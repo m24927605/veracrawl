@@ -10,6 +10,7 @@ from veracrawl.contracts.durable import DurableCommandRecord, EventCursorRecord,
 from veracrawl.contracts.event import CrawlRunEvent
 from veracrawl.contracts.persistence import (
     IdempotencyPersistenceRecord,
+    PersistenceMigrationRecord,
     PersistenceTransactionRecord,
     PersistentQueueOperationRecord,
 )
@@ -48,6 +49,12 @@ class ArtifactIndexPersistencePort(Protocol):
     def register_artifact_ref(self, artifact_ref: Ref) -> Ref: ...
 
     def has_artifact_ref(self, artifact_ref: Ref) -> bool: ...
+
+
+class MigrationPersistencePort(Protocol):
+    def save_migration_record(self, record: PersistenceMigrationRecord) -> Ref: ...
+
+    def list_migration_records(self) -> list[PersistenceMigrationRecord]: ...
 
 
 class QueuePersistencePort(Protocol):

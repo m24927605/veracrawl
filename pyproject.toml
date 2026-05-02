@@ -36,6 +36,7 @@ veracrawl-ops = "veracrawl.cli.ops:main"
 veracrawl-export = "veracrawl.cli.export:main"
 veracrawl-scale = "veracrawl.cli.scale:main"
 veracrawl-persistence = "veracrawl.cli.persistence:main"
+veracrawl-persistence-adapter = "veracrawl.cli.persistence_adapter:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

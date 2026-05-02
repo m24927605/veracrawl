@@ -1,0 +1,1 @@
+{"id":"sqlite-idempotency-gap","scenario":"sqlite-idempotency-gap","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"sqlite_idempotency_gap","expected_failure_type":"sqlite_idempotency_gap","negative_case":true}

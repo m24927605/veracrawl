@@ -212,6 +212,31 @@ This acceptance proves production-facing adapter semantics through a reference
 filesystem adapter. It does not prove concrete database, broker, cloud, metrics,
 tracing, deployment, or production worker readiness.
 
+Concrete persistence adapter fixture contract:
+
+```text
+veracrawl-persistence-adapter run tests/fixtures/<persistence_adapter_fixture_id> --profile target --out .veracrawl-test-runs/<persistence_adapter_fixture_id>
+```
+
+Required persistence adapter fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| sqlite-adapter-conformance-success | SQLite adapter proves adapter, transaction, migration, command, idempotency, event cursor, outbox, artifact, queue, lease, policy, and replay refs with `pass` |
+| sqlite-reopen-idempotency-success | reopened SQLite adapter dedupes duplicate command with 0 duplicate events and 0 duplicate outbox records |
+| sqlite-queue-recovery-success | SQLite adapter persists heartbeat, nack, dead-letter, failure, and recovery queue operation refs with `pass` |
+| postgres-adapter-contract-harness | Postgres descriptor returns `needs_review` with `contract_only_refs` and does not claim operational pass |
+| adapter-missing-capability | missing capability blocks conformance pass |
+| sqlite-idempotency-gap | missing SQLite idempotency refs fail |
+| sqlite-event-cursor-gap | missing SQLite event cursor refs fail |
+| sqlite-outbox-gap | missing SQLite outbox visibility refs fail |
+| sqlite-migration-missing | missing SQLite migration refs fail |
+
+This acceptance proves executable SQLite adapter semantics and Postgres adapter
+contract boundaries. It does not prove live Postgres connectivity, external
+queue brokers, object storage, cloud deployment, metrics/tracing backends,
+production observability, or production worker readiness.
+
 Source adapter and fetch runtime fixture contract:
 
 ```text
@@ -995,6 +1020,8 @@ Acceptance gates:
 - queue persistence fixtures prove enqueue, lease, heartbeat, ack, nack, dead-letter, failure, and recovery refs are durable and replay-visible
 - negative fixtures for non-atomic commits, missing idempotency persistence, event log gaps, unrecovered pending outbox, missing artifact indexes, and missing lease heartbeat refs must fail deterministically
 - reference filesystem persistence is accepted only as an adapter-contract proof; concrete database, queue broker, object store, cloud, metrics, tracing, and deployment readiness require separate adapter specs and gates
+- concrete persistence adapter fixtures prove SQLite operational conformance through migrations, transactions, idempotency, event cursor, outbox, artifact index, queue lease/recovery, policy, and replay refs
+- Postgres adapter contract fixtures must remain `needs_review` and contract-only until a live adapter passes the same executable conformance harness
 
 ## Non-deceptive Completion Checklist
 

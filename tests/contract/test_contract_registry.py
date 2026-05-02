@@ -38,6 +38,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "artifact_lifecycle",
         "durable_persistence",
         "production_persistence_queue_runtime",
+        "concrete_persistence_adapters",
         "scheduler",
         "source_acquisition",
         "network_browser_acquisition",

@@ -1,0 +1,1 @@
+{"required_refs":["adapter_ref","transaction_refs","migration_record_refs","idempotency_record_refs","event_cursor_refs","outbox_refs","artifact_refs","queue_operation_refs","lease_refs","replay_bundle_ref"]}

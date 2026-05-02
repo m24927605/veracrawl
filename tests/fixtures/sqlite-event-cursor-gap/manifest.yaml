@@ -1,0 +1,1 @@
+{"id":"sqlite-event-cursor-gap","scenario":"sqlite-event-cursor-gap","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"sqlite_event_cursor_gap","expected_failure_type":"sqlite_event_cursor_gap","negative_case":true}

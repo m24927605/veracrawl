@@ -406,6 +406,26 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         tests=["tests/contract/test_persistence_contracts.py"],
     ),
+    "PersistenceMigrationRecord": _contract(
+        "PersistenceMigrationRecord",
+        OwnerService.RUNTIME_EVENTS,
+        "persistence",
+        mutation_allowed=True,
+        tests=["tests/contract/test_persistence_adapter_contracts.py"],
+    ),
+    "PersistenceAdapterConformanceReport": _contract(
+        "PersistenceAdapterConformanceReport",
+        OwnerService.REVIEW_REPLAY,
+        "persistence",
+        mutation_allowed=True,
+        tests=["tests/contract/test_persistence_adapter_contracts.py"],
+    ),
+    "PersistenceAdapterFixtureManifest": _contract(
+        "PersistenceAdapterFixtureManifest",
+        OwnerService.TESTS,
+        "persistence",
+        tests=["tests/integration/test_persistence_adapter_fixtures.py"],
+    ),
     "PersistenceTransactionRecord": _contract(
         "PersistenceTransactionRecord",
         OwnerService.RUNTIME_EVENTS,
@@ -1553,6 +1573,14 @@ COMMAND_TYPES.update(
             expected_version_required=True,
             emitted_event_types=["persistence_transaction_recorded"],
         ),
+        "record_persistence_migration": CommandTypeRegistration(
+            command_type="record_persistence_migration",
+            owner_service=OwnerService.RUNTIME_EVENTS,
+            target_aggregate_type="PersistenceMigrationRecord",
+            payload_schema_ref="BaseCommandPayload",
+            expected_version_required=True,
+            emitted_event_types=["persistence_migration_recorded"],
+        ),
         "record_idempotency_persistence": CommandTypeRegistration(
             command_type="record_idempotency_persistence",
             owner_service=OwnerService.RUNTIME_EVENTS,
@@ -1574,6 +1602,13 @@ COMMAND_TYPES.update(
             target_aggregate_type="PersistenceRuntimeReport",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["persistence_runtime_reported"],
+        ),
+        "record_persistence_adapter_conformance_report": CommandTypeRegistration(
+            command_type="record_persistence_adapter_conformance_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="PersistenceAdapterConformanceReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["persistence_adapter_conformance_reported"],
         ),
     }
 )
@@ -1712,9 +1747,11 @@ EVENT_TYPES.update(
             "scale_recovery_reported",
             "persistence_adapter_recorded",
             "persistence_transaction_recorded",
+            "persistence_migration_recorded",
             "idempotency_persisted",
             "persistent_queue_operation_recorded",
             "persistence_runtime_reported",
+            "persistence_adapter_conformance_reported",
         ]
     }
 )
@@ -2197,6 +2234,29 @@ for _persistence_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _persistence_adapter_fixture, _negative in {
+    "sqlite-adapter-conformance-success": False,
+    "sqlite-reopen-idempotency-success": False,
+    "sqlite-queue-recovery-success": False,
+    "postgres-adapter-contract-harness": False,
+    "adapter-missing-capability": True,
+    "sqlite-idempotency-gap": True,
+    "sqlite-event-cursor-gap": True,
+    "sqlite-outbox-gap": True,
+    "sqlite-migration-missing": True,
+}.items():
+    _base = f"tests/fixtures/{_persistence_adapter_fixture}"
+    FIXTURE_ORACLES[_persistence_adapter_fixture] = FixtureOracleRegistration(
+        fixture_id=_persistence_adapter_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -2420,6 +2480,20 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "IdempotencyPersistenceRecord",
             "PersistentQueueOperationRecord",
             "PersistenceRuntimeReport",
+        ],
+    ),
+    "concrete_persistence_adapters": _target_area(
+        "concrete_persistence_adapters",
+        OwnerService.PORTS,
+        "materialized",
+        materialized=[
+            "PersistenceAdapterSpec",
+            "PersistenceMigrationRecord",
+            "PersistenceAdapterConformanceReport",
+            "PersistenceAdapterFixtureManifest",
+            "PersistenceTransactionRecord",
+            "IdempotencyPersistenceRecord",
+            "PersistentQueueOperationRecord",
         ],
     ),
     "scheduler": _target_area(

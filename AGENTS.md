@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/015-production-persistence-queue-runtime/plan.md`.
-Use it with `specs/015-production-persistence-queue-runtime/spec.md`,
-`specs/015-production-persistence-queue-runtime/research.md`,
-`specs/015-production-persistence-queue-runtime/data-model.md`,
-`specs/015-production-persistence-queue-runtime/contracts/`, and
-`specs/015-production-persistence-queue-runtime/quickstart.md` for VeraCrawl Production Persistence And Queue Runtime work.
+Current active Spec Kit plan: `specs/016-concrete-persistence-adapters/plan.md`.
+Use it with `specs/016-concrete-persistence-adapters/spec.md`,
+`specs/016-concrete-persistence-adapters/research.md`,
+`specs/016-concrete-persistence-adapters/data-model.md`,
+`specs/016-concrete-persistence-adapters/contracts/`, and
+`specs/016-concrete-persistence-adapters/quickstart.md` for VeraCrawl Concrete Persistence Adapter Family work.
 <!-- SPECKIT END -->

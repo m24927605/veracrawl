@@ -562,6 +562,8 @@ class ScaleFailureType(StrEnum):
 class PersistenceAdapterKind(StrEnum):
     REFERENCE_FILESYSTEM = "reference_filesystem"
     EXTERNAL_ADAPTER = "external_adapter"
+    SQLITE = "sqlite"
+    POSTGRES_CONTRACT = "postgres_contract"
 
 
 class PersistenceCapability(StrEnum):
@@ -588,6 +590,20 @@ class PersistenceFailureType(StrEnum):
     OUTBOX_DISPATCH_MISSING = "outbox_dispatch_missing"
     ARTIFACT_INDEX_MISSING = "artifact_index_missing"
     LEASE_HEARTBEAT_MISSING = "lease_heartbeat_missing"
+
+
+class PersistenceMigrationStatus(StrEnum):
+    APPLIED = "applied"
+    ROLLED_BACK = "rolled_back"
+    FAILED = "failed"
+
+
+class PersistenceAdapterConformanceFailureType(StrEnum):
+    ADAPTER_MISSING_CAPABILITY = "adapter_missing_capability"
+    SQLITE_IDEMPOTENCY_GAP = "sqlite_idempotency_gap"
+    SQLITE_EVENT_CURSOR_GAP = "sqlite_event_cursor_gap"
+    SQLITE_OUTBOX_GAP = "sqlite_outbox_gap"
+    SQLITE_MIGRATION_MISSING = "sqlite_migration_missing"
 
 
 class UnitOfWorkStatus(StrEnum):

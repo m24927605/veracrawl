@@ -80,6 +80,10 @@ evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
 review/replay/ops console spine, the export connector spine, the scale
 hardening spine, and the production persistence/queue runtime spine.
+The concrete persistence adapter spine adds a standard-library SQLite adapter,
+Postgres contract descriptor, core adapter conformance harness, migration
+records, adapter conformance reports, adapter fixtures, and dynamic adapter CLI
+loading without importing concrete storage into core.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -160,6 +164,12 @@ not a claim that concrete queue brokers, storage engines, metrics/tracing
 backends, cloud autoscaling APIs, production distributed persistence,
 production worker fleets, production browser rendering, or production scale
 operations are complete.
+The concrete persistence adapter spine proves executable SQLite adapter
+semantics for transactions, migrations, idempotency, event cursors, outbox,
+artifact index, queue leases, and replay refs. The Postgres descriptor is
+contract-only and returns `needs_review`; it is not a claim that live Postgres,
+external queue brokers, object storage, cloud deployment, or observability
+backends are production-ready.
 
 Run the local foundation gate with Python 3.12:
 
@@ -464,6 +474,27 @@ for fixture in \
   lease-heartbeat-missing
 do
   uv run --python python3.12 --extra dev veracrawl-persistence run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run concrete persistence adapter fixtures:
+
+```sh
+for fixture in \
+  sqlite-adapter-conformance-success \
+  sqlite-reopen-idempotency-success \
+  sqlite-queue-recovery-success \
+  postgres-adapter-contract-harness \
+  adapter-missing-capability \
+  sqlite-idempotency-gap \
+  sqlite-event-cursor-gap \
+  sqlite-outbox-gap \
+  sqlite-migration-missing
+do
+  uv run --python python3.12 --extra dev veracrawl-persistence-adapter run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

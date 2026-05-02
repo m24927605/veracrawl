@@ -120,8 +120,11 @@ from veracrawl.contracts.ops import (
 )
 from veracrawl.contracts.persistence import (
     IdempotencyPersistenceRecord,
+    PersistenceAdapterConformanceReport,
+    PersistenceAdapterFixtureManifest,
     PersistenceAdapterSpec,
     PersistenceFixtureManifest,
+    PersistenceMigrationRecord,
     PersistenceRuntimeReport,
     PersistenceTransactionRecord,
     PersistentQueueOperationRecord,
@@ -269,8 +272,11 @@ __all__ = [
     "OperationalTemporalMemoryRecord",
     "PageSnapshot",
     "PageTypeClassification",
+    "PersistenceAdapterConformanceReport",
+    "PersistenceAdapterFixtureManifest",
     "PersistenceAdapterSpec",
     "PersistenceFixtureManifest",
+    "PersistenceMigrationRecord",
     "PersistenceRuntimeReport",
     "PersistenceTransactionRecord",
     "PersistentQueueOperationRecord",

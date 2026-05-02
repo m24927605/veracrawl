@@ -1,0 +1,1 @@
+{"id":"postgres-adapter-contract-harness","scenario":"postgres-adapter-contract-harness","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"postgres_contract_declared","negative_case":false}

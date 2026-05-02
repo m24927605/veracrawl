@@ -43,7 +43,7 @@ Target contract manifest:
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
 | QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
-| PersistenceAdapterSpec, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, queue adapter semantics, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
+| PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, queue adapter semantics, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
 | FailureRecord, RecoveryAction, DriftEvent, QualityReport | required | failure, repair, drift, recovery, and operations are evented and reviewable |
 
 Target adapter types:
@@ -1180,9 +1180,11 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_scale_recovery_report | review_replay | ScaleRecoveryReport | BaseCommandPayload | queue, lease, backpressure, autoscaling, dead-letter, failure/recovery, DR, policy, command, event, outbox, and replay refs validate | expected_version | scale_recovery_reported | missing scale refs fail replay |
 | record_persistence_adapter | ports | PersistenceAdapterSpec | BaseCommandPayload | all persistence capabilities and port refs declared | none | persistence_adapter_recorded | adapter missing required capability blocks target profile |
 | record_persistence_transaction | runtime_events | PersistenceTransactionRecord | BaseCommandPayload | command/event/outbox/artifact/idempotency/queue refs validate | expected_version | persistence_transaction_recorded | non-atomic commit fails replay |
+| record_persistence_migration | runtime_events | PersistenceMigrationRecord | BaseCommandPayload | migration version, rollback plan, validation cursor, and failure refs validate | expected_version | persistence_migration_recorded | missing migration refs block adapter conformance pass |
 | record_idempotency_persistence | runtime_events | IdempotencyPersistenceRecord | BaseCommandPayload | command identity, result, event, and outbox refs validate | none | idempotency_persisted | duplicate command without persisted idempotency fails |
 | record_persistent_queue_operation | scheduler | PersistentQueueOperationRecord | BaseCommandPayload | queue operation refs, lease token, heartbeat, ack/nack/dead-letter refs validate | lease_required | persistent_queue_operation_recorded | missing lease recovery refs fail |
 | record_persistence_runtime_report | review_replay | PersistenceRuntimeReport | BaseCommandPayload | persistence adapter, transaction, idempotency, event cursor, outbox, artifact, queue, policy, and replay refs validate | expected_version | persistence_runtime_reported | missing persistence refs fail replay |
+| record_persistence_adapter_conformance_report | review_replay | PersistenceAdapterConformanceReport | BaseCommandPayload | adapter, transaction, migration, idempotency, event cursor, outbox, artifact, queue, policy, contract-only, and replay refs validate | expected_version | persistence_adapter_conformance_reported | contract-only descriptors cannot claim operational pass |
 | create_dr_restore_plan | ops | DRRestorePlan | DRRestorePlanPayload | restore scope, restore point, and backup refs validate | expected_version | command_committed | invalid restore point rejected |
 | start_dr_restore | ops | DRRestoreRun | DRRestoreRunPayload | approved restore plan and phase graph present | expected_version | command_committed | phase precondition failure blocks run |
 | complete_dr_restore | ops | DRRestoreRun, DRRestoreReport | DRRestoreResultPayload | all validation gates pass or needs_review recorded | expected_version | dr_restore_reported | unresolved refs force fail or needs_review |
@@ -1549,7 +1551,7 @@ BackfillJob:
 ```yaml
 StateMachineSpec:
   id: string
-  entity_type: CrawlObjective | CrawlPlan | CrawlJob | CrawlRun | SourceAdapterResult | FrontierItem | ProcessingTask | BrowserInteractionStep | AgentRunResult | ToolCallTrace | FrontierRecommendation | MultiAgentWorkflow | AgentHandoff | CrossScopeMemoryTunnel | ExtractionStrategy | ExtractionCandidate | EvidencePacket | VerificationDecision | PublishedOutput | VerifiedFact | ExportJob | ExportAttempt | ExportWithdrawalJob | ExportWithdrawalAttempt | ReviewItem | ConflictRecord | DriftEvent | RecoveryAction | ProjectionWatermark | ProjectionRebuildJob | BackfillJob | SchemaMigrationRun | EventMigrationRun | DRRestoreRun | TemporalKGEntityIdentity | TemporalKGProjectionRecord | MemoryEvent | OperationalTemporalMemoryRecord | QueueTopologySpec | QueueItem | ShardLease | RetryDeadLetterRecord | BackpressureSignal | AutoscalingDecision | ScaleRecoveryReport | PersistenceAdapterSpec | PersistenceTransactionRecord | IdempotencyPersistenceRecord | PersistentQueueOperationRecord | PersistenceRuntimeReport | ArtifactLifecycleState
+  entity_type: CrawlObjective | CrawlPlan | CrawlJob | CrawlRun | SourceAdapterResult | FrontierItem | ProcessingTask | BrowserInteractionStep | AgentRunResult | ToolCallTrace | FrontierRecommendation | MultiAgentWorkflow | AgentHandoff | CrossScopeMemoryTunnel | ExtractionStrategy | ExtractionCandidate | EvidencePacket | VerificationDecision | PublishedOutput | VerifiedFact | ExportJob | ExportAttempt | ExportWithdrawalJob | ExportWithdrawalAttempt | ReviewItem | ConflictRecord | DriftEvent | RecoveryAction | ProjectionWatermark | ProjectionRebuildJob | BackfillJob | SchemaMigrationRun | EventMigrationRun | DRRestoreRun | TemporalKGEntityIdentity | TemporalKGProjectionRecord | MemoryEvent | OperationalTemporalMemoryRecord | QueueTopologySpec | QueueItem | ShardLease | RetryDeadLetterRecord | BackpressureSignal | AutoscalingDecision | ScaleRecoveryReport | PersistenceAdapterSpec | PersistenceMigrationRecord | PersistenceAdapterConformanceReport | PersistenceTransactionRecord | IdempotencyPersistenceRecord | PersistentQueueOperationRecord | PersistenceRuntimeReport | ArtifactLifecycleState
   version: string
   states: list
   transitions:
@@ -1594,6 +1596,8 @@ Target state transition matrix:
 | AutoscalingDecision | proposed -> recorded/rejected | record_autoscaling_decision | ops | autoscaling policy | capacity-change policy tests |
 | ScaleRecoveryReport | created as pass/fail/needs_review; immutable after create | record_scale_recovery_report | review_replay | scale replay and DR refs | missing scale refs tests |
 | PersistenceAdapterSpec | proposed -> recorded/superseded | record_persistence_adapter | ports | persistence policy | capability and port boundary tests |
+| PersistenceMigrationRecord | created as applied/rolled_back/failed; immutable after create | record_persistence_migration | runtime_events | migration validation cursor and rollback plan | migration fixture tests |
+| PersistenceAdapterConformanceReport | created as pass/fail/needs_review; immutable after create | record_persistence_adapter_conformance_report | review_replay | adapter conformance refs and contract-only boundary | concrete adapter fixture tests |
 | PersistenceTransactionRecord | open -> committed/rolled_back/failed | record_persistence_transaction | runtime_events | atomic commit and expected version | non-atomic commit tests |
 | IdempotencyPersistenceRecord | recorded -> duplicate/rejected/failed | record_idempotency_persistence | runtime_events | idempotency key | duplicate replay tests |
 | PersistentQueueOperationRecord | created as enqueue/lease/heartbeat/ack/nack/dead_letter; immutable after create | record_persistent_queue_operation | scheduler | lease token | heartbeat, ack/nack, dead-letter tests |
@@ -2975,7 +2979,7 @@ CrawlRunEvent:
   crawl_plan_id: string
   event_version: string
   sequence: integer
-  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | frontier_recommended | frontier_transitioned | queue_topology_recorded | queue_item_recorded | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_recorded | shard_lease_acquired | shard_lease_released | retry_dead_letter_recorded | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | scale_recovery_reported | persistence_adapter_recorded | persistence_transaction_recorded | idempotency_persisted | persistent_queue_operation_recorded | persistence_runtime_reported | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
+  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | frontier_recommended | frontier_transitioned | queue_topology_recorded | queue_item_recorded | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_recorded | shard_lease_acquired | shard_lease_released | retry_dead_letter_recorded | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | scale_recovery_reported | persistence_adapter_recorded | persistence_transaction_recorded | persistence_migration_recorded | idempotency_persisted | persistent_queue_operation_recorded | persistence_runtime_reported | persistence_adapter_conformance_reported | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
   event_type_spec_id: string
   payload_ref: string
   actor: string
@@ -3085,7 +3089,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | drift_detected | graph/extract/ops | DriftEvent | run | yes | repair, review |
 | review_created, review_decided, conflict_adjudicated | review_replay/verify | ReviewItem/ConflictRecord | review_item, conflict | yes | publish, ops, replay |
 | backpressure_signal_recorded, autoscaling_decided, scale_recovery_reported | ops/review_replay | BackpressureSignal/AutoscalingDecision/ScaleRecoveryReport | run | yes | ops, scheduler, replay |
-| persistence_adapter_recorded, persistence_transaction_recorded, idempotency_persisted, persistent_queue_operation_recorded, persistence_runtime_reported | runtime_events/scheduler/review_replay | PersistenceAdapterSpec/PersistenceTransactionRecord/IdempotencyPersistenceRecord/PersistentQueueOperationRecord/PersistenceRuntimeReport | run | yes | replay, scheduler, ops |
+| persistence_adapter_recorded, persistence_transaction_recorded, persistence_migration_recorded, idempotency_persisted, persistent_queue_operation_recorded, persistence_runtime_reported, persistence_adapter_conformance_reported | runtime_events/scheduler/review_replay | PersistenceAdapterSpec/PersistenceTransactionRecord/PersistenceMigrationRecord/IdempotencyPersistenceRecord/PersistentQueueOperationRecord/PersistenceRuntimeReport/PersistenceAdapterConformanceReport | run | yes | replay, scheduler, ops |
 | dr_restore_reported | ops | DRRestoreReport | run | yes | ops, audit |
 | recovery_action_started, recovery_action_completed, error_recorded | ops or owner service | FailureRecord/RecoveryAction | recovery_action | yes | ops, replay |
 
@@ -3107,7 +3111,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | graph/projection events | ProjectionEventPayload | ProjectionWatermark, ProjectionRebuildJob, GraphBuildManifest, ProjectionMismatchReport | projection status | projection refs remain |
 | memory events | MemoryEventPayload | MemoryEvent, MemoryRetrievalTrace, CrossScopeMemoryTunnel | memory/tunnel status | memory content may be summarized or redacted |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
-| persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | persistence transaction, idempotency, queue, and replay status | storage backend details are stable refs; credentials are redacted |
+| persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
 | artifact lifecycle events | ArtifactLifecycleEventPayload | ArtifactLifecycleState | lifecycle/hold status | redaction/tombstone refs remain |
 | failure/recovery/ops events | OpsEventPayload | FailureRecord, RecoveryAction, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, DRRestoreReport | recovery/status fields | incident details follow audit policy |
 
@@ -3224,9 +3228,11 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | scale_recovery_reported | OpsEventPayload | ScaleRecoveryReport | after required | queue, lease, backpressure, autoscaling, dead-letter, DR, command, event, outbox, replay refs | operational refs remain |
 | persistence_adapter_recorded | PersistenceEventPayload | PersistenceAdapterSpec | after required | capability refs, port refs, policy refs | concrete credentials redacted |
 | persistence_transaction_recorded | PersistenceEventPayload | PersistenceTransactionRecord | before optional, after required | transaction refs, command/event/outbox/artifact/idempotency/queue refs | stable refs remain |
+| persistence_migration_recorded | PersistenceEventPayload | PersistenceMigrationRecord | after required | version transition, rollback plan, validation cursor, failure refs | stable refs remain |
 | idempotency_persisted | PersistenceEventPayload | IdempotencyPersistenceRecord | after required | command identity, result, event, outbox, duplicate refs | payload values redacted by ref |
 | persistent_queue_operation_recorded | PersistenceEventPayload | PersistentQueueOperationRecord | after required | queue item, lease token hash, heartbeat, ack/nack/dead-letter refs | lease token secret material redacted |
 | persistence_runtime_reported | PersistenceEventPayload | PersistenceRuntimeReport | after required | adapter, transaction, event cursor, outbox, artifact, queue, policy, replay refs | stable refs remain |
+| persistence_adapter_conformance_reported | PersistenceEventPayload | PersistenceAdapterConformanceReport | after required | adapter, migration, transaction, event cursor, outbox, queue, contract-only, failure, and replay refs | stable refs remain |
 | dr_restore_reported | OpsEventPayload | DRRestoreReport | after required | restore point, validation result, missing refs | incident details follow audit policy |
 | recovery_action_started | OpsEventPayload | RecoveryAction | before and after required | recovery action id, affected refs, approval refs | incident details follow audit policy |
 | recovery_action_completed | OpsEventPayload | RecoveryAction | before and after required | output refs, validation result | incident details follow audit policy |
@@ -3475,7 +3481,7 @@ Rules:
 ```yaml
 PersistenceAdapterSpec:
   id: string
-  adapter_kind: reference_filesystem | external_adapter
+  adapter_kind: reference_filesystem | external_adapter | sqlite | postgres_contract
   capability_refs:
     - metadata_store
     - event_log
@@ -3487,6 +3493,23 @@ PersistenceAdapterSpec:
   idempotency_supported: boolean
   lease_supported: boolean
   policy_decision_refs: list
+  created_at: timestamp
+```
+
+## PersistenceMigrationRecord
+
+```yaml
+PersistenceMigrationRecord:
+  id: string
+  adapter_ref: string
+  migration_name: string
+  from_version: string
+  to_version: string
+  status: applied | rolled_back | failed
+  applied_at_ref: string
+  rollback_plan_ref: string
+  validation_event_cursor_ref: string
+  failure_refs: list
   created_at: timestamp
 ```
 
@@ -3572,9 +3595,51 @@ PersistenceRuntimeReport:
   created_at: timestamp
 ```
 
+## PersistenceAdapterConformanceReport
+
+```yaml
+PersistenceAdapterConformanceReport:
+  id: string
+  adapter_ref: string
+  adapter_kind: reference_filesystem | external_adapter | sqlite | postgres_contract
+  transaction_refs: list
+  migration_record_refs: list
+  command_record_refs: list
+  idempotency_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  artifact_refs: list
+  queue_operation_refs: list
+  lease_refs: list
+  policy_decision_refs: list
+  contract_only_refs: list
+  failure_record_refs: list
+  replay_bundle_ref: string
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## PersistenceAdapterFixtureManifest
+
+```yaml
+PersistenceAdapterFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: adapter_missing_capability | sqlite_idempotency_gap | sqlite_event_cursor_gap | sqlite_outbox_gap | sqlite_migration_missing
+  negative_case: boolean
+  created_at: timestamp
+```
+
 Rules:
 
 - a passing `PersistenceRuntimeReport` requires adapter, transaction, durable command, idempotency, event cursor, outbox, artifact, queue operation, lease, policy, and replay refs.
+- a passing `PersistenceAdapterConformanceReport` requires adapter, transaction, migration, durable command, idempotency, event cursor, outbox, artifact, queue operation, lease, policy, and replay refs.
+- a `postgres_contract` conformance report may use `needs_review` with `contract_only_refs`; it must not claim `pass` until an operational Postgres adapter runs the executable harness.
 - duplicate commands must return persisted idempotency refs and must not create duplicate event or outbox refs after adapter reopen.
 - queue operation records must persist lease, heartbeat, ack/nack, dead-letter, failure, and recovery refs as applicable.
 - persistence refs do not satisfy publication evidence; they only prove canonical state, replay, queue, and recovery behavior.
