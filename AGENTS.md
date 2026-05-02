@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/013-export-connectors/plan.md`.
-Use it with `specs/013-export-connectors/spec.md`,
-`specs/013-export-connectors/research.md`,
-`specs/013-export-connectors/data-model.md`,
-`specs/013-export-connectors/contracts/`, and
-`specs/013-export-connectors/quickstart.md` for VeraCrawl Export Connectors work.
+Current active Spec Kit plan: `specs/014-scale-hardening/plan.md`.
+Use it with `specs/014-scale-hardening/spec.md`,
+`specs/014-scale-hardening/research.md`,
+`specs/014-scale-hardening/data-model.md`,
+`specs/014-scale-hardening/contracts/`, and
+`specs/014-scale-hardening/quickstart.md` for VeraCrawl Scale Hardening work.
 <!-- SPECKIT END -->

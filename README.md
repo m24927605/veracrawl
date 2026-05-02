@@ -78,7 +78,8 @@ runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
-review/replay/ops console spine, and the export connector spine.
+review/replay/ops console spine, the export connector spine, and the scale
+hardening spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -143,6 +144,14 @@ and replay fixtures. It is not a claim that concrete export adapters, external
 API/database/warehouse/object-store/queue delivery, production export worker
 fleets, distributed persistence, production browser rendering, or production
 scale operations are complete.
+The scale hardening spine adds queue topology specs, deterministic shard keys,
+queue items, worker shard leases and heartbeats, backpressure signals,
+autoscaling decisions, retry dead-letter records, scale recovery reports,
+DR/replay refs, fairness and recovery policy gates, and scale fixtures. It is
+not a claim that concrete queue brokers, storage engines, metrics/tracing
+backends, cloud autoscaling APIs, production distributed persistence,
+production worker fleets, production browser rendering, or production scale
+operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -406,6 +415,26 @@ for fixture in \
   correction-without-withdrawal
 do
   uv run --python python3.12 --extra dev veracrawl-export run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run scale hardening fixtures:
+
+```sh
+for fixture in \
+  scale-sharding-success \
+  backpressure-autoscale-success \
+  dead-letter-recovery-success \
+  stale-lease-without-recovery \
+  unfair-site-starvation \
+  autoscale-without-policy \
+  dead-letter-missing-failure-record \
+  replay-missing-scale-refs
+do
+  uv run --python python3.12 --extra dev veracrawl-scale run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

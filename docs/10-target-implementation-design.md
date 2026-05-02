@@ -848,6 +848,17 @@ Autoscaling:
 - scale fetch/browser/processing/export/projection workers from queue lag, lease wait time, CPU/memory, browser minutes, and destination throttling
 - autoscaling changes must not change correctness; they only change throughput
 
+Scale hardening executable slice:
+
+- `QueueTopologySpec` records every target queue, deterministic shard key parts, per-project and per-site concurrency limits, fairness refs, and scheduler policy refs.
+- `QueueItem` records queue family, shard key, aggregate refs, command ref, idempotency key, expected version ref, retry class, lease token, attempts, deadline, and transition status.
+- `ShardLease` records worker identity, heartbeat, expiry, fencing token, policy refs, and lease status.
+- `BackpressureSignal` and `AutoscalingDecision` record policy-visible throughput pressure and capacity changes; capacity-changing decisions require policy refs.
+- `RetryDeadLetterRecord` records exhausted retry class, attempts, final reason, failure record, and recovery actions.
+- `ScaleRecoveryReport` ties scale recovery to queue topology, queue items, leases, backpressure, autoscaling, dead letters, failure/recovery, DR restore, policy, command, event cursor, outbox, and replay refs.
+- stale leases, unfair site starvation, autoscaling without policy, dead letters without failure records, and replay gaps are target-profile failures.
+- the target spine remains queue/storage/cloud/metrics/tracing-neutral; concrete brokers, stores, telemetry backends, and cloud autoscalers are adapter work, not core coupling.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

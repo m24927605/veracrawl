@@ -41,6 +41,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "source_acquisition",
         "network_browser_acquisition",
         "normalize_extract",
+        "scale_reliability",
     }
     assert set(TARGET_CONTRACT_AREAS) == expected
     for area, registration in TARGET_CONTRACT_AREAS.items():

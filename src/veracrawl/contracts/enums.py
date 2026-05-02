@@ -497,6 +497,68 @@ class ExportFailureType(StrEnum):
     CORRECTION_WITHOUT_WITHDRAWAL = "correction_without_withdrawal"
 
 
+class ScaleQueueName(StrEnum):
+    FRONTIER = "frontier"
+    PROCESSING = "processing"
+    VERIFICATION_REVIEW = "verification_review"
+    EXPORT_OUTBOX = "export_outbox"
+    PROJECTION = "projection"
+    RECOVERY = "recovery"
+
+
+class ScaleRetryClass(StrEnum):
+    TRANSIENT = "transient"
+    RATE_LIMITED = "rate_limited"
+    POLICY_BLOCKED = "policy_blocked"
+    PERMANENT_SOURCE_FAILURE = "permanent_source_failure"
+    ADAPTER_BUG = "adapter_bug"
+    WORKER_CRASH = "worker_crash"
+    PROJECTION_MISMATCH = "projection_mismatch"
+    DESTINATION_REJECTED = "destination_rejected"
+
+
+class ScaleQueueItemStatus(StrEnum):
+    QUEUED = "queued"
+    LEASED = "leased"
+    ACKED = "acked"
+    NACKED = "nacked"
+    DEAD_LETTERED = "dead_lettered"
+
+
+class ScaleShardLeaseStatus(StrEnum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    RELEASED = "released"
+    REVOKED = "revoked"
+
+
+class BackpressureSignalType(StrEnum):
+    QUEUE_LAG = "queue_lag"
+    RETRY_RATE = "retry_rate"
+    BROWSER_MINUTES = "browser_minutes"
+    TOKEN_SPEND = "token_spend"
+    OBJECT_STORE_GROWTH = "object_store_growth"
+    PROJECTION_LAG = "projection_lag"
+    EXPORT_LAG = "export_lag"
+    ERROR_RATE = "error_rate"
+
+
+class WorkerPool(StrEnum):
+    FETCH = "fetch"
+    BROWSER = "browser"
+    PROCESSING = "processing"
+    EXPORT = "export"
+    PROJECTION = "projection"
+
+
+class ScaleFailureType(StrEnum):
+    STALE_LEASE_WITHOUT_RECOVERY = "stale_lease_without_recovery"
+    UNFAIR_SITE_STARVATION = "unfair_site_starvation"
+    AUTOSCALE_WITHOUT_POLICY = "autoscale_without_policy"
+    DEAD_LETTER_MISSING_FAILURE_RECORD = "dead_letter_missing_failure_record"
+    REPLAY_MISSING_SCALE_REFS = "replay_missing_scale_refs"
+
+
 class UnitOfWorkStatus(StrEnum):
     OPEN = "open"
     COMMITTED = "committed"

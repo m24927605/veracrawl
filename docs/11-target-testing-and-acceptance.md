@@ -960,6 +960,12 @@ Acceptance gates:
 - projection lag is visible and bounded by SLO
 - disaster recovery restores canonical state and rebuilds projections
 - one bad site cannot starve unrelated jobs
+- queue topology fixtures prove all target queues and shard key parts are declared
+- lease fixtures prove active leases include heartbeat, expiry, fencing token, and policy refs
+- backpressure/autoscaling fixtures prove capacity changes are policy-visible and throughput-only
+- dead-letter/recovery fixtures prove exhausted retries create failure records and recovery action refs
+- replay fixtures prove passing scale reports include queue topology, queue item, shard lease, backpressure, autoscaling, dead-letter, failure, recovery, DR restore, policy, command, event cursor, outbox, and replay refs
+- negative fixtures for stale leases, unfair site starvation, autoscaling without policy, missing dead-letter failure records, and replay missing scale refs must fail deterministically
 
 ## Non-deceptive Completion Checklist
 

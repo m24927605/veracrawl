@@ -136,6 +136,16 @@ from veracrawl.contracts.publication import OutputManifest, PublicationReport, P
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
+from veracrawl.contracts.scale import (
+    AutoscalingDecision,
+    BackpressureSignal,
+    QueueItem,
+    QueueTopologySpec,
+    RetryDeadLetterRecord,
+    ScaleFixtureManifest,
+    ScaleRecoveryReport,
+    ShardLease,
+)
 from veracrawl.contracts.scheduler import FrontierItem, QueueLease, SchedulerRecoveryReport
 from veracrawl.contracts.source_adapter import (
     SourceAdapterCommand,
@@ -161,8 +171,10 @@ __all__ = [
     "AdvancedGraphFixtureManifest",
     "AdvancedGraphProjectionReport",
     "AnchorMap",
+    "AutoscalingDecision",
     "BaseCommandPayload",
     "BenchmarkFixtureManifest",
+    "BackpressureSignal",
     "BlockedActionReport",
     "BrowserInteractionStep",
     "BrowserSandboxPolicy",
@@ -257,14 +269,20 @@ __all__ = [
     "PublishedOutput",
     "PublicationReport",
     "QueueLease",
+    "QueueItem",
+    "QueueTopologySpec",
     "ReplayBundleManifest",
     "ReplayBundleOracle",
     "ReplayValidationReport",
+    "RetryDeadLetterRecord",
     "RedirectHop",
     "RunPlanSnapshot",
     "RuntimeArtifactRef",
     "RuntimeCompletionGate",
     "SchedulerRecoveryReport",
+    "ScaleFixtureManifest",
+    "ScaleRecoveryReport",
+    "ShardLease",
     "RateLimitDecision",
     "RecoveryAction",
     "ReplayAuditView",

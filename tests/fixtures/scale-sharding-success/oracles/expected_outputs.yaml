@@ -1,0 +1,1 @@
+{"expected_operator_status":"scale_hardening_completed","requires_all_queues":true,"requires_shard_key_parts":["project_id","site_id","adapter_type","priority_band"]}

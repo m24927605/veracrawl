@@ -1,0 +1,1 @@
+{"expected_events":["queue_topology_recorded","queue_item_recorded","shard_lease_recorded","backpressure_signal_recorded","autoscaling_decided","retry_dead_letter_recorded","scale_recovery_reported"]}

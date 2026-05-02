@@ -344,6 +344,61 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "export",
         tests=["tests/integration/test_export_fixtures.py"],
     ),
+    "QueueTopologySpec": _contract(
+        "QueueTopologySpec",
+        OwnerService.SCHEDULER,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/contract/test_scale_contracts.py"],
+    ),
+    "QueueItem": _contract(
+        "QueueItem",
+        OwnerService.SCHEDULER,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/contract/test_scale_contracts.py"],
+    ),
+    "ShardLease": _contract(
+        "ShardLease",
+        OwnerService.SCHEDULER,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scale_hardening.py"],
+    ),
+    "RetryDeadLetterRecord": _contract(
+        "RetryDeadLetterRecord",
+        OwnerService.SCHEDULER,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scale_policy_boundaries.py"],
+    ),
+    "BackpressureSignal": _contract(
+        "BackpressureSignal",
+        OwnerService.OPS,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scale_policy_boundaries.py"],
+    ),
+    "AutoscalingDecision": _contract(
+        "AutoscalingDecision",
+        OwnerService.OPS,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scale_policy_boundaries.py"],
+    ),
+    "ScaleRecoveryReport": _contract(
+        "ScaleRecoveryReport",
+        OwnerService.REVIEW_REPLAY,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scale_replay.py"],
+    ),
+    "ScaleFixtureManifest": _contract(
+        "ScaleFixtureManifest",
+        OwnerService.TESTS,
+        "scale",
+        tests=["tests/integration/test_scale_fixtures.py"],
+    ),
     "ReplayBundleManifest": _contract(
         "ReplayBundleManifest",
         OwnerService.REVIEW_REPLAY,
@@ -1388,6 +1443,59 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["export_reconciliation_reported"],
         ),
+        "record_queue_topology": CommandTypeRegistration(
+            command_type="record_queue_topology",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="QueueTopologySpec",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["scheduler"],
+            emitted_event_types=["queue_topology_recorded"],
+        ),
+        "record_queue_item": CommandTypeRegistration(
+            command_type="record_queue_item",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="QueueItem",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["queue_item_recorded"],
+        ),
+        "record_shard_lease": CommandTypeRegistration(
+            command_type="record_shard_lease",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="ShardLease",
+            payload_schema_ref="BaseCommandPayload",
+            lease_required=True,
+            emitted_event_types=["shard_lease_recorded"],
+        ),
+        "record_backpressure_signal": CommandTypeRegistration(
+            command_type="record_backpressure_signal",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="BackpressureSignal",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["backpressure"],
+            emitted_event_types=["backpressure_signal_recorded"],
+        ),
+        "record_autoscaling_decision": CommandTypeRegistration(
+            command_type="record_autoscaling_decision",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="AutoscalingDecision",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["autoscaling"],
+            emitted_event_types=["autoscaling_decided"],
+        ),
+        "record_retry_dead_letter": CommandTypeRegistration(
+            command_type="record_retry_dead_letter",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="RetryDeadLetterRecord",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["retry_dead_letter_recorded", "error_recorded"],
+        ),
+        "record_scale_recovery_report": CommandTypeRegistration(
+            command_type="record_scale_recovery_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="ScaleRecoveryReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["scale_recovery_reported"],
+        ),
     }
 )
 
@@ -1516,6 +1624,13 @@ EVENT_TYPES.update(
             "export_withdrawal_completed",
             "export_withdrawal_failed",
             "export_reconciliation_reported",
+            "queue_topology_recorded",
+            "queue_item_recorded",
+            "shard_lease_recorded",
+            "backpressure_signal_recorded",
+            "autoscaling_decided",
+            "retry_dead_letter_recorded",
+            "scale_recovery_reported",
         ]
     }
 )
@@ -1953,6 +2068,28 @@ for _export_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _scale_fixture, _negative in {
+    "scale-sharding-success": False,
+    "backpressure-autoscale-success": False,
+    "dead-letter-recovery-success": False,
+    "stale-lease-without-recovery": True,
+    "unfair-site-starvation": True,
+    "autoscale-without-policy": True,
+    "dead-letter-missing-failure-record": True,
+    "replay-missing-scale-refs": True,
+}.items():
+    _base = f"tests/fixtures/{_scale_fixture}"
+    FIXTURE_ORACLES[_scale_fixture] = FixtureOracleRegistration(
+        fixture_id=_scale_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -2170,7 +2307,15 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
         "scheduler",
         OwnerService.SCHEDULER,
         "materialized",
-        materialized=["FrontierItem", "QueueLease", "SchedulerRecoveryReport"],
+        materialized=[
+            "FrontierItem",
+            "QueueLease",
+            "SchedulerRecoveryReport",
+            "QueueTopologySpec",
+            "QueueItem",
+            "ShardLease",
+            "RetryDeadLetterRecord",
+        ],
     ),
     "source_acquisition": _target_area(
         "source_acquisition",
@@ -2214,6 +2359,20 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "ExtractionStrategy",
             "ExtractionCandidate",
             "NormalizeExtractReport",
+        ],
+    ),
+    "scale_reliability": _target_area(
+        "scale_reliability",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "QueueTopologySpec",
+            "QueueItem",
+            "ShardLease",
+            "RetryDeadLetterRecord",
+            "BackpressureSignal",
+            "AutoscalingDecision",
+            "ScaleRecoveryReport",
         ],
     ),
 }

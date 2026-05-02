@@ -1,0 +1,1 @@
+{"id":"unfair-site-starvation","scenario":"unfair-site-starvation","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"unfair_site_starvation","negative_case":true}

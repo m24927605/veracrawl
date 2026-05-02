@@ -1,0 +1,1 @@
+{"id":"stale-lease-without-recovery","scenario":"stale-lease-without-recovery","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"stale_lease_without_recovery","negative_case":true}

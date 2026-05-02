@@ -1,0 +1,1 @@
+{"id":"replay-missing-scale-refs","scenario":"replay-missing-scale-refs","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"replay_missing_scale_refs","negative_case":true}

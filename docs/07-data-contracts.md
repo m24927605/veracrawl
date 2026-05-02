@@ -42,7 +42,7 @@ Target contract manifest:
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
-| QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, reliability, queueing, projection mismatch, and DR behavior are contracted |
+| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
 | FailureRecord, RecoveryAction, DriftEvent, QualityReport | required | failure, repair, drift, recovery, and operations are evented and reviewable |
 
 Target adapter types:
@@ -1108,6 +1108,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | cancel_run | control | CrawlRun | RunLifecyclePayload | run not terminal | expected_version | command_committed, processing_transitioned | cancellation emits recovery tasks for owned leases |
 | complete_run | control | CrawlRun | RunLifecyclePayload | queues drained or terminal policy satisfied | expected_version | command_committed, processing_transitioned | incomplete artifacts create QualityReport |
 | fail_run | control | CrawlRun | RunFailurePayload | terminal failure reason recorded | expected_version | command_committed, error_recorded | FailureRecord and RecoveryAction proposed |
+| record_queue_topology | scheduler | QueueTopologySpec | BaseCommandPayload | all target queues, shard key parts, fairness refs, and policy refs validate | expected_version | queue_topology_recorded | missing fairness or policy refs fail target scale acceptance |
+| record_queue_item | scheduler | QueueItem | BaseCommandPayload | command ref, shard key, idempotency key, and expected version ref validate | expected_version | queue_item_recorded | invalid queue item rejects before lease |
+| record_shard_lease | scheduler | ShardLease | BaseCommandPayload | active lease heartbeat, expiry, fencing token, and policy refs validate | lease_required | shard_lease_recorded | stale or policy-missing lease rejected |
 | enqueue | scheduler | QueueItem | QueueCommandPayload | aggregate command exists; queue policy permits | idempotency_key | queue_item_enqueued | duplicate idempotency returns duplicate CommandResult |
 | acquire_lease | scheduler | QueueItem, ShardLease | LeaseCommandPayload | item queued or expired; worker identity valid | lease_required after acquire | queue_item_leased, shard_lease_acquired | stale lease rejected by fencing token |
 | heartbeat_lease | scheduler | ShardLease | LeaseHeartbeatPayload | active lease token | lease_required | command_committed | missed heartbeat allows expiry |
@@ -1170,7 +1173,10 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | propose_recovery | ops | RecoveryAction | RecoveryActionPayload | FailureRecord exists | expected_version | recovery_action_started | unsafe recovery requires review |
 | complete_recovery | ops or owner service | RecoveryAction | RecoveryResultPayload | recovery outputs validate | expected_version | recovery_action_completed | failed recovery opens ReviewItem |
 | record_backpressure | ops | BackpressureSignal | BackpressureSignalPayload | threshold exceeded | none | backpressure_signal_recorded | autoscaling decision may be proposed |
+| record_retry_dead_letter | scheduler | RetryDeadLetterRecord | BaseCommandPayload | retry policy exhausted, final reason, failure record, and recovery refs validate | lease_required | retry_dead_letter_recorded, error_recorded | missing failure record blocks dead-letter visibility |
 | decide_autoscaling | ops | AutoscalingDecision | AutoscalingPayload | current budgets and queue metrics loaded | none | autoscaling_decided | budget cap rejection logged |
+| record_autoscaling_decision | ops | AutoscalingDecision | BaseCommandPayload | reason signals and policy refs validate for capacity changes | none | autoscaling_decided | autoscale without policy is rejected |
+| record_scale_recovery_report | review_replay | ScaleRecoveryReport | BaseCommandPayload | queue, lease, backpressure, autoscaling, dead-letter, failure/recovery, DR, policy, command, event, outbox, and replay refs validate | expected_version | scale_recovery_reported | missing scale refs fail replay |
 | create_dr_restore_plan | ops | DRRestorePlan | DRRestorePlanPayload | restore scope, restore point, and backup refs validate | expected_version | command_committed | invalid restore point rejected |
 | start_dr_restore | ops | DRRestoreRun | DRRestoreRunPayload | approved restore plan and phase graph present | expected_version | command_committed | phase precondition failure blocks run |
 | complete_dr_restore | ops | DRRestoreRun, DRRestoreReport | DRRestoreResultPayload | all validation gates pass or needs_review recorded | expected_version | dr_restore_reported | unresolved refs force fail or needs_review |
@@ -1537,7 +1543,7 @@ BackfillJob:
 ```yaml
 StateMachineSpec:
   id: string
-  entity_type: CrawlObjective | CrawlPlan | CrawlJob | CrawlRun | SourceAdapterResult | FrontierItem | ProcessingTask | BrowserInteractionStep | AgentRunResult | ToolCallTrace | FrontierRecommendation | MultiAgentWorkflow | AgentHandoff | CrossScopeMemoryTunnel | ExtractionStrategy | ExtractionCandidate | EvidencePacket | VerificationDecision | PublishedOutput | VerifiedFact | ExportJob | ExportAttempt | ExportWithdrawalJob | ExportWithdrawalAttempt | ReviewItem | ConflictRecord | DriftEvent | RecoveryAction | ProjectionWatermark | ProjectionRebuildJob | BackfillJob | SchemaMigrationRun | EventMigrationRun | DRRestoreRun | TemporalKGEntityIdentity | TemporalKGProjectionRecord | MemoryEvent | OperationalTemporalMemoryRecord | QueueItem | ShardLease | ArtifactLifecycleState
+  entity_type: CrawlObjective | CrawlPlan | CrawlJob | CrawlRun | SourceAdapterResult | FrontierItem | ProcessingTask | BrowserInteractionStep | AgentRunResult | ToolCallTrace | FrontierRecommendation | MultiAgentWorkflow | AgentHandoff | CrossScopeMemoryTunnel | ExtractionStrategy | ExtractionCandidate | EvidencePacket | VerificationDecision | PublishedOutput | VerifiedFact | ExportJob | ExportAttempt | ExportWithdrawalJob | ExportWithdrawalAttempt | ReviewItem | ConflictRecord | DriftEvent | RecoveryAction | ProjectionWatermark | ProjectionRebuildJob | BackfillJob | SchemaMigrationRun | EventMigrationRun | DRRestoreRun | TemporalKGEntityIdentity | TemporalKGProjectionRecord | MemoryEvent | OperationalTemporalMemoryRecord | QueueTopologySpec | QueueItem | ShardLease | RetryDeadLetterRecord | BackpressureSignal | AutoscalingDecision | ScaleRecoveryReport | ArtifactLifecycleState
   version: string
   states: list
   transitions:
@@ -1574,8 +1580,13 @@ Target state transition matrix:
 | CrawlRun | queued -> running -> completed/failed/cancelled/paused; paused -> running/cancelled | start_run, pause_run, resume_run, cancel_run, complete_run, fail_run | control | plan approval, policy snapshot, budget | illegal transition, resume, cancel tests |
 | SourceAdapterResult | pending -> succeeded/blocked/failed/partial | execute_http_fetch, read_sitemap, read_rss, read_api_source, capture_browser_snapshot, open_authorized_session, normalize_document_source, import_file, apply_manual_seed, attach_prior_snapshot | natural adapter owner | source_adapter policy, adapter-specific approvals | blocked-source, adapter-result replay, natural-owner tests |
 | FrontierItem | discovered -> eligible -> scheduled -> fetching -> fetched/failed/retired; failed -> eligible/retired | schedule_frontier, lease_fetch, commit_fetch, fail_fetch, retire_frontier | scheduler | source scope, budget, lease | duplicate lease, retry, retire tests |
+| QueueTopologySpec | proposed -> recorded/superseded | record_queue_topology | scheduler | fairness refs, concurrency policy | all queues, shard-key, and fairness tests |
 | QueueItem | queued -> leased -> acked/nacked/dead_lettered | enqueue, acquire_lease, ack, nack, dead_letter | scheduler | lease token | lease expiry, duplicate ack tests |
 | ShardLease | active -> released/expired/revoked | acquire_lease, heartbeat_lease, release_lease, revoke_lease | scheduler | worker identity | heartbeat and fencing tests |
+| RetryDeadLetterRecord | created as recorded; immutable after create | record_retry_dead_letter | scheduler | failure and recovery refs | missing failure/recovery tests |
+| BackpressureSignal | created as recorded; immutable after create | record_backpressure_signal | ops | backpressure policy | threshold and policy tests |
+| AutoscalingDecision | proposed -> recorded/rejected | record_autoscaling_decision | ops | autoscaling policy | capacity-change policy tests |
+| ScaleRecoveryReport | created as pass/fail/needs_review; immutable after create | record_scale_recovery_report | review_replay | scale replay and DR refs | missing scale refs tests |
 | ProcessingTask | queued -> running -> completed/failed/cancelled/waiting_review | start_task, complete_task, fail_task, cancel_task, request_review | task owner | task policy, lease | retry, cancel, and review tests |
 | BrowserInteractionStep | planned -> executed/blocked/failed | execute_browser_step | browser | browser_interaction, credential_use, approval for side effects | destructive action block tests |
 | AgentRunResult | created as completed/failed/escalated/cancelled; immutable after create | complete_workflow, fail_workflow, escalate_workflow, cancel_workflow | agents | context, model, tool trace completeness | immutable terminal trace tests |
@@ -2953,7 +2964,7 @@ CrawlRunEvent:
   crawl_plan_id: string
   event_version: string
   sequence: integer
-  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | frontier_recommended | frontier_transitioned | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_acquired | shard_lease_released | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
+  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | frontier_recommended | frontier_transitioned | queue_topology_recorded | queue_item_recorded | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_recorded | shard_lease_acquired | shard_lease_released | retry_dead_letter_recorded | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | scale_recovery_reported | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
   event_type_spec_id: string
   payload_ref: string
   actor: string
@@ -3042,7 +3053,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | agent_handoff_proposed, agent_handoff_accepted, agent_handoff_rejected, agent_handoff_completed | agents | AgentHandoff | run | yes | replay, coordination |
 | coordination_decision_recorded, coordination_decision_applied | agents | CoordinationDecision | run | yes | replay, owner services |
 | frontier_transitioned | scheduler | FrontierItem | frontier_item | yes | fetch, graph, replay |
-| queue_item_enqueued, queue_item_leased, queue_item_acked, queue_item_dead_lettered, shard_lease_acquired, shard_lease_released | scheduler | QueueItem/ShardLease/RetryDeadLetterRecord | frontier_item, processing_task, export_job, graph_projection | yes | workers, ops, replay |
+| queue_topology_recorded, queue_item_recorded, queue_item_enqueued, queue_item_leased, queue_item_acked, queue_item_dead_lettered, shard_lease_recorded, shard_lease_acquired, shard_lease_released, retry_dead_letter_recorded | scheduler | QueueTopologySpec/QueueItem/ShardLease/RetryDeadLetterRecord | frontier_item, processing_task, export_job, graph_projection | yes | workers, ops, replay |
 | source_adapter_result_recorded | natural adapter owner | SourceAdapterResult | source_adapter | yes | scheduler, normalize, evidence, replay |
 | fetch_attempted, snapshot_written | fetch/browser | FetchAttempt/PageSnapshot | fetch_attempt, artifact | yes | normalize, evidence, replay |
 | browser_step_executed | browser | BrowserInteractionStep | artifact, run | yes | security, replay, review |
@@ -3062,7 +3073,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | run_diary_written | control/agents | RunDiaryEvent | run | yes | replay |
 | drift_detected | graph/extract/ops | DriftEvent | run | yes | repair, review |
 | review_created, review_decided, conflict_adjudicated | review_replay/verify | ReviewItem/ConflictRecord | review_item, conflict | yes | publish, ops, replay |
-| backpressure_signal_recorded, autoscaling_decided | ops | BackpressureSignal/AutoscalingDecision | run | yes | ops, scheduler |
+| backpressure_signal_recorded, autoscaling_decided, scale_recovery_reported | ops/review_replay | BackpressureSignal/AutoscalingDecision/ScaleRecoveryReport | run | yes | ops, scheduler, replay |
 | dr_restore_reported | ops | DRRestoreReport | run | yes | ops, audit |
 | recovery_action_started, recovery_action_completed, error_recorded | ops or owner service | FailureRecord/RecoveryAction | recovery_action | yes | ops, replay |
 
@@ -3077,7 +3088,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | policy/approval/review events | DecisionEventPayload | PolicyDecision, ApprovalDecision, ReviewDecision | decision before/after | reviewer identity follows audit policy |
 | agent/model/tool events | AgentTraceEventPayload | AgentActionTrace, ModelCallTrace, ToolCallTrace, ContextBundleTrace | trace status | raw prompt/response may be redacted, trace refs remain |
 | workflow/handoff/coordination events | MultiAgentWorkflowEventPayload | MultiAgentWorkflow, AgentHandoff, CoordinationDecision | workflow/handoff status | context refs may be redacted, decisions remain |
-| queue/lease/frontier events | QueueFrontierEventPayload | QueueItem, ShardLease, FrontierItem | queue/frontier state before/after | no replay-critical redaction |
+| queue/lease/frontier events | QueueFrontierEventPayload | QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, FrontierItem | queue/frontier state before/after | no replay-critical redaction |
 | fetch/browser/session events | FetchBrowserEventPayload | FetchAttempt, SourceAdapterResult, BrowserInteractionStep, CredentialUseAudit | attempt/step status | raw secret material is never serialized; audit refs remain |
 | processing/extraction/evidence events | ProcessingEvidenceEventPayload | ProcessingTask, ExtractionCandidate, EvidencePacket | task/candidate status | source snippets may be redacted with artifact refs |
 | verification/publication events | PublicationEventPayload | VerificationDecision, PublishedOutput, OutputManifest, EvidenceCoverageMap | decision/output status | output values follow publication privacy policy |
@@ -3085,7 +3096,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | memory events | MemoryEventPayload | MemoryEvent, MemoryRetrievalTrace, CrossScopeMemoryTunnel | memory/tunnel status | memory content may be summarized or redacted |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | artifact lifecycle events | ArtifactLifecycleEventPayload | ArtifactLifecycleState | lifecycle/hold status | redaction/tombstone refs remain |
-| failure/recovery/ops events | OpsEventPayload | FailureRecord, RecoveryAction, BackpressureSignal, AutoscalingDecision, DRRestoreReport | recovery/status fields | incident details follow audit policy |
+| failure/recovery/ops events | OpsEventPayload | FailureRecord, RecoveryAction, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, DRRestoreReport | recovery/status fields | incident details follow audit policy |
 
 Event payload schema definitions:
 
@@ -3152,12 +3163,16 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | coordination_decision_applied | MultiAgentWorkflowEventPayload | CoordinationDecision, CommandResult | before and after required | applied command result, selected ref | rationale may be redacted by ref |
 | frontier_recommended | AgentTraceEventPayload | FrontierRecommendation | after required | recommendation type, priority delta, input refs | rationale may be redacted by ref |
 | frontier_transitioned | QueueFrontierEventPayload | FrontierItem | before and after required | canonical URL/source key, transition version | no replay-critical redaction |
+| queue_topology_recorded | QueueFrontierEventPayload | QueueTopologySpec | after required | queue names, shard key parts, concurrency limits, fairness refs | no replay-critical redaction |
+| queue_item_recorded | QueueFrontierEventPayload | QueueItem | after required | queue, shard key, command ref, idempotency key, expected version | no replay-critical redaction |
 | queue_item_enqueued | QueueFrontierEventPayload | QueueItem | after required | queue, shard key, command ref, idempotency key | no replay-critical redaction |
 | queue_item_leased | QueueFrontierEventPayload | QueueItem, ShardLease | before and after required | lease token hash, worker id, expiry | lease token secret material redacted |
 | queue_item_acked | QueueFrontierEventPayload | QueueItem, CommandResult | before and after required | lease token hash, command result refs | lease token secret material redacted |
 | queue_item_dead_lettered | QueueFrontierEventPayload | QueueItem, RetryDeadLetterRecord | before and after required | retry class, attempts, failure record | incident details follow audit policy |
+| shard_lease_recorded | QueueFrontierEventPayload | ShardLease | after required | shard key, worker id, heartbeat, expiry, policy refs | lease token secret material redacted |
 | shard_lease_acquired | QueueFrontierEventPayload | ShardLease | after required | shard key, worker id, lease token hash | lease token secret material redacted |
 | shard_lease_released | QueueFrontierEventPayload | ShardLease | before and after required | release reason, lease token hash | lease token secret material redacted |
+| retry_dead_letter_recorded | QueueFrontierEventPayload | RetryDeadLetterRecord | after required | retry class, attempts, final reason, failure and recovery refs | incident details follow audit policy |
 | source_adapter_result_recorded | FetchBrowserEventPayload | SourceAdapterResult | before optional, after required | adapter type, result type, output refs, policy refs | blocked reasons remain; secrets redacted |
 | fetch_attempted | FetchBrowserEventPayload | FetchAttempt, SourceAdapterResult when applicable | after required | attempt id, URL/source ref, idempotency key | request auth material redacted |
 | browser_step_executed | FetchBrowserEventPayload | BrowserInteractionStep | before and after required | step number, side-effect class, artifact refs | inputs redacted by policy |
@@ -3193,6 +3208,7 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | conflict_adjudicated | DecisionEventPayload | ConflictRecord, AdjudicationDecision | before and after required | conflict id, decision, resulting outputs | evidence refs remain |
 | backpressure_signal_recorded | OpsEventPayload | BackpressureSignal | after required | signal type, threshold, measured value | operational metrics remain |
 | autoscaling_decided | OpsEventPayload | AutoscalingDecision | after required | scaling action, budget refs, decision reason | operational metrics remain |
+| scale_recovery_reported | OpsEventPayload | ScaleRecoveryReport | after required | queue, lease, backpressure, autoscaling, dead-letter, DR, command, event, outbox, replay refs | operational refs remain |
 | dr_restore_reported | OpsEventPayload | DRRestoreReport | after required | restore point, validation result, missing refs | incident details follow audit policy |
 | recovery_action_started | OpsEventPayload | RecoveryAction | before and after required | recovery action id, affected refs, approval refs | incident details follow audit policy |
 | recovery_action_completed | OpsEventPayload | RecoveryAction | before and after required | output refs, validation result | incident details follow audit policy |
@@ -3288,6 +3304,38 @@ DriftEvent:
   created_at: timestamp
 ```
 
+## QueueTopologySpec
+
+```yaml
+QueueTopologySpec:
+  id: string
+  project_id: string
+  queue_names:
+    - frontier
+    - processing
+    - verification_review
+    - export_outbox
+    - projection
+    - recovery
+  shard_key_parts:
+    - project_id
+    - site_id
+    - adapter_type
+    - priority_band
+  fairness_scope_refs: list
+  per_project_concurrency_limit: integer
+  per_site_concurrency_limit: integer
+  policy_decision_refs: list
+  created_at: timestamp
+```
+
+Rules:
+
+- `QueueTopologySpec` must declare every target queue before queue work can be considered target-profile complete.
+- shard keys must include project ID, site ID, adapter type, and priority band.
+- per-site concurrency cannot exceed per-project concurrency.
+- fairness and policy refs are mandatory; a topology that lets one site starve unrelated work fails target acceptance.
+
 ## QueueItem
 
 ```yaml
@@ -3301,6 +3349,8 @@ QueueItem:
   command_ref: string
   priority: number
   retry_class: transient | rate_limited | policy_blocked | permanent_source_failure | adapter_bug | worker_crash | projection_mismatch | destination_rejected
+  idempotency_key: string
+  expected_version_ref: string
   lease_token: string
   lease_expires_at: timestamp
   attempts: integer
@@ -3322,6 +3372,7 @@ ShardLease:
   acquired_at: timestamp
   heartbeat_at: timestamp
   expires_at: timestamp
+  policy_decision_refs: list
   status: active | expired | released | revoked
 ```
 
@@ -3368,6 +3419,38 @@ AutoscalingDecision:
   policy_decision_refs: list
   created_at: timestamp
 ```
+
+## ScaleRecoveryReport
+
+```yaml
+ScaleRecoveryReport:
+  id: string
+  run_ref: string
+  queue_topology_ref: string
+  queue_item_refs: list
+  shard_lease_refs: list
+  backpressure_signal_refs: list
+  autoscaling_decision_refs: list
+  dead_letter_record_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  dr_restore_report_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+Rules:
+
+- a passing `ScaleRecoveryReport` requires queue topology, queue item, shard lease, backpressure, autoscaling, dead-letter, failure, recovery, DR restore, policy, command, event cursor, outbox, and replay refs.
+- non-pass reports must expose failure records or missing refs; scale failures cannot be hidden as successful throughput degradation.
+- scale decisions never satisfy publication evidence; they only explain scheduling, reliability, recovery, and throughput behavior.
 
 ## ProjectionMismatchReport
 

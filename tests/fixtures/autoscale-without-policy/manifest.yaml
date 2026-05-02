@@ -1,0 +1,1 @@
+{"id":"autoscale-without-policy","scenario":"autoscale-without-policy","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"autoscale_without_policy","negative_case":true}
