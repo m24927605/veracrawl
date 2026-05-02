@@ -639,6 +639,44 @@ agent framework integration, model SDK integration, review UI, export delivery,
 distributed storage, distributed queueing, production browser rendering, or
 production scale readiness.
 
+Security/privacy lifecycle gate fixture contract:
+
+```text
+veracrawl-security-privacy run tests/fixtures/<security_privacy_fixture_id> --profile target --out .veracrawl-test-runs/<security_privacy_fixture_id>
+```
+
+Required security/privacy fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| security-privacy-success | security checks, credential audit, prompt taint boundary, artifact lifecycle action, projection cleanup, redacted replay, observability, policy, command, event cursor, outbox, failure/recovery, redaction, and replay refs are complete with leakage count 0 |
+| security-privacy-policy-only | ordinary policy refs alone return `needs_review` and cannot claim pass |
+| security-privacy-unsafe-network | missing or unsafe egress/private-network policy check fails |
+| security-privacy-prompt-injection | missing prompt-taint/tool-misuse boundary fails |
+| security-privacy-credential-leakage | credential prompt leakage or raw secret leak refs fail |
+| security-privacy-missing-lifecycle | missing artifact lifecycle propagation fails |
+| security-privacy-legal-hold-delete | delete under active legal hold fails |
+| security-privacy-missing-projection-cleanup | missing projection cleanup refs fail |
+| security-privacy-missing-redacted-replay | missing redacted replay refs fail |
+| security-privacy-missing-observability | missing observability refs fail |
+
+Security/privacy lifecycle acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_security_privacy_contract_registry.py`
+- `pytest tests/contract/test_security_privacy_contracts.py`
+- `pytest tests/contract/test_security_privacy_import_boundaries.py`
+- `pytest tests/unit/test_security_privacy_gate.py`
+- `pytest tests/integration/test_security_privacy_fixtures.py`
+
+This acceptance proves target security/privacy lifecycle refs, policy-only
+rejection, credential leak blocking, prompt-taint boundaries, artifact
+lifecycle/projection cleanup propagation, redacted replay, and backend-neutral
+observability linkage. It does not prove managed DLP, SIEM/SOAR integrations,
+production compliance workflows, production browser fleets, cloud security
+accounts, CAPTCHA solving, paywall bypass, WAF evasion, stealth automation, or
+credential bypass behavior.
+
 Review/replay/ops console fixture contract:
 
 ```text
@@ -1103,6 +1141,9 @@ Acceptance gates:
 - deletion is blocked while legal hold is active; redacted-under-hold and tombstoned-under-hold fixtures preserve hold metadata and replay lineage
 - redacted replay remains structurally complete through `ReplayBundleManifest`
 - poisoned-memory and prompt-injection fixtures cannot steer unsafe tools or publication
+- `SecurityPrivacyReport` pass requires security policy checks, credential audit refs, prompt taint boundary refs, artifact lifecycle actions, projection cleanup, redacted replay, observability, policy, command, event cursor, outbox, failure/recovery, redaction, and replay refs with leakage count 0
+- `security-privacy-policy-only` must remain `needs_review`; ordinary policy refs alone cannot claim security/privacy lifecycle pass
+- negative fixtures for unsafe network access, prompt-injection/tool misuse, credential leakage, missing lifecycle propagation, legal-hold delete, missing projection cleanup, missing redacted replay, and missing observability refs must fail deterministically
 
 ### Scale And Reliability Profile
 

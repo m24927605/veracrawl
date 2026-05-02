@@ -1,0 +1,1 @@
+{"id":"security-privacy-unsafe-network","scenario":"security-privacy-unsafe-network","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"security_privacy_unsafe_network","expected_failure_type":"security_privacy_unsafe_network","negative_case":true}

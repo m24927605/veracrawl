@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"security_privacy_credential_leakage","required_missing_ref_fields":["raw_secret_leak_refs"],"leakage_count":1}

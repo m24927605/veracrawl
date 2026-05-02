@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"security_privacy_missing_lifecycle_propagation","required_missing_ref_fields":["artifact_lifecycle_action_refs"]}

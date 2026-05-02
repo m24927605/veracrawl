@@ -538,6 +538,52 @@ class ObservabilityFailureType(StrEnum):
     UNSAFE_RUNBOOK_WITHOUT_APPROVAL = "observability_unsafe_runbook_without_approval"
 
 
+class SecurityActionSurface(StrEnum):
+    NETWORK = "network"
+    PROMPT = "prompt"
+    CREDENTIAL = "credential"
+    BROWSER = "browser"
+    MEMORY = "memory"
+    GRAPH = "graph"
+    EXPORT = "export"
+    RECOVERY = "recovery"
+    ARTIFACT_LIFECYCLE = "artifact_lifecycle"
+
+
+class SecurityCheckResult(StrEnum):
+    ALLOW = "allow"
+    BLOCK = "block"
+    NEEDS_REVIEW = "needs_review"
+
+
+class CredentialDeliveryMode(StrEnum):
+    SCOPED_HEADER = "scoped_header"
+    SCOPED_COOKIE = "scoped_cookie"
+    REQUEST_SIGNING = "request_signing"
+    VAULT_BROKERED_FORM_FILL = "vault_brokered_form_fill"
+
+
+class ArtifactLifecycleOperation(StrEnum):
+    CLASSIFY = "classify"
+    REDACT = "redact"
+    TOMBSTONE = "tombstone"
+    DELETE = "delete"
+    LEGAL_HOLD = "legal_hold"
+    RETENTION = "retention"
+    RELEASE_LEGAL_HOLD = "release_legal_hold"
+
+
+class SecurityPrivacyFailureType(StrEnum):
+    UNSAFE_NETWORK = "security_privacy_unsafe_network"
+    PROMPT_INJECTION_TOOL_MISUSE = "security_privacy_prompt_injection_tool_misuse"
+    CREDENTIAL_LEAKAGE = "security_privacy_credential_leakage"
+    MISSING_LIFECYCLE_PROPAGATION = "security_privacy_missing_lifecycle_propagation"
+    LEGAL_HOLD_DELETE = "security_privacy_legal_hold_delete"
+    MISSING_PROJECTION_CLEANUP = "security_privacy_missing_projection_cleanup"
+    MISSING_REDACTED_REPLAY = "security_privacy_missing_redacted_replay"
+    MISSING_OBSERVABILITY_REFS = "security_privacy_missing_observability_refs"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"

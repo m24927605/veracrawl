@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"security_privacy_prompt_injection_tool_misuse","required_missing_ref_fields":["prompt_taint_boundary_refs"]}

@@ -935,6 +935,15 @@ Operational observability gate slice:
 - no-runtime and ops-console-only observability return `needs_review`; missing metrics, traces, alerts, runbooks, dashboard watermarks, DR refs, redaction refs, replay refs, secret leakage, and unsafe runbook actions without approval are deterministic failures.
 - this slice does not implement managed telemetry storage, OpenTelemetry collector deployment, Grafana dashboards, cloud monitoring accounts, paging integrations, on-call automation, deployment automation, production worker fleets, browser rendering, model SDK integration, or concrete agent framework integration. Those remain separate target gates.
 
+Security/privacy lifecycle gate slice:
+
+- `veracrawl.runtime_support.security_privacy` is core-owned and imports only VeraCrawl contracts.
+- `SecurityPolicyCheck`, `CredentialUseAudit`, `PromptTaintBoundary`, `ArtifactLifecycleAction`, and `ProjectionCleanupRecord` are the executable contract spine for egress/private-network denial, credential isolation, prompt-taint boundaries, artifact lifecycle actions, and projection cleanup.
+- `SecurityPrivacyReport` can claim `pass` only when security policy checks, credential audit refs, prompt taint boundary refs, artifact lifecycle actions, projection cleanup, redacted replay, observability, policy, command, event cursor, outbox, failure/recovery, redaction, and replay refs are present and leakage count is 0.
+- `veracrawl-security-privacy` runs success, policy-only, and negative security/privacy fixtures without static dependencies on browser libraries, model SDKs, agent frameworks, cloud SDKs, telemetry SDKs, vault SDKs, or security vendor SDKs.
+- policy-only security/privacy returns `needs_review`; unsafe network access, prompt-injection/tool misuse, credential leakage, missing lifecycle propagation, legal-hold delete, missing projection cleanup, missing redacted replay, and missing observability refs are deterministic failures.
+- this slice does not implement CAPTCHA solving, paywall bypass, login wall circumvention, WAF evasion, stealth automation, credential theft, raw secret form-fill bypass, production browser rendering, managed DLP, external SIEM/SOAR integrations, or production compliance workflows. Those are outside VeraCrawl's authorized crawler boundary or require separate approved adapter specs.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

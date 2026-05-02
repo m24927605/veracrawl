@@ -312,6 +312,9 @@ Required acceptance:
 - customer-authorized origin credential presentation is allowed only through audited scoped delivery modes with origin allowlist and `CredentialUseAudit`
 - redaction, tombstone, delete, retention, and legal hold actions propagate to projections
 - replay remains structurally complete under redaction
+- `SecurityPrivacyReport` pass requires security policy checks, credential audit refs, prompt taint boundary refs, artifact lifecycle actions, projection cleanup, redacted replay, observability, policy, command, event cursor, outbox, failure, recovery, and redaction refs with leakage count 0
+- policy refs alone return `needs_review`; they cannot be used to claim security/privacy lifecycle pass
+- negative fixtures for unsafe network access, prompt-injection/tool misuse, credential leakage, missing lifecycle propagation, legal-hold delete, missing projection cleanup, missing redacted replay, and missing observability refs fail deterministically
 - security/privacy gates pass before target capability can be claimed
 
 ### Scale And Reliability Profile
@@ -368,6 +371,15 @@ Required acceptance:
   data, missing metrics, traces, alerts, runbooks, dashboard watermarks, DR refs,
   redaction refs, replay refs, secret leakage, or unsafe runbook actions block
   operational observability pass
+- security/privacy lifecycle gates must prove egress/private-network checks,
+  prompt-taint boundaries, credential-use audits, artifact lifecycle actions,
+  projection cleanup, redacted replay, observability, policy, command, event
+  cursor, outbox, failure/recovery, and redaction refs before a target security
+  capability can be labeled verified
+- policy-only security/privacy refs return `needs_review`; unsafe network,
+  prompt-injection/tool misuse, credential leakage, missing lifecycle propagation,
+  legal-hold delete, missing projection cleanup, missing redacted replay, and
+  missing observability refs block security/privacy lifecycle pass
 
 ## Completion States
 

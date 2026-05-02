@@ -72,6 +72,7 @@ Safety is part of the crawl contract:
 - raw secrets must not be exposed to agents, model prompts, logs, replay bundles, or untrusted page text
 - customer-approved credential presentation to an authorized origin is allowed only through scoped headers, scoped cookies, request signing, or vault-brokered form fill with origin allowlist, policy approval, and `CredentialUseAudit`
 - raw artifacts need retention, privacy, and PII handling policy
+- target security/privacy acceptance requires `SecurityPrivacyReport` with security policy checks, credential audits, prompt taint boundaries, artifact lifecycle actions, projection cleanup, redacted replay, observability, policy, command, event cursor, outbox, failure, and recovery refs
 - unavailable or blocked sources must be reported, not bypassed
 
 These documents intentionally do not specify mechanisms for CAPTCHA solving, paywall bypass, login wall circumvention, WAF evasion, stealth automation, or ban-avoidance proxy tactics.

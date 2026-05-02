@@ -117,6 +117,14 @@ observability contracts and backend/collector handoff refs. It is not a claim
 that managed Prometheus, OpenTelemetry collectors, Grafana dashboards, cloud
 monitoring, paging integrations, deployment automation, or production worker
 fleets are ready.
+The security/privacy lifecycle gate proves target security and lifecycle
+contracts for egress/private-network denial, prompt-taint boundaries,
+credential-use audit, zero credential prompt leakage, artifact redaction,
+tombstone/delete/legal-hold/retention behavior, projection cleanup, redacted
+replay, observability refs, policy refs, command/event/outbox refs, and
+failure/recovery refs. It cannot claim `pass` from ordinary policy refs alone
+and remains framework-, browser-, cloud-, telemetry-, and security-vendor-neutral
+inside core.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -742,6 +750,28 @@ Run the Docker-backed operational DR gate:
 VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev \
   --extra postgres --extra queue-redis --extra object-s3 \
   pytest tests/integration/test_operational_disaster_recovery_live.py
+```
+
+Run security/privacy lifecycle fixtures:
+
+```sh
+for fixture in \
+  security-privacy-success \
+  security-privacy-policy-only \
+  security-privacy-unsafe-network \
+  security-privacy-prompt-injection \
+  security-privacy-credential-leakage \
+  security-privacy-missing-lifecycle \
+  security-privacy-legal-hold-delete \
+  security-privacy-missing-projection-cleanup \
+  security-privacy-missing-redacted-replay \
+  security-privacy-missing-observability
+do
+  uv run --python python3.12 --extra dev veracrawl-security-privacy run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
 ```
 
 ## Safety Boundary

@@ -1,0 +1,1 @@
+{"id":"security-privacy-credential-leakage","scenario":"security-privacy-credential-leakage","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"security_privacy_credential_leakage","expected_failure_type":"security_privacy_credential_leakage","negative_case":true}

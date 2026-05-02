@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/022-operational-observability-gate/plan.md`.
-Use it with `specs/022-operational-observability-gate/spec.md`,
-`specs/022-operational-observability-gate/research.md`,
-`specs/022-operational-observability-gate/data-model.md`,
-`specs/022-operational-observability-gate/contracts/`, and
-`specs/022-operational-observability-gate/quickstart.md` for VeraCrawl Operational Observability Gate work.
+Current active Spec Kit plan: `specs/023-security-privacy-lifecycle-gate/plan.md`.
+Use it with `specs/023-security-privacy-lifecycle-gate/spec.md`,
+`specs/023-security-privacy-lifecycle-gate/research.md`,
+`specs/023-security-privacy-lifecycle-gate/data-model.md`,
+`specs/023-security-privacy-lifecycle-gate/contracts/`, and
+`specs/023-security-privacy-lifecycle-gate/quickstart.md` for VeraCrawl Security Privacy Lifecycle Gate work.
 <!-- SPECKIT END -->

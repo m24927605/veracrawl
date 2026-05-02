@@ -1,0 +1,1 @@
+{"id":"security-privacy-missing-projection-cleanup","scenario":"security-privacy-missing-projection-cleanup","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"security_privacy_missing_projection_cleanup","expected_failure_type":"security_privacy_missing_projection_cleanup","negative_case":true}

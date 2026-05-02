@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"security_privacy_legal_hold_delete","required_missing_ref_fields":["legal_hold_violation_refs"]}

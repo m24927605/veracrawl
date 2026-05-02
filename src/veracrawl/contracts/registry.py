@@ -75,6 +75,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_graph_ref: str | None = None
     expected_dr_restore_ref: str | None = None
     expected_observability_ref: str | None = None
+    expected_security_privacy_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -353,6 +354,60 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "ops",
         tests=["tests/integration/test_operational_observability_fixtures.py"],
+    ),
+    "SecurityPolicyCheck": _contract(
+        "SecurityPolicyCheck",
+        OwnerService.POLICY,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    "CredentialUseAudit": _contract(
+        "CredentialUseAudit",
+        OwnerService.POLICY,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    "PromptTaintBoundary": _contract(
+        "PromptTaintBoundary",
+        OwnerService.POLICY,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    "ArtifactLifecycleAction": _contract(
+        "ArtifactLifecycleAction",
+        OwnerService.ARTIFACT_LIFECYCLE,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    "ProjectionCleanupRecord": _contract(
+        "ProjectionCleanupRecord",
+        OwnerService.PROJECTION,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    "SecurityPrivacyReport": _contract(
+        "SecurityPrivacyReport",
+        OwnerService.POLICY,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    "SecurityPrivacyFixtureManifest": _contract(
+        "SecurityPrivacyFixtureManifest",
+        OwnerService.TESTS,
+        "security_privacy",
+        tests=["tests/integration/test_security_privacy_fixtures.py"],
     ),
     "ExportTargetSpec": _contract(
         "ExportTargetSpec",
@@ -1648,6 +1703,62 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["observability_fixture_manifest_recorded"],
         ),
+        "record_security_policy_check": CommandTypeRegistration(
+            command_type="record_security_policy_check",
+            owner_service=OwnerService.POLICY,
+            target_aggregate_type="SecurityPolicyCheck",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["security_privacy"],
+            emitted_event_types=["security_policy_check_recorded"],
+        ),
+        "record_credential_use_audit": CommandTypeRegistration(
+            command_type="record_credential_use_audit",
+            owner_service=OwnerService.POLICY,
+            target_aggregate_type="CredentialUseAudit",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["credential_use"],
+            approval_required=True,
+            emitted_event_types=["credential_use_audited"],
+        ),
+        "record_prompt_taint_boundary": CommandTypeRegistration(
+            command_type="record_prompt_taint_boundary",
+            owner_service=OwnerService.POLICY,
+            target_aggregate_type="PromptTaintBoundary",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["prompt_context"],
+            emitted_event_types=["prompt_taint_boundary_recorded"],
+        ),
+        "record_artifact_lifecycle_action": CommandTypeRegistration(
+            command_type="record_artifact_lifecycle_action",
+            owner_service=OwnerService.ARTIFACT_LIFECYCLE,
+            target_aggregate_type="ArtifactLifecycleAction",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["artifact_lifecycle", "retention"],
+            approval_required=True,
+            emitted_event_types=["artifact_lifecycle_action_recorded"],
+        ),
+        "record_projection_cleanup": CommandTypeRegistration(
+            command_type="record_projection_cleanup",
+            owner_service=OwnerService.PROJECTION,
+            target_aggregate_type="ProjectionCleanupRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["artifact_lifecycle"],
+            emitted_event_types=["projection_cleanup_recorded"],
+        ),
+        "record_security_privacy_report": CommandTypeRegistration(
+            command_type="record_security_privacy_report",
+            owner_service=OwnerService.POLICY,
+            target_aggregate_type="SecurityPrivacyReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["security_privacy_reported"],
+        ),
+        "record_security_privacy_fixture_manifest": CommandTypeRegistration(
+            command_type="record_security_privacy_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="SecurityPrivacyFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["security_privacy_fixture_manifest_recorded"],
+        ),
         "record_quality_report": CommandTypeRegistration(
             command_type="record_quality_report",
             owner_service=OwnerService.OPS,
@@ -2028,6 +2139,13 @@ EVENT_TYPES.update(
             "runbook_action_recorded",
             "observability_reported",
             "observability_fixture_manifest_recorded",
+            "security_policy_check_recorded",
+            "credential_use_audited",
+            "prompt_taint_boundary_recorded",
+            "artifact_lifecycle_action_recorded",
+            "projection_cleanup_recorded",
+            "security_privacy_reported",
+            "security_privacy_fixture_manifest_recorded",
             "quality_report_recorded",
             "ops_dashboard_snapshot_recorded",
             "ops_console_reported",
@@ -2683,6 +2801,31 @@ for _observability_fixture, _negative in {
     )
 
 
+for _security_privacy_fixture, _negative in {
+    "security-privacy-success": False,
+    "security-privacy-policy-only": False,
+    "security-privacy-unsafe-network": True,
+    "security-privacy-prompt-injection": True,
+    "security-privacy-credential-leakage": True,
+    "security-privacy-missing-lifecycle": True,
+    "security-privacy-legal-hold-delete": True,
+    "security-privacy-missing-projection-cleanup": True,
+    "security-privacy-missing-redacted-replay": True,
+    "security-privacy-missing-observability": True,
+}.items():
+    _base = f"tests/fixtures/{_security_privacy_fixture}"
+    FIXTURE_ORACLES[_security_privacy_fixture] = FixtureOracleRegistration(
+        fixture_id=_security_privacy_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_security_privacy_ref=f"{_base}/oracles/expected_security_privacy.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+
 def _target_area(
     area: str,
     owner: OwnerService,
@@ -2885,6 +3028,13 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "OpsConsoleReport",
             "DRRestoreFixtureManifest",
             "ObservabilityFixtureManifest",
+            "SecurityPolicyCheck",
+            "CredentialUseAudit",
+            "PromptTaintBoundary",
+            "ArtifactLifecycleAction",
+            "ProjectionCleanupRecord",
+            "SecurityPrivacyReport",
+            "SecurityPrivacyFixtureManifest",
         ],
     ),
     "artifact_lifecycle": _target_area(
@@ -2941,6 +3091,23 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "OpsDashboardSnapshot",
             "QualityReport",
             "DRRestoreReport",
+        ],
+    ),
+    "security_privacy_lifecycle_gate": _target_area(
+        "security_privacy_lifecycle_gate",
+        OwnerService.POLICY,
+        "materialized",
+        materialized=[
+            "SecurityPolicyCheck",
+            "CredentialUseAudit",
+            "PromptTaintBoundary",
+            "ArtifactLifecycleAction",
+            "ProjectionCleanupRecord",
+            "SecurityPrivacyReport",
+            "SecurityPrivacyFixtureManifest",
+            "FailureRecord",
+            "RecoveryAction",
+            "ObservabilityReport",
         ],
     ),
     "durable_persistence": _target_area(

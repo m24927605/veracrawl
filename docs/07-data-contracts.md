@@ -3096,6 +3096,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | fetch_attempted, snapshot_written | fetch/browser | FetchAttempt/PageSnapshot | fetch_attempt, artifact | yes | normalize, evidence, replay |
 | browser_step_executed | browser | BrowserInteractionStep | artifact, run | yes | security, replay, review |
 | credential_used | control | CredentialUseAudit | run | yes | security, replay, review |
+| security_policy_check_recorded, credential_use_audited, prompt_taint_boundary_recorded, artifact_lifecycle_action_recorded, projection_cleanup_recorded, security_privacy_reported, security_privacy_fixture_manifest_recorded | policy/artifact_lifecycle/projection/tests | SecurityPolicyCheck/CredentialUseAudit/PromptTaintBoundary/ArtifactLifecycleAction/ProjectionCleanupRecord/SecurityPrivacyReport/SecurityPrivacyFixtureManifest | run, artifact_lifecycle, projection | yes | security, privacy, replay, ops |
 | processing_transitioned | normalize/extract/evidence/verify/publish/graph/memory | ProcessingTask | processing_task | yes | ops, replay |
 | candidate_created | extract | ExtractionCandidate | candidate | yes | evidence, review |
 | evidence_built | evidence | EvidencePacket | evidence_packet | yes | verify, review, publish |
@@ -3166,6 +3167,7 @@ BaseEventPayload:
 | Payload schema | Required typed fields | Required refs | State shape | Replay and redaction rules |
 | --- | --- | --- | --- | --- |
 | CommandEventPayload | command_type:string, target_aggregate_type:string, target_aggregate_id:string, command_status:string | CommandEnvelope, CommandResult when terminal | `state_before.status`, `state_after.status` | command metadata and idempotency key hash are never redacted |
+| SecurityPrivacyEventPayload | action_surface:string, result:string, lifecycle_action:string, missing_ref_fields:list | SecurityPolicyCheck, CredentialUseAudit, PromptTaintBoundary, ArtifactLifecycleAction, ProjectionCleanupRecord, SecurityPrivacyReport | policy check result, credential leakage count, lifecycle status, projection cleanup refs | raw secrets and raw prompts are never serialized; only stable redacted refs remain |
 | PlanEventPayload | objective_id:string, plan_id:string, plan_version:string, approval_status:string | CrawlObjective, CrawlPlan, RunPlanSnapshot when approved | lifecycle/approval fields | user instruction can be redacted by stable ref |
 | DecisionEventPayload | subject_ref:string, subject_type:string, decision:string, authority_ref:string | PolicyDecision, ApprovalDecision, ReviewDecision, AdjudicationDecision when applicable | decision/status fields | authority refs remain; reviewer identity follows audit policy |
 | AgentTraceEventPayload | agent_role:string, runtime_spec_id:string, trace_status:string | AgentActionTrace, ModelCallTrace, ToolCallTrace, ContextBundleTrace | trace/tool status fields | raw prompt/response redacted unless policy permits |
@@ -4251,6 +4253,126 @@ Executable operational observability rules:
 - Negative observability fixtures fail deterministically for missing metrics, traces, alerts, runbooks, dashboard watermarks, DR refs, redaction refs, replay refs, secret leakage, and unsafe runbook actions without approval.
 - Core observability contracts and validation do not import or require Prometheus, OpenTelemetry, Grafana, cloud monitoring SDKs, browser libraries, model SDKs, agent frameworks, or site-specific scraper modules.
 - These contracts prove backend-neutral observability acceptance. They do not claim managed telemetry storage, collector deployment, dashboards, paging integrations, on-call automation, production deployment, production worker fleets, production browser rendering, or production scale readiness.
+
+## Security Privacy Lifecycle Gate Contracts
+
+```yaml
+SecurityPolicyCheck:
+  id: string
+  action_surface: network | prompt | credential | browser | memory | graph | export | recovery | artifact_lifecycle
+  subject_ref: string
+  scope_ref: string
+  result: allow | block | needs_review
+  policy_decision_refs: list
+  blocked_reason_refs: list
+  observability_signal_refs: list
+  command_refs: list
+  event_refs: list
+  replay_bundle_ref: string
+  created_at: timestamp
+
+CredentialUseAudit:
+  id: string
+  credential_scope_ref: string
+  authorized_origin_ref: string
+  delivery_mode: scoped_header | scoped_cookie | request_signing | vault_brokered_form_fill
+  policy_decision_refs: list
+  approval_decision_refs: list
+  redaction_map_refs: list
+  prompt_context_refs: list
+  raw_secret_exposed: boolean
+  raw_secret_leak_refs: list
+  command_refs: list
+  event_refs: list
+  replay_bundle_ref: string
+  created_at: timestamp
+
+PromptTaintBoundary:
+  id: string
+  tainted_source_refs: list
+  taint_label_refs: list
+  sanitized_context_refs: list
+  blocked_tool_refs: list
+  prompt_use_restriction_refs: list
+  policy_decision_refs: list
+  replay_bundle_ref: string
+  created_at: timestamp
+
+ArtifactLifecycleAction:
+  id: string
+  action_type: classify | redact | tombstone | delete | legal_hold | retention | release_legal_hold
+  artifact_ref: string
+  lifecycle_state_ref: string
+  retention_policy_ref: string
+  privacy_policy_ref: string
+  legal_hold_ref: string
+  legal_hold_active: boolean
+  projection_cleanup_refs: list
+  policy_decision_refs: list
+  approval_decision_refs: list
+  command_refs: list
+  event_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  created_at: timestamp
+
+ProjectionCleanupRecord:
+  id: string
+  lifecycle_action_ref: string
+  affected_projection_refs: list
+  cleanup_event_refs: list
+  projection_watermark_refs: list
+  policy_decision_refs: list
+  replay_bundle_ref: string
+  created_at: timestamp
+
+SecurityPrivacyReport:
+  id: string
+  run_ref: string
+  security_policy_check_refs: list
+  credential_use_audit_refs: list
+  prompt_taint_boundary_refs: list
+  artifact_lifecycle_action_refs: list
+  projection_cleanup_refs: list
+  redacted_replay_refs: list
+  observability_report_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  redaction_map_refs: list
+  replay_bundle_ref: string
+  leakage_count: integer
+  raw_secret_leak_refs: list
+  unsafe_action_refs: list
+  contract_only_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  result: pass | fail | needs_review
+  created_at: timestamp
+
+SecurityPrivacyFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: security_privacy_unsafe_network | security_privacy_prompt_injection_tool_misuse | security_privacy_credential_leakage | security_privacy_missing_lifecycle_propagation | security_privacy_legal_hold_delete | security_privacy_missing_projection_cleanup | security_privacy_missing_redacted_replay | security_privacy_missing_observability_refs
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Executable security/privacy lifecycle rules:
+
+- `SecurityPrivacyReport` pass requires security policy checks, credential audits, prompt taint boundaries, artifact lifecycle actions, projection cleanup, redacted replay, observability, policy, command, event cursor, outbox, failure/recovery, redaction, and replay refs with leakage count 0.
+- `security-privacy-policy-only` returns `needs_review`; ordinary policy refs alone cannot claim security/privacy lifecycle pass.
+- Negative security/privacy fixtures fail deterministically for unsafe network access, prompt-injection/tool misuse, credential leakage, missing lifecycle propagation, legal-hold delete, missing projection cleanup, missing redacted replay, and missing observability refs.
+- `CredentialUseAudit` rejects raw secret exposure and sensitive prompt context refs; raw secrets must never be serialized into prompts, logs, replay bundles, captured artifacts, untrusted page text, or agent-visible state.
+- `ArtifactLifecycleAction` blocks delete while legal hold is active and requires projection cleanup refs; side-effecting lifecycle actions require approval refs.
+- Core security/privacy contracts and validation do not import or require browser libraries, model SDKs, agent frameworks, cloud SDKs, telemetry SDKs, vault SDKs, security vendor SDKs, or site-specific scraper modules.
+- These contracts prove framework- and vendor-neutral security/privacy lifecycle acceptance. They do not implement CAPTCHA solving, paywall bypass, login wall circumvention, WAF evasion, stealth automation, credential theft, managed DLP, SIEM/SOAR integrations, production compliance workflows, or production browser fleets.
 
 ## QualityReport
 

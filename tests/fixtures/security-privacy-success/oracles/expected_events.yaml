@@ -1,0 +1,1 @@
+{"expected_events":["security_policy_check_recorded","credential_use_audited","prompt_taint_boundary_recorded","artifact_lifecycle_action_recorded","projection_cleanup_recorded","security_privacy_reported"]}

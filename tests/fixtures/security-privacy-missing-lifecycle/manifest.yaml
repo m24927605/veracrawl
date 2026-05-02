@@ -1,0 +1,1 @@
+{"id":"security-privacy-missing-lifecycle","scenario":"security-privacy-missing-lifecycle","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"security_privacy_missing_lifecycle_propagation","expected_failure_type":"security_privacy_missing_lifecycle_propagation","negative_case":true}
