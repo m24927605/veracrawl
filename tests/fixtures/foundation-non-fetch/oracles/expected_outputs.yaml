@@ -1,0 +1,1 @@
+{"id":"output:foundation-non-fetch","fixture_id":"foundation-non-fetch","expected_output_type":"record","expected_items":[{"item_id":"seed:1","expected_values":{"source":"manual"}}],"required_field_coverage":[],"required_evidence_level":"item","allowed_optional_misses":[],"forbidden_outputs":["fetch_result"],"comparison_mode":"exact"}

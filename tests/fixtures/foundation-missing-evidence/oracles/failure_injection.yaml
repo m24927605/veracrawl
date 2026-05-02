@@ -1,0 +1,1 @@
+{"id":"failure:foundation-missing-evidence","fixture_id":"foundation-missing-evidence","injected_failures":[{"injection_type":"artifact_missing"}],"expected_failure_records":["failure:missing-evidence"],"expected_recovery_actions":[],"expected_dead_letters":[],"expected_events":["review_created","error_recorded"],"expected_operator_visible_status":"missing_evidence"}

@@ -1,0 +1,1 @@
+{"id":"dr:foundation-fetch-like","fixture_id":"foundation-fetch-like","required_restore_phase_refs":["dr-phase:foundation"],"required_backup_manifest_refs":["backup:foundation"],"required_validation_gate_refs":["gate:replay"],"expected_report_status":"pass","unresolved_ref_behavior":"fail_replay"}

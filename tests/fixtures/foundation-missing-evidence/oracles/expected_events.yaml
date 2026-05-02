@@ -1,0 +1,1 @@
+{"id":"events:foundation-missing-evidence","fixture_id":"foundation-missing-evidence","required_event_types":["review_created","error_recorded"],"forbidden_event_types":["output_published"],"ordering_constraints":[],"required_payloads":[],"event_cursor_refs":["cursor:missing-evidence"],"replay_required_event_types":["review_created"]}

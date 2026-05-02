@@ -1,0 +1,1 @@
+{"id":"evidence:foundation-fetch-like","fixture_id":"foundation-fetch-like","required_anchor_refs":["anchor:1"],"required_artifact_refs":["artifact:html:1"],"privacy_classification_expectations":{"artifact:html:1":"public"},"required_verification_refs":["verification:1"],"missing_evidence_behavior":"fail"}

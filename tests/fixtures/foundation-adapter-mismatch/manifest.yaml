@@ -1,0 +1,1 @@
+{"id":"foundation-adapter-mismatch","name":"Foundation adapter mismatch fixture","profile_refs":["target"],"scenario":"adapter-mismatch","oracles":{"expected_events":"oracles/expected_events.yaml","expected_replay":"oracles/expected_replay.yaml","failure_injection":"oracles/failure_injection.yaml","thresholds":"oracles/thresholds.yaml"}}

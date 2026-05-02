@@ -1,0 +1,1 @@
+{"id":"graph:foundation-non-fetch","fixture_id":"foundation-non-fetch","expected_nodes":[],"expected_edges":[],"forbidden_edges":[],"expected_projection_watermarks":["watermark:graph:seed"],"false_merge_cases":[],"false_split_cases":[]}

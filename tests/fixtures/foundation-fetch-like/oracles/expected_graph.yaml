@@ -1,0 +1,1 @@
+{"id":"graph:foundation-fetch-like","fixture_id":"foundation-fetch-like","expected_nodes":[{"node_key":"url:https://fixture.local/","node_type":"url"}],"expected_edges":[],"forbidden_edges":[],"expected_projection_watermarks":["watermark:graph:1"],"false_merge_cases":[],"false_split_cases":[]}

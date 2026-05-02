@@ -1,0 +1,1 @@
+{"id":"output:foundation-fetch-like","fixture_id":"foundation-fetch-like","expected_output_type":"record","expected_items":[{"item_id":"item:1","expected_values":{"title":"Foundation"}}],"required_field_coverage":[{"target_id":"item:1","required":true}],"required_evidence_level":"field","allowed_optional_misses":[],"forbidden_outputs":[],"comparison_mode":"exact"}

@@ -1,0 +1,1 @@
+{"id":"dr:foundation-replay-missing-ref","fixture_id":"foundation-replay-missing-ref","required_restore_phase_refs":[],"required_backup_manifest_refs":[],"required_validation_gate_refs":[],"expected_report_status":"fail","unresolved_ref_behavior":"fail_replay"}

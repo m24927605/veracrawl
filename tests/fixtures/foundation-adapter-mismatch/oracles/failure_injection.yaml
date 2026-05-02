@@ -1,0 +1,1 @@
+{"id":"failure:foundation-adapter-mismatch","fixture_id":"foundation-adapter-mismatch","injected_failures":[{"injection_type":"adapter_mismatch"}],"expected_failure_records":["failure:adapter-mismatch"],"expected_recovery_actions":[],"expected_dead_letters":[],"expected_events":["error_recorded"],"expected_operator_visible_status":"adapter_mismatch"}

@@ -1,0 +1,1 @@
+{"id":"evidence:foundation-missing-evidence","fixture_id":"foundation-missing-evidence","required_anchor_refs":["missing:anchor"],"required_artifact_refs":["missing:artifact"],"privacy_classification_expectations":{},"required_verification_refs":[],"missing_evidence_behavior":"needs_review"}

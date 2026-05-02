@@ -1,0 +1,1 @@
+{"id":"output:foundation-policy-blocked-source","fixture_id":"foundation-policy-blocked-source","expected_output_type":"record","expected_items":[],"required_field_coverage":[],"required_evidence_level":"item","allowed_optional_misses":[],"forbidden_outputs":["fetch_result","published_output"],"comparison_mode":"exact"}

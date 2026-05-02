@@ -1,0 +1,1 @@
+{"id":"evidence:foundation-non-fetch","fixture_id":"foundation-non-fetch","required_anchor_refs":["anchor:seed"],"required_artifact_refs":["artifact:seed"],"privacy_classification_expectations":{"artifact:seed":"public"},"required_verification_refs":["verification:seed"],"missing_evidence_behavior":"fail"}

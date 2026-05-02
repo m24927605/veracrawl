@@ -1,0 +1,1 @@
+{"id":"events:foundation-fetch-like","fixture_id":"foundation-fetch-like","required_event_types":["command_received","policy_evaluated","source_adapter_result_recorded","command_committed"],"forbidden_event_types":["error_recorded"],"ordering_constraints":[],"required_payloads":[],"event_cursor_refs":["cursor:1"],"replay_required_event_types":["source_adapter_result_recorded"]}

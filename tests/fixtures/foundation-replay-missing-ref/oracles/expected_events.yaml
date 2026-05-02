@@ -1,0 +1,1 @@
+{"id":"events:foundation-replay-missing-ref","fixture_id":"foundation-replay-missing-ref","required_event_types":["error_recorded"],"forbidden_event_types":["output_published"],"ordering_constraints":[],"required_payloads":[],"event_cursor_refs":[],"replay_required_event_types":["error_recorded"]}

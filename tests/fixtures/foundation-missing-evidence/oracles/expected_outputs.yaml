@@ -1,0 +1,1 @@
+{"id":"output:foundation-missing-evidence","fixture_id":"foundation-missing-evidence","expected_output_type":"record","expected_items":[],"required_field_coverage":[],"required_evidence_level":"field","allowed_optional_misses":[],"forbidden_outputs":["output_published"],"comparison_mode":"exact"}

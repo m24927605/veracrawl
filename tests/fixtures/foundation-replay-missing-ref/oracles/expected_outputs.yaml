@@ -1,0 +1,1 @@
+{"id":"output:foundation-replay-missing-ref","fixture_id":"foundation-replay-missing-ref","expected_output_type":"record","expected_items":[],"required_field_coverage":[],"required_evidence_level":"item","allowed_optional_misses":[],"forbidden_outputs":["pass"],"comparison_mode":"exact"}

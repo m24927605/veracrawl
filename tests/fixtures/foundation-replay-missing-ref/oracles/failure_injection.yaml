@@ -1,0 +1,1 @@
+{"id":"failure:foundation-replay-missing-ref","fixture_id":"foundation-replay-missing-ref","injected_failures":[{"injection_type":"event_log_gap"}],"expected_failure_records":["failure:replay-gap"],"expected_recovery_actions":[],"expected_dead_letters":[],"expected_events":["error_recorded"],"expected_operator_visible_status":"replay_gap"}

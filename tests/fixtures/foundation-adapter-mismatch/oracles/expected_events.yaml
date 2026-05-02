@@ -1,0 +1,1 @@
+{"id":"events:foundation-adapter-mismatch","fixture_id":"foundation-adapter-mismatch","required_event_types":["error_recorded"],"forbidden_event_types":["source_adapter_result_recorded"],"ordering_constraints":[],"required_payloads":[],"event_cursor_refs":[],"replay_required_event_types":["error_recorded"]}

@@ -1,0 +1,1 @@
+{"id":"failure:foundation-policy-blocked-source","fixture_id":"foundation-policy-blocked-source","injected_failures":[{"injection_type":"policy_denied"}],"expected_failure_records":["failure:blocked"],"expected_recovery_actions":[],"expected_dead_letters":[],"expected_events":["policy_evaluated","command_rejected"],"expected_operator_visible_status":"blocked"}
