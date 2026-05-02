@@ -48,6 +48,7 @@ veracrawl-persistence = "veracrawl.cli.persistence:main"
 veracrawl-persistence-adapter = "veracrawl.cli.persistence_adapter:main"
 veracrawl-queue-broker = "veracrawl.cli.queue_broker:main"
 veracrawl-object-store = "veracrawl.cli.object_store:main"
+veracrawl-infrastructure = "veracrawl.cli.infrastructure:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

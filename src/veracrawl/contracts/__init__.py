@@ -91,6 +91,11 @@ from veracrawl.contracts.graph import (
     ProjectionWatermark,
     TemporalGraphProjectionRecord,
 )
+from veracrawl.contracts.infrastructure import (
+    RuntimeInfrastructureFixtureManifest,
+    RuntimeInfrastructureReport,
+    RuntimeInfrastructureSpec,
+)
 from veracrawl.contracts.memory import (
     CrossScopeMemoryTunnel,
     MemoryEvent,
@@ -317,6 +322,9 @@ __all__ = [
     "RunPlanSnapshot",
     "RuntimeArtifactRef",
     "RuntimeCompletionGate",
+    "RuntimeInfrastructureFixtureManifest",
+    "RuntimeInfrastructureReport",
+    "RuntimeInfrastructureSpec",
     "SchedulerRecoveryReport",
     "ScaleFixtureManifest",
     "ScaleRecoveryReport",

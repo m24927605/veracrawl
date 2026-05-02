@@ -344,6 +344,12 @@ Required acceptance:
   be labeled verified
 - no live S3-compatible endpoint/runtime means `needs_review`; deterministic
   fixture artifact refs alone cannot be labeled an operational object store pass
+- integrated runtime infrastructure gates must prove live Postgres,
+  Redis/Valkey, and S3-compatible object storage contribute persistence, queue,
+  artifact, policy, and replay refs in the same run before the infrastructure
+  substrate can be labeled verified
+- an isolated adapter conformance pass cannot be labeled an integrated runtime
+  infrastructure pass
 
 ## Completion States
 

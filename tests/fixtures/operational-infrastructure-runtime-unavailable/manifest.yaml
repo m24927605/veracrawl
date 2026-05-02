@@ -1,0 +1,1 @@
+{"id":"operational-infrastructure-runtime-unavailable","scenario":"operational-infrastructure-runtime-unavailable","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"operational_infrastructure_runtime_unavailable","negative_case":false}

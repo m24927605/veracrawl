@@ -1,0 +1,1 @@
+{"id":"infrastructure-missing-queue-refs","scenario":"infrastructure-missing-queue-refs","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"infrastructure_missing_queue_refs","expected_failure_type":"infrastructure_missing_queue_refs","negative_case":true}

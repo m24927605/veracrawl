@@ -1,0 +1,1 @@
+{"id":"infrastructure-missing-object-refs","scenario":"infrastructure-missing-object-refs","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"infrastructure_missing_object_refs","expected_failure_type":"infrastructure_missing_object_refs","negative_case":true}

@@ -289,6 +289,31 @@ only when a live endpoint or Docker-backed MinIO gate is executed. It does not
 prove managed S3 operations, cloud IAM, CDN behavior, encryption key
 management, deployment, metrics/tracing backends, or production observability.
 
+Operational runtime infrastructure gate fixture contract:
+
+```text
+veracrawl-infrastructure run tests/fixtures/<infrastructure_fixture_id> --profile target --out .veracrawl-test-runs/<infrastructure_fixture_id>
+```
+
+Required runtime infrastructure fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| operational-infrastructure-success | live Postgres, Redis/Valkey, and S3-compatible adapters contribute persistence, queue, object, policy, and replay refs in one `pass` report |
+| operational-infrastructure-idempotency-success | duplicate command, enqueue, and put after adapter reopen are deduped across live adapters |
+| operational-infrastructure-runtime-unavailable | no live runtimes return `needs_review` and must not claim integrated operational pass |
+| infrastructure-missing-persistence-refs | missing persistence refs fail |
+| infrastructure-missing-queue-refs | missing queue refs fail |
+| infrastructure-missing-object-refs | missing object refs fail |
+| infrastructure-missing-replay-refs | missing replay refs fail |
+
+This acceptance proves the operational infrastructure substrate only when
+Postgres, Redis/Valkey, and S3-compatible runtimes all contribute live refs in
+the same gate. It does not prove managed cloud operations, deployment,
+production worker fleets, metrics/tracing backends, production observability,
+browser rendering, model SDK integration, or concrete agent framework
+integration.
+
 Source adapter and fetch runtime fixture contract:
 
 ```text
@@ -1079,6 +1104,9 @@ Acceptance gates:
 - operational object store fixtures prove S3-compatible put, duplicate put after reopen, get, head, list, delete, content digest, lifecycle, retention, privacy, policy, and replay refs only through a live endpoint or Docker-backed MinIO gate
 - no-runtime object store fixtures must remain `needs_review` and contract-only
 - negative object store fixtures for missing digest, missing read-after-write, and missing delete marker/lifecycle refs must fail deterministically
+- operational infrastructure fixtures prove live Postgres, Redis/Valkey, and S3-compatible refs in one runtime report only through explicit live runtimes or a Docker-backed integrated gate
+- no-runtime infrastructure fixtures must remain `needs_review` and contract-only
+- negative infrastructure fixtures for missing persistence, queue, object, and replay refs must fail deterministically
 
 ## Non-deceptive Completion Checklist
 

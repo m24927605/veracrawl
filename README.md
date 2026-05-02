@@ -95,6 +95,11 @@ contracts, a core conformance harness, a MinIO/S3 adapter behind optional runtim
 loading, object operation records, no-runtime `needs_review` reporting, negative
 object-store fixtures, live MinIO/Docker gates, and dynamic CLI loading without
 importing object-store SDKs into core.
+The operational runtime infrastructure gate composes the live Postgres,
+Redis/Valkey, and S3-compatible adapters into one acceptance report so
+metadata/event/outbox/idempotency refs, queue broker refs, object artifact refs,
+policy refs, and replay refs are validated together rather than as isolated
+adapter passes.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -196,6 +201,13 @@ can claim `pass` only against an explicit live S3-compatible endpoint or
 Docker-backed MinIO gate. It is not a claim that managed S3, cloud IAM, CDN,
 encryption key management, production retention workers, or observability
 backends are production-ready.
+The operational runtime infrastructure gate proves that live Postgres,
+Redis/Valkey, and S3-compatible adapters can contribute one replayable runtime
+infrastructure report. It can claim `pass` only when all three live adapter
+families contribute refs in the same run. It is not a claim that managed cloud,
+deployment, production worker fleets, metrics/tracing backends, production
+observability, browser rendering, model SDKs, or agent frameworks are
+production-ready.
 
 Run the local foundation gate with Python 3.12:
 
@@ -630,6 +642,53 @@ Run the Docker-backed live MinIO integration gate:
 ```sh
 VERACRAWL_S3_DOCKER=1 uv run --python python3.12 --extra dev --extra object-s3 \
   pytest tests/integration/test_s3_object_store_live.py
+```
+
+Run integrated infrastructure no-runtime and negative fixtures:
+
+```sh
+for fixture in \
+  operational-infrastructure-runtime-unavailable \
+  infrastructure-missing-persistence-refs \
+  infrastructure-missing-queue-refs \
+  infrastructure-missing-object-refs \
+  infrastructure-missing-replay-refs
+do
+  uv run --python python3.12 --extra dev --extra postgres --extra queue-redis --extra object-s3 \
+    veracrawl-infrastructure run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run integrated infrastructure fixtures with live runtimes:
+
+```sh
+for fixture in \
+  operational-infrastructure-success \
+  operational-infrastructure-idempotency-success
+do
+  uv run --python python3.12 --extra dev --extra postgres --extra queue-redis --extra object-s3 \
+    veracrawl-infrastructure run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --postgres-dsn "$VERACRAWL_POSTGRES_DSN" \
+    --redis-url "$VERACRAWL_REDIS_URL" \
+    --s3-endpoint-url "$VERACRAWL_S3_ENDPOINT_URL" \
+    --s3-bucket "$VERACRAWL_S3_BUCKET" \
+    --s3-access-key-id "$VERACRAWL_S3_ACCESS_KEY_ID" \
+    --s3-secret-access-key "$VERACRAWL_S3_SECRET_ACCESS_KEY" \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run the Docker-backed integrated infrastructure gate:
+
+```sh
+VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev \
+  --extra postgres --extra queue-redis --extra object-s3 \
+  pytest tests/integration/test_operational_infrastructure_live.py
 ```
 
 ## Safety Boundary

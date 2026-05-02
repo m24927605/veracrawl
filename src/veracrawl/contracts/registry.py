@@ -571,6 +571,27 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "artifact",
         tests=["tests/integration/test_object_store_fixtures.py"],
     ),
+    "RuntimeInfrastructureSpec": _contract(
+        "RuntimeInfrastructureSpec",
+        OwnerService.PORTS,
+        "infrastructure",
+        mutation_allowed=True,
+        tests=["tests/contract/test_runtime_infrastructure_contracts.py"],
+    ),
+    "RuntimeInfrastructureReport": _contract(
+        "RuntimeInfrastructureReport",
+        OwnerService.REVIEW_REPLAY,
+        "infrastructure",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_runtime_infrastructure_contracts.py"],
+    ),
+    "RuntimeInfrastructureFixtureManifest": _contract(
+        "RuntimeInfrastructureFixtureManifest",
+        OwnerService.TESTS,
+        "infrastructure",
+        tests=["tests/integration/test_operational_infrastructure_fixtures.py"],
+    ),
     "NormalizedDocument": _contract(
         "NormalizedDocument",
         OwnerService.NORMALIZE,
@@ -1710,6 +1731,21 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["persistence_adapter_conformance_reported"],
         ),
+        "record_runtime_infrastructure_spec": CommandTypeRegistration(
+            command_type="record_runtime_infrastructure_spec",
+            owner_service=OwnerService.PORTS,
+            target_aggregate_type="RuntimeInfrastructureSpec",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["persistence", "queue_broker", "artifact_lifecycle"],
+            emitted_event_types=["runtime_infrastructure_spec_recorded"],
+        ),
+        "record_runtime_infrastructure_report": CommandTypeRegistration(
+            command_type="record_runtime_infrastructure_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="RuntimeInfrastructureReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["runtime_infrastructure_reported"],
+        ),
     }
 )
 
@@ -1858,6 +1894,8 @@ EVENT_TYPES.update(
             "persistent_queue_operation_recorded",
             "persistence_runtime_reported",
             "persistence_adapter_conformance_reported",
+            "runtime_infrastructure_spec_recorded",
+            "runtime_infrastructure_reported",
         ]
     }
 )
@@ -2407,6 +2445,26 @@ for _persistence_adapter_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _infrastructure_fixture, _negative in {
+    "operational-infrastructure-success": False,
+    "operational-infrastructure-idempotency-success": False,
+    "operational-infrastructure-runtime-unavailable": False,
+    "infrastructure-missing-persistence-refs": True,
+    "infrastructure-missing-queue-refs": True,
+    "infrastructure-missing-object-refs": True,
+    "infrastructure-missing-replay-refs": True,
+}.items():
+    _base = f"tests/fixtures/{_infrastructure_fixture}"
+    FIXTURE_ORACLES[_infrastructure_fixture] = FixtureOracleRegistration(
+        fixture_id=_infrastructure_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -2689,6 +2747,19 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "QueueItem",
             "ShardLease",
             "RetryDeadLetterRecord",
+        ],
+    ),
+    "operational_runtime_infrastructure_gate": _target_area(
+        "operational_runtime_infrastructure_gate",
+        OwnerService.REVIEW_REPLAY,
+        "materialized",
+        materialized=[
+            "RuntimeInfrastructureSpec",
+            "RuntimeInfrastructureReport",
+            "RuntimeInfrastructureFixtureManifest",
+            "PersistenceAdapterConformanceReport",
+            "QueueBrokerConformanceReport",
+            "ObjectStoreConformanceReport",
         ],
     ),
     "scheduler": _target_area(

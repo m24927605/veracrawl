@@ -1,0 +1,1 @@
+{"id":"infrastructure-missing-persistence-refs","scenario":"infrastructure-missing-persistence-refs","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"infrastructure_missing_persistence_refs","expected_failure_type":"infrastructure_missing_persistence_refs","negative_case":true}

@@ -905,6 +905,16 @@ Operational object store adapter slice:
 - missing content digest refs, missing read-after-write refs, and missing delete/lifecycle refs are object store conformance failures.
 - this slice does not implement managed S3 operations, cloud IAM, CDN behavior, encryption key management, deployment, metrics/tracing backends, or production observability. Those remain separate adapter and operations specs with their own live gates.
 
+Operational runtime infrastructure gate slice:
+
+- `veracrawl.runtime_support.infrastructure_gate` is core-owned and imports only VeraCrawl contracts and core conformance result types. It aggregates results from operational persistence, queue broker, and object store conformance without importing concrete adapters or SDKs.
+- `RuntimeInfrastructureSpec` records the required live Postgres persistence, Redis/Valkey queue broker, and S3-compatible object store adapter refs plus policy refs.
+- `RuntimeInfrastructureReport` can claim `pass` only when persistence, queue broker, object store, adapter, command, idempotency, event cursor, outbox, queue operation, lease, heartbeat, ack, nack, dead-letter, artifact, object operation, digest, read, head, list, delete, lifecycle, policy, and replay refs are present in one integrated report.
+- `veracrawl-infrastructure` loads concrete adapter modules dynamically so fixture execution does not create static core or CLI dependencies on `psycopg`, `redis`, `boto3`, `botocore`, cloud SDKs, model SDKs, browser libraries, or agent frameworks.
+- `operational-infrastructure-runtime-unavailable` returns `needs_review` with contract-only refs; no single adapter pass, deterministic fixture store, or contract-only path may claim integrated runtime pass.
+- missing persistence refs, missing queue refs, missing object refs, and missing replay refs are runtime infrastructure conformance failures.
+- this slice does not implement managed cloud operations, deployment, production worker fleets, metrics/tracing backends, production observability, browser rendering, model SDK integration, or concrete agent framework integration. Those remain separate target gates.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/019-operational-object-store-adapter/plan.md`.
-Use it with `specs/019-operational-object-store-adapter/spec.md`,
-`specs/019-operational-object-store-adapter/research.md`,
-`specs/019-operational-object-store-adapter/data-model.md`,
-`specs/019-operational-object-store-adapter/contracts/`, and
-`specs/019-operational-object-store-adapter/quickstart.md` for VeraCrawl Operational Object Store Adapter work.
+Current active Spec Kit plan: `specs/020-operational-runtime-infrastructure-gate/plan.md`.
+Use it with `specs/020-operational-runtime-infrastructure-gate/spec.md`,
+`specs/020-operational-runtime-infrastructure-gate/research.md`,
+`specs/020-operational-runtime-infrastructure-gate/data-model.md`,
+`specs/020-operational-runtime-infrastructure-gate/contracts/`, and
+`specs/020-operational-runtime-infrastructure-gate/quickstart.md` for VeraCrawl Operational Runtime Infrastructure Gate work.
 <!-- SPECKIT END -->

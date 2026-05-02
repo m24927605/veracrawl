@@ -251,6 +251,19 @@ class ObjectStoreConformanceFailureType(StrEnum):
     OBJECT_STORE_MISSING_DELETE_MARKER = "object_store_missing_delete_marker"
 
 
+class RuntimeInfrastructureAdapterFamily(StrEnum):
+    POSTGRES_PERSISTENCE = "postgres_persistence"
+    REDIS_QUEUE_BROKER = "redis_queue_broker"
+    S3_OBJECT_STORE = "s3_object_store"
+
+
+class RuntimeInfrastructureFailureType(StrEnum):
+    INFRASTRUCTURE_MISSING_PERSISTENCE_REFS = "infrastructure_missing_persistence_refs"
+    INFRASTRUCTURE_MISSING_QUEUE_REFS = "infrastructure_missing_queue_refs"
+    INFRASTRUCTURE_MISSING_OBJECT_REFS = "infrastructure_missing_object_refs"
+    INFRASTRUCTURE_MISSING_REPLAY_REFS = "infrastructure_missing_replay_refs"
+
+
 class ExtractionCandidateStatus(StrEnum):
     CANDIDATE = "candidate"
     EVIDENCE_BUILT = "evidence_built"
