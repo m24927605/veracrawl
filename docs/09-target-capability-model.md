@@ -332,6 +332,12 @@ Required acceptance:
 - one bad site cannot starve unrelated jobs
 - crash/restart scenarios preserve replay and state correctness
 - projections can rebuild from canonical source of truth
+- operational queue broker adapters must prove enqueue, lease, heartbeat, ack,
+  nack, dead-letter, fencing token, visibility timeout, idempotency, fairness,
+  backpressure, policy, and replay refs against a live broker before they can be
+  labeled verified
+- no live Redis/Valkey URL/runtime means `needs_review`; persistence queue refs
+  alone cannot be labeled an operational broker pass
 
 ## Completion States
 

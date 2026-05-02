@@ -1,0 +1,1 @@
+{"expected_operator_status":"redis_broker_conformance_completed","requires_live_redis":true,"requires_fencing_tokens":true,"requires_heartbeat":true,"requires_dead_letter":true}

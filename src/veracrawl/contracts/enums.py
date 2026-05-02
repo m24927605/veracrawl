@@ -559,6 +559,42 @@ class ScaleFailureType(StrEnum):
     REPLAY_MISSING_SCALE_REFS = "replay_missing_scale_refs"
 
 
+class QueueBrokerAdapterKind(StrEnum):
+    REDIS = "redis"
+    REDIS_CONTRACT = "redis_contract"
+    EXTERNAL_BROKER = "external_broker"
+
+
+class QueueBrokerCapability(StrEnum):
+    ENQUEUE = "enqueue"
+    LEASE = "lease"
+    HEARTBEAT = "heartbeat"
+    ACK = "ack"
+    NACK = "nack"
+    DEAD_LETTER = "dead_letter"
+    FENCING_TOKEN = "fencing_token"
+    VISIBILITY_TIMEOUT = "visibility_timeout"
+    IDEMPOTENCY = "idempotency"
+    FAIRNESS = "fairness"
+    BACKPRESSURE = "backpressure"
+
+
+class QueueBrokerOperation(StrEnum):
+    ENQUEUE = "enqueue"
+    DUPLICATE_ENQUEUE = "duplicate_enqueue"
+    LEASE = "lease"
+    HEARTBEAT = "heartbeat"
+    ACK = "ack"
+    NACK = "nack"
+    DEAD_LETTER = "dead_letter"
+
+
+class QueueBrokerConformanceFailureType(StrEnum):
+    BROKER_MISSING_FENCING_TOKEN = "broker_missing_fencing_token"
+    BROKER_MISSING_HEARTBEAT = "broker_missing_heartbeat"
+    BROKER_MISSING_DEAD_LETTER = "broker_missing_dead_letter"
+
+
 class PersistenceAdapterKind(StrEnum):
     REFERENCE_FILESYSTEM = "reference_filesystem"
     EXTERNAL_ADAPTER = "external_adapter"

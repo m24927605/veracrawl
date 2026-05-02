@@ -40,6 +40,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "production_persistence_queue_runtime",
         "concrete_persistence_adapters",
         "operational_postgres_persistence_adapter",
+        "operational_queue_broker_adapter",
         "scheduler",
         "source_acquisition",
         "network_browser_acquisition",

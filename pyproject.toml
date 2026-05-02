@@ -21,6 +21,9 @@ dev = [
 postgres = [
   "psycopg[binary]>=3.2,<4",
 ]
+queue-redis = [
+  "redis>=5.0,<6",
+]
 
 [project.scripts]
 veracrawl-contracts = "veracrawl.cli.contracts:main"
@@ -40,6 +43,7 @@ veracrawl-export = "veracrawl.cli.export:main"
 veracrawl-scale = "veracrawl.cli.scale:main"
 veracrawl-persistence = "veracrawl.cli.persistence:main"
 veracrawl-persistence-adapter = "veracrawl.cli.persistence_adapter:main"
+veracrawl-queue-broker = "veracrawl.cli.queue_broker:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

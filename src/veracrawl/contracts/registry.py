@@ -399,6 +399,33 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "scale",
         tests=["tests/integration/test_scale_fixtures.py"],
     ),
+    "QueueBrokerAdapterSpec": _contract(
+        "QueueBrokerAdapterSpec",
+        OwnerService.PORTS,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/contract/test_queue_broker_contracts.py"],
+    ),
+    "QueueBrokerOperationRecord": _contract(
+        "QueueBrokerOperationRecord",
+        OwnerService.SCHEDULER,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/contract/test_queue_broker_contracts.py"],
+    ),
+    "QueueBrokerConformanceReport": _contract(
+        "QueueBrokerConformanceReport",
+        OwnerService.REVIEW_REPLAY,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/contract/test_queue_broker_contracts.py"],
+    ),
+    "QueueBrokerFixtureManifest": _contract(
+        "QueueBrokerFixtureManifest",
+        OwnerService.TESTS,
+        "scale",
+        tests=["tests/integration/test_queue_broker_fixtures.py"],
+    ),
     "PersistenceAdapterSpec": _contract(
         "PersistenceAdapterSpec",
         OwnerService.PORTS,
@@ -1557,6 +1584,29 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["scale_recovery_reported"],
         ),
+        "record_queue_broker_adapter": CommandTypeRegistration(
+            command_type="record_queue_broker_adapter",
+            owner_service=OwnerService.PORTS,
+            target_aggregate_type="QueueBrokerAdapterSpec",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["queue_broker"],
+            emitted_event_types=["queue_broker_adapter_recorded"],
+        ),
+        "record_queue_broker_operation": CommandTypeRegistration(
+            command_type="record_queue_broker_operation",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="QueueBrokerOperationRecord",
+            payload_schema_ref="BaseCommandPayload",
+            lease_required=True,
+            emitted_event_types=["queue_broker_operation_recorded"],
+        ),
+        "record_queue_broker_conformance_report": CommandTypeRegistration(
+            command_type="record_queue_broker_conformance_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="QueueBrokerConformanceReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["queue_broker_conformance_reported"],
+        ),
         "record_persistence_adapter": CommandTypeRegistration(
             command_type="record_persistence_adapter",
             owner_service=OwnerService.PORTS,
@@ -1745,6 +1795,9 @@ EVENT_TYPES.update(
             "autoscaling_decided",
             "retry_dead_letter_recorded",
             "scale_recovery_reported",
+            "queue_broker_adapter_recorded",
+            "queue_broker_operation_recorded",
+            "queue_broker_conformance_reported",
             "persistence_adapter_recorded",
             "persistence_transaction_recorded",
             "persistence_migration_recorded",
@@ -2211,6 +2264,26 @@ for _scale_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _queue_broker_fixture, _negative in {
+    "redis-broker-conformance-success": False,
+    "redis-broker-idempotency-success": False,
+    "redis-broker-dead-letter-success": False,
+    "redis-broker-runtime-unavailable": False,
+    "broker-missing-fencing-token": True,
+    "broker-missing-heartbeat": True,
+    "broker-missing-dead-letter": True,
+}.items():
+    _base = f"tests/fixtures/{_queue_broker_fixture}"
+    FIXTURE_ORACLES[_queue_broker_fixture] = FixtureOracleRegistration(
+        fixture_id=_queue_broker_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _persistence_fixture, _negative in {
     "persistence-transaction-success": False,
     "idempotent-replay-success": False,
@@ -2512,6 +2585,21 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "PersistenceTransactionRecord",
             "IdempotencyPersistenceRecord",
             "PersistentQueueOperationRecord",
+        ],
+    ),
+    "operational_queue_broker_adapter": _target_area(
+        "operational_queue_broker_adapter",
+        OwnerService.PORTS,
+        "materialized",
+        materialized=[
+            "QueueBrokerAdapterSpec",
+            "QueueBrokerOperationRecord",
+            "QueueBrokerConformanceReport",
+            "QueueBrokerFixtureManifest",
+            "QueueTopologySpec",
+            "QueueItem",
+            "ShardLease",
+            "RetryDeadLetterRecord",
         ],
     ),
     "scheduler": _target_area(

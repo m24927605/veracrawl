@@ -242,6 +242,30 @@ or Docker-backed live gate is executed. It does not prove external queue
 brokers, object storage, cloud deployment, metrics/tracing backends, managed
 Postgres operations, production observability, or production worker readiness.
 
+Operational queue broker adapter fixture contract:
+
+```text
+veracrawl-queue-broker run tests/fixtures/<queue_broker_fixture_id> --profile target --out .veracrawl-test-runs/<queue_broker_fixture_id>
+```
+
+Required queue broker fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| redis-broker-conformance-success | live Redis adapter proves enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, retry, fairness, backpressure, policy, and replay refs with `pass` |
+| redis-broker-idempotency-success | reopened live Redis adapter dedupes duplicate enqueue and does not create a second queued item |
+| redis-broker-dead-letter-success | live Redis adapter moves retry-exhausted work to dead letter with failure and recovery refs |
+| redis-broker-runtime-unavailable | no live URL/runtime returns `needs_review` and must not claim operational pass |
+| broker-missing-fencing-token | missing fencing token refs fail |
+| broker-missing-heartbeat | missing heartbeat refs fail |
+| broker-missing-dead-letter | missing dead-letter refs fail |
+
+This acceptance proves operational Redis/Valkey-style queue broker semantics
+only when a live URL or Docker-backed live gate is executed. It does not prove
+managed Redis operations, Kafka, cloud queues, production autoscaling,
+deployment, production worker fleets, metrics/tracing backends, or production
+observability.
+
 Source adapter and fetch runtime fixture contract:
 
 ```text

@@ -1,0 +1,1 @@
+{"id":"redis-broker-runtime-unavailable","scenario":"redis-broker-runtime-unavailable","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"redis_broker_runtime_unavailable","negative_case":false}

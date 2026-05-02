@@ -85,6 +85,11 @@ Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
 fixtures, and dynamic adapter CLI loading without importing concrete storage
 into core.
+The operational queue broker adapter spine adds Redis/Valkey-style broker
+contracts, a core conformance harness, a Redis adapter behind optional runtime
+loading, queue broker operation records, no-runtime `needs_review` reporting,
+negative broker fixtures, live Redis/Docker gates, and dynamic CLI loading
+without importing queue clients into core.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -172,6 +177,13 @@ contract-only and returns `needs_review`; the operational Postgres adapter can
 claim `pass` only against an explicit live DSN or Docker-backed live gate. It is
 not a claim that external queue brokers, object storage, cloud deployment,
 managed Postgres operations, or observability backends are production-ready.
+The operational queue broker adapter spine proves Redis queue broker semantics
+for enqueue, idempotent duplicate enqueue after reopen, lease, fencing token,
+visibility timeout, heartbeat, ack, nack, retry requeue, dead letter, fairness,
+backpressure, policy, and replay refs. It can claim `pass` only against an
+explicit live Redis URL or Docker-backed live gate. It is not a claim that
+managed Redis, Kafka, cloud queues, production autoscaling, production worker
+fleets, or observability backends are production-ready.
 
 Run the local foundation gate with Python 3.12:
 
@@ -525,6 +537,45 @@ Run the Docker-backed live Postgres integration gate:
 ```sh
 VERACRAWL_POSTGRES_DOCKER=1 uv run --python python3.12 --extra dev --extra postgres \
   pytest tests/integration/test_postgres_persistence_adapter_live.py
+```
+
+Run queue broker no-runtime and negative fixtures:
+
+```sh
+for fixture in \
+  redis-broker-runtime-unavailable \
+  broker-missing-fencing-token \
+  broker-missing-heartbeat \
+  broker-missing-dead-letter
+do
+  uv run --python python3.12 --extra dev --extra queue-redis veracrawl-queue-broker run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run operational Redis queue broker fixtures with a live URL:
+
+```sh
+for fixture in \
+  redis-broker-conformance-success \
+  redis-broker-idempotency-success \
+  redis-broker-dead-letter-success
+do
+  uv run --python python3.12 --extra dev --extra queue-redis veracrawl-queue-broker run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --redis-url "$VERACRAWL_REDIS_URL" \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run the Docker-backed live Redis integration gate:
+
+```sh
+VERACRAWL_REDIS_DOCKER=1 uv run --python python3.12 --extra dev --extra queue-redis \
+  pytest tests/integration/test_redis_queue_broker_live.py
 ```
 
 ## Safety Boundary

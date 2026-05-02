@@ -881,6 +881,18 @@ Concrete persistence adapter family slice:
 - missing adapter capability, missing idempotency persistence, event cursor gaps, outbox visibility gaps, and missing migration refs are adapter conformance failures.
 - this slice does not implement external queue brokers, object storage, cloud deployment, metrics/tracing backends, managed Postgres operations, or production observability. Those remain future concrete adapter specs and gates.
 
+Operational queue broker adapter slice:
+
+- `veracrawl.scale.broker_conformance` is core-owned and imports only VeraCrawl contracts/ports. It executes broker conformance without importing `veracrawl.adapters`, Redis, Kafka, cloud queues, or broker SDKs.
+- `QueueBrokerAdapterSpec` records queue names, broker capabilities, visibility timeout, fencing-token support, idempotency support, fairness refs, backpressure refs, and policy refs.
+- `QueueBrokerOperationRecord` records enqueue, duplicate enqueue, lease, heartbeat, ack, nack, dead-letter, fencing token, visibility timeout, retry, failure/recovery, fairness, backpressure, and policy refs.
+- `QueueBrokerConformanceReport` can claim `pass` only when a live operational broker produces topology, queue item, operation, lease, heartbeat, ack/nack, dead-letter, fencing, retry, fairness, backpressure, policy, and replay refs.
+- `veracrawl.adapters.queue_brokers.redis` is the operational Redis/Valkey-style adapter. It uses optional `redis` only inside the adapter package and passes conformance only against an explicit live URL or Docker-backed gate.
+- `redis-broker-runtime-unavailable` returns `needs_review` with `contract_only_refs`; no missing runtime or contract-only broker path may claim operational pass.
+- `veracrawl-queue-broker` loads concrete broker modules dynamically so fixture execution does not create a core-to-adapter static dependency.
+- missing fencing tokens, missing heartbeat refs, and missing dead-letter refs are queue broker conformance failures.
+- this slice does not implement managed Redis operations, Kafka, cloud queues, production autoscaling, production worker fleets, deployment, metrics/tracing backends, or production observability. Those remain separate adapter and operations specs with their own live gates.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

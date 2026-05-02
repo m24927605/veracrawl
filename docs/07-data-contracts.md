@@ -43,7 +43,8 @@ Target contract manifest:
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
 | QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
-| PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, queue adapter semantics, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
+| PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
+| QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
 | FailureRecord, RecoveryAction, DriftEvent, QualityReport | required | failure, repair, drift, recovery, and operations are evented and reviewable |
 
 Target adapter types:
@@ -1178,6 +1179,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | decide_autoscaling | ops | AutoscalingDecision | AutoscalingPayload | current budgets and queue metrics loaded | none | autoscaling_decided | budget cap rejection logged |
 | record_autoscaling_decision | ops | AutoscalingDecision | BaseCommandPayload | reason signals and policy refs validate for capacity changes | none | autoscaling_decided | autoscale without policy is rejected |
 | record_scale_recovery_report | review_replay | ScaleRecoveryReport | BaseCommandPayload | queue, lease, backpressure, autoscaling, dead-letter, failure/recovery, DR, policy, command, event, outbox, and replay refs validate | expected_version | scale_recovery_reported | missing scale refs fail replay |
+| record_queue_broker_adapter | ports | QueueBrokerAdapterSpec | BaseCommandPayload | queue names, broker capabilities, fencing, idempotency, fairness, backpressure, and policy refs validate | none | queue_broker_adapter_recorded | broker missing capability blocks operational target pass |
+| record_queue_broker_operation | scheduler | QueueBrokerOperationRecord | BaseCommandPayload | enqueue, duplicate enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, visibility, retry, fairness, backpressure, and policy refs validate | lease_required | queue_broker_operation_recorded | missing fencing, heartbeat, or dead-letter refs fail conformance |
+| record_queue_broker_conformance_report | review_replay | QueueBrokerConformanceReport | BaseCommandPayload | adapter, topology, item, broker operation, lease, heartbeat, ack/nack, dead-letter, fencing, retry, fairness, backpressure, policy, contract-only, and replay refs validate | expected_version | queue_broker_conformance_reported | runtime-unavailable brokers must report needs_review, not pass |
 | record_persistence_adapter | ports | PersistenceAdapterSpec | BaseCommandPayload | all persistence capabilities and port refs declared | none | persistence_adapter_recorded | adapter missing required capability blocks target profile |
 | record_persistence_transaction | runtime_events | PersistenceTransactionRecord | BaseCommandPayload | command/event/outbox/artifact/idempotency/queue refs validate | expected_version | persistence_transaction_recorded | non-atomic commit fails replay |
 | record_persistence_migration | runtime_events | PersistenceMigrationRecord | BaseCommandPayload | migration version, rollback plan, validation cursor, and failure refs validate | expected_version | persistence_migration_recorded | missing migration refs block adapter conformance pass |
@@ -1595,6 +1599,9 @@ Target state transition matrix:
 | BackpressureSignal | created as recorded; immutable after create | record_backpressure_signal | ops | backpressure policy | threshold and policy tests |
 | AutoscalingDecision | proposed -> recorded/rejected | record_autoscaling_decision | ops | autoscaling policy | capacity-change policy tests |
 | ScaleRecoveryReport | created as pass/fail/needs_review; immutable after create | record_scale_recovery_report | review_replay | scale replay and DR refs | missing scale refs tests |
+| QueueBrokerAdapterSpec | proposed -> recorded/superseded | record_queue_broker_adapter | ports | queue broker policy | broker capability and import boundary tests |
+| QueueBrokerOperationRecord | created append-only | record_queue_broker_operation | scheduler | lease, fencing, retry, dead-letter policy | queue broker operation contract tests |
+| QueueBrokerConformanceReport | created as pass/fail/needs_review; immutable after create | record_queue_broker_conformance_report | review_replay | broker conformance refs, no-runtime, and failure boundaries | queue broker fixture tests |
 | PersistenceAdapterSpec | proposed -> recorded/superseded | record_persistence_adapter | ports | persistence policy | capability and port boundary tests |
 | PersistenceMigrationRecord | created as applied/rolled_back/failed; immutable after create | record_persistence_migration | runtime_events | migration validation cursor and rollback plan | migration fixture tests |
 | PersistenceAdapterConformanceReport | created as pass/fail/needs_review; immutable after create | record_persistence_adapter_conformance_report | review_replay | adapter conformance refs and contract-only boundary | concrete adapter fixture tests |
@@ -3090,6 +3097,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | review_created, review_decided, conflict_adjudicated | review_replay/verify | ReviewItem/ConflictRecord | review_item, conflict | yes | publish, ops, replay |
 | backpressure_signal_recorded, autoscaling_decided, scale_recovery_reported | ops/review_replay | BackpressureSignal/AutoscalingDecision/ScaleRecoveryReport | run | yes | ops, scheduler, replay |
 | persistence_adapter_recorded, persistence_transaction_recorded, persistence_migration_recorded, idempotency_persisted, persistent_queue_operation_recorded, persistence_runtime_reported, persistence_adapter_conformance_reported | runtime_events/scheduler/review_replay | PersistenceAdapterSpec/PersistenceTransactionRecord/PersistenceMigrationRecord/IdempotencyPersistenceRecord/PersistentQueueOperationRecord/PersistenceRuntimeReport/PersistenceAdapterConformanceReport | run | yes | replay, scheduler, ops |
+| queue_broker_adapter_recorded, queue_broker_operation_recorded, queue_broker_conformance_reported | ports/scheduler/review_replay | QueueBrokerAdapterSpec/QueueBrokerOperationRecord/QueueBrokerConformanceReport | run | yes | replay, scheduler, ops |
 | dr_restore_reported | ops | DRRestoreReport | run | yes | ops, audit |
 | recovery_action_started, recovery_action_completed, error_recorded | ops or owner service | FailureRecord/RecoveryAction | recovery_action | yes | ops, replay |
 
@@ -3112,6 +3120,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | memory events | MemoryEventPayload | MemoryEvent, MemoryRetrievalTrace, CrossScopeMemoryTunnel | memory/tunnel status | memory content may be summarized or redacted |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
+| queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |
 | artifact lifecycle events | ArtifactLifecycleEventPayload | ArtifactLifecycleState | lifecycle/hold status | redaction/tombstone refs remain |
 | failure/recovery/ops events | OpsEventPayload | FailureRecord, RecoveryAction, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, DRRestoreReport | recovery/status fields | incident details follow audit policy |
 
@@ -3226,6 +3235,9 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | backpressure_signal_recorded | OpsEventPayload | BackpressureSignal | after required | signal type, threshold, measured value | operational metrics remain |
 | autoscaling_decided | OpsEventPayload | AutoscalingDecision | after required | scaling action, budget refs, decision reason | operational metrics remain |
 | scale_recovery_reported | OpsEventPayload | ScaleRecoveryReport | after required | queue, lease, backpressure, autoscaling, dead-letter, DR, command, event, outbox, replay refs | operational refs remain |
+| queue_broker_adapter_recorded | QueueBrokerEventPayload | QueueBrokerAdapterSpec | after required | queue names, capability refs, visibility timeout, policy refs | broker URL and credentials redacted |
+| queue_broker_operation_recorded | QueueBrokerEventPayload | QueueBrokerOperationRecord | after required | queue item, lease, fencing token hash/ref, visibility timeout, heartbeat, retry, dead-letter refs | fencing secret material redacted |
+| queue_broker_conformance_reported | QueueBrokerEventPayload | QueueBrokerConformanceReport | after required | adapter, topology, operation, lease, heartbeat, ack/nack, dead-letter, failure, contract-only, replay refs | stable refs remain |
 | persistence_adapter_recorded | PersistenceEventPayload | PersistenceAdapterSpec | after required | capability refs, port refs, policy refs | concrete credentials redacted |
 | persistence_transaction_recorded | PersistenceEventPayload | PersistenceTransactionRecord | before optional, after required | transaction refs, command/event/outbox/artifact/idempotency/queue refs | stable refs remain |
 | persistence_migration_recorded | PersistenceEventPayload | PersistenceMigrationRecord | after required | version transition, rollback plan, validation cursor, failure refs | stable refs remain |
@@ -3475,6 +3487,100 @@ Rules:
 - a passing `ScaleRecoveryReport` requires queue topology, queue item, shard lease, backpressure, autoscaling, dead-letter, failure, recovery, DR restore, policy, command, event cursor, outbox, and replay refs.
 - non-pass reports must expose failure records or missing refs; scale failures cannot be hidden as successful throughput degradation.
 - scale decisions never satisfy publication evidence; they only explain scheduling, reliability, recovery, and throughput behavior.
+
+## QueueBrokerAdapterSpec
+
+```yaml
+QueueBrokerAdapterSpec:
+  id: string
+  adapter_kind: redis | redis_contract | external_broker
+  queue_names: list
+  capability_refs: list
+  visibility_timeout_seconds: integer
+  fencing_token_supported: boolean
+  idempotency_supported: boolean
+  fairness_scope_refs: list
+  backpressure_signal_refs: list
+  policy_decision_refs: list
+  created_at: timestamp
+```
+
+## QueueBrokerOperationRecord
+
+```yaml
+QueueBrokerOperationRecord:
+  id: string
+  adapter_ref: string
+  queue_name: frontier | processing | verification_review | export_outbox | projection | recovery
+  operation: enqueue | duplicate_enqueue | lease | heartbeat | ack | nack | dead_letter
+  queue_item_ref: string
+  lease_ref: string
+  fencing_token_ref: string
+  visibility_timeout_ref: string
+  heartbeat_ref: string
+  retry_ref: string
+  failure_record_refs: list
+  recovery_action_refs: list
+  dead_letter_ref: string
+  duplicate_of_ref: string
+  fairness_scope_refs: list
+  backpressure_signal_refs: list
+  policy_decision_refs: list
+  created_at: timestamp
+```
+
+## QueueBrokerConformanceReport
+
+```yaml
+QueueBrokerConformanceReport:
+  id: string
+  adapter_ref: string
+  adapter_kind: redis | redis_contract | external_broker
+  queue_topology_ref: string
+  queue_item_refs: list
+  broker_operation_refs: list
+  lease_refs: list
+  heartbeat_refs: list
+  ack_refs: list
+  nack_refs: list
+  dead_letter_refs: list
+  fencing_token_refs: list
+  retry_refs: list
+  fairness_scope_refs: list
+  backpressure_signal_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  policy_decision_refs: list
+  contract_only_refs: list
+  replay_bundle_ref: string
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## QueueBrokerFixtureManifest
+
+```yaml
+QueueBrokerFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: broker_missing_fencing_token | broker_missing_heartbeat | broker_missing_dead_letter
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Rules:
+
+- a passing `QueueBrokerConformanceReport` requires adapter, topology, queue item, broker operation, lease, heartbeat, ack, dead-letter, fencing token, retry, fairness, backpressure, policy, and replay refs.
+- `redis-broker-runtime-unavailable` returns `needs_review` with `contract_only_refs`; no live URL/runtime may be labeled `pass`.
+- duplicate enqueue after adapter reopen must return a duplicate operation and must not create a second queued item.
+- leased operations must include fencing token and visibility-timeout refs; heartbeat, nack, and dead-letter operations require their operation-specific refs.
+- broker refs do not satisfy publication evidence; they only prove queue durability, concurrency safety, recovery, and replay behavior.
+- Redis/Valkey clients stay behind `veracrawl.adapters.queue_brokers`; core imports only contracts and ports.
 
 ## PersistenceAdapterSpec
 
