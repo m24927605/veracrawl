@@ -258,3 +258,53 @@ class AgentRecommendationStatus(StrEnum):
     PROPOSED = "proposed"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+
+
+class UnitOfWorkStatus(StrEnum):
+    OPEN = "open"
+    COMMITTED = "committed"
+    ROLLED_BACK = "rolled_back"
+    FAILED = "failed"
+
+
+class DurableCommandRecordStatus(StrEnum):
+    RECORDED = "recorded"
+    COMMITTED = "committed"
+    DUPLICATE = "duplicate"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+class OutboxStatus(StrEnum):
+    PENDING = "pending"
+    DISPATCHED = "dispatched"
+    FAILED = "failed"
+
+
+class FrontierItemStatus(StrEnum):
+    QUEUED = "queued"
+    LEASED = "leased"
+    COMPLETED = "completed"
+    RELEASED = "released"
+    RETRYING = "retrying"
+    DEAD_LETTERED = "dead_lettered"
+
+
+class QueueLeaseStatus(StrEnum):
+    ACTIVE = "active"
+    HEARTBEAT_RECORDED = "heartbeat_recorded"
+    COMPLETED = "completed"
+    RELEASED = "released"
+    EXPIRED = "expired"
+    INVALID = "invalid"
+
+
+class DurableRecoveryStatus(StrEnum):
+    DURABLE_RECOVERED = "durable_recovered"
+    DUPLICATE_COMMAND_DEDUPED = "duplicate_command_deduped"
+    EVENT_GAP = "event_gap"
+    PENDING_OUTBOX = "pending_outbox"
+    STALE_LEASE = "stale_lease"
+    INVALID_LEASE = "invalid_lease"
+    MISSING_ARTIFACT = "missing_artifact"
+    DEAD_LETTER = "dead_letter"

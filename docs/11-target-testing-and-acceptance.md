@@ -153,6 +153,41 @@ must not be described as full crawler completion until browser, graph, memory,
 export, distributed persistence, queueing, operational recovery, and production
 scale acceptance suites are implemented and pass.
 
+Durable runtime and scheduler fixture contract:
+
+```text
+veracrawl-durable run tests/fixtures/<durable_fixture_id> --profile target --out .veracrawl-test-runs/<durable_fixture_id>
+```
+
+Required durable fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| durable-runtime-success | durable command, event cursor, outbox, artifact, frontier, lease, and recovery refs reload with `pass` |
+| durable-duplicate-command | duplicate command returns original result and does not duplicate event or outbox records |
+| durable-event-gap | event cursor gap is detected and recovery fails |
+| durable-pending-outbox | pending outbox is visible and recovery requires review |
+| durable-stale-lease | expired lease is retry-visible and recovery requires review |
+| durable-invalid-lease | wrong lease token is rejected and recovery fails |
+| durable-missing-artifact | missing artifact ref blocks durable recovery |
+
+Durable scheduler acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_durable_contract_registry.py`
+- `pytest tests/contract/test_durable_ports_and_boundaries.py`
+- `pytest tests/contract/test_scheduler_contracts.py`
+- `pytest tests/unit/test_durable_command_idempotency.py`
+- `pytest tests/unit/test_durable_event_outbox.py`
+- `pytest tests/unit/test_scheduler_leases.py`
+- `pytest tests/unit/test_durable_replay_recovery.py`
+- `pytest tests/integration/test_durable_runtime_persistence.py`
+- `pytest tests/integration/test_durable_negative_fixtures.py`
+
+This acceptance proves deterministic durable and scheduler semantics only. It does
+not prove production persistence adapters, distributed queueing, browser crawling,
+graph/memory intelligence, export delivery, or production scale readiness.
+
 Oracle schemas:
 
 ```yaml

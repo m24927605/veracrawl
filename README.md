@@ -73,12 +73,16 @@ This repository uses GitHub Spec Kit for spec-driven development. See [AGENTS.md
 
 The current Python foundation implements the target architecture contracts, ports,
 framework-neutral adapter boundaries, command/event/replay primitives, policy gates,
-deterministic fixture/oracle checks, and the first target runtime spine. The runtime
-spine can execute deterministic objective-to-output fixtures, enforce owner
-boundaries, block unsafe publication, validate replay refs, and accept
-framework-neutral agent recommendations through commands. It is not a claim that
-the full production crawler runtime, browser fleet, graph intelligence, memory
-system, export system, or production scale operations are complete.
+deterministic fixture/oracle checks, the first target runtime spine, and the
+durable runtime/scheduler foundation. The runtime spine can execute deterministic
+objective-to-output fixtures, enforce owner boundaries, block unsafe publication,
+validate replay refs, and accept framework-neutral agent recommendations through
+commands. The durable foundation adds deterministic unit-of-work, command
+idempotency, event cursor, outbox, artifact index, frontier, queue lease, and
+replay recovery checks behind replaceable ports. It is not a claim that the full
+production crawler runtime, production persistence adapters, browser fleet, graph
+intelligence, memory system, export system, or production scale operations are
+complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -124,6 +128,29 @@ for fixture in \
   runtime-boundary-violation
 do
   uv run --python python3.12 --extra dev veracrawl-runtime run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run durable runtime and scheduler fixtures:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-durable run \
+  tests/fixtures/durable-runtime-success \
+  --profile target \
+  --out .veracrawl-test-runs/durable-runtime-success
+
+for fixture in \
+  durable-duplicate-command \
+  durable-event-gap \
+  durable-pending-outbox \
+  durable-stale-lease \
+  durable-invalid-lease \
+  durable-missing-artifact
+do
+  uv run --python python3.12 --extra dev veracrawl-durable run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

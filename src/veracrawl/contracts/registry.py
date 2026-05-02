@@ -279,6 +279,68 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         tests=["tests/unit/test_evidence_publication_gates.py"],
     ),
+    "UnitOfWorkRecord": _contract(
+        "UnitOfWorkRecord",
+        OwnerService.RUNTIME_EVENTS,
+        "durable",
+        mutation_allowed=True,
+        tests=["tests/contract/test_scheduler_contracts.py"],
+    ),
+    "DurableCommandRecord": _contract(
+        "DurableCommandRecord",
+        OwnerService.RUNTIME_EVENTS,
+        "durable",
+        mutation_allowed=True,
+        tests=["tests/unit/test_durable_command_idempotency.py"],
+    ),
+    "OutboxRecord": _contract(
+        "OutboxRecord",
+        OwnerService.RUNTIME_EVENTS,
+        "durable",
+        mutation_allowed=True,
+        tests=["tests/unit/test_durable_event_outbox.py"],
+    ),
+    "EventCursorRecord": _contract(
+        "EventCursorRecord",
+        OwnerService.RUNTIME_EVENTS,
+        "durable",
+        mutation_allowed=True,
+        tests=["tests/unit/test_durable_event_outbox.py"],
+    ),
+    "DurableFixtureManifest": _contract(
+        "DurableFixtureManifest",
+        OwnerService.TESTS,
+        "durable",
+        tests=["tests/integration/test_durable_runtime_persistence.py"],
+    ),
+    "FrontierItem": _contract(
+        "FrontierItem",
+        OwnerService.SCHEDULER,
+        "scheduler",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scheduler_leases.py"],
+    ),
+    "QueueLease": _contract(
+        "QueueLease",
+        OwnerService.SCHEDULER,
+        "scheduler",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scheduler_leases.py"],
+    ),
+    "SchedulerRecoveryReport": _contract(
+        "SchedulerRecoveryReport",
+        OwnerService.SCHEDULER,
+        "scheduler",
+        mutation_allowed=True,
+        tests=["tests/unit/test_scheduler_leases.py"],
+    ),
+    "DurableReplayRecoveryReport": _contract(
+        "DurableReplayRecoveryReport",
+        OwnerService.REVIEW_REPLAY,
+        "recovery",
+        mutation_allowed=True,
+        tests=["tests/unit/test_durable_replay_recovery.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -425,6 +487,44 @@ COMMAND_TYPES.update(
             required_policy_decision_types=["prompt_context"],
             emitted_event_types=["accept_agent_recommendation_committed"],
         ),
+        "durable_commit_command": CommandTypeRegistration(
+            command_type="durable_commit_command",
+            owner_service=OwnerService.RUNTIME_EVENTS,
+            target_aggregate_type="DurableCommandRecord",
+            payload_schema_ref="BaseCommandPayload",
+            expected_version_required=True,
+            emitted_event_types=["durable_command_committed", "outbox_record_appended"],
+        ),
+        "enqueue_frontier_item": CommandTypeRegistration(
+            command_type="enqueue_frontier_item",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="FrontierItem",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["frontier_item_enqueued"],
+        ),
+        "lease_frontier_item": CommandTypeRegistration(
+            command_type="lease_frontier_item",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="QueueLease",
+            payload_schema_ref="BaseCommandPayload",
+            lease_required=True,
+            emitted_event_types=["frontier_item_leased"],
+        ),
+        "complete_frontier_item": CommandTypeRegistration(
+            command_type="complete_frontier_item",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="FrontierItem",
+            payload_schema_ref="BaseCommandPayload",
+            lease_required=True,
+            emitted_event_types=["frontier_item_completed"],
+        ),
+        "record_durable_recovery": CommandTypeRegistration(
+            command_type="record_durable_recovery",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="DurableReplayRecoveryReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["durable_recovery_reported"],
+        ),
     }
 )
 
@@ -476,6 +576,17 @@ EVENT_TYPES.update(
             "record_replay_bundle_committed",
             "accept_agent_recommendation_committed",
             "runtime_owner_violation_recorded",
+            "durable_command_committed",
+            "outbox_record_appended",
+            "frontier_item_enqueued",
+            "frontier_item_leased",
+            "queue_lease_heartbeat_recorded",
+            "frontier_item_completed",
+            "queue_lease_released",
+            "queue_lease_expired",
+            "frontier_item_dead_lettered",
+            "scheduler_recovery_reported",
+            "durable_recovery_reported",
         ]
     }
 )
@@ -681,6 +792,26 @@ for _runtime_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _durable_fixture, _negative in {
+    "durable-runtime-success": False,
+    "durable-duplicate-command": False,
+    "durable-event-gap": True,
+    "durable-pending-outbox": True,
+    "durable-stale-lease": True,
+    "durable-invalid-lease": True,
+    "durable-missing-artifact": True,
+}.items():
+    _base = f"tests/fixtures/{_durable_fixture}"
+    FIXTURE_ORACLES[_durable_fixture] = FixtureOracleRegistration(
+        fixture_id=_durable_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -815,6 +946,24 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
         OwnerService.ARTIFACT_LIFECYCLE,
         "materialized",
         materialized=["RuntimeArtifactRef"],
+    ),
+    "durable_persistence": _target_area(
+        "durable_persistence",
+        OwnerService.RUNTIME_EVENTS,
+        "materialized",
+        materialized=[
+            "UnitOfWorkRecord",
+            "DurableCommandRecord",
+            "OutboxRecord",
+            "EventCursorRecord",
+            "DurableReplayRecoveryReport",
+        ],
+    ),
+    "scheduler": _target_area(
+        "scheduler",
+        OwnerService.SCHEDULER,
+        "materialized",
+        materialized=["FrontierItem", "QueueLease", "SchedulerRecoveryReport"],
     ),
 }
 

@@ -22,6 +22,13 @@ from veracrawl.contracts.command import (
     CommandResult,
     CommandTypeSpec,
 )
+from veracrawl.contracts.durable import (
+    DurableCommandRecord,
+    DurableFixtureManifest,
+    EventCursorRecord,
+    OutboxRecord,
+    UnitOfWorkRecord,
+)
 from veracrawl.contracts.event import CrawlRunEvent, EventCursor, EventTypeSpec
 from veracrawl.contracts.evidence import EvidenceCoverageResult, EvidencePacket
 from veracrawl.contracts.fixture import (
@@ -45,8 +52,10 @@ from veracrawl.contracts.objective import (
 from veracrawl.contracts.policy import BlockedActionReport, PolicyDecision
 from veracrawl.contracts.processing import ExtractionCandidate, NormalizedDocument
 from veracrawl.contracts.publication import OutputManifest, PublishedOutput
+from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
+from veracrawl.contracts.scheduler import FrontierItem, QueueLease, SchedulerRecoveryReport
 from veracrawl.contracts.source_adapter import (
     SourceAdapterCommand,
     SourceAdapterResult,
@@ -75,7 +84,11 @@ __all__ = [
     "CrawlRun",
     "CrawlRunEvent",
     "DRRestoreOracle",
+    "DurableCommandRecord",
+    "DurableFixtureManifest",
+    "DurableReplayRecoveryReport",
     "EventCursor",
+    "EventCursorRecord",
     "EventTypeSpec",
     "ExpectedEventSequenceOracle",
     "ExpectedEvidenceCoverageOracle",
@@ -85,24 +98,29 @@ __all__ = [
     "EvidencePacket",
     "ExtractionCandidate",
     "FailureInjectionPlan",
+    "FrontierItem",
     "ModelCallTrace",
     "ModelRequest",
     "ModelResponse",
     "NormalizedDocument",
     "OutputManifest",
+    "OutboxRecord",
     "PolicyDecision",
     "PublishedOutput",
+    "QueueLease",
     "ReplayBundleManifest",
     "ReplayBundleOracle",
     "ReplayValidationReport",
     "RunPlanSnapshot",
     "RuntimeArtifactRef",
     "RuntimeCompletionGate",
+    "SchedulerRecoveryReport",
     "SourceAdapterCommand",
     "SourceAdapterResult",
     "SourceAdapterSpec",
     "ThresholdSpec",
     "ToolCallTrace",
+    "UnitOfWorkRecord",
     "VerificationDecision",
     "registry_json",
     "validate_registry",

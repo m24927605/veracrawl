@@ -35,6 +35,8 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "export",
         "ops",
         "artifact_lifecycle",
+        "durable_persistence",
+        "scheduler",
     }
     assert set(TARGET_CONTRACT_AREAS) == expected
     for area, registration in TARGET_CONTRACT_AREAS.items():

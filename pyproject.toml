@@ -23,6 +23,7 @@ dev = [
 veracrawl-contracts = "veracrawl.cli.contracts:main"
 veracrawl-fixture = "veracrawl.cli.fixtures:main"
 veracrawl-runtime = "veracrawl.cli.runtime:main"
+veracrawl-durable = "veracrawl.cli.durable:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

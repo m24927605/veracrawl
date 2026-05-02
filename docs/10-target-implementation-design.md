@@ -123,6 +123,34 @@ gap, and wrong-owner mutation. It does not implement full browser capability, gr
 intelligence, memory intelligence, export connectors, distributed storage, queue
 workers, or production scale crawling.
 
+## Durable Runtime And Scheduler Foundation Slice
+
+The durable foundation slice moves the target runtime spine beyond process-local
+state while still avoiding concrete infrastructure coupling:
+
+- `veracrawl.contracts.durable`: `UnitOfWorkRecord`, `DurableCommandRecord`,
+  `OutboxRecord`, `EventCursorRecord`, and `DurableFixtureManifest`.
+- `veracrawl.contracts.scheduler`: `FrontierItem`, `QueueLease`, and
+  `SchedulerRecoveryReport`.
+- `veracrawl.contracts.recovery`: `DurableReplayRecoveryReport`.
+- `veracrawl.ports.durable` and `veracrawl.ports.scheduler`: protocol boundaries
+  for durable unit-of-work, command idempotency, event cursors, outbox, artifact
+  index, frontier items, and queue leases.
+- `veracrawl.runtime_support.durable_store`: deterministic durable fixture profile
+  behind ports. This profile is intentionally not a production database or queue.
+- `veracrawl.scheduler.runtime`: owner-service lease transitions for enqueue,
+  lease, heartbeat, complete, release, expire, retry, and dead-letter behavior.
+- `veracrawl.runtime_events.durable` and `veracrawl.review_replay.durable`:
+  event cursor validation and durable replay recovery reports.
+- `veracrawl.cli.durable`: deterministic fixture runner for durable success,
+  duplicate command, event gap, pending outbox, stale lease, invalid lease, and
+  missing artifact scenarios.
+
+This slice proves durable semantics, scheduler ownership, idempotency, and recovery
+without importing Postgres, Redis, Kafka, object storage, browser libraries, model
+SDKs, or agent frameworks into core. Production adapters and migrations remain
+future specs.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

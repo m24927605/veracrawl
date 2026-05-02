@@ -117,11 +117,11 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/002-core-runtime-spine/plan.md`.
-Use it with `specs/002-core-runtime-spine/spec.md`,
-`specs/002-core-runtime-spine/research.md`,
-`specs/002-core-runtime-spine/data-model.md`,
-`specs/002-core-runtime-spine/contracts/`, and
-`specs/002-core-runtime-spine/quickstart.md` for VeraCrawl Target Core Runtime
-Spine work.
+Current active Spec Kit plan: `specs/003-durable-runtime-scheduler/plan.md`.
+Use it with `specs/003-durable-runtime-scheduler/spec.md`,
+`specs/003-durable-runtime-scheduler/research.md`,
+`specs/003-durable-runtime-scheduler/data-model.md`,
+`specs/003-durable-runtime-scheduler/contracts/`, and
+`specs/003-durable-runtime-scheduler/quickstart.md` for VeraCrawl Durable
+Runtime Persistence and Scheduler Foundation work.
 <!-- SPECKIT END -->
