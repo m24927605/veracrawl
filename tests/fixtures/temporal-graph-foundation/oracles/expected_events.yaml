@@ -1,0 +1,1 @@
+{"required_event_types":["temporal_graph_recorded","projection_watermark_recorded","advanced_graph_projection_reported"]}

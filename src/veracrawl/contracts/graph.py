@@ -1,11 +1,17 @@
-"""Basic site graph contracts."""
+"""Graph and graph projection contracts."""
 
 from __future__ import annotations
 
 from pydantic import Field, model_validator
 
 from veracrawl.contracts.common import Ref, TimestampedModel
-from veracrawl.contracts.enums import CompletenessResult, GraphEdgeType, GraphNodeType
+from veracrawl.contracts.enums import (
+    CompletenessResult,
+    GraphEdgeType,
+    GraphNodeType,
+    GraphSignalType,
+    ProjectionJobStatus,
+)
 
 
 class GraphNode(TimestampedModel):
@@ -75,6 +81,167 @@ class ProjectionWatermark(TimestampedModel):
         return self
 
 
+class ProjectionSpec(TimestampedModel):
+    id: str
+    run_ref: Ref
+    projection_name: str
+    input_manifest_refs: list[Ref] = Field(default_factory=list)
+    graph_version: str
+    rebuild_policy_ref: Ref
+    owner_service_ref: Ref
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_projection_spec(self) -> ProjectionSpec:
+        if not self.projection_name or not self.graph_version:
+            raise ValueError("projection spec requires name and graph version")
+        if not self.input_manifest_refs:
+            raise ValueError("projection spec requires input manifests")
+        if not self.rebuild_policy_ref or not self.owner_service_ref:
+            raise ValueError("projection spec requires rebuild policy and owner refs")
+        if not self.policy_decision_refs:
+            raise ValueError("projection spec requires policy refs")
+        return self
+
+
+class ProjectionRebuildJob(TimestampedModel):
+    id: str
+    run_ref: Ref
+    projection_spec_ref: Ref
+    input_manifest_refs: list[Ref] = Field(default_factory=list)
+    expected_rebuild_hash: str
+    actual_rebuild_hash: str
+    watermark_ref: Ref | None = None
+    status: ProjectionJobStatus
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_rebuild_job(self) -> ProjectionRebuildJob:
+        if not self.projection_spec_ref or not self.input_manifest_refs:
+            raise ValueError("projection rebuild job requires projection and input refs")
+        if not self.expected_rebuild_hash or not self.actual_rebuild_hash:
+            raise ValueError("projection rebuild job requires expected and actual hashes")
+        if self.status == ProjectionJobStatus.REBUILT:
+            if self.expected_rebuild_hash != self.actual_rebuild_hash:
+                raise ValueError("rebuilt projection job hash mismatch")
+            if not self.watermark_ref:
+                raise ValueError("rebuilt projection job requires watermark")
+        if self.status == ProjectionJobStatus.MISMATCH and (
+            self.expected_rebuild_hash == self.actual_rebuild_hash
+        ):
+            raise ValueError("mismatch projection job requires different hashes")
+        if not self.policy_decision_refs:
+            raise ValueError("projection rebuild job requires policy refs")
+        return self
+
+
+class ProjectionMismatchReport(TimestampedModel):
+    id: str
+    run_ref: Ref
+    projection_rebuild_job_ref: Ref
+    expected_rebuild_hash: str
+    actual_rebuild_hash: str
+    mismatch_ref: Ref
+    operator_status: str
+
+    @model_validator(mode="after")
+    def validate_mismatch(self) -> ProjectionMismatchReport:
+        if self.expected_rebuild_hash == self.actual_rebuild_hash:
+            raise ValueError("projection mismatch report requires differing hashes")
+        if not self.mismatch_ref or not self.operator_status:
+            raise ValueError("projection mismatch report requires mismatch and status refs")
+        return self
+
+
+class GraphSignal(TimestampedModel):
+    id: str
+    run_ref: Ref
+    signal_type: GraphSignalType
+    subject_ref: Ref
+    score: float = Field(ge=0.0, le=1.0)
+    source_graph_refs: list[Ref] = Field(default_factory=list)
+    explanation_ref: Ref
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    evidence_ref_allowed: bool = False
+
+    @model_validator(mode="after")
+    def validate_signal(self) -> GraphSignal:
+        if not self.subject_ref or not self.explanation_ref:
+            raise ValueError("graph signal requires subject and explanation refs")
+        if not self.source_graph_refs:
+            raise ValueError("graph signal requires source graph refs")
+        if not self.policy_decision_refs:
+            raise ValueError("graph signal requires policy refs")
+        if self.evidence_ref_allowed:
+            raise ValueError("graph signals cannot satisfy source evidence requirements")
+        return self
+
+
+class GraphDeltaReport(TimestampedModel):
+    id: str
+    run_ref: Ref
+    previous_manifest_ref: Ref
+    current_manifest_ref: Ref
+    added_node_refs: list[Ref] = Field(default_factory=list)
+    removed_node_refs: list[Ref] = Field(default_factory=list)
+    added_edge_refs: list[Ref] = Field(default_factory=list)
+    removed_edge_refs: list[Ref] = Field(default_factory=list)
+    changed_signal_refs: list[Ref] = Field(default_factory=list)
+    rebuild_hash: str
+
+    @model_validator(mode="after")
+    def validate_delta(self) -> GraphDeltaReport:
+        if not self.previous_manifest_ref or not self.current_manifest_ref:
+            raise ValueError("graph delta report requires previous and current manifests")
+        if not self.rebuild_hash:
+            raise ValueError("graph delta report requires rebuild hash")
+        return self
+
+
+class GraphQualityReport(TimestampedModel):
+    id: str
+    run_ref: Ref
+    graph_manifest_ref: Ref
+    metric_refs: list[Ref] = Field(default_factory=list)
+    score_refs: list[Ref] = Field(default_factory=list)
+    warning_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_quality(self) -> GraphQualityReport:
+        if not self.graph_manifest_ref:
+            raise ValueError("graph quality report requires graph manifest")
+        if not self.metric_refs or not self.score_refs:
+            raise ValueError("graph quality report requires metric and score refs")
+        if not self.policy_decision_refs:
+            raise ValueError("graph quality report requires policy refs")
+        return self
+
+
+class TemporalGraphProjectionRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    source_output_refs: list[Ref] = Field(default_factory=list)
+    valid_from_ref: Ref
+    valid_to_ref: Ref | None = None
+    entity_identity_ref: Ref
+    evidence_packet_refs: list[Ref] = Field(default_factory=list)
+    projection_watermark_ref: Ref
+
+    @model_validator(mode="after")
+    def validate_temporal_record(self) -> TemporalGraphProjectionRecord:
+        if not self.source_output_refs:
+            raise ValueError("temporal graph record requires source output refs")
+        if not self.evidence_packet_refs:
+            raise ValueError("temporal graph record requires evidence packet refs")
+        required = [self.valid_from_ref, self.entity_identity_ref, self.projection_watermark_ref]
+        if not all(required):
+            raise ValueError(
+                "temporal graph record requires validity, identity, and watermark refs"
+            )
+        return self
+
+
 class GraphBuildManifest(TimestampedModel):
     id: str
     run_ref: Ref
@@ -141,6 +308,56 @@ class GraphBuildReport(TimestampedModel):
         return self
 
 
+class AdvancedGraphProjectionReport(TimestampedModel):
+    id: str
+    run_ref: Ref
+    projection_spec_ref: Ref | None = None
+    rebuild_job_ref: Ref | None = None
+    delta_report_ref: Ref | None = None
+    quality_report_ref: Ref | None = None
+    signal_refs: list[Ref] = Field(default_factory=list)
+    temporal_record_refs: list[Ref] = Field(default_factory=list)
+    mismatch_report_ref: Ref | None = None
+    watermark_ref: Ref | None = None
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    operator_status: str
+    completion_result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_projection_report(self) -> AdvancedGraphProjectionReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required = {
+                "projection_spec_ref": self.projection_spec_ref,
+                "rebuild_job_ref": self.rebuild_job_ref,
+                "delta_report_ref": self.delta_report_ref,
+                "quality_report_ref": self.quality_report_ref,
+                "signal_refs": self.signal_refs,
+                "temporal_record_refs": self.temporal_record_refs,
+                "watermark_ref": self.watermark_ref,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing or self.missing_ref_fields:
+                raise ValueError(
+                    f"passing advanced graph projection report missing refs: {missing}"
+                )
+        if self.completion_result != CompletenessResult.PASS and not (
+            self.failure_report_refs or self.missing_ref_fields or self.mismatch_report_ref
+        ):
+            raise ValueError(
+                "non-pass advanced graph projection report requires failures or missing refs"
+            )
+        return self
+
+
 class GraphFixtureManifest(TimestampedModel):
     id: str
     scenario: str
@@ -155,4 +372,21 @@ class GraphFixtureManifest(TimestampedModel):
             raise ValueError("graph fixture must support target profile")
         if self.negative_case and self.expected_completion_result == "pass":
             raise ValueError("negative graph fixture must not expect pass")
+        return self
+
+
+class AdvancedGraphFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: str
+    expected_operator_status: str
+    negative_case: bool = False
+
+    @model_validator(mode="after")
+    def validate_fixture(self) -> AdvancedGraphFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("advanced graph fixture must support target profile")
+        if self.negative_case and self.expected_completion_result == "pass":
+            raise ValueError("negative advanced graph fixture must not expect pass")
         return self

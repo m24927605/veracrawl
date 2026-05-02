@@ -1,0 +1,1 @@
+{"id":"projection-missing-watermark","scenario":"projection-missing-watermark","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"missing_projection_watermark","negative_case":true}

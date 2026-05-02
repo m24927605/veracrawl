@@ -377,6 +377,42 @@ intelligence, graph store adapters, graph-driven frontier scheduling, memory,
 export delivery, distributed storage, distributed queueing, production browser
 rendering, or production scale readiness.
 
+Advanced graph projection fixture contract:
+
+```text
+veracrawl-projection run tests/fixtures/<advanced_graph_fixture_id> --profile target --out .veracrawl-test-runs/<advanced_graph_fixture_id>
+```
+
+Required advanced graph projection fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| projection-rebuild-success | projection spec, rebuild job, watermark, delta, quality, signal, temporal record, and replay report are complete |
+| graph-signal-frontier-review | frontier and review graph signals include source graph refs, explanations, bounded scores, and policy refs |
+| temporal-graph-foundation | temporal graph records derive from verified output refs, evidence packet refs, valid-time refs, identity refs, and watermark refs |
+| projection-missing-watermark | missing projection watermark fails projection replay |
+| projection-mismatch | rebuild hash mismatch emits projection mismatch report and fails pass claim |
+| graph-signal-as-evidence | graph signal used as source evidence is rejected |
+
+Advanced graph projection acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_advanced_graph_projection_contract_registry.py`
+- `pytest tests/contract/test_advanced_graph_projection_contracts.py`
+- `pytest tests/contract/test_advanced_graph_projection_import_boundaries.py`
+- `pytest tests/unit/test_advanced_graph_projection.py`
+- `pytest tests/unit/test_advanced_graph_replay.py`
+- `pytest tests/unit/test_graph_signal_evidence_boundary.py`
+- `pytest tests/integration/test_advanced_graph_projection_fixtures.py`
+
+This acceptance proves target architecture graph projection contracts,
+deterministic rebuilds, mismatch reports, graph delta and quality reports, graph
+signals, temporal records, projection replay refs, and graph-signal-as-evidence
+rejection. It does not prove production graph store adapters, concrete
+graph-driven scheduling, memory, export delivery, distributed storage,
+distributed queueing, production browser rendering, graph explorer UI, or
+production scale readiness.
+
 Oracle schemas:
 
 ```yaml

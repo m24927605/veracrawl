@@ -1,0 +1,1 @@
+{"id":"graph-signal-as-evidence","scenario":"graph-signal-as-evidence","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"graph_signal_as_evidence","negative_case":true}

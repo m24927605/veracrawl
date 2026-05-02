@@ -1,0 +1,1 @@
+{"id":"projection-mismatch","scenario":"projection-mismatch","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"projection_mismatch","negative_case":true}

@@ -1350,6 +1350,48 @@ ProjectionWatermark:
   updated_at: timestamp
 ```
 
+## ProjectionRebuildJob
+
+```yaml
+ProjectionRebuildJob:
+  id: string
+  run_ref: string
+  projection_spec_ref: string
+  input_manifest_refs: list
+  expected_rebuild_hash: string
+  actual_rebuild_hash: string
+  watermark_ref: string
+  status: planned | rebuilt | mismatch | failed
+  policy_decision_refs: list
+  created_at: timestamp
+```
+
+Rules:
+
+- rebuilt status requires expected and actual rebuild hashes to match.
+- mismatch status requires a `ProjectionMismatchReport`.
+- rebuild jobs are derived from canonical event/artifact refs and do not own publication truth.
+
+## ProjectionMismatchReport
+
+```yaml
+ProjectionMismatchReport:
+  id: string
+  run_ref: string
+  projection_rebuild_job_ref: string
+  expected_rebuild_hash: string
+  actual_rebuild_hash: string
+  mismatch_ref: string
+  operator_status: string
+  created_at: timestamp
+```
+
+Rules:
+
+- expected and actual rebuild hashes must differ.
+- mismatch reports block pass claims until the projection is rebuilt or explicitly reviewed by policy.
+- mismatch reports are replay-critical.
+
 ## EventCursor
 
 ```yaml
@@ -2148,6 +2190,41 @@ GraphSignal:
 
 Graph signals can guide planning, prioritization, and review. They are never source evidence and cannot satisfy required evidence coverage. Only underlying source artifacts and source anchors referenced through `source_evidence_refs` can support publication.
 
+## GraphDeltaReport
+
+```yaml
+GraphDeltaReport:
+  id: string
+  run_ref: string
+  previous_manifest_ref: string
+  current_manifest_ref: string
+  added_node_refs: list
+  removed_node_refs: list
+  added_edge_refs: list
+  removed_edge_refs: list
+  changed_signal_refs: list
+  rebuild_hash: string
+  created_at: timestamp
+```
+
+Graph deltas are derived projection records. They can trigger drift or review workflows but cannot replace source evidence.
+
+## GraphQualityReport
+
+```yaml
+GraphQualityReport:
+  id: string
+  run_ref: string
+  graph_manifest_ref: string
+  metric_refs: list
+  score_refs: list
+  warning_refs: list
+  policy_decision_refs: list
+  created_at: timestamp
+```
+
+Quality reports explain projection quality, coverage, staleness, and rebuild risk. They are replay inputs for operators and agents, not publication evidence.
+
 ## TemporalKGEntityIdentity
 
 ```yaml
@@ -2211,6 +2288,63 @@ Rules:
 - temporal KG reads may inform planning, review, contradiction detection, and repair.
 - temporal KG reads must not satisfy publication evidence requirements.
 - rebuilds must reproduce records from canonical inputs or emit a projection mismatch report.
+
+## TemporalGraphProjectionRecord
+
+`TemporalGraphProjectionRecord` is the executable foundation contract used by the
+advanced graph projection slice. It is a narrower implementation-ready subset of
+the conceptual `TemporalKGProjectionRecord` above.
+
+```yaml
+TemporalGraphProjectionRecord:
+  id: string
+  run_ref: string
+  source_output_refs: list
+  valid_from_ref: string
+  valid_to_ref: string
+  entity_identity_ref: string
+  evidence_packet_refs: list
+  projection_watermark_ref: string
+  created_at: timestamp
+```
+
+Rules:
+
+- source output refs and evidence packet refs are required.
+- valid-time, identity, and projection watermark refs are required.
+- temporal graph projection records can inform planning, review, contradiction detection, and repair.
+- temporal graph projection records must not satisfy publication evidence requirements.
+
+## AdvancedGraphProjectionReport
+
+```yaml
+AdvancedGraphProjectionReport:
+  id: string
+  run_ref: string
+  projection_spec_ref: string
+  rebuild_job_ref: string
+  delta_report_ref: string
+  quality_report_ref: string
+  signal_refs: list
+  temporal_record_refs: list
+  mismatch_report_ref: string
+  watermark_ref: string
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+Rules:
+
+- pass requires projection, rebuild, delta, quality, signal, temporal, watermark, policy, command, event, and outbox refs.
+- non-pass requires failure refs, missing refs, or a mismatch report ref.
+- graph signals referenced by the report remain planning/review signals only.
 
 ## OperationalTemporalMemoryRecord
 

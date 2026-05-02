@@ -303,6 +303,31 @@ graph, graph store adapters, graph-driven frontier scheduling, memory, export,
 distributed persistence, production browser rendering, or production scale graph
 operations.
 
+## Advanced Graph Projection Spine Slice
+
+The advanced graph projection slice turns basic graph manifests and canonical
+source/evidence refs into replayable derived projections while preserving the
+rule that graph and memory cannot become publication source of truth:
+
+- `veracrawl.contracts.graph`: `ProjectionSpec`, `ProjectionRebuildJob`,
+  `ProjectionMismatchReport`, `GraphDeltaReport`, `GraphSignal`,
+  `GraphQualityReport`, `TemporalGraphProjectionRecord`,
+  `AdvancedGraphProjectionReport`, and `AdvancedGraphFixtureManifest`.
+- `veracrawl.graph.projection`: deterministic projection rebuild, mismatch,
+  graph signal, quality, delta, and temporal record construction.
+- `veracrawl.review_replay.graph`: advanced graph projection replay completeness
+  validation for projection, rebuild, delta, quality, signal, temporal,
+  watermark, policy, command, event, and outbox refs.
+- `veracrawl.cli.projection`: `veracrawl-projection run` fixture runner.
+
+This slice proves projection specs, deterministic rebuild jobs, projection
+mismatch reports, graph deltas, graph quality reports, graph signals,
+frontier/review signal contracts, temporal graph records, projection watermarks,
+and graph-signal-as-evidence rejection. It does not prove production graph store
+adapters, concrete graph-driven scheduling, memory, export, distributed
+persistence, production browser rendering, graph explorer UI, or production
+scale graph operations.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

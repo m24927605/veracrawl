@@ -1,0 +1,1 @@
+{"required_event_types":["projection_spec_recorded","projection_rebuild_job_recorded","projection_watermark_recorded","graph_delta_recorded","graph_quality_recorded","graph_signal_recorded","temporal_graph_recorded","advanced_graph_projection_reported"]}

@@ -414,6 +414,9 @@ class GraphNodeType(StrEnum):
     TEMPLATE = "template"
     CANONICAL = "canonical"
     SOURCE_EVIDENCE = "source_evidence"
+    ENTITY = "entity"
+    TASK = "task"
+    TEMPORAL_FACT = "temporal_fact"
 
 
 class GraphEdgeType(StrEnum):
@@ -422,9 +425,30 @@ class GraphEdgeType(StrEnum):
     CANONICAL = "canonical"
     PAGE_STRUCTURE = "page_structure"
     SOURCE_EVIDENCE = "source_evidence"
+    ENTITY_EVIDENCE = "entity_evidence"
+    TASK_DEPENDENCY = "task_dependency"
+    TEMPORAL_VALIDITY = "temporal_validity"
+
+
+class GraphSignalType(StrEnum):
+    FRONTIER_PRIORITY = "frontier_priority"
+    REVIEW_ROUTE = "review_route"
+    DEDUP_HINT = "dedup_hint"
+    DRIFT_RISK = "drift_risk"
+    QUALITY_WARNING = "quality_warning"
+
+
+class ProjectionJobStatus(StrEnum):
+    PLANNED = "planned"
+    REBUILT = "rebuilt"
+    MISMATCH = "mismatch"
+    FAILED = "failed"
 
 
 class GraphFailureType(StrEnum):
     MISSING_GRAPH_INPUT = "missing_graph_input"
     REBUILD_MISMATCH = "rebuild_mismatch"
     GRAPH_AS_EVIDENCE = "graph_as_evidence"
+    MISSING_PROJECTION_WATERMARK = "missing_projection_watermark"
+    PROJECTION_MISMATCH = "projection_mismatch"
+    GRAPH_SIGNAL_AS_EVIDENCE = "graph_signal_as_evidence"

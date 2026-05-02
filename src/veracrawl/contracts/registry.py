@@ -362,6 +362,68 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "graph",
         tests=["tests/integration/test_graph_fixtures.py"],
     ),
+    "ProjectionSpec": _contract(
+        "ProjectionSpec",
+        OwnerService.PROJECTION,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/contract/test_advanced_graph_projection_contracts.py"],
+    ),
+    "ProjectionRebuildJob": _contract(
+        "ProjectionRebuildJob",
+        OwnerService.PROJECTION,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_advanced_graph_projection.py"],
+    ),
+    "ProjectionMismatchReport": _contract(
+        "ProjectionMismatchReport",
+        OwnerService.PROJECTION,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_advanced_graph_projection.py"],
+    ),
+    "GraphSignal": _contract(
+        "GraphSignal",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_graph_signal_evidence_boundary.py"],
+    ),
+    "GraphDeltaReport": _contract(
+        "GraphDeltaReport",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_advanced_graph_projection.py"],
+    ),
+    "GraphQualityReport": _contract(
+        "GraphQualityReport",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_advanced_graph_projection.py"],
+    ),
+    "TemporalGraphProjectionRecord": _contract(
+        "TemporalGraphProjectionRecord",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_advanced_graph_projection.py"],
+    ),
+    "AdvancedGraphProjectionReport": _contract(
+        "AdvancedGraphProjectionReport",
+        OwnerService.REVIEW_REPLAY,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_advanced_graph_replay.py"],
+    ),
+    "AdvancedGraphFixtureManifest": _contract(
+        "AdvancedGraphFixtureManifest",
+        OwnerService.TESTS,
+        "graph",
+        tests=["tests/integration/test_advanced_graph_projection_fixtures.py"],
+    ),
     "UnitOfWorkRecord": _contract(
         "UnitOfWorkRecord",
         OwnerService.RUNTIME_EVENTS,
@@ -907,6 +969,30 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["graph_report_recorded"],
         ),
+        "build_advanced_graph_projection": CommandTypeRegistration(
+            command_type="build_advanced_graph_projection",
+            owner_service=OwnerService.GRAPH,
+            target_aggregate_type="AdvancedGraphProjectionReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["graph", "projection"],
+            emitted_event_types=[
+                "projection_spec_recorded",
+                "projection_rebuild_job_recorded",
+                "projection_watermark_recorded",
+                "graph_delta_recorded",
+                "graph_quality_recorded",
+                "graph_signal_recorded",
+                "temporal_graph_recorded",
+                "advanced_graph_projection_reported",
+            ],
+        ),
+        "record_projection_mismatch": CommandTypeRegistration(
+            command_type="record_projection_mismatch",
+            owner_service=OwnerService.PROJECTION,
+            target_aggregate_type="ProjectionMismatchReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["projection_mismatch_reported"],
+        ),
     }
 )
 
@@ -996,6 +1082,14 @@ EVENT_TYPES.update(
             "graph_manifest_recorded",
             "projection_watermark_recorded",
             "graph_report_recorded",
+            "projection_spec_recorded",
+            "projection_rebuild_job_recorded",
+            "projection_mismatch_reported",
+            "graph_delta_recorded",
+            "graph_quality_recorded",
+            "graph_signal_recorded",
+            "temporal_graph_recorded",
+            "advanced_graph_projection_reported",
         ]
     }
 )
@@ -1330,6 +1424,26 @@ for _graph_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _advanced_graph_fixture, _negative in {
+    "projection-rebuild-success": False,
+    "graph-signal-frontier-review": False,
+    "temporal-graph-foundation": False,
+    "projection-missing-watermark": True,
+    "projection-mismatch": True,
+    "graph-signal-as-evidence": True,
+}.items():
+    _base = f"tests/fixtures/{_advanced_graph_fixture}"
+    FIXTURE_ORACLES[_advanced_graph_fixture] = FixtureOracleRegistration(
+        fixture_id=_advanced_graph_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_graph_ref=f"{_base}/oracles/expected_graph.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1453,8 +1567,13 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     "projection": _target_area(
         "projection",
         OwnerService.PROJECTION,
-        "foundation_placeholder",
-        placeholders=["ProjectionWatermark"],
+        "materialized",
+        materialized=[
+            "ProjectionSpec",
+            "ProjectionWatermark",
+            "ProjectionRebuildJob",
+            "ProjectionMismatchReport",
+        ],
     ),
     "graph": _target_area(
         "graph",
@@ -1466,6 +1585,11 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "GraphEdgeProvenance",
             "GraphBuildManifest",
             "GraphBuildReport",
+            "GraphSignal",
+            "GraphDeltaReport",
+            "GraphQualityReport",
+            "TemporalGraphProjectionRecord",
+            "AdvancedGraphProjectionReport",
         ],
     ),
     "memory": _target_area(

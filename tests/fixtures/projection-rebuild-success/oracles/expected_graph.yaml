@@ -1,0 +1,1 @@
+{"expected_result":"pass","expected_signal_types":["dedup_hint"],"expected_temporal_records":["temporal-graph-record:projection-rebuild-success:entity-1"],"source_of_truth":"canonical_events_and_source_evidence"}

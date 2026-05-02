@@ -75,8 +75,9 @@ The current Python foundation implements the target architecture contracts, port
 framework-neutral adapter boundaries, command/event/replay primitives, policy gates,
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
-the local network/browser acquisition runtime, the normalize/extract plane, and
-the evidence/publication spine, and the basic site graph spine.
+the local network/browser acquisition runtime, the normalize/extract plane, the
+evidence/publication spine, the basic site graph spine, and the advanced graph
+projection spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -107,6 +108,14 @@ provenance, projection watermarks, replay reports, and graph-as-evidence
 boundary checks. It is not a claim that advanced graph intelligence, memory
 intelligence, graph store adapters, export delivery, distributed persistence,
 production browser rendering, or production scale operations are complete.
+The advanced graph projection spine adds projection specs, rebuild jobs,
+projection mismatch reports, graph delta reports, graph quality reports, graph
+signals, temporal graph projection records, replay reports, and frontier/review
+signal contracts while preserving the rule that graph signals cannot satisfy
+source evidence. It is not a claim that memory intelligence, export delivery,
+distributed persistence, production browser rendering, production graph store
+operations, concrete graph-driven scheduling, or production scale operations are
+complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -277,6 +286,24 @@ for fixture in \
   graph-as-evidence
 do
   uv run --python python3.12 --extra dev veracrawl-graph run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run advanced graph projection fixtures:
+
+```sh
+for fixture in \
+  projection-rebuild-success \
+  graph-signal-frontier-review \
+  temporal-graph-foundation \
+  projection-missing-watermark \
+  projection-mismatch \
+  graph-signal-as-evidence
+do
+  uv run --python python3.12 --extra dev veracrawl-projection run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture
