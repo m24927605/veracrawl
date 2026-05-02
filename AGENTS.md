@@ -98,6 +98,7 @@ For all Spec Kit plans and implementation tasks:
 - Use Python for V1 services, workers, contracts, policy checks, event handling, and agent runtime abstractions.
 - Keep the AI agent runtime framework-neutral and owned by VeraCrawl.
 - Do not make core packages depend on LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, or equivalent agent frameworks.
+- Provide framework-neutral agent abstractions that can be implemented by adapters for OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, or future frameworks without changing core contracts.
 - Any model SDK or agent framework must live behind a replaceable adapter.
 - Do not persist framework-native state as canonical state; persist VeraCrawl contracts, commands, events, policy decisions, tool calls, artifact refs, and replay records.
 - Treat framework independence as an architecture acceptance criterion, not an implementation preference.
@@ -117,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/023-security-privacy-lifecycle-gate/plan.md`.
-Use it with `specs/023-security-privacy-lifecycle-gate/spec.md`,
-`specs/023-security-privacy-lifecycle-gate/research.md`,
-`specs/023-security-privacy-lifecycle-gate/data-model.md`,
-`specs/023-security-privacy-lifecycle-gate/contracts/`, and
-`specs/023-security-privacy-lifecycle-gate/quickstart.md` for VeraCrawl Security Privacy Lifecycle Gate work.
+Current active Spec Kit plan: `specs/024-agent-runtime-adapter-operational-gate/plan.md`.
+Use it with `specs/024-agent-runtime-adapter-operational-gate/spec.md`,
+`specs/024-agent-runtime-adapter-operational-gate/research.md`,
+`specs/024-agent-runtime-adapter-operational-gate/data-model.md`,
+`specs/024-agent-runtime-adapter-operational-gate/contracts/`, and
+`specs/024-agent-runtime-adapter-operational-gate/quickstart.md` for VeraCrawl Agent Runtime Adapter Operational Gate work.
 <!-- SPECKIT END -->

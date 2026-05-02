@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"agent_adapter_raw_prompt_leak","required_missing_ref_fields":["raw_prompt_leak_refs"]}

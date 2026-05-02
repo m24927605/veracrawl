@@ -34,6 +34,7 @@ The target product must support:
 - URL, page-structure, entity, source/evidence, task, and temporal graph projections
 - scoped long-term site, task, extraction, failure, repair, and agent memory
 - multi-agent planning, extraction, verification, drift repair, memory, and operations workflows
+- model provider and agent framework adapters mapped through VeraCrawl-owned framework-neutral runtime contracts
 - replayable commands, events, tool calls, model calls, policy decisions, and publication decisions
 - review, correction, withdrawal, result delivery, and export reconciliation
 - production observability, cost controls, queueing, backpressure, security, privacy, retention, and disaster recovery
@@ -266,8 +267,10 @@ Required capabilities:
 
 - Planner, Site Understanding, Frontier, Fetch Analysis, Extractor, Verifier, Drift, Memory, and Ops agents
 - framework-neutral agent runtime
+- adapter-owned mappings for OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, and future frameworks
 - tool gateway permissions
 - agent action trace
+- model call, tool call, context bundle, command result, policy, observability, security/privacy, and replay trace refs
 - repair loops
 
 Required acceptance:
@@ -275,6 +278,9 @@ Required acceptance:
 - agents cannot directly mutate durable stores
 - each tool call is validated by typed contracts and policy
 - framework-native state is not canonical state
+- `AgentRuntimeAdapterReport` pass requires every required framework family to produce canonical execution refs through the same adapter contract
+- missing live SDK/runtime refs return `needs_review`; contract-only descriptors cannot claim operational pass
+- raw prompt/response persistence, framework-native canonical state, missing model/tool/security/privacy/replay refs, or unsupported frameworks fail deterministically
 
 ### Export And Correction Profile
 

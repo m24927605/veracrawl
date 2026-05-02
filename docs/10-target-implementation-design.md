@@ -522,6 +522,27 @@ Agent runtime requirements:
 - every agent run records model/provider refs, prompt template version, tool calls, command results, policy decisions, and output refs
 - replay uses recorded refs and events, not framework-native state
 
+### Agent Runtime Adapter Operational Gate Slice
+
+The adapter gate proves that agent framework and model provider integrations map into VeraCrawl canonical contracts before any concrete framework is trusted by core.
+
+Required implementation:
+
+- `AgentAdapterExecutionRecord` records one framework family execution with runtime spec, `AgentRunRequest`, `AgentRunResult`, `AgentActionTrace`, model call, tool call, context bundle, command result, policy, observability, security/privacy, runtime/contract adapter, diagnostic framework state, and replay refs.
+- `AgentRuntimeAdapterReport` aggregates all required framework families and can claim `pass` only when OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, and FutureFramework all produce canonical execution refs through the same adapter contract.
+- `AgentRuntimeAdapterFixtureManifest` defines success, no-runtime, and negative adapter fixtures with expected operator status and failure type.
+- `veracrawl.agents.adapter_gate` is core-owned and imports only VeraCrawl contracts.
+- `veracrawl.adapters.agent_frameworks.contract` is adapter-owned and provides deterministic contract adapters without importing real SDKs.
+- `veracrawl-agent-adapters` loads adapter modules dynamically so CLI fixture execution does not create static dependencies on OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, model SDKs, browser libraries, storage clients, or queue clients.
+
+Rules:
+
+- missing live SDK/runtime refs return `needs_review`; contract-only refs cannot claim operational pass.
+- raw prompts and raw responses must never be persisted as canonical state.
+- framework-native state can be stored only as diagnostic refs and cannot satisfy canonical replay or completion requirements.
+- missing model traces, tool traces, security/privacy refs, observability refs, replay refs, or unsupported framework names are deterministic failures.
+- this slice proves framework-neutral adapter mapping and boundary enforcement. It does not prove production model provider accounts, vendor service availability, review UI, export delivery, distributed persistence, production browser rendering, or production scale readiness.
+
 Agent reasoning quality requirements:
 
 - Planner must record ambiguities, assumptions, rejected alternatives, selected adapter rationale, evidence requirements, policy risks, and expected failure modes.
@@ -983,7 +1004,7 @@ Implementation order is for dependency management, not schedule reduction:
 
 1. Contracts, IDs, policy, command/result, event log, state machines, artifact lifecycle.
 2. Core runtime spine: control, scheduler, fetch, normalize, extract, evidence, verify, publish, replay.
-3. Framework-neutral agent runtime and model provider adapter.
+3. Framework-neutral agent runtime, model provider adapter, and agent framework adapter gate.
 4. Browser, document, authorized session, and API-like source adapters.
 5. Graph projections and graph-driven frontier/review workflows.
 6. Memory kernel and scoped retrieval/invalidation.

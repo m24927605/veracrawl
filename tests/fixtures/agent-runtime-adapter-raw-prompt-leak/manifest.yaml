@@ -1,0 +1,1 @@
+{"id":"agent-runtime-adapter-raw-prompt-leak","scenario":"agent-runtime-adapter-raw-prompt-leak","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"agent_adapter_raw_prompt_leak","expected_failure_type":"agent_adapter_raw_prompt_leak","negative_case":true}

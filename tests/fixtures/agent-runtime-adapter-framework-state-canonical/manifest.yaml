@@ -1,0 +1,1 @@
+{"id":"agent-runtime-adapter-framework-state-canonical","scenario":"agent-runtime-adapter-framework-state-canonical","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"agent_adapter_framework_state_canonical","expected_failure_type":"agent_adapter_framework_state_canonical","negative_case":true}

@@ -639,6 +639,42 @@ agent framework integration, model SDK integration, review UI, export delivery,
 distributed storage, distributed queueing, production browser rendering, or
 production scale readiness.
 
+Agent runtime adapter operational gate fixture contract:
+
+```text
+veracrawl-agent-adapters run tests/fixtures/<agent_adapter_fixture_id> --profile target --out .veracrawl-test-runs/<agent_adapter_fixture_id>
+```
+
+Required agent runtime adapter fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| agent-runtime-adapter-success | OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, and FutureFramework produce canonical agent run, model, tool, context, command, policy, observability, security/privacy, and replay refs through one adapter contract |
+| agent-runtime-adapter-runtime-unavailable | missing live SDK/runtime refs return `needs_review` with contract-only and missing-runtime refs |
+| agent-runtime-adapter-raw-prompt-leak | raw prompt persistence fails |
+| agent-runtime-adapter-framework-state-canonical | framework-native canonical state fails |
+| agent-runtime-adapter-missing-model-trace | missing model call trace refs fail |
+| agent-runtime-adapter-missing-tool-trace | missing tool call trace refs fail |
+| agent-runtime-adapter-missing-replay | missing replay refs fail |
+| agent-runtime-adapter-missing-security-privacy | missing security/privacy refs fail |
+| agent-runtime-adapter-unsupported-framework | unsupported framework names fail |
+
+Agent runtime adapter acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_agent_runtime_adapter_contract_registry.py`
+- `pytest tests/contract/test_agent_runtime_adapter_contracts.py`
+- `pytest tests/contract/test_agent_runtime_adapter_import_boundaries.py`
+- `pytest tests/unit/test_agent_runtime_adapter_gate.py`
+- `pytest tests/integration/test_agent_runtime_adapter_fixtures.py`
+
+This acceptance proves framework-neutral adapter mapping, dynamic adapter loading,
+core import boundaries, raw prompt/response blocking, framework-state boundary,
+and canonical trace/security/replay completeness. It does not prove production
+model provider accounts, vendor service uptime, review UI, export delivery,
+distributed storage, distributed queueing, production browser rendering, or
+production scale readiness.
+
 Security/privacy lifecycle gate fixture contract:
 
 ```text
@@ -1144,6 +1180,9 @@ Acceptance gates:
 - `SecurityPrivacyReport` pass requires security policy checks, credential audit refs, prompt taint boundary refs, artifact lifecycle actions, projection cleanup, redacted replay, observability, policy, command, event cursor, outbox, failure/recovery, redaction, and replay refs with leakage count 0
 - `security-privacy-policy-only` must remain `needs_review`; ordinary policy refs alone cannot claim security/privacy lifecycle pass
 - negative fixtures for unsafe network access, prompt-injection/tool misuse, credential leakage, missing lifecycle propagation, legal-hold delete, missing projection cleanup, missing redacted replay, and missing observability refs must fail deterministically
+- agent runtime adapter fixtures prove OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, and future frameworks map into canonical VeraCrawl agent request/result, action trace, model trace, tool trace, context trace, command, policy, observability, security/privacy, and replay refs without core framework coupling
+- no-runtime agent adapter fixtures must remain `needs_review` and contract-only; missing live SDK/runtime refs cannot be labeled operational pass
+- negative agent adapter fixtures for raw prompt persistence, framework-native canonical state, missing model/tool trace refs, missing replay refs, missing security/privacy refs, and unsupported frameworks must fail deterministically
 
 ### Scale And Reliability Profile
 

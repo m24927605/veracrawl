@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"agent_adapter_missing_security_privacy_refs","required_missing_ref_fields":["security_privacy_report_refs"]}

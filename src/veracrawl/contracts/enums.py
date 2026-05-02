@@ -584,6 +584,18 @@ class SecurityPrivacyFailureType(StrEnum):
     MISSING_OBSERVABILITY_REFS = "security_privacy_missing_observability_refs"
 
 
+class AgentAdapterFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "agent_adapter_missing_runtime_refs"
+    RAW_PROMPT_LEAK = "agent_adapter_raw_prompt_leak"
+    RAW_RESPONSE_LEAK = "agent_adapter_raw_response_leak"
+    FRAMEWORK_STATE_CANONICAL = "agent_adapter_framework_state_canonical"
+    MISSING_MODEL_TRACE = "agent_adapter_missing_model_trace"
+    MISSING_TOOL_TRACE = "agent_adapter_missing_tool_trace"
+    MISSING_REPLAY_REFS = "agent_adapter_missing_replay_refs"
+    MISSING_SECURITY_PRIVACY_REFS = "agent_adapter_missing_security_privacy_refs"
+    UNSUPPORTED_FRAMEWORK = "agent_adapter_unsupported_framework"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"

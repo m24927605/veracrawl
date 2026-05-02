@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"agent_adapter_missing_model_trace","required_missing_ref_fields":["model_call_trace_refs"]}

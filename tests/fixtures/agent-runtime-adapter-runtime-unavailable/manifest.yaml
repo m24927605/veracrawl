@@ -1,0 +1,1 @@
+{"id":"agent-runtime-adapter-runtime-unavailable","scenario":"agent-runtime-adapter-runtime-unavailable","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"agent_runtime_adapter_runtime_unavailable"}

@@ -46,6 +46,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "operational_disaster_recovery_gate",
         "operational_observability_gate",
         "security_privacy_lifecycle_gate",
+        "agent_runtime_adapter_operational_gate",
         "scheduler",
         "source_acquisition",
         "network_browser_acquisition",

@@ -78,8 +78,9 @@ runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
-review/replay/ops console spine, the export connector spine, the scale
-hardening spine, and the production persistence/queue runtime spine.
+agent runtime adapter operational gate, the review/replay/ops console spine, the
+export connector spine, the scale hardening spine, and the production
+persistence/queue runtime spine.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
@@ -125,6 +126,14 @@ replay, observability refs, policy refs, command/event/outbox refs, and
 failure/recovery refs. It cannot claim `pass` from ordinary policy refs alone
 and remains framework-, browser-, cloud-, telemetry-, and security-vendor-neutral
 inside core.
+The agent runtime adapter operational gate proves that model provider and agent
+framework adapters can map OpenAI Agent SDK, LangChain, LangGraph, CrewAI,
+AutoGen, Semantic Kernel, and future frameworks into canonical VeraCrawl
+`AgentRunRequest`, `AgentRunResult`, trace, command, policy, observability,
+security/privacy, and replay refs. It cannot claim `pass` from framework-native
+state, raw prompts/responses, unsupported frameworks, or missing model/tool,
+security/privacy, observability, or replay refs. Missing live SDK/runtime refs
+remain `needs_review` rather than a false operational pass.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -768,6 +777,27 @@ for fixture in \
   security-privacy-missing-observability
 do
   uv run --python python3.12 --extra dev veracrawl-security-privacy run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run agent runtime adapter operational gate fixtures:
+
+```sh
+for fixture in \
+  agent-runtime-adapter-success \
+  agent-runtime-adapter-runtime-unavailable \
+  agent-runtime-adapter-raw-prompt-leak \
+  agent-runtime-adapter-framework-state-canonical \
+  agent-runtime-adapter-missing-model-trace \
+  agent-runtime-adapter-missing-tool-trace \
+  agent-runtime-adapter-missing-replay \
+  agent-runtime-adapter-missing-security-privacy \
+  agent-runtime-adapter-unsupported-framework
+do
+  uv run --python python3.12 --extra dev veracrawl-agent-adapters run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

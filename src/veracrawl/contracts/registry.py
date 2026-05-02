@@ -76,6 +76,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_dr_restore_ref: str | None = None
     expected_observability_ref: str | None = None
     expected_security_privacy_ref: str | None = None
+    expected_agent_adapter_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -214,6 +215,28 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "agent",
         tests=["tests/integration/test_multi_agent_fixtures.py"],
+    ),
+    "AgentAdapterExecutionRecord": _contract(
+        "AgentAdapterExecutionRecord",
+        OwnerService.AGENTS,
+        "agent_adapter",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_agent_runtime_adapter_contracts.py"],
+    ),
+    "AgentRuntimeAdapterReport": _contract(
+        "AgentRuntimeAdapterReport",
+        OwnerService.AGENTS,
+        "agent_adapter",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_agent_runtime_adapter_contracts.py"],
+    ),
+    "AgentRuntimeAdapterFixtureManifest": _contract(
+        "AgentRuntimeAdapterFixtureManifest",
+        OwnerService.TESTS,
+        "agent_adapter",
+        tests=["tests/integration/test_agent_runtime_adapter_fixtures.py"],
     ),
     "ReviewItem": _contract(
         "ReviewItem",
@@ -1219,6 +1242,29 @@ COMMAND_TYPES: dict[str, CommandTypeRegistration] = {
         required_policy_decision_types=["prompt_context"],
         emitted_event_types=["agent_action_recorded", "model_called"],
     ),
+    "record_agent_adapter_execution": CommandTypeRegistration(
+        command_type="record_agent_adapter_execution",
+        owner_service=OwnerService.AGENTS,
+        target_aggregate_type="AgentAdapterExecutionRecord",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["prompt_context", "tool_call"],
+        emitted_event_types=["agent_adapter_execution_recorded"],
+    ),
+    "record_agent_runtime_adapter_report": CommandTypeRegistration(
+        command_type="record_agent_runtime_adapter_report",
+        owner_service=OwnerService.AGENTS,
+        target_aggregate_type="AgentRuntimeAdapterReport",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["prompt_context"],
+        emitted_event_types=["agent_runtime_adapter_reported"],
+    ),
+    "record_agent_runtime_adapter_fixture_manifest": CommandTypeRegistration(
+        command_type="record_agent_runtime_adapter_fixture_manifest",
+        owner_service=OwnerService.TESTS,
+        target_aggregate_type="AgentRuntimeAdapterFixtureManifest",
+        payload_schema_ref="BaseCommandPayload",
+        emitted_event_types=["agent_runtime_adapter_fixture_manifest_recorded"],
+    ),
     "execute_agent_tool": CommandTypeRegistration(
         command_type="execute_agent_tool",
         owner_service=OwnerService.CONTRACTS,
@@ -2033,6 +2079,9 @@ EVENT_TYPES: dict[str, EventTypeRegistration] = {
         "agent_action_recorded",
         "model_called",
         "tool_called",
+        "agent_adapter_execution_recorded",
+        "agent_runtime_adapter_reported",
+        "agent_runtime_adapter_fixture_manifest_recorded",
         "source_adapter_result_recorded",
         "review_created",
         "error_recorded",
@@ -2826,6 +2875,30 @@ for _security_privacy_fixture, _negative in {
     )
 
 
+for _agent_adapter_fixture, _negative in {
+    "agent-runtime-adapter-success": False,
+    "agent-runtime-adapter-runtime-unavailable": False,
+    "agent-runtime-adapter-raw-prompt-leak": True,
+    "agent-runtime-adapter-framework-state-canonical": True,
+    "agent-runtime-adapter-missing-model-trace": True,
+    "agent-runtime-adapter-missing-tool-trace": True,
+    "agent-runtime-adapter-missing-replay": True,
+    "agent-runtime-adapter-missing-security-privacy": True,
+    "agent-runtime-adapter-unsupported-framework": True,
+}.items():
+    _base = f"tests/fixtures/{_agent_adapter_fixture}"
+    FIXTURE_ORACLES[_agent_adapter_fixture] = FixtureOracleRegistration(
+        fixture_id=_agent_adapter_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_agent_adapter_ref=f"{_base}/oracles/expected_agent_adapter.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+
 def _target_area(
     area: str,
     owner: OwnerService,
@@ -2894,6 +2967,28 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "CoordinationDecision",
             "DriftRepairSignal",
             "MultiAgentRepairReport",
+            "AgentAdapterExecutionRecord",
+            "AgentRuntimeAdapterReport",
+            "AgentRuntimeAdapterFixtureManifest",
+        ],
+    ),
+    "agent_runtime_adapter_operational_gate": _target_area(
+        "agent_runtime_adapter_operational_gate",
+        OwnerService.AGENTS,
+        "materialized",
+        materialized=[
+            "AgentRuntimeSpec",
+            "AgentRunRequest",
+            "AgentRunResult",
+            "AgentActionTrace",
+            "ModelCallTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
+            "AgentAdapterExecutionRecord",
+            "AgentRuntimeAdapterReport",
+            "AgentRuntimeAdapterFixtureManifest",
+            "ObservabilityReport",
+            "SecurityPrivacyReport",
         ],
     ),
     "fixture_oracles": _target_area(

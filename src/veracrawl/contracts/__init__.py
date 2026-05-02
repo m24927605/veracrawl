@@ -21,6 +21,11 @@ from veracrawl.contracts.agent import (
     MultiAgentWorkflow,
     ToolCallTrace,
 )
+from veracrawl.contracts.agent_adapter import (
+    AgentAdapterExecutionRecord,
+    AgentRuntimeAdapterFixtureManifest,
+    AgentRuntimeAdapterReport,
+)
 from veracrawl.contracts.artifact import (
     ObjectStoreAdapterSpec,
     ObjectStoreConformanceReport,
@@ -207,10 +212,13 @@ from veracrawl.contracts.verification import ReviewDecision, VerificationDecisio
 
 __all__ = [
     "AgentActionTrace",
+    "AgentAdapterExecutionRecord",
     "AgentHandoff",
     "AgentRecommendation",
     "AgentRunRequest",
     "AgentRunResult",
+    "AgentRuntimeAdapterFixtureManifest",
+    "AgentRuntimeAdapterReport",
     "AgentRuntimeSpec",
     "AgentToolSpec",
     "AdvancedGraphFixtureManifest",

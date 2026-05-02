@@ -1,0 +1,1 @@
+{"expected_result":"pass","required_frameworks":["OpenAI Agent SDK","LangChain","LangGraph","CrewAI","AutoGen","Semantic Kernel","FutureFramework"],"required_refs":["framework_execution_refs","model_provider_refs","policy_decision_refs","observability_report_refs","security_privacy_report_refs","command_record_refs","event_cursor_refs","outbox_refs","replay_bundle_ref"]}
