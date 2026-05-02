@@ -77,8 +77,8 @@ deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
-projection spine, the memory kernel spine, the multi-agent repair spine, and the
-review/replay/ops console spine.
+projection spine, the memory kernel spine, the multi-agent repair spine, the
+review/replay/ops console spine, and the export connector spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -136,6 +136,13 @@ gates, and replay checks. It is not a claim that a production dashboard
 frontend, production observability backend, alerting system, export delivery,
 distributed persistence, production browser rendering, or production scale
 operations are complete.
+The export connector spine adds destination-neutral export targets, export jobs,
+attempts, delivery receipts, withdrawal jobs, withdrawal attempts, correction
+records, reconciliation reports, idempotency checks, destination object mappings,
+and replay fixtures. It is not a claim that concrete export adapters, external
+API/database/warehouse/object-store/queue delivery, production export worker
+fleets, distributed persistence, production browser rendering, or production
+scale operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -379,6 +386,26 @@ for fixture in \
   unsafe-recovery-without-review
 do
   uv run --python python3.12 --extra dev veracrawl-ops run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run export connector fixtures:
+
+```sh
+for fixture in \
+  export-file-success \
+  export-api-success \
+  export-correction-withdrawal-success \
+  export-missing-receipt \
+  duplicate-export-idempotency \
+  withdrawal-missing-mapping \
+  destination-unsupported-withdrawal \
+  correction-without-withdrawal
+do
+  uv run --python python3.12 --extra dev veracrawl-export run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

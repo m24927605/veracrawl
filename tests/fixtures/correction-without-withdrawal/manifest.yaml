@@ -1,0 +1,1 @@
+{"id":"correction-without-withdrawal","scenario":"correction-without-withdrawal","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"correction_without_withdrawal","negative_case":true}

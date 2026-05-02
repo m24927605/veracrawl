@@ -1,0 +1,1 @@
+{"id":"withdrawal-missing-mapping","scenario":"withdrawal-missing-mapping","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"withdrawal_mapping_missing","negative_case":true}

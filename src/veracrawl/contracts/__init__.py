@@ -44,6 +44,17 @@ from veracrawl.contracts.evidence import (
     EvidencePacketManifest,
     EvidencePublicationFixtureManifest,
 )
+from veracrawl.contracts.export import (
+    ExportAttempt,
+    ExportCorrectionRecord,
+    ExportDeliveryReceipt,
+    ExportFixtureManifest,
+    ExportJob,
+    ExportReconciliationReport,
+    ExportTargetSpec,
+    ExportWithdrawalAttempt,
+    ExportWithdrawalJob,
+)
 from veracrawl.contracts.fetch import DocumentArtifact, FetchAttempt, FetchResult, PageSnapshot
 from veracrawl.contracts.fixture import (
     BenchmarkFixtureManifest,
@@ -177,6 +188,15 @@ __all__ = [
     "EventCursor",
     "EventCursorRecord",
     "EventTypeSpec",
+    "ExportAttempt",
+    "ExportCorrectionRecord",
+    "ExportDeliveryReceipt",
+    "ExportFixtureManifest",
+    "ExportJob",
+    "ExportReconciliationReport",
+    "ExportTargetSpec",
+    "ExportWithdrawalAttempt",
+    "ExportWithdrawalJob",
     "ExpectedEventSequenceOracle",
     "ExpectedEvidenceCoverageOracle",
     "ExpectedGraphOracle",

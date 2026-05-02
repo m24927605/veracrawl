@@ -425,6 +425,78 @@ class OpsDashboardType(StrEnum):
     COST = "cost"
 
 
+class ExportTargetType(StrEnum):
+    DATABASE = "database"
+    WAREHOUSE = "warehouse"
+    FILE = "file"
+    API = "api"
+    OBJECT_STORE = "object_store"
+    QUEUE = "queue"
+
+
+class ExportDeliveryMode(StrEnum):
+    BATCH = "batch"
+    STREAMING = "streaming"
+    MANUAL = "manual"
+
+
+class ExportJobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ExportAttemptStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ExportRetryClassification(StrEnum):
+    TRANSIENT = "transient"
+    PERMANENT = "permanent"
+    DESTINATION_REJECTED = "destination_rejected"
+
+
+class ExportWithdrawalReason(StrEnum):
+    SUPERSEDED = "superseded"
+    DISPUTED = "disputed"
+    RETENTION_DELETE = "retention_delete"
+    SCHEMA_MIGRATION = "schema_migration"
+    OPERATOR_WITHDRAWAL = "operator_withdrawal"
+
+
+class ExportWithdrawalStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ExportPropagationStatus(StrEnum):
+    PENDING = "pending"
+    PROPAGATED = "propagated"
+    FAILED = "failed"
+    DESTINATION_UNSUPPORTED = "destination_unsupported"
+
+
+class ExportCorrectionStatus(StrEnum):
+    PROPOSED = "proposed"
+    PROPAGATED = "propagated"
+    FAILED = "failed"
+
+
+class ExportFailureType(StrEnum):
+    MISSING_DELIVERY_RECEIPT = "missing_delivery_receipt"
+    DUPLICATE_IDEMPOTENCY = "duplicate_idempotency"
+    WITHDRAWAL_MAPPING_MISSING = "withdrawal_mapping_missing"
+    DESTINATION_UNSUPPORTED = "destination_unsupported"
+    CORRECTION_WITHOUT_WITHDRAWAL = "correction_without_withdrawal"
+
+
 class UnitOfWorkStatus(StrEnum):
     OPEN = "open"
     COMMITTED = "committed"

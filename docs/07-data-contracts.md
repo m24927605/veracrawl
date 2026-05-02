@@ -2713,6 +2713,7 @@ ExportTargetSpec:
   auth_scope_ref: string
   delivery_mode: batch | streaming | manual
   idempotency_key_template: string
+  policy_decision_refs: list
   created_at: timestamp
 ```
 
@@ -2725,6 +2726,10 @@ ExportJob:
   export_target_spec_id: string
   output_refs: list
   destination_schema_version: string
+  policy_decision_refs: list
+  attempt_refs: list
+  delivery_receipt_refs: list
+  idempotency_key_refs: list
   status: queued | running | completed | failed | cancelled
   created_at: timestamp
 ```
@@ -2758,6 +2763,7 @@ ExportDeliveryReceipt:
   delivered_output_refs: list
   withdrawn_output_refs: list
   delete_propagation_refs: list
+  receipt_hash: string
   acknowledged_at: timestamp
 ```
 
@@ -2770,6 +2776,9 @@ ExportWithdrawalJob:
   export_target_spec_id: string
   output_version_refs: list
   reason: superseded | disputed | retention_delete | schema_migration | operator_withdrawal
+  policy_decision_refs: list
+  withdrawal_attempt_refs: list
+  review_item_refs: list
   status: queued | running | completed | failed | cancelled
   created_at: timestamp
 ```
@@ -2785,10 +2794,66 @@ ExportWithdrawalAttempt:
   external_object_mappings: list
   propagation_status: pending | propagated | failed | destination_unsupported
   delivery_receipt_ref: string
+  unsupported_reason: string
   error: object
   started_at: timestamp
   ended_at: timestamp
 ```
+
+## ExportCorrectionRecord
+
+```yaml
+ExportCorrectionRecord:
+  id: string
+  project_id: string
+  superseded_output_ref: string
+  replacement_output_ref: string
+  withdrawal_job_ref: string
+  replacement_export_job_ref: string
+  destination_object_mappings: object
+  receipt_refs: list
+  policy_decision_refs: list
+  status: proposed | propagated | failed
+  created_at: timestamp
+```
+
+## ExportReconciliationReport
+
+```yaml
+ExportReconciliationReport:
+  id: string
+  run_ref: string
+  export_target_spec_refs: list
+  export_job_refs: list
+  export_attempt_refs: list
+  delivery_receipt_refs: list
+  withdrawal_job_refs: list
+  withdrawal_attempt_refs: list
+  correction_record_refs: list
+  destination_object_mapping_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+Executable export rules:
+
+- export target specs require destination, schema, redacted auth scope, idempotency key template, and policy refs.
+- completed export jobs require attempts and delivery receipt refs.
+- completed export attempts require idempotency key, output refs, external object ids, and receipt ref.
+- delivery receipts require external object ids and delivered or withdrawn output refs.
+- withdrawal propagation requires external object mappings and receipt ref.
+- `destination_unsupported` withdrawal requires an unsupported reason and must route to review/needs-review, not pass.
+- correction propagation requires superseded output, replacement output, withdrawal job, replacement export job, destination mappings, receipts, and policy refs.
+- passing export reconciliation reports require target, job, attempt, receipt, destination mapping, policy, command, event cursor, outbox, and replay refs.
+- these contracts do not claim concrete export adapters, external destination writes, production export workers, distributed persistence, or production scale readiness.
 
 ## RunDiaryEvent
 

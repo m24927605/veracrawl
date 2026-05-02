@@ -278,6 +278,72 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "ops",
         tests=["tests/integration/test_ops_fixtures.py"],
     ),
+    "ExportTargetSpec": _contract(
+        "ExportTargetSpec",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_export_contracts.py"],
+    ),
+    "ExportJob": _contract(
+        "ExportJob",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        tests=["tests/contract/test_export_contracts.py"],
+    ),
+    "ExportAttempt": _contract(
+        "ExportAttempt",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_export_runtime.py"],
+    ),
+    "ExportDeliveryReceipt": _contract(
+        "ExportDeliveryReceipt",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_export_runtime.py"],
+    ),
+    "ExportWithdrawalJob": _contract(
+        "ExportWithdrawalJob",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        tests=["tests/unit/test_export_policy_boundaries.py"],
+    ),
+    "ExportWithdrawalAttempt": _contract(
+        "ExportWithdrawalAttempt",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_export_policy_boundaries.py"],
+    ),
+    "ExportCorrectionRecord": _contract(
+        "ExportCorrectionRecord",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        tests=["tests/unit/test_export_policy_boundaries.py"],
+    ),
+    "ExportReconciliationReport": _contract(
+        "ExportReconciliationReport",
+        OwnerService.EXPORT,
+        "export",
+        mutation_allowed=True,
+        tests=["tests/unit/test_export_replay.py"],
+    ),
+    "ExportFixtureManifest": _contract(
+        "ExportFixtureManifest",
+        OwnerService.TESTS,
+        "export",
+        tests=["tests/integration/test_export_fixtures.py"],
+    ),
     "ReplayBundleManifest": _contract(
         "ReplayBundleManifest",
         OwnerService.REVIEW_REPLAY,
@@ -1257,6 +1323,71 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["ops_console_reported"],
         ),
+        "record_export_target_spec": CommandTypeRegistration(
+            command_type="record_export_target_spec",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportTargetSpec",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["export_dispatch"],
+            emitted_event_types=["export_target_recorded"],
+        ),
+        "dispatch_export": CommandTypeRegistration(
+            command_type="dispatch_export",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportJob",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["export_dispatch"],
+            expected_version_required=True,
+            emitted_event_types=["export_dispatched"],
+        ),
+        "complete_export": CommandTypeRegistration(
+            command_type="complete_export",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportDeliveryReceipt",
+            payload_schema_ref="BaseCommandPayload",
+            expected_version_required=True,
+            emitted_event_types=["export_delivered"],
+        ),
+        "fail_export": CommandTypeRegistration(
+            command_type="fail_export",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportAttempt",
+            payload_schema_ref="BaseCommandPayload",
+            expected_version_required=True,
+            emitted_event_types=["export_failed", "error_recorded"],
+        ),
+        "dispatch_withdrawal": CommandTypeRegistration(
+            command_type="dispatch_withdrawal",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportWithdrawalJob",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["export_withdrawal"],
+            expected_version_required=True,
+            emitted_event_types=["export_withdrawal_attempted"],
+        ),
+        "complete_withdrawal": CommandTypeRegistration(
+            command_type="complete_withdrawal",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportWithdrawalAttempt",
+            payload_schema_ref="BaseCommandPayload",
+            expected_version_required=True,
+            emitted_event_types=["export_withdrawal_completed"],
+        ),
+        "fail_withdrawal": CommandTypeRegistration(
+            command_type="fail_withdrawal",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportWithdrawalAttempt",
+            payload_schema_ref="BaseCommandPayload",
+            expected_version_required=True,
+            emitted_event_types=["export_withdrawal_failed", "error_recorded"],
+        ),
+        "record_export_reconciliation": CommandTypeRegistration(
+            command_type="record_export_reconciliation",
+            owner_service=OwnerService.EXPORT,
+            target_aggregate_type="ExportReconciliationReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["export_reconciliation_reported"],
+        ),
     }
 )
 
@@ -1377,6 +1508,14 @@ EVENT_TYPES.update(
             "quality_report_recorded",
             "ops_dashboard_snapshot_recorded",
             "ops_console_reported",
+            "export_target_recorded",
+            "export_dispatched",
+            "export_delivered",
+            "export_failed",
+            "export_withdrawal_attempted",
+            "export_withdrawal_completed",
+            "export_withdrawal_failed",
+            "export_reconciliation_reported",
         ]
     }
 )
@@ -1792,6 +1931,28 @@ for _ops_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _export_fixture, _negative in {
+    "export-file-success": False,
+    "export-api-success": False,
+    "export-correction-withdrawal-success": False,
+    "export-missing-receipt": True,
+    "duplicate-export-idempotency": True,
+    "withdrawal-missing-mapping": True,
+    "destination-unsupported-withdrawal": True,
+    "correction-without-withdrawal": True,
+}.items():
+    _base = f"tests/fixtures/{_export_fixture}"
+    FIXTURE_ORACLES[_export_fixture] = FixtureOracleRegistration(
+        fixture_id=_export_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1960,8 +2121,17 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     "export": _target_area(
         "export",
         OwnerService.EXPORT,
-        "foundation_placeholder",
-        placeholders=["ExportJob"],
+        "materialized",
+        materialized=[
+            "ExportTargetSpec",
+            "ExportJob",
+            "ExportAttempt",
+            "ExportDeliveryReceipt",
+            "ExportWithdrawalJob",
+            "ExportWithdrawalAttempt",
+            "ExportCorrectionRecord",
+            "ExportReconciliationReport",
+        ],
     ),
     "ops": _target_area(
         "ops",

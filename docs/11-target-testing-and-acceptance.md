@@ -521,6 +521,43 @@ It does not prove production dashboard frontend, production observability
 backend, alerting system, export delivery, distributed storage, distributed
 queueing, production browser rendering, or production scale readiness.
 
+Export connector fixture contract:
+
+```text
+veracrawl-export run tests/fixtures/<export_fixture_id> --profile target --out .veracrawl-test-runs/<export_fixture_id>
+```
+
+Required export fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| export-file-success | file target dispatch, receipt, destination mapping, withdrawal, correction, policy refs, and replay refs are complete |
+| export-api-success | API target dispatch remains destination-neutral and receipt-backed |
+| export-correction-withdrawal-success | correction includes superseded output, replacement output, withdrawal job, replacement export job, mappings, receipts, and policy refs |
+| export-missing-receipt | export dispatch without delivery receipt fails |
+| duplicate-export-idempotency | duplicate idempotency cannot create duplicate accepted downstream records |
+| withdrawal-missing-mapping | withdrawal without external object mappings fails |
+| destination-unsupported-withdrawal | unsupported withdrawal produces reviewable `destination_unsupported` needs-review |
+| correction-without-withdrawal | correction propagation without withdrawal linkage fails |
+
+Export connector acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_export_contract_registry.py`
+- `pytest tests/contract/test_export_contracts.py`
+- `pytest tests/contract/test_export_import_boundaries.py`
+- `pytest tests/unit/test_export_runtime.py`
+- `pytest tests/unit/test_export_replay.py`
+- `pytest tests/unit/test_export_policy_boundaries.py`
+- `pytest tests/integration/test_export_fixtures.py`
+
+This acceptance proves destination-neutral export contracts, idempotent
+dispatch, receipt reconciliation, withdrawal propagation, correction linkage,
+and replay refs. It does not prove concrete export adapters, external
+destination delivery, production export worker fleets, distributed storage,
+distributed queueing, production browser rendering, or production scale
+readiness.
+
 Oracle schemas:
 
 ```yaml

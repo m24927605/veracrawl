@@ -751,6 +751,31 @@ Rules:
   observability backend, alerting system, export delivery, distributed
   persistence, production browser rendering, or production scale operations.
 
+### Export Connectors Slice
+
+The executable target export slice materializes destination-neutral delivery,
+receipt, withdrawal, correction, and reconciliation records before concrete
+destination adapters exist.
+
+Required records:
+
+- `ExportTargetSpec` for file, API, database, warehouse, object store, and queue targets.
+- `ExportJob` and `ExportAttempt` for idempotent dispatch.
+- `ExportDeliveryReceipt` for destination acknowledgement and external object ids.
+- `ExportWithdrawalJob` and `ExportWithdrawalAttempt` for withdrawal propagation.
+- `ExportCorrectionRecord` for supersession and replacement propagation.
+- `ExportReconciliationReport` for replay-visible completion.
+
+Rules:
+
+- export core depends on `ExportTargetPort`, not concrete destination clients.
+- dispatch success requires immutable output refs, idempotency key, policy refs, receipt, and destination object mappings.
+- withdrawal requires object mappings; unsupported withdrawal creates reviewable `destination_unsupported`.
+- correction requires withdrawal linkage and replacement export linkage.
+- this slice does not implement concrete destination adapters, external writes,
+  production export worker fleets, distributed persistence, production browser
+  rendering, or production scale operations.
+
 ## Multi-agent Coordination Design
 
 Target multi-agent behavior is coordinated through durable workflow contracts, not hidden framework state.

@@ -1,0 +1,1 @@
+{"id":"destination-unsupported-withdrawal","scenario":"destination-unsupported-withdrawal","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"destination_unsupported","negative_case":true}

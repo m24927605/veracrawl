@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/012-review-replay-ops/plan.md`.
-Use it with `specs/012-review-replay-ops/spec.md`,
-`specs/012-review-replay-ops/research.md`,
-`specs/012-review-replay-ops/data-model.md`,
-`specs/012-review-replay-ops/contracts/`, and
-`specs/012-review-replay-ops/quickstart.md` for VeraCrawl Review Replay Ops Console work.
+Current active Spec Kit plan: `specs/013-export-connectors/plan.md`.
+Use it with `specs/013-export-connectors/spec.md`,
+`specs/013-export-connectors/research.md`,
+`specs/013-export-connectors/data-model.md`,
+`specs/013-export-connectors/contracts/`, and
+`specs/013-export-connectors/quickstart.md` for VeraCrawl Export Connectors work.
 <!-- SPECKIT END -->
