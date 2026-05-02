@@ -3002,7 +3002,7 @@ CrawlRunEvent:
   crawl_plan_id: string
   event_version: string
   sequence: integer
-  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | agent_adapter_execution_recorded | agent_runtime_adapter_reported | agent_runtime_adapter_fixture_manifest_recorded | frontier_recommended | frontier_transitioned | queue_topology_recorded | queue_item_recorded | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_recorded | shard_lease_acquired | shard_lease_released | retry_dead_letter_recorded | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | scale_recovery_reported | persistence_adapter_recorded | persistence_transaction_recorded | persistence_migration_recorded | idempotency_persisted | persistent_queue_operation_recorded | persistence_runtime_reported | persistence_adapter_conformance_reported | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
+  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | agent_adapter_execution_recorded | agent_runtime_adapter_reported | agent_runtime_adapter_fixture_manifest_recorded | model_provider_adapter_execution_recorded | model_provider_adapter_reported | model_provider_adapter_fixture_manifest_recorded | frontier_recommended | frontier_transitioned | queue_topology_recorded | queue_item_recorded | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_recorded | shard_lease_acquired | shard_lease_released | retry_dead_letter_recorded | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | scale_recovery_reported | persistence_adapter_recorded | persistence_transaction_recorded | persistence_migration_recorded | idempotency_persisted | persistent_queue_operation_recorded | persistence_runtime_reported | persistence_adapter_conformance_reported | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
   event_type_spec_id: string
   payload_ref: string
   actor: string
@@ -3091,6 +3091,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | agent_handoff_proposed, agent_handoff_accepted, agent_handoff_rejected, agent_handoff_completed | agents | AgentHandoff | run | yes | replay, coordination |
 | coordination_decision_recorded, coordination_decision_applied | agents | CoordinationDecision | run | yes | replay, owner services |
 | agent_adapter_execution_recorded, agent_runtime_adapter_reported, agent_runtime_adapter_fixture_manifest_recorded | agents/tests | AgentAdapterExecutionRecord/AgentRuntimeAdapterReport/AgentRuntimeAdapterFixtureManifest | run | yes | replay, policy, observability, security |
+| model_provider_adapter_execution_recorded, model_provider_adapter_reported, model_provider_adapter_fixture_manifest_recorded | agents/tests | ModelProviderAdapterExecutionRecord/ModelProviderAdapterReport/ModelProviderAdapterFixtureManifest | run | yes | replay, policy, observability, security |
 | frontier_transitioned | scheduler | FrontierItem | frontier_item | yes | fetch, graph, replay |
 | queue_topology_recorded, queue_item_recorded, queue_item_enqueued, queue_item_leased, queue_item_acked, queue_item_dead_lettered, shard_lease_recorded, shard_lease_acquired, shard_lease_released, retry_dead_letter_recorded | scheduler | QueueTopologySpec/QueueItem/ShardLease/RetryDeadLetterRecord | frontier_item, processing_task, export_job, graph_projection | yes | workers, ops, replay |
 | source_adapter_result_recorded | natural adapter owner | SourceAdapterResult | source_adapter | yes | scheduler, normalize, evidence, replay |
@@ -3139,6 +3140,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | graph/projection events | ProjectionEventPayload | ProjectionWatermark, ProjectionRebuildJob, GraphBuildManifest, ProjectionMismatchReport | projection status | projection refs remain |
 | memory events | MemoryEventPayload | MemoryEvent, MemoryRetrievalTrace, CrossScopeMemoryTunnel | memory/tunnel status | memory content may be summarized or redacted |
 | agent runtime adapter events | AgentAdapterEventPayload | AgentAdapterExecutionRecord, AgentRuntimeAdapterReport, AgentRuntimeAdapterFixtureManifest | framework mapping, runtime availability, model/tool trace completeness, policy/security/observability/replay status | raw prompts/responses and framework-native state are never canonical |
+| model provider adapter events | ModelProviderAdapterEventPayload | ModelProviderAdapterExecutionRecord, ModelProviderAdapterReport, ModelProviderAdapterFixtureManifest | provider mapping, runtime availability, request/response/trace completeness, policy/security/observability/replay status | raw prompts/responses, raw credentials, and provider-native transcripts are never canonical |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
 | queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |
@@ -4449,6 +4451,89 @@ Executable agent runtime adapter rules:
 - Missing live SDK/runtime refs return `needs_review`; contract-only adapter descriptors cannot claim operational pass.
 - Negative adapter fixtures fail deterministically for raw prompt leak, framework state canonicalization, missing model trace, missing tool trace, missing replay refs, missing security/privacy refs, and unsupported framework.
 - Core agent adapter contracts and validation do not import or require OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, model SDKs, browser libraries, storage clients, queue clients, or site-specific scraper modules.
+
+## ModelProviderAdapterReport
+
+```yaml
+ModelProviderAdapterExecutionRecord:
+  id: string
+  provider_name: string
+  runtime_spec_ref: string
+  model_request_ref: string
+  model_response_ref: string
+  model_call_trace_ref: string
+  context_bundle_trace_ref: string
+  agent_run_request_ref: string
+  agent_run_result_ref: string
+  agent_action_trace_ref: string
+  command_result_refs: list
+  policy_decision_refs: list
+  observability_report_refs: list
+  security_privacy_report_refs: list
+  replay_bundle_ref: string
+  live_runtime_refs: list
+  contract_adapter_refs: list
+  diagnostic_provider_state_refs: list
+  raw_prompt_persisted: boolean
+  raw_response_persisted: boolean
+  raw_credential_persisted: boolean
+  provider_transcript_canonical: boolean
+  unsafe_tool_suggestion_refs: list
+  missing_ref_fields: list
+  result: pass | fail | needs_review
+  created_at: timestamp
+
+ModelProviderAdapterReport:
+  id: string
+  run_ref: string
+  provider_execution_refs: list
+  required_provider_names: list
+  verified_provider_names: list
+  model_request_refs: list
+  model_response_refs: list
+  model_call_trace_refs: list
+  context_bundle_trace_refs: list
+  agent_run_refs: list
+  policy_decision_refs: list
+  observability_report_refs: list
+  security_privacy_report_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  contract_only_refs: list
+  missing_runtime_refs: list
+  raw_prompt_leak_refs: list
+  raw_response_leak_refs: list
+  raw_credential_leak_refs: list
+  provider_transcript_canonical_refs: list
+  unsafe_tool_suggestion_refs: list
+  unsupported_provider_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+
+ModelProviderAdapterFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: model_provider_adapter_missing_runtime_refs | model_provider_adapter_raw_prompt_leak | model_provider_adapter_raw_response_leak | model_provider_adapter_raw_credential_leak | model_provider_adapter_provider_transcript_canonical | model_provider_adapter_missing_context_trace | model_provider_adapter_missing_replay_refs | model_provider_adapter_missing_security_privacy_refs | model_provider_adapter_unsafe_tool_suggestion | model_provider_adapter_unsupported_provider
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Executable model provider adapter rules:
+
+- A passing `ModelProviderAdapterExecutionRecord` requires runtime spec, `ModelRequest`, `ModelResponse`, `ModelCallTrace`, `ContextBundleTrace`, `AgentRunRequest`, `AgentRunResult`, `AgentActionTrace`, command result, policy, observability, security/privacy, and replay refs.
+- A passing `ModelProviderAdapterReport` requires all required provider families: OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoint, Local model runtime, and FutureProvider.
+- Provider-native transcripts may appear only as diagnostic refs; they cannot become canonical state.
+- Raw prompts, raw responses, and raw credentials must not be persisted as canonical records, logs, replay records, or adapter outputs.
+- Missing live provider runtime/API credential refs return `needs_review`; contract-only adapter descriptors cannot claim operational pass.
+- Negative provider fixtures fail deterministically for raw prompt leak, raw response leak, provider-native canonical state, missing context trace, missing replay refs, missing security/privacy refs, unsafe tool suggestion, and unsupported provider.
+- Core model provider adapter contracts and validation do not import or require OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoint clients, local model runtime clients, browser libraries, storage clients, queue clients, or site-specific scraper modules.
 
 ## QualityReport
 

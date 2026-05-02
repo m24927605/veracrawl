@@ -109,6 +109,11 @@ from veracrawl.contracts.memory import (
     MemoryRetrievalTrace,
     OperationalTemporalMemoryRecord,
 )
+from veracrawl.contracts.model_provider_adapter import (
+    ModelProviderAdapterExecutionRecord,
+    ModelProviderAdapterFixtureManifest,
+    ModelProviderAdapterReport,
+)
 from veracrawl.contracts.network import (
     NetworkAcquisitionReport,
     NetworkFixtureManifest,
@@ -301,6 +306,9 @@ __all__ = [
     "MemoryRetrievalTrace",
     "MetricSample",
     "ModelCallTrace",
+    "ModelProviderAdapterExecutionRecord",
+    "ModelProviderAdapterFixtureManifest",
+    "ModelProviderAdapterReport",
     "ModelRequest",
     "ModelResponse",
     "MultiAgentFixtureManifest",

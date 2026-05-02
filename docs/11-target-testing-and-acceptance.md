@@ -639,6 +639,44 @@ agent framework integration, model SDK integration, review UI, export delivery,
 distributed storage, distributed queueing, production browser rendering, or
 production scale readiness.
 
+Model provider adapter operational gate fixture contract:
+
+```text
+veracrawl-model-providers run tests/fixtures/<model_provider_fixture_id> --profile target --out .veracrawl-test-runs/<model_provider_fixture_id>
+```
+
+Required model provider adapter fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| model-provider-adapter-success | OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoint, local model runtime, and FutureProvider produce canonical model request, response, trace, context, agent run, command, policy, observability, security/privacy, and replay refs through one adapter contract |
+| model-provider-adapter-runtime-unavailable | missing live provider runtime/API credentials return `needs_review` with contract-only and missing-runtime refs |
+| model-provider-adapter-raw-prompt-leak | raw prompt persistence fails |
+| model-provider-adapter-raw-response-leak | raw response persistence fails |
+| model-provider-adapter-provider-state-canonical | provider-native canonical transcript state fails |
+| model-provider-adapter-missing-context-trace | missing context trace refs fail |
+| model-provider-adapter-missing-replay | missing replay refs fail |
+| model-provider-adapter-missing-security-privacy | missing security/privacy refs fail |
+| model-provider-adapter-unsafe-tool-suggestion | unsafe tool suggestions fail |
+| model-provider-adapter-unsupported-provider | unsupported provider names fail |
+
+Model provider adapter acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_model_provider_adapter_contract_registry.py`
+- `pytest tests/contract/test_model_provider_adapter_contracts.py`
+- `pytest tests/contract/test_model_provider_adapter_import_boundaries.py`
+- `pytest tests/unit/test_model_provider_adapter_gate.py`
+- `pytest tests/integration/test_model_provider_adapter_fixtures.py`
+
+This acceptance proves provider-neutral adapter mapping, dynamic adapter loading,
+core import boundaries, raw prompt/response/credential blocking, provider-native
+transcript boundary, and canonical context/security/replay completeness. It does
+not prove production model provider accounts, vendor uptime, token billing,
+model selection optimization, review UI, export delivery, distributed storage,
+distributed queueing, production browser rendering, or production scale
+readiness.
+
 Agent runtime adapter operational gate fixture contract:
 
 ```text
@@ -1183,6 +1221,9 @@ Acceptance gates:
 - agent runtime adapter fixtures prove OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, and future frameworks map into canonical VeraCrawl agent request/result, action trace, model trace, tool trace, context trace, command, policy, observability, security/privacy, and replay refs without core framework coupling
 - no-runtime agent adapter fixtures must remain `needs_review` and contract-only; missing live SDK/runtime refs cannot be labeled operational pass
 - negative agent adapter fixtures for raw prompt persistence, framework-native canonical state, missing model/tool trace refs, missing replay refs, missing security/privacy refs, and unsupported frameworks must fail deterministically
+- model provider adapter fixtures prove OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoint, local model runtime, and future providers map into canonical VeraCrawl model request/response, model trace, context trace, agent run, command, policy, observability, security/privacy, and replay refs without core provider SDK coupling
+- no-runtime model provider fixtures must remain `needs_review` and contract-only; missing live provider runtime/API credentials cannot be labeled operational pass
+- negative model provider fixtures for raw prompt/response/credential persistence, provider-native canonical transcript state, unsafe tool suggestions, missing context refs, missing replay refs, missing security/privacy refs, and unsupported providers must fail deterministically
 
 ### Scale And Reliability Profile
 

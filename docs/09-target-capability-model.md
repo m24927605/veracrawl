@@ -268,6 +268,7 @@ Required capabilities:
 - Planner, Site Understanding, Frontier, Fetch Analysis, Extractor, Verifier, Drift, Memory, and Ops agents
 - framework-neutral agent runtime
 - adapter-owned mappings for OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, and future frameworks
+- provider-owned mappings for OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoints, local model runtimes, and future providers
 - tool gateway permissions
 - agent action trace
 - model call, tool call, context bundle, command result, policy, observability, security/privacy, and replay trace refs
@@ -281,6 +282,9 @@ Required acceptance:
 - `AgentRuntimeAdapterReport` pass requires every required framework family to produce canonical execution refs through the same adapter contract
 - missing live SDK/runtime refs return `needs_review`; contract-only descriptors cannot claim operational pass
 - raw prompt/response persistence, framework-native canonical state, missing model/tool/security/privacy/replay refs, or unsupported frameworks fail deterministically
+- `ModelProviderAdapterReport` pass requires every required provider family to produce canonical `ModelRequest`, `ModelResponse`, `ModelCallTrace`, context, policy, security/privacy, observability, command, and replay refs through the same provider adapter contract
+- missing live provider runtime/API credentials return `needs_review`; contract-only descriptors cannot claim operational provider pass
+- raw prompt/response/credential persistence, provider-native canonical transcript state, unsafe tool suggestions, missing context/security/privacy/replay refs, or unsupported providers fail deterministically
 
 ### Export And Correction Profile
 

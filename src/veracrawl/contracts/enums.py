@@ -596,6 +596,19 @@ class AgentAdapterFailureType(StrEnum):
     UNSUPPORTED_FRAMEWORK = "agent_adapter_unsupported_framework"
 
 
+class ModelProviderAdapterFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "model_provider_adapter_missing_runtime_refs"
+    RAW_PROMPT_LEAK = "model_provider_adapter_raw_prompt_leak"
+    RAW_RESPONSE_LEAK = "model_provider_adapter_raw_response_leak"
+    RAW_CREDENTIAL_LEAK = "model_provider_adapter_raw_credential_leak"
+    PROVIDER_TRANSCRIPT_CANONICAL = "model_provider_adapter_provider_transcript_canonical"
+    MISSING_CONTEXT_TRACE = "model_provider_adapter_missing_context_trace"
+    MISSING_REPLAY_REFS = "model_provider_adapter_missing_replay_refs"
+    MISSING_SECURITY_PRIVACY_REFS = "model_provider_adapter_missing_security_privacy_refs"
+    UNSAFE_TOOL_SUGGESTION = "model_provider_adapter_unsafe_tool_suggestion"
+    UNSUPPORTED_PROVIDER = "model_provider_adapter_unsupported_provider"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"

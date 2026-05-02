@@ -1,0 +1,1 @@
+{"id":"model-provider-adapter-missing-replay","scenario":"model-provider-adapter-missing-replay","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"model_provider_adapter_missing_replay_refs","expected_failure_type":"model_provider_adapter_missing_replay_refs","negative_case":true}

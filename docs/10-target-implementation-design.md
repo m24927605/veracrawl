@@ -522,6 +522,27 @@ Agent runtime requirements:
 - every agent run records model/provider refs, prompt template version, tool calls, command results, policy decisions, and output refs
 - replay uses recorded refs and events, not framework-native state
 
+### Model Provider Adapter Operational Gate Slice
+
+The model provider gate proves that provider integrations map into VeraCrawl canonical model contracts before any provider runtime is trusted by agent workflows.
+
+Required implementation:
+
+- `ModelProviderAdapterExecutionRecord` records one provider family execution with runtime spec, `ModelRequest`, `ModelResponse`, `ModelCallTrace`, `ContextBundleTrace`, `AgentRunRequest`, `AgentRunResult`, `AgentActionTrace`, command result, policy, observability, security/privacy, runtime/contract adapter, diagnostic provider state, and replay refs.
+- `ModelProviderAdapterReport` aggregates all required provider families and can claim `pass` only when OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoint, local model runtime, and FutureProvider all produce canonical execution refs through the same adapter contract.
+- `ModelProviderAdapterFixtureManifest` defines success, no-runtime, and negative provider fixtures with expected operator status and failure type.
+- `veracrawl.agents.model_provider_gate` is core-owned and imports only VeraCrawl contracts.
+- `veracrawl.adapters.model_providers.contract` is adapter-owned and provides deterministic provider contract adapters without importing real SDKs.
+- `veracrawl-model-providers` loads adapter modules dynamically so CLI fixture execution does not create static dependencies on OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoint clients, local model runtime clients, browser libraries, storage clients, or queue clients.
+
+Rules:
+
+- missing live provider runtime/API credential refs return `needs_review`; contract-only refs cannot claim operational pass.
+- raw prompts, raw responses, and raw credentials must never be persisted as canonical state.
+- provider-native transcripts can be stored only as diagnostic refs and cannot satisfy canonical replay or completion requirements.
+- missing context traces, security/privacy refs, observability refs, replay refs, unsafe tool suggestions, or unsupported provider names are deterministic failures.
+- this slice proves provider-neutral adapter mapping and boundary enforcement. It does not prove production model provider accounts, vendor service availability, token billing, model selection optimization, review UI, export delivery, distributed persistence, production browser rendering, or production scale readiness.
+
 ### Agent Runtime Adapter Operational Gate Slice
 
 The adapter gate proves that agent framework and model provider integrations map into VeraCrawl canonical contracts before any concrete framework is trusted by core.

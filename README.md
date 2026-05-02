@@ -78,8 +78,9 @@ runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
-agent runtime adapter operational gate, the review/replay/ops console spine, the
-export connector spine, the scale hardening spine, and the production
+agent runtime adapter operational gate, the model provider adapter operational
+gate, the review/replay/ops console spine, the export connector spine, the scale
+hardening spine, and the production
 persistence/queue runtime spine.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
@@ -134,6 +135,14 @@ security/privacy, and replay refs. It cannot claim `pass` from framework-native
 state, raw prompts/responses, unsupported frameworks, or missing model/tool,
 security/privacy, observability, or replay refs. Missing live SDK/runtime refs
 remain `needs_review` rather than a false operational pass.
+The model provider adapter operational gate proves that OpenAI, Anthropic,
+Google Gemini, OpenAI-compatible endpoint, local model runtime, and future
+provider adapters map into canonical `ModelRequest`, `ModelResponse`,
+`ModelCallTrace`, `ContextBundleTrace`, agent run/action, command, policy,
+observability, security/privacy, and replay refs. It cannot claim `pass` from
+raw prompts/responses, raw credentials, provider-native transcripts, unsafe tool
+suggestions, unsupported providers, or missing context/security/replay refs.
+Missing live provider runtime/API credentials remain `needs_review`.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -798,6 +807,28 @@ for fixture in \
   agent-runtime-adapter-unsupported-framework
 do
   uv run --python python3.12 --extra dev veracrawl-agent-adapters run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run model provider adapter operational gate fixtures:
+
+```sh
+for fixture in \
+  model-provider-adapter-success \
+  model-provider-adapter-runtime-unavailable \
+  model-provider-adapter-raw-prompt-leak \
+  model-provider-adapter-raw-response-leak \
+  model-provider-adapter-provider-state-canonical \
+  model-provider-adapter-missing-context-trace \
+  model-provider-adapter-missing-replay \
+  model-provider-adapter-missing-security-privacy \
+  model-provider-adapter-unsafe-tool-suggestion \
+  model-provider-adapter-unsupported-provider
+do
+  uv run --python python3.12 --extra dev veracrawl-model-providers run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

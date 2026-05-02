@@ -77,6 +77,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_observability_ref: str | None = None
     expected_security_privacy_ref: str | None = None
     expected_agent_adapter_ref: str | None = None
+    expected_model_provider_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -237,6 +238,28 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "agent_adapter",
         tests=["tests/integration/test_agent_runtime_adapter_fixtures.py"],
+    ),
+    "ModelProviderAdapterExecutionRecord": _contract(
+        "ModelProviderAdapterExecutionRecord",
+        OwnerService.AGENTS,
+        "model_provider_adapter",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_model_provider_adapter_contracts.py"],
+    ),
+    "ModelProviderAdapterReport": _contract(
+        "ModelProviderAdapterReport",
+        OwnerService.AGENTS,
+        "model_provider_adapter",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_model_provider_adapter_contracts.py"],
+    ),
+    "ModelProviderAdapterFixtureManifest": _contract(
+        "ModelProviderAdapterFixtureManifest",
+        OwnerService.TESTS,
+        "model_provider_adapter",
+        tests=["tests/integration/test_model_provider_adapter_fixtures.py"],
     ),
     "ReviewItem": _contract(
         "ReviewItem",
@@ -1265,6 +1288,29 @@ COMMAND_TYPES: dict[str, CommandTypeRegistration] = {
         payload_schema_ref="BaseCommandPayload",
         emitted_event_types=["agent_runtime_adapter_fixture_manifest_recorded"],
     ),
+    "record_model_provider_adapter_execution": CommandTypeRegistration(
+        command_type="record_model_provider_adapter_execution",
+        owner_service=OwnerService.AGENTS,
+        target_aggregate_type="ModelProviderAdapterExecutionRecord",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["prompt_context"],
+        emitted_event_types=["model_provider_adapter_execution_recorded"],
+    ),
+    "record_model_provider_adapter_report": CommandTypeRegistration(
+        command_type="record_model_provider_adapter_report",
+        owner_service=OwnerService.AGENTS,
+        target_aggregate_type="ModelProviderAdapterReport",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["prompt_context"],
+        emitted_event_types=["model_provider_adapter_reported"],
+    ),
+    "record_model_provider_adapter_fixture_manifest": CommandTypeRegistration(
+        command_type="record_model_provider_adapter_fixture_manifest",
+        owner_service=OwnerService.TESTS,
+        target_aggregate_type="ModelProviderAdapterFixtureManifest",
+        payload_schema_ref="BaseCommandPayload",
+        emitted_event_types=["model_provider_adapter_fixture_manifest_recorded"],
+    ),
     "execute_agent_tool": CommandTypeRegistration(
         command_type="execute_agent_tool",
         owner_service=OwnerService.CONTRACTS,
@@ -2082,6 +2128,9 @@ EVENT_TYPES: dict[str, EventTypeRegistration] = {
         "agent_adapter_execution_recorded",
         "agent_runtime_adapter_reported",
         "agent_runtime_adapter_fixture_manifest_recorded",
+        "model_provider_adapter_execution_recorded",
+        "model_provider_adapter_reported",
+        "model_provider_adapter_fixture_manifest_recorded",
         "source_adapter_result_recorded",
         "review_created",
         "error_recorded",
@@ -2899,6 +2948,31 @@ for _agent_adapter_fixture, _negative in {
     )
 
 
+for _model_provider_fixture, _negative in {
+    "model-provider-adapter-success": False,
+    "model-provider-adapter-runtime-unavailable": False,
+    "model-provider-adapter-raw-prompt-leak": True,
+    "model-provider-adapter-raw-response-leak": True,
+    "model-provider-adapter-provider-state-canonical": True,
+    "model-provider-adapter-missing-context-trace": True,
+    "model-provider-adapter-missing-replay": True,
+    "model-provider-adapter-missing-security-privacy": True,
+    "model-provider-adapter-unsafe-tool-suggestion": True,
+    "model-provider-adapter-unsupported-provider": True,
+}.items():
+    _base = f"tests/fixtures/{_model_provider_fixture}"
+    FIXTURE_ORACLES[_model_provider_fixture] = FixtureOracleRegistration(
+        fixture_id=_model_provider_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_model_provider_ref=f"{_base}/oracles/expected_model_provider.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+
 def _target_area(
     area: str,
     owner: OwnerService,
@@ -2970,6 +3044,28 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "AgentAdapterExecutionRecord",
             "AgentRuntimeAdapterReport",
             "AgentRuntimeAdapterFixtureManifest",
+            "ModelProviderAdapterExecutionRecord",
+            "ModelProviderAdapterReport",
+            "ModelProviderAdapterFixtureManifest",
+        ],
+    ),
+    "model_provider_adapter_operational_gate": _target_area(
+        "model_provider_adapter_operational_gate",
+        OwnerService.AGENTS,
+        "materialized",
+        materialized=[
+            "ModelRequest",
+            "ModelResponse",
+            "ModelCallTrace",
+            "ContextBundleTrace",
+            "AgentRunRequest",
+            "AgentRunResult",
+            "AgentActionTrace",
+            "ModelProviderAdapterExecutionRecord",
+            "ModelProviderAdapterReport",
+            "ModelProviderAdapterFixtureManifest",
+            "ObservabilityReport",
+            "SecurityPrivacyReport",
         ],
     ),
     "agent_runtime_adapter_operational_gate": _target_area(

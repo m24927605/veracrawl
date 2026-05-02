@@ -1,0 +1,1 @@
+{"id":"model-provider-adapter-runtime-unavailable","scenario":"model-provider-adapter-runtime-unavailable","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"model_provider_adapter_runtime_unavailable","negative_case":false}

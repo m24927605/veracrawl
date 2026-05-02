@@ -1,0 +1,1 @@
+{"id":"model-provider-adapter-raw-response-leak","scenario":"model-provider-adapter-raw-response-leak","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"model_provider_adapter_raw_response_leak","expected_failure_type":"model_provider_adapter_raw_response_leak","negative_case":true}

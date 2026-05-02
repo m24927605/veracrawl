@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"model_provider_adapter_missing_security_privacy_refs","missing_ref_fields":["security_privacy_report_refs"]}

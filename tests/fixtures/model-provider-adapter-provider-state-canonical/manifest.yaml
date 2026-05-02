@@ -1,0 +1,1 @@
+{"id":"model-provider-adapter-provider-state-canonical","scenario":"model-provider-adapter-provider-state-canonical","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"model_provider_adapter_provider_transcript_canonical","expected_failure_type":"model_provider_adapter_provider_transcript_canonical","negative_case":true}

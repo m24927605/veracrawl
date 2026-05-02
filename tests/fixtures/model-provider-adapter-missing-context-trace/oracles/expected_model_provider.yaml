@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"model_provider_adapter_missing_context_trace","missing_ref_fields":["context_bundle_trace_refs"]}
