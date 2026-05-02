@@ -1,0 +1,1 @@
+{"id":"graph-rebuild-mismatch","scenario":"rebuild-mismatch","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"rebuild_mismatch","negative_case":true}

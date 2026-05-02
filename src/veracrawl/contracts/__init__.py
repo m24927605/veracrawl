@@ -50,6 +50,15 @@ from veracrawl.contracts.fixture import (
     ReplayBundleOracle,
     ThresholdSpec,
 )
+from veracrawl.contracts.graph import (
+    GraphBuildManifest,
+    GraphBuildReport,
+    GraphEdge,
+    GraphEdgeProvenance,
+    GraphFixtureManifest,
+    GraphNode,
+    ProjectionWatermark,
+)
 from veracrawl.contracts.network import (
     NetworkAcquisitionReport,
     NetworkFixtureManifest,
@@ -142,6 +151,12 @@ __all__ = [
     "FetchResult",
     "FailureInjectionPlan",
     "FrontierItem",
+    "GraphBuildManifest",
+    "GraphBuildReport",
+    "GraphEdge",
+    "GraphEdgeProvenance",
+    "GraphFixtureManifest",
+    "GraphNode",
     "LinkProvenance",
     "ModelCallTrace",
     "ModelRequest",
@@ -158,6 +173,7 @@ __all__ = [
     "PageSnapshot",
     "PageTypeClassification",
     "PolicyDecision",
+    "ProjectionWatermark",
     "ProcessFixtureManifest",
     "PublishedOutput",
     "PublicationReport",

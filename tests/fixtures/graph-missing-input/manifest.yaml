@@ -1,0 +1,1 @@
+{"id":"graph-missing-input","scenario":"missing-input","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"missing_graph_input","negative_case":true}

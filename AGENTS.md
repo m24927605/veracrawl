@@ -117,11 +117,11 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/007-evidence-publication-spine/plan.md`.
-Use it with `specs/007-evidence-publication-spine/spec.md`,
-`specs/007-evidence-publication-spine/research.md`,
-`specs/007-evidence-publication-spine/data-model.md`,
-`specs/007-evidence-publication-spine/contracts/`, and
-`specs/007-evidence-publication-spine/quickstart.md` for VeraCrawl Evidence and
-Publication Spine work.
+Current active Spec Kit plan: `specs/008-basic-site-graph-spine/plan.md`.
+Use it with `specs/008-basic-site-graph-spine/spec.md`,
+`specs/008-basic-site-graph-spine/research.md`,
+`specs/008-basic-site-graph-spine/data-model.md`,
+`specs/008-basic-site-graph-spine/contracts/`, and
+`specs/008-basic-site-graph-spine/quickstart.md` for VeraCrawl Basic Site Graph
+Spine work.
 <!-- SPECKIT END -->

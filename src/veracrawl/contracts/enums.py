@@ -406,3 +406,25 @@ class PublicationFailureType(StrEnum):
     REPLAY_GAP = "replay_gap"
     CANDIDATE_DIRECT_PUBLICATION = "candidate_direct_publication"
     REVIEW_NOT_ACCEPTED = "review_not_accepted"
+
+
+class GraphNodeType(StrEnum):
+    URL = "url"
+    PAGE_TYPE = "page_type"
+    TEMPLATE = "template"
+    CANONICAL = "canonical"
+    SOURCE_EVIDENCE = "source_evidence"
+
+
+class GraphEdgeType(StrEnum):
+    HYPERLINK = "hyperlink"
+    REDIRECT = "redirect"
+    CANONICAL = "canonical"
+    PAGE_STRUCTURE = "page_structure"
+    SOURCE_EVIDENCE = "source_evidence"
+
+
+class GraphFailureType(StrEnum):
+    MISSING_GRAPH_INPUT = "missing_graph_input"
+    REBUILD_MISMATCH = "rebuild_mismatch"
+    GRAPH_AS_EVIDENCE = "graph_as_evidence"

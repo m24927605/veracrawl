@@ -314,6 +314,54 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         tests=["tests/unit/test_publication_replay.py"],
     ),
+    "GraphNode": _contract(
+        "GraphNode",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/contract/test_graph_contracts.py"],
+    ),
+    "GraphEdge": _contract(
+        "GraphEdge",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/contract/test_graph_contracts.py"],
+    ),
+    "GraphEdgeProvenance": _contract(
+        "GraphEdgeProvenance",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/contract/test_graph_contracts.py"],
+    ),
+    "GraphBuildManifest": _contract(
+        "GraphBuildManifest",
+        OwnerService.GRAPH,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_graph_build.py"],
+    ),
+    "ProjectionWatermark": _contract(
+        "ProjectionWatermark",
+        OwnerService.PROJECTION,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_graph_build.py"],
+    ),
+    "GraphBuildReport": _contract(
+        "GraphBuildReport",
+        OwnerService.REVIEW_REPLAY,
+        "graph",
+        mutation_allowed=True,
+        tests=["tests/unit/test_graph_replay.py"],
+    ),
+    "GraphFixtureManifest": _contract(
+        "GraphFixtureManifest",
+        OwnerService.TESTS,
+        "graph",
+        tests=["tests/integration/test_graph_fixtures.py"],
+    ),
     "UnitOfWorkRecord": _contract(
         "UnitOfWorkRecord",
         OwnerService.RUNTIME_EVENTS,
@@ -840,6 +888,25 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["publication_report_recorded"],
         ),
+        "build_basic_site_graph": CommandTypeRegistration(
+            command_type="build_basic_site_graph",
+            owner_service=OwnerService.GRAPH,
+            target_aggregate_type="GraphBuildManifest",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["graph"],
+            emitted_event_types=[
+                "graph_node_recorded",
+                "graph_edge_recorded",
+                "graph_manifest_recorded",
+            ],
+        ),
+        "record_graph_report": CommandTypeRegistration(
+            command_type="record_graph_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="GraphBuildReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["graph_report_recorded"],
+        ),
     }
 )
 
@@ -924,6 +991,11 @@ EVENT_TYPES.update(
             "evidence_manifest_recorded",
             "review_decision_recorded",
             "publication_report_recorded",
+            "graph_node_recorded",
+            "graph_edge_recorded",
+            "graph_manifest_recorded",
+            "projection_watermark_recorded",
+            "graph_report_recorded",
         ]
     }
 )
@@ -1238,6 +1310,26 @@ for _evidence_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _graph_fixture, _negative in {
+    "graph-url-hyperlink": False,
+    "graph-canonical-redirect": False,
+    "graph-page-structure": False,
+    "graph-missing-input": True,
+    "graph-rebuild-mismatch": True,
+    "graph-as-evidence": True,
+}.items():
+    _base = f"tests/fixtures/{_graph_fixture}"
+    FIXTURE_ORACLES[_graph_fixture] = FixtureOracleRegistration(
+        fixture_id=_graph_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_graph_ref=f"{_base}/oracles/expected_graph.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1367,8 +1459,14 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     "graph": _target_area(
         "graph",
         OwnerService.GRAPH,
-        "foundation_placeholder",
-        placeholders=["GraphBuildManifest"],
+        "materialized",
+        materialized=[
+            "GraphNode",
+            "GraphEdge",
+            "GraphEdgeProvenance",
+            "GraphBuildManifest",
+            "GraphBuildReport",
+        ],
     ),
     "memory": _target_area(
         "memory",

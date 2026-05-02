@@ -342,6 +342,41 @@ publication failures, and replay refs. It does not prove graph intelligence,
 memory intelligence, export delivery, distributed storage, distributed queueing,
 production browser rendering, review UI, or production scale readiness.
 
+Basic site graph fixture contract:
+
+```text
+veracrawl-graph run tests/fixtures/<graph_fixture_id> --profile target --out .veracrawl-test-runs/<graph_fixture_id>
+```
+
+Required graph fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| graph-url-hyperlink | URL nodes and hyperlink edges are deduplicated, provenance-backed, manifested, watermarked, and replay-complete |
+| graph-canonical-redirect | canonical and redirect edges are recorded with acquisition/canonical provenance refs |
+| graph-page-structure | page type and page-structure graph records are built from site model refs |
+| graph-missing-input | missing graph input refs fail graph build |
+| graph-rebuild-mismatch | rebuild hash mismatch fails graph replay |
+| graph-as-evidence | graph refs used as source evidence are rejected |
+
+Basic graph acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_graph_contract_registry.py`
+- `pytest tests/contract/test_graph_contracts.py`
+- `pytest tests/contract/test_graph_import_boundaries.py`
+- `pytest tests/unit/test_graph_build.py`
+- `pytest tests/unit/test_graph_replay.py`
+- `pytest tests/unit/test_graph_evidence_boundary.py`
+- `pytest tests/integration/test_graph_fixtures.py`
+
+This acceptance proves basic URL/hyperlink/canonical/redirect/page-structure
+graph records, provenance refs, manifest refs, projection watermarks, typed graph
+failures, and graph-as-evidence rejection. It does not prove advanced graph
+intelligence, graph store adapters, graph-driven frontier scheduling, memory,
+export delivery, distributed storage, distributed queueing, production browser
+rendering, or production scale readiness.
+
 Oracle schemas:
 
 ```yaml

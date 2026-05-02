@@ -76,7 +76,7 @@ framework-neutral adapter boundaries, command/event/replay primitives, policy ga
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, and
-the evidence/publication spine.
+the evidence/publication spine, and the basic site graph spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -101,7 +101,12 @@ publication reports, and replay checks that prevent candidates from becoming
 outputs without source-backed evidence and accepted gates. It is not a claim that
 graph intelligence, memory intelligence, export delivery, distributed
 persistence, production browser rendering, or production scale operations are
-complete.
+complete. The basic site graph spine adds deterministic URL, hyperlink,
+canonical, redirect, and page-structure graph records with graph manifests, edge
+provenance, projection watermarks, replay reports, and graph-as-evidence
+boundary checks. It is not a claim that advanced graph intelligence, memory
+intelligence, graph store adapters, export delivery, distributed persistence,
+production browser rendering, or production scale operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -254,6 +259,24 @@ for fixture in \
   evidence-candidate-direct-publication
 do
   uv run --python python3.12 --extra dev veracrawl-evidence run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run basic site graph fixtures:
+
+```sh
+for fixture in \
+  graph-url-hyperlink \
+  graph-canonical-redirect \
+  graph-page-structure \
+  graph-missing-input \
+  graph-rebuild-mismatch \
+  graph-as-evidence
+do
+  uv run --python python3.12 --extra dev veracrawl-graph run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

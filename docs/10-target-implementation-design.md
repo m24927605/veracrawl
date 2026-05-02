@@ -280,6 +280,29 @@ refs, and replay completeness. It does not prove graph intelligence, memory
 intelligence, export delivery, distributed persistence, production browser
 rendering, review UI, or production scale readiness.
 
+## Basic Site Graph Spine Slice
+
+The basic graph slice turns acquisition, normalization, and site-understanding
+refs into replayable graph records while preserving the rule that graph signals
+cannot replace source evidence:
+
+- `veracrawl.contracts.graph`: `GraphNode`, `GraphEdge`,
+  `GraphEdgeProvenance`, `GraphBuildManifest`, `ProjectionWatermark`,
+  `GraphBuildReport`, and `GraphFixtureManifest`.
+- `veracrawl.graph.build`: deterministic URL, hyperlink, canonical, redirect,
+  page type, and page-structure graph build records.
+- `veracrawl.review_replay.graph`: graph replay completeness validation for
+  manifest, node, edge, provenance, watermark, policy, command, event, and outbox
+  refs.
+- `veracrawl.cli.graph`: `veracrawl-graph run` fixture runner.
+
+This slice proves basic site graph construction, stable rebuild hashes,
+deduplicated graph keys, edge provenance, projection watermarks, and
+graph-as-evidence rejection. It does not prove entity graph, temporal knowledge
+graph, graph store adapters, graph-driven frontier scheduling, memory, export,
+distributed persistence, production browser rendering, or production scale graph
+operations.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.
