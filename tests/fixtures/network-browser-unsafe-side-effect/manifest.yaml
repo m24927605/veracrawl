@@ -1,0 +1,1 @@
+{"id":"network-browser-unsafe-side-effect","scenario":"browser-unsafe-side-effect","acquisition_type":"browser","path":"/browser","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"unsafe_browser_side_effect","negative_case":true}

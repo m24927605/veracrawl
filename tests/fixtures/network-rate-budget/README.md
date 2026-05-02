@@ -1,0 +1,1 @@
+Network rate budget fixture.

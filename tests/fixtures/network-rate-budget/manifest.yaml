@@ -1,0 +1,1 @@
+{"id":"network-rate-budget","scenario":"rate-budget","acquisition_type":"http","path":"/static/basic","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"rate_budget_exceeded","negative_case":true}

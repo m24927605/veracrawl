@@ -1,0 +1,1 @@
+Network size budget fixture.

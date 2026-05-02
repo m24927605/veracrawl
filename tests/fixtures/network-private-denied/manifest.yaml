@@ -1,0 +1,1 @@
+{"id":"network-private-denied","scenario":"private-denied","acquisition_type":"http","path":"/private","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"private_network_denied","negative_case":true}

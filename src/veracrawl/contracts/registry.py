@@ -398,6 +398,55 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "source_runtime",
         tests=["tests/integration/test_source_acquisition_runtime.py"],
     ),
+    "NetworkRequest": _contract(
+        "NetworkRequest",
+        OwnerService.FETCH,
+        "network",
+        mutation_allowed=True,
+        tests=["tests/contract/test_network_browser_contracts.py"],
+    ),
+    "NetworkResponse": _contract(
+        "NetworkResponse",
+        OwnerService.FETCH,
+        "network",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_network_browser_contracts.py"],
+    ),
+    "RedirectHop": _contract(
+        "RedirectHop",
+        OwnerService.FETCH,
+        "network",
+        mutation_allowed=True,
+        tests=["tests/contract/test_network_browser_contracts.py"],
+    ),
+    "NetworkAcquisitionReport": _contract(
+        "NetworkAcquisitionReport",
+        OwnerService.FETCH,
+        "network",
+        mutation_allowed=True,
+        tests=["tests/unit/test_network_browser_replay.py"],
+    ),
+    "NetworkFixtureManifest": _contract(
+        "NetworkFixtureManifest",
+        OwnerService.TESTS,
+        "network",
+        tests=["tests/integration/test_network_acquisition_runtime.py"],
+    ),
+    "BrowserSandboxPolicy": _contract(
+        "BrowserSandboxPolicy",
+        OwnerService.BROWSER,
+        "browser",
+        tests=["tests/unit/test_browser_sandbox_gates.py"],
+    ),
+    "BrowserInteractionStep": _contract(
+        "BrowserInteractionStep",
+        OwnerService.BROWSER,
+        "browser",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_browser_sandbox_gates.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -605,6 +654,36 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["source_acquisition_reported"],
         ),
+        "execute_http_fetch": CommandTypeRegistration(
+            command_type="execute_http_fetch",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="SourceAdapterResult",
+            payload_schema_ref="SourceAdapterCommand",
+            required_policy_decision_types=["source_adapter", "fetch"],
+            lease_required=True,
+            emitted_event_types=[
+                "source_adapter_result_recorded",
+                "network_request_recorded",
+                "network_response_recorded",
+                "snapshot_written",
+            ],
+        ),
+        "record_network_acquisition": CommandTypeRegistration(
+            command_type="record_network_acquisition",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="NetworkAcquisitionReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["network_acquisition_reported"],
+        ),
+        "capture_browser_snapshot": CommandTypeRegistration(
+            command_type="capture_browser_snapshot",
+            owner_service=OwnerService.BROWSER,
+            target_aggregate_type="BrowserInteractionStep",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["browser_interaction"],
+            lease_required=True,
+            emitted_event_types=["browser_step_executed", "snapshot_written"],
+        ),
     }
 )
 
@@ -673,6 +752,11 @@ EVENT_TYPES.update(
             "document_artifact_recorded",
             "source_acquisition_reported",
             "source_failure_reported",
+            "network_request_recorded",
+            "network_response_recorded",
+            "network_acquisition_reported",
+            "browser_step_executed",
+            "snapshot_written",
         ]
     }
 )
@@ -922,6 +1006,30 @@ for _source_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _network_fixture, _negative in {
+    "network-http-success": False,
+    "network-http-redirect": False,
+    "network-browser-readonly": False,
+    "network-robots-blocked": True,
+    "network-private-denied": True,
+    "network-egress-denied": True,
+    "network-rate-budget": True,
+    "network-size-budget": True,
+    "network-redirect-denied": True,
+    "network-timeout": True,
+    "network-browser-unsafe-side-effect": True,
+}.items():
+    _base = f"tests/fixtures/{_network_fixture}"
+    FIXTURE_ORACLES[_network_fixture] = FixtureOracleRegistration(
+        fixture_id=_network_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1087,6 +1195,19 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "RateLimitDecision",
             "SourceFailureReport",
             "SourceAcquisitionReport",
+        ],
+    ),
+    "network_browser_acquisition": _target_area(
+        "network_browser_acquisition",
+        OwnerService.FETCH,
+        "materialized",
+        materialized=[
+            "NetworkRequest",
+            "NetworkResponse",
+            "RedirectHop",
+            "NetworkAcquisitionReport",
+            "BrowserSandboxPolicy",
+            "BrowserInteractionStep",
         ],
     ),
 }

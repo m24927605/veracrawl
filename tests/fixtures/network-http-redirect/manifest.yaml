@@ -1,0 +1,1 @@
+{"id":"network-http-redirect","scenario":"http-redirect","acquisition_type":"http","path":"/redirect","profile_refs":["target"],"expected_completion_result":"pass","expected_operator_status":"network_acquired","negative_case":false}

@@ -1,0 +1,1 @@
+{"id":"network-browser-readonly","scenario":"browser-readonly","acquisition_type":"browser","path":"/browser","profile_refs":["target"],"expected_completion_result":"pass","expected_operator_status":"browser_observed","negative_case":false}

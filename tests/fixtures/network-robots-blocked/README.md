@@ -1,0 +1,1 @@
+Network robots blocked fixture.

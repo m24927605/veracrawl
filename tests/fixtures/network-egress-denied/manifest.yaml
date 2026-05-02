@@ -1,0 +1,1 @@
+{"id":"network-egress-denied","scenario":"egress-denied","acquisition_type":"http","path":"/blocked","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"egress_denied","negative_case":true}

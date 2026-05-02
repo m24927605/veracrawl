@@ -1,0 +1,1 @@
+{"id":"network-size-budget","scenario":"size-budget","acquisition_type":"http","path":"/oversize","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"size_budget_exceeded","negative_case":true}

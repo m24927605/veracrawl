@@ -1,0 +1,1 @@
+Network redirect denied fixture.

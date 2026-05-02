@@ -227,6 +227,47 @@ replay lineage. It does not prove production network crawling, browser execution
 distributed storage, distributed queueing, graph/memory intelligence, export
 delivery, or production scale readiness.
 
+Network and browser acquisition fixture contract:
+
+```text
+veracrawl-network run tests/fixtures/<network_fixture_id> --profile target --out .veracrawl-test-runs/<network_fixture_id>
+```
+
+Required network/browser fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| network-http-success | actual local HTTP request produces raw HTML artifact, response metadata, source acquisition report, and replay-complete network report |
+| network-http-redirect | actual local HTTP redirect records redirect hop refs and replay-complete acquisition lineage |
+| network-browser-readonly | read-only browser observation records sandbox policy, browser step, DOM, screenshot, network metadata, and replay refs |
+| network-robots-blocked | robots policy denial produces typed blocked report and no accepted raw artifact |
+| network-private-denied | private-network denial blocks execution before acquisition |
+| network-egress-denied | egress allowlist denial blocks execution before acquisition |
+| network-rate-budget | exhausted rate budget produces needs-review status with typed diagnostics |
+| network-size-budget | oversized response is rejected as a typed failure |
+| network-redirect-denied | redirect target policy denial produces typed failure |
+| network-timeout | runtime timeout budget produces typed failure |
+| network-browser-unsafe-side-effect | unsafe browser side effect is blocked before DOM/screenshot artifacts are accepted |
+
+Network/browser acquisition acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_network_browser_contract_registry.py`
+- `pytest tests/contract/test_network_browser_contracts.py`
+- `pytest tests/contract/test_network_browser_import_boundaries.py`
+- `pytest tests/unit/test_network_policy_gates.py`
+- `pytest tests/unit/test_browser_sandbox_gates.py`
+- `pytest tests/unit/test_network_browser_replay.py`
+- `pytest tests/integration/test_network_acquisition_runtime.py`
+- `pytest tests/integration/test_network_browser_negative_fixtures.py`
+
+This acceptance proves actual deterministic local HTTP acquisition, browser
+observation contracts, sandbox gates, typed safety failures, adapter
+replaceability, and replay lineage. It does not prove full JavaScript rendering,
+production browser fleet operation, authenticated crawling, distributed storage,
+distributed queueing, graph/memory intelligence, export delivery, or production
+scale readiness.
+
 Oracle schemas:
 
 ```yaml

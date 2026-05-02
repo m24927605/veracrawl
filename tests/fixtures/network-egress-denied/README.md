@@ -1,0 +1,1 @@
+Network egress denied fixture.

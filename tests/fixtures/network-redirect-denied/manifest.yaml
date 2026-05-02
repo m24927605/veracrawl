@@ -1,0 +1,1 @@
+{"id":"network-redirect-denied","scenario":"redirect-denied","acquisition_type":"http","path":"/redirect-denied","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"redirect_denied","negative_case":true}

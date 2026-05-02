@@ -1,0 +1,1 @@
+{"id":"network-robots-blocked","scenario":"robots-blocked","acquisition_type":"http","path":"/robots-blocked","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"robots_blocked","negative_case":true}

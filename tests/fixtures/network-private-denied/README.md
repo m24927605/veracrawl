@@ -1,0 +1,1 @@
+Network private denied fixture.

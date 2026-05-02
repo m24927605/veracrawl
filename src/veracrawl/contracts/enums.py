@@ -346,3 +346,32 @@ class SourceAcquisitionStatus(StrEnum):
     PASS = "pass"
     FAIL = "fail"
     NEEDS_REVIEW = "needs_review"
+
+
+class NetworkFailureType(StrEnum):
+    EGRESS_DENIED = "egress_denied"
+    PRIVATE_NETWORK_DENIED = "private_network_denied"
+    ROBOTS_BLOCKED = "robots_blocked"
+    RATE_BUDGET_EXCEEDED = "rate_budget_exceeded"
+    SIZE_BUDGET_EXCEEDED = "size_budget_exceeded"
+    REDIRECT_DENIED = "redirect_denied"
+    NETWORK_TIMEOUT = "network_timeout"
+    UNSAFE_BROWSER_SIDE_EFFECT = "unsafe_browser_side_effect"
+    ADAPTER_FAILURE = "adapter_failure"
+    MISSING_NETWORK_ARTIFACT = "missing_network_artifact"
+
+
+class BrowserStepStatus(StrEnum):
+    PLANNED = "planned"
+    EXECUTED = "executed"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+
+
+class BrowserSideEffectClass(StrEnum):
+    READ_ONLY = "read_only"
+    ACCOUNT_CHANGING = "account_changing"
+    PURCHASE_CART = "purchase_cart"
+    DELETE = "delete"
+    MESSAGE_SEND = "message_send"
+    UNKNOWN = "unknown"

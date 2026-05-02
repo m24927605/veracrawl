@@ -185,6 +185,40 @@ It does not prove production HTTP crawling, JavaScript browser rendering,
 distributed persistence, graph/memory intelligence, export delivery, or production
 scale readiness.
 
+## Browser And Network Acquisition Runtime Slice
+
+The browser/network acquisition slice moves acquisition from deterministic
+payload fixtures to real local network observation while preserving adapter
+boundaries:
+
+- `veracrawl.contracts.network`: `NetworkRequest`, `NetworkResponse`,
+  `RedirectHop`, `NetworkAcquisitionReport`, and `NetworkFixtureManifest`.
+- `veracrawl.contracts.browser`: `BrowserSandboxPolicy` and
+  `BrowserInteractionStep`.
+- `veracrawl.ports.network` and `veracrawl.ports.browser`: protocol boundaries
+  for concrete HTTP clients and browser observation engines.
+- `veracrawl.fetch.network_acquisition`: owner-service policy and replay flow for
+  HTTP request, response, redirect, size, timeout, egress, private-network,
+  robots, rate, and acquisition reporting.
+- `veracrawl.browser.observation`: browser sandbox policy gate and read-only
+  observation reporting.
+- `veracrawl.adapters.network.stdlib_http`: concrete standard-library HTTP
+  adapter for deterministic local benchmark servers.
+- `veracrawl.adapters.network.local_benchmark`: deterministic local benchmark
+  server used by fixtures.
+- `veracrawl.adapters.browser.deterministic`: deterministic browser observation
+  adapter for DOM, screenshot, and network metadata refs.
+- `veracrawl.review_replay.network_browser`: replay completeness validation for
+  network and browser acquisition reports.
+- `veracrawl.cli.network`: `veracrawl-network run` fixture runner.
+
+This slice proves actual local HTTP acquisition, redirect metadata, egress and
+private-network gates, robots/rate/size/timeout failure typing, browser sandbox
+contracts, unsafe side-effect blocking, and replay-visible artifact refs. It does
+not prove full JavaScript rendering, production browser fleet execution,
+authenticated crawling, distributed persistence, graph/memory intelligence,
+export delivery, or production scale readiness.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

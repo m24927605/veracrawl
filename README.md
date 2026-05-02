@@ -74,7 +74,8 @@ This repository uses GitHub Spec Kit for spec-driven development. See [AGENTS.md
 The current Python foundation implements the target architecture contracts, ports,
 framework-neutral adapter boundaries, command/event/replay primitives, policy gates,
 deterministic fixture/oracle checks, the first target runtime spine, the durable
-runtime/scheduler foundation, and the deterministic source acquisition runtime.
+runtime/scheduler foundation, the deterministic source acquisition runtime, and
+the local network/browser acquisition runtime.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -83,9 +84,13 @@ artifact index, frontier, queue lease, and replay recovery checks behind
 replaceable ports. The source acquisition runtime adds framework-neutral source
 adapter execution for HTTP, sitemap, RSS, API-like, and document-source families,
 with policy, rate-limit, retry, adapter mismatch, malformed response, raw artifact,
-and replay lineage reports. It is not a claim that the full production crawler
-runtime, production persistence adapters, browser fleet, graph intelligence,
-memory system, export system, or production scale operations are complete.
+and replay lineage reports. The network/browser acquisition runtime adds actual
+local HTTP acquisition through a replaceable adapter, redirect metadata,
+network/browser replay reports, browser sandbox contracts, and deterministic
+browser observation fixtures. It is not a claim that the full production crawler
+runtime, production browser rendering fleet, production persistence adapters,
+authenticated crawling, graph intelligence, memory system, export system, or
+production scale operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -177,6 +182,29 @@ for fixture in \
   source-missing-artifact
 do
   uv run --python python3.12 --extra dev veracrawl-source run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run network and browser acquisition fixtures:
+
+```sh
+for fixture in \
+  network-http-success \
+  network-http-redirect \
+  network-browser-readonly \
+  network-robots-blocked \
+  network-private-denied \
+  network-egress-denied \
+  network-rate-budget \
+  network-size-budget \
+  network-redirect-denied \
+  network-timeout \
+  network-browser-unsafe-side-effect
+do
+  uv run --python python3.12 --extra dev veracrawl-network run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

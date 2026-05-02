@@ -16,6 +16,7 @@ from veracrawl.contracts.agent import (
     ToolCallTrace,
 )
 from veracrawl.contracts.artifact import RuntimeArtifactRef
+from veracrawl.contracts.browser import BrowserInteractionStep, BrowserSandboxPolicy
 from veracrawl.contracts.command import (
     BaseCommandPayload,
     CommandEnvelope,
@@ -42,6 +43,13 @@ from veracrawl.contracts.fixture import (
     FailureInjectionPlan,
     ReplayBundleOracle,
     ThresholdSpec,
+)
+from veracrawl.contracts.network import (
+    NetworkAcquisitionReport,
+    NetworkFixtureManifest,
+    NetworkRequest,
+    NetworkResponse,
+    RedirectHop,
 )
 from veracrawl.contracts.objective import (
     CrawlObjective,
@@ -80,6 +88,8 @@ __all__ = [
     "BaseCommandPayload",
     "BenchmarkFixtureManifest",
     "BlockedActionReport",
+    "BrowserInteractionStep",
+    "BrowserSandboxPolicy",
     "CommandEnvelope",
     "CommandResult",
     "CommandTypeSpec",
@@ -112,6 +122,10 @@ __all__ = [
     "ModelCallTrace",
     "ModelRequest",
     "ModelResponse",
+    "NetworkAcquisitionReport",
+    "NetworkFixtureManifest",
+    "NetworkRequest",
+    "NetworkResponse",
     "NormalizedDocument",
     "OutputManifest",
     "OutboxRecord",
@@ -122,6 +136,7 @@ __all__ = [
     "ReplayBundleManifest",
     "ReplayBundleOracle",
     "ReplayValidationReport",
+    "RedirectHop",
     "RunPlanSnapshot",
     "RuntimeArtifactRef",
     "RuntimeCompletionGate",
