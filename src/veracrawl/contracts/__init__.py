@@ -59,7 +59,19 @@ from veracrawl.contracts.objective import (
     RuntimeCompletionGate,
 )
 from veracrawl.contracts.policy import BlockedActionReport, PolicyDecision
-from veracrawl.contracts.processing import ExtractionCandidate, NormalizedDocument
+from veracrawl.contracts.processing import (
+    AnchorMap,
+    ExtractionCandidate,
+    ExtractionStrategy,
+    LinkProvenance,
+    NormalizationManifest,
+    NormalizedDocument,
+    NormalizeExtractReport,
+    PageTypeClassification,
+    ProcessFixtureManifest,
+    SiteModel,
+    TextAnchor,
+)
 from veracrawl.contracts.publication import OutputManifest, PublishedOutput
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
@@ -85,6 +97,7 @@ __all__ = [
     "AgentRunResult",
     "AgentRuntimeSpec",
     "AgentToolSpec",
+    "AnchorMap",
     "BaseCommandPayload",
     "BenchmarkFixtureManifest",
     "BlockedActionReport",
@@ -115,10 +128,12 @@ __all__ = [
     "EvidenceCoverageResult",
     "EvidencePacket",
     "ExtractionCandidate",
+    "ExtractionStrategy",
     "FetchAttempt",
     "FetchResult",
     "FailureInjectionPlan",
     "FrontierItem",
+    "LinkProvenance",
     "ModelCallTrace",
     "ModelRequest",
     "ModelResponse",
@@ -126,11 +141,15 @@ __all__ = [
     "NetworkFixtureManifest",
     "NetworkRequest",
     "NetworkResponse",
+    "NormalizationManifest",
+    "NormalizeExtractReport",
     "NormalizedDocument",
     "OutputManifest",
     "OutboxRecord",
     "PageSnapshot",
+    "PageTypeClassification",
     "PolicyDecision",
+    "ProcessFixtureManifest",
     "PublishedOutput",
     "QueueLease",
     "ReplayBundleManifest",
@@ -142,6 +161,7 @@ __all__ = [
     "RuntimeCompletionGate",
     "SchedulerRecoveryReport",
     "RateLimitDecision",
+    "SiteModel",
     "SourceAcquisitionReport",
     "SourceAdapterCommand",
     "SourceAdapterResult",
@@ -149,6 +169,7 @@ __all__ = [
     "SourceFailureReport",
     "SourceFixtureManifest",
     "ThresholdSpec",
+    "TextAnchor",
     "ToolCallTrace",
     "UnitOfWorkRecord",
     "VerificationDecision",

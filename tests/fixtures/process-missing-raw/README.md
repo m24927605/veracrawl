@@ -1,0 +1,1 @@
+Process missing raw fixture.

@@ -117,11 +117,11 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/005-browser-network-acquisition/plan.md`.
-Use it with `specs/005-browser-network-acquisition/spec.md`,
-`specs/005-browser-network-acquisition/research.md`,
-`specs/005-browser-network-acquisition/data-model.md`,
-`specs/005-browser-network-acquisition/contracts/`, and
-`specs/005-browser-network-acquisition/quickstart.md` for VeraCrawl Browser
-and Network Acquisition Runtime work.
+Current active Spec Kit plan: `specs/006-normalize-extract-plane/plan.md`.
+Use it with `specs/006-normalize-extract-plane/spec.md`,
+`specs/006-normalize-extract-plane/research.md`,
+`specs/006-normalize-extract-plane/data-model.md`,
+`specs/006-normalize-extract-plane/contracts/`, and
+`specs/006-normalize-extract-plane/quickstart.md` for VeraCrawl Normalize and
+Extract Plane work.
 <!-- SPECKIT END -->

@@ -1,0 +1,1 @@
+Process empty content fixture.

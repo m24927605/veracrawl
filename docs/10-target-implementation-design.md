@@ -219,6 +219,37 @@ not prove full JavaScript rendering, production browser fleet execution,
 authenticated crawling, distributed persistence, graph/memory intelligence,
 export delivery, or production scale readiness.
 
+## Normalize And Extract Plane Slice
+
+The normalize/extract slice turns raw acquisition output into replayable
+processing artifacts without allowing extracted candidates to bypass evidence or
+publication gates:
+
+- `veracrawl.contracts.processing`: `NormalizationManifest`, `TextAnchor`,
+  `AnchorMap`, `LinkProvenance`, `PageTypeClassification`, `SiteModel`,
+  `ExtractionStrategy`, `ExtractionCandidate`, `NormalizedDocument`, and
+  `NormalizeExtractReport`.
+- `veracrawl.normalize.pipeline`: deterministic HTML-to-text normalization,
+  manifest digest tracking, anchor generation, anchor map construction, link
+  extraction with source anchors, page type classification, and site model
+  recording.
+- `veracrawl.extract.candidates`: deterministic extraction strategy and candidate
+  creation that requires every candidate field to point to an anchor.
+- `veracrawl.review_replay.processing`: replay completeness checks for raw
+  artifact, source adapter result, normalized document, manifest, anchor map,
+  site model, page type, link provenance, extraction strategy, candidate, command,
+  event cursor, outbox, and policy refs.
+- `veracrawl.cli.process`: `veracrawl-process run` fixture runner for process
+  success and typed negative cases.
+
+This slice proves replay-visible lineage from raw snapshot to normalized text,
+anchors, discovered links, page classification, site model, strategy, and
+candidate. It preserves the architectural rule that model-generated or
+deterministically generated candidates are not published outputs. It does not
+prove evidence packet construction, publication completion, graph or memory
+intelligence, export delivery, distributed persistence, production browser
+rendering, or production scale readiness.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

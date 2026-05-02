@@ -1,0 +1,1 @@
+{"id":"process-missing-raw","scenario":"missing-raw","path":"/static/basic","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"missing_raw_artifact","negative_case":true}

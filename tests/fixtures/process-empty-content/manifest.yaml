@@ -1,0 +1,1 @@
+{"id":"process-empty-content","scenario":"empty-content","path":"/static/basic","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"empty_normalized_content","negative_case":true}

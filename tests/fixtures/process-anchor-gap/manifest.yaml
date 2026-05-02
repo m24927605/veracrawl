@@ -1,0 +1,1 @@
+{"id":"process-anchor-gap","scenario":"anchor-gap","path":"/static/basic","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"candidate_anchor_gap","negative_case":true}

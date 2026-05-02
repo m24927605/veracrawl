@@ -268,6 +268,42 @@ production browser fleet operation, authenticated crawling, distributed storage,
 distributed queueing, graph/memory intelligence, export delivery, or production
 scale readiness.
 
+Normalize and extract fixture contract:
+
+```text
+veracrawl-process run tests/fixtures/<process_fixture_id> --profile target --out .veracrawl-test-runs/<process_fixture_id>
+```
+
+Required normalize/extract fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| process-static-basic | raw HTML acquisition produces normalized document, normalization manifest, text anchors, anchor map, page type classification, site model, extraction strategy, candidate, and replay-complete process report |
+| process-link-provenance | discovered links include resolved href, source anchor refs, policy refs, and site model refs |
+| process-anchored-candidate | extraction candidate fields all point to text anchors and remain unpublished |
+| process-missing-raw | missing raw artifact produces typed failure and no normalized document claim |
+| process-empty-content | empty normalized content produces needs-review status with typed diagnostics |
+| process-anchor-gap | candidate field without anchor is rejected before process completion |
+
+Normalize/extract acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_process_contract_registry.py`
+- `pytest tests/contract/test_process_contracts.py`
+- `pytest tests/contract/test_process_import_boundaries.py`
+- `pytest tests/unit/test_normalization_pipeline.py`
+- `pytest tests/unit/test_extraction_candidate_guards.py`
+- `pytest tests/unit/test_process_replay.py`
+- `pytest tests/integration/test_process_fixtures.py`
+
+This acceptance proves normalized document replay lineage, anchor map creation,
+link provenance, page type classification, site model records, extraction
+strategy records, anchored candidates, typed process failures, adapter
+replaceability through existing acquisition ports, and replay refs. It does not
+prove evidence packet construction, publication completion, graph/memory
+intelligence, export delivery, distributed storage, distributed queueing,
+production browser rendering, or production scale readiness.
+
 Oracle schemas:
 
 ```yaml

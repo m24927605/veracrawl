@@ -398,6 +398,68 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "source_runtime",
         tests=["tests/integration/test_source_acquisition_runtime.py"],
     ),
+    "NormalizationManifest": _contract(
+        "NormalizationManifest",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/contract/test_process_contracts.py"],
+    ),
+    "TextAnchor": _contract(
+        "TextAnchor",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/contract/test_process_contracts.py"],
+    ),
+    "AnchorMap": _contract(
+        "AnchorMap",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/contract/test_process_contracts.py"],
+    ),
+    "LinkProvenance": _contract(
+        "LinkProvenance",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/unit/test_normalization_pipeline.py"],
+    ),
+    "PageTypeClassification": _contract(
+        "PageTypeClassification",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/unit/test_normalization_pipeline.py"],
+    ),
+    "SiteModel": _contract(
+        "SiteModel",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/unit/test_normalization_pipeline.py"],
+    ),
+    "ExtractionStrategy": _contract(
+        "ExtractionStrategy",
+        OwnerService.EXTRACT,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/unit/test_extraction_candidate_guards.py"],
+    ),
+    "NormalizeExtractReport": _contract(
+        "NormalizeExtractReport",
+        OwnerService.REVIEW_REPLAY,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/unit/test_process_replay.py"],
+    ),
+    "ProcessFixtureManifest": _contract(
+        "ProcessFixtureManifest",
+        OwnerService.TESTS,
+        "processing",
+        tests=["tests/integration/test_process_fixtures.py"],
+    ),
     "NetworkRequest": _contract(
         "NetworkRequest",
         OwnerService.FETCH,
@@ -684,6 +746,34 @@ COMMAND_TYPES.update(
             lease_required=True,
             emitted_event_types=["browser_step_executed", "snapshot_written"],
         ),
+        "record_normalization_manifest": CommandTypeRegistration(
+            command_type="record_normalization_manifest",
+            owner_service=OwnerService.NORMALIZE,
+            target_aggregate_type="NormalizationManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["normalization_manifest_recorded"],
+        ),
+        "record_link_provenance": CommandTypeRegistration(
+            command_type="record_link_provenance",
+            owner_service=OwnerService.NORMALIZE,
+            target_aggregate_type="LinkProvenance",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["link_provenance_recorded"],
+        ),
+        "record_extraction_strategy": CommandTypeRegistration(
+            command_type="record_extraction_strategy",
+            owner_service=OwnerService.EXTRACT,
+            target_aggregate_type="ExtractionStrategy",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["extraction_strategy_recorded"],
+        ),
+        "record_process_report": CommandTypeRegistration(
+            command_type="record_process_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="NormalizeExtractReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["process_report_recorded"],
+        ),
     }
 )
 
@@ -757,6 +847,13 @@ EVENT_TYPES.update(
             "network_acquisition_reported",
             "browser_step_executed",
             "snapshot_written",
+            "normalization_manifest_recorded",
+            "anchor_map_recorded",
+            "link_provenance_recorded",
+            "page_type_classified",
+            "site_model_recorded",
+            "extraction_strategy_recorded",
+            "process_report_recorded",
         ]
     }
 )
@@ -1030,6 +1127,25 @@ for _network_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _process_fixture, _negative in {
+    "process-static-basic": False,
+    "process-link-provenance": False,
+    "process-anchored-candidate": False,
+    "process-missing-raw": True,
+    "process-empty-content": True,
+    "process-anchor-gap": True,
+}.items():
+    _base = f"tests/fixtures/{_process_fixture}"
+    FIXTURE_ORACLES[_process_fixture] = FixtureOracleRegistration(
+        fixture_id=_process_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1208,6 +1324,23 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "NetworkAcquisitionReport",
             "BrowserSandboxPolicy",
             "BrowserInteractionStep",
+        ],
+    ),
+    "normalize_extract": _target_area(
+        "normalize_extract",
+        OwnerService.NORMALIZE,
+        "materialized",
+        materialized=[
+            "NormalizedDocument",
+            "NormalizationManifest",
+            "TextAnchor",
+            "AnchorMap",
+            "LinkProvenance",
+            "PageTypeClassification",
+            "SiteModel",
+            "ExtractionStrategy",
+            "ExtractionCandidate",
+            "NormalizeExtractReport",
         ],
     ),
 }

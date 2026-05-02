@@ -75,7 +75,7 @@ The current Python foundation implements the target architecture contracts, port
 framework-neutral adapter boundaries, command/event/replay primitives, policy gates,
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
-the local network/browser acquisition runtime.
+the local network/browser acquisition runtime, and the normalize/extract plane.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -87,10 +87,14 @@ with policy, rate-limit, retry, adapter mismatch, malformed response, raw artifa
 and replay lineage reports. The network/browser acquisition runtime adds actual
 local HTTP acquisition through a replaceable adapter, redirect metadata,
 network/browser replay reports, browser sandbox contracts, and deterministic
-browser observation fixtures. It is not a claim that the full production crawler
-runtime, production browser rendering fleet, production persistence adapters,
-authenticated crawling, graph intelligence, memory system, export system, or
-production scale operations are complete.
+browser observation fixtures. The normalize/extract plane adds normalized
+document manifests, text anchors, anchor maps, link provenance, page type
+classification, site model records, extraction strategies, anchored extraction
+candidates, and replay checks from raw snapshot to candidate. It is not a claim
+that the full production crawler runtime, production browser rendering fleet,
+production persistence adapters, authenticated crawling, evidence/publication
+completion, graph intelligence, memory system, export system, or production scale
+operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -205,6 +209,24 @@ for fixture in \
   network-browser-unsafe-side-effect
 do
   uv run --python python3.12 --extra dev veracrawl-network run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run normalize and extract fixtures:
+
+```sh
+for fixture in \
+  process-static-basic \
+  process-link-provenance \
+  process-anchored-candidate \
+  process-missing-raw \
+  process-empty-content \
+  process-anchor-gap
+do
+  uv run --python python3.12 --extra dev veracrawl-process run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

@@ -1,0 +1,1 @@
+Process static basic fixture.

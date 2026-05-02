@@ -375,3 +375,25 @@ class BrowserSideEffectClass(StrEnum):
     DELETE = "delete"
     MESSAGE_SEND = "message_send"
     UNKNOWN = "unknown"
+
+
+class PageType(StrEnum):
+    STATIC = "static"
+    LISTING = "listing"
+    DETAIL = "detail"
+    SEARCH = "search"
+    DOCUMENT = "document"
+    UNKNOWN = "unknown"
+
+
+class LinkProvenanceStatus(StrEnum):
+    DISCOVERED = "discovered"
+    BLOCKED = "blocked"
+    DUPLICATE = "duplicate"
+
+
+class ProcessFailureType(StrEnum):
+    MISSING_RAW_ARTIFACT = "missing_raw_artifact"
+    EMPTY_NORMALIZED_CONTENT = "empty_normalized_content"
+    CANDIDATE_ANCHOR_GAP = "candidate_anchor_gap"
+    NORMALIZATION_FAILED = "normalization_failed"
