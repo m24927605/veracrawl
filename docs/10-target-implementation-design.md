@@ -724,6 +724,33 @@ Replay bundle must include:
 
 Replay uses `ReplayBundleManifest` as the contract for event cursors, schema versions, artifact hashes, trace refs, projection watermarks, redaction map, deterministic clock/random seed, missing-ref behavior, replay mode, and completeness result.
 
+### Review Replay Ops Console Slice
+
+The executable target slice materializes the data surface behind the review
+queue, replay console, quality dashboard, recovery view, and DR restore view
+before a production UI exists.
+
+Required records:
+
+- `ReviewItem` for operator-visible review queue state.
+- `ReplayAuditView` for replay bundle, command, event cursor, artifact hash, projection watermark, redaction, and policy refs.
+- `FailureRecord` for typed operational failure visibility.
+- `RecoveryAction` for policy/review/approval-gated recovery decisions.
+- `DRRestoreReport` for disaster recovery validation refs.
+- `QualityReport` for quality and cost dashboard data.
+- `OpsDashboardSnapshot` for projection-watermarked dashboard state.
+- `OpsConsoleReport` for end-to-end completion and replay refs.
+
+Rules:
+
+- passing ops console reports require review, replay audit, quality, dashboard, DR restore, policy, command, event cursor, and outbox refs.
+- side-effecting recovery actions require policy and approval refs.
+- stale dashboard projections fail instead of being presented as fresh state.
+- missing review evidence and unresolved failures create explicit failure records.
+- this slice does not implement a production dashboard frontend, production
+  observability backend, alerting system, export delivery, distributed
+  persistence, production browser rendering, or production scale operations.
+
 ## Multi-agent Coordination Design
 
 Target multi-agent behavior is coordinated through durable workflow contracts, not hidden framework state.

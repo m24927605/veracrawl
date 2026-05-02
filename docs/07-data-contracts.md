@@ -3396,13 +3396,19 @@ DRRestoreReport:
 FailureRecord:
   id: string
   run_id: string
-  failure_type: fetch | browser | session | credential | model | agent | tool | queue | lease | dead_letter | processing | verification | publication | export | projection | projection_mismatch | memory | migration | backfill | artifact_lifecycle | retention | policy | autoscaling | backpressure | disaster_recovery
+  failure_type: fetch | browser | session | credential | model | agent | tool | queue | lease | dead_letter | processing | verification | publication | export | projection | projection_mismatch | memory | migration | backfill | artifact_lifecycle | retention | policy | autoscaling | backpressure | disaster_recovery | missing_review_evidence | unresolved_failure_without_recovery | stale_dashboard_projection | unsafe_recovery_without_review
   failed_ref: string
+  owner_service_ref: string
   severity: low | medium | high | critical
   retryable: boolean
   orphan_artifact_refs: list
   partial_side_effect_refs: list
   dead_letter_reason: string
+  diagnostic_ref: string
+  evidence_refs: list
+  policy_decision_refs: list
+  replay_audit_refs: list
+  recovery_action_refs: list
   created_at: timestamp
 ```
 
@@ -3416,6 +3422,7 @@ RecoveryAction:
   command_refs: list
   policy_decision_refs: list
   approval_decision_refs: list
+  review_item_refs: list
   status: proposed | approved | running | completed | failed
   result_refs: list
   created_at: timestamp
@@ -3441,5 +3448,87 @@ QualityReport:
   verification_acceptance_rate: number
   cost_summary: object
   open_review_items: list
+  replay_audit_refs: list
+  policy_decision_refs: list
+  projection_watermark_refs: list
   created_at: timestamp
 ```
+
+## ReplayAuditView
+
+```yaml
+ReplayAuditView:
+  id: string
+  run_id: string
+  replay_bundle_ref: string
+  replay_mode: full | redacted | structural
+  replay_validation_report_ref: string
+  command_refs: list
+  event_cursor_refs: list
+  artifact_hash_refs: list
+  projection_watermark_refs: list
+  redaction_map_ref: string
+  policy_decision_refs: list
+  failure_report_refs: list
+  missing_ref_fields: list
+  completeness_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## OpsDashboardSnapshot
+
+```yaml
+OpsDashboardSnapshot:
+  id: string
+  run_id: string
+  dashboard_type: run | frontier | review | replay | quality | cost
+  as_of_event_cursor_refs: list
+  projection_watermark_refs: list
+  review_item_refs: list
+  replay_audit_view_refs: list
+  quality_report_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  dr_restore_report_refs: list
+  alert_refs: list
+  cost_summary_ref: string
+  freshness_lag_seconds: integer
+  stale_projection_refs: list
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## OpsConsoleReport
+
+```yaml
+OpsConsoleReport:
+  id: string
+  run_ref: string
+  review_item_refs: list
+  replay_audit_view_refs: list
+  quality_report_refs: list
+  dashboard_snapshot_ref: string
+  failure_record_refs: list
+  recovery_action_refs: list
+  dr_restore_report_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+Executable review/replay/ops console rules:
+
+- `ReviewItem` requires input refs, reason, priority, status, and policy refs. Closed items require decision refs.
+- `ReplayAuditView` pass requires command refs, event cursor refs, artifact hash refs, projection watermarks, redaction map, policy refs, and no missing refs.
+- `RecoveryAction` with destructive or external side effects requires policy and approval refs.
+- `DRRestoreReport` pass requires metadata restore, artifact reachability, event replay, projection rebuild, validation refs, and no unresolved refs or data loss.
+- `QualityReport` requires bounded success/acceptance rates, policy refs, and projection watermarks.
+- `OpsDashboardSnapshot` pass requires event cursors, projection watermarks, quality refs, and no stale projection refs.
+- `OpsConsoleReport` pass requires review, replay audit, quality, dashboard, DR restore, policy, command, event cursor, and outbox refs.
+- Negative ops fixtures must fail explicitly for missing review evidence, unresolved failure without recovery, stale dashboard projection, and unsafe recovery without review or approval.
+- These contracts provide a replayable target ops data surface. They do not claim production UI, production observability storage, alerting backend, export delivery, distributed persistence, production browser rendering, or production scale readiness.

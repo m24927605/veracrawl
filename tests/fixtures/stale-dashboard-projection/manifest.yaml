@@ -1,0 +1,1 @@
+{"id":"stale-dashboard-projection","scenario":"stale-dashboard-projection","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"stale_dashboard_projection","negative_case":true}

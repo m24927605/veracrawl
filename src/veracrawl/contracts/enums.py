@@ -305,6 +305,126 @@ class MultiAgentFailureType(StrEnum):
     AGENT_REASONING_AS_EVIDENCE = "agent_reasoning_as_evidence"
 
 
+class ReviewItemType(StrEnum):
+    CRAWL_PLAN = "crawl_plan"
+    SCHEMA = "schema"
+    PUBLICATION_POLICY = "publication_policy"
+    SOURCE_ADAPTER = "source_adapter"
+    BROWSER_INTERACTION = "browser_interaction"
+    AUTHORIZED_SESSION = "authorized_session"
+    CREDENTIAL_USE = "credential_use"
+    EXTRACTION_CANDIDATE = "extraction_candidate"
+    EVIDENCE_PACKET = "evidence_packet"
+    VERIFICATION_RECOMMENDATION = "verification_recommendation"
+    PUBLICATION = "publication"
+    EXPORT_DISPATCH = "export_dispatch"
+    EXPORT_WITHDRAWAL = "export_withdrawal"
+    ARTIFACT_LIFECYCLE = "artifact_lifecycle"
+    RETENTION = "retention"
+    MEMORY_RETRIEVAL = "memory_retrieval"
+    CROSS_SCOPE_MEMORY_TUNNEL = "cross_scope_memory_tunnel"
+    GRAPH_SIGNAL_USE = "graph_signal_use"
+    RECOVERY_ACTION = "recovery_action"
+    MULTI_AGENT_WORKFLOW = "multi_agent_workflow"
+    CONFLICT = "conflict"
+    DRIFT = "drift"
+    SAFETY_POLICY = "safety_policy"
+
+
+class ReviewPriority(StrEnum):
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class ReviewItemStatus(StrEnum):
+    OPEN = "open"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    NEEDS_MORE_EVIDENCE = "needs_more_evidence"
+    RESOLVED = "resolved"
+
+
+class OpsSeverity(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class OpsFailureType(StrEnum):
+    FETCH = "fetch"
+    BROWSER = "browser"
+    SESSION = "session"
+    CREDENTIAL = "credential"
+    MODEL = "model"
+    AGENT = "agent"
+    TOOL = "tool"
+    QUEUE = "queue"
+    LEASE = "lease"
+    DEAD_LETTER = "dead_letter"
+    PROCESSING = "processing"
+    VERIFICATION = "verification"
+    PUBLICATION = "publication"
+    EXPORT = "export"
+    PROJECTION = "projection"
+    PROJECTION_MISMATCH = "projection_mismatch"
+    MEMORY = "memory"
+    MIGRATION = "migration"
+    BACKFILL = "backfill"
+    ARTIFACT_LIFECYCLE = "artifact_lifecycle"
+    RETENTION = "retention"
+    POLICY = "policy"
+    AUTOSCALING = "autoscaling"
+    BACKPRESSURE = "backpressure"
+    DISASTER_RECOVERY = "disaster_recovery"
+    MISSING_REVIEW_EVIDENCE = "missing_review_evidence"
+    UNRESOLVED_FAILURE_WITHOUT_RECOVERY = "unresolved_failure_without_recovery"
+    STALE_DASHBOARD_PROJECTION = "stale_dashboard_projection"
+    UNSAFE_RECOVERY_WITHOUT_REVIEW = "unsafe_recovery_without_review"
+
+
+class RecoveryActionType(StrEnum):
+    RETRY_COMMAND = "retry_command"
+    RETRY_QUEUE_ITEM = "retry_queue_item"
+    RENEW_LEASE = "renew_lease"
+    REPLAY_EVENTS = "replay_events"
+    TOMBSTONE_ARTIFACT = "tombstone_artifact"
+    REDACT_ARTIFACT = "redact_artifact"
+    DELETE_ARTIFACT = "delete_artifact"
+    RELEASE_LEGAL_HOLD = "release_legal_hold"
+    WITHDRAW_OUTPUT = "withdraw_output"
+    RECONCILE_EXPORT = "reconcile_export"
+    REBUILD_PROJECTION = "rebuild_projection"
+    RERUN_MIGRATION = "rerun_migration"
+    RERUN_BACKFILL = "rerun_backfill"
+    INVALIDATE_MEMORY = "invalidate_memory"
+    QUARANTINE_TAINTED_CONTEXT = "quarantine_tainted_context"
+    PAUSE_SITE = "pause_site"
+    SCALE_WORKER_POOL = "scale_worker_pool"
+    RESTORE_FROM_BACKUP = "restore_from_backup"
+    REQUEST_REVIEW = "request_review"
+    IGNORE = "ignore"
+
+
+class OpsRecoveryStatus(StrEnum):
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class OpsDashboardType(StrEnum):
+    RUN = "run"
+    FRONTIER = "frontier"
+    REVIEW = "review"
+    REPLAY = "replay"
+    QUALITY = "quality"
+    COST = "cost"
+
+
 class UnitOfWorkStatus(StrEnum):
     OPEN = "open"
     COMMITTED = "committed"

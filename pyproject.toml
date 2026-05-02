@@ -32,6 +32,7 @@ veracrawl-graph = "veracrawl.cli.graph:main"
 veracrawl-projection = "veracrawl.cli.projection:main"
 veracrawl-memory = "veracrawl.cli.memory:main"
 veracrawl-agent-workflow = "veracrawl.cli.agents:main"
+veracrawl-ops = "veracrawl.cli.ops:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

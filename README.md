@@ -77,7 +77,8 @@ deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
-projection spine, the memory kernel spine, and the multi-agent repair spine.
+projection spine, the memory kernel spine, the multi-agent repair spine, and the
+review/replay/ops console spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -126,6 +127,13 @@ The multi-agent repair spine adds framework-neutral workflow, handoff,
 coordination decision, drift repair signal, repair replay report, owner-service
 boundary, arbitration, and agent-reasoning-as-evidence checks. It is not a claim
 that any concrete agent framework, model SDK, review UI, export delivery,
+distributed persistence, production browser rendering, or production scale
+operations are complete.
+The review/replay/ops console spine adds review items, replay audit views,
+failure records, recovery actions, DR restore reports, quality reports,
+dashboard snapshots, ops console reports, fixture manifests, policy/review
+gates, and replay checks. It is not a claim that a production dashboard
+frontend, production observability backend, alerting system, export delivery,
 distributed persistence, production browser rendering, or production scale
 operations are complete.
 
@@ -352,6 +360,25 @@ for fixture in \
   agent-reasoning-as-evidence
 do
   uv run --python python3.12 --extra dev veracrawl-agent-workflow run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run review/replay/ops console fixtures:
+
+```sh
+for fixture in \
+  review-console-success \
+  replay-audit-success \
+  quality-dashboard-success \
+  missing-review-evidence \
+  unresolved-failure-without-recovery \
+  stale-dashboard-projection \
+  unsafe-recovery-without-review
+do
+  uv run --python python3.12 --extra dev veracrawl-ops run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

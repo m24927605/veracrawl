@@ -486,6 +486,41 @@ agent framework integration, model SDK integration, review UI, export delivery,
 distributed storage, distributed queueing, production browser rendering, or
 production scale readiness.
 
+Review/replay/ops console fixture contract:
+
+```text
+veracrawl-ops run tests/fixtures/<ops_fixture_id> --profile target --out .veracrawl-test-runs/<ops_fixture_id>
+```
+
+Required ops fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| review-console-success | review item, replay audit view, quality report, dashboard snapshot, failure/recovery refs, DR restore report, policy refs, and replay refs are complete |
+| replay-audit-success | replay bundle, commands, event cursors, artifact hashes, projection watermarks, redaction, and policy refs are complete |
+| quality-dashboard-success | quality report, cost summary, open review refs, projection watermarks, and dashboard snapshot are complete |
+| missing-review-evidence | missing review evidence input refs fail and emit failure record |
+| unresolved-failure-without-recovery | operational failure without recovery/review path fails |
+| stale-dashboard-projection | stale projection watermark fails dashboard pass claim |
+| unsafe-recovery-without-review | side-effecting recovery without approval/review fails |
+
+Review/replay/ops console acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_ops_contract_registry.py`
+- `pytest tests/contract/test_ops_contracts.py`
+- `pytest tests/contract/test_ops_import_boundaries.py`
+- `pytest tests/unit/test_ops_console.py`
+- `pytest tests/unit/test_ops_replay.py`
+- `pytest tests/unit/test_ops_review_recovery_boundary.py`
+- `pytest tests/integration/test_ops_fixtures.py`
+
+This acceptance proves executable review queue, replay audit, operational
+failure/recovery, DR restore, quality dashboard, and ops console replay refs.
+It does not prove production dashboard frontend, production observability
+backend, alerting system, export delivery, distributed storage, distributed
+queueing, production browser rendering, or production scale readiness.
+
 Oracle schemas:
 
 ```yaml

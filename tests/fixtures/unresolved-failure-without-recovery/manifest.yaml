@@ -1,0 +1,1 @@
+{"id":"unresolved-failure-without-recovery","scenario":"unresolved-failure-without-recovery","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"unresolved_failure_without_recovery","negative_case":true}

@@ -1,0 +1,1 @@
+{"expected_completion_result":"fail","expected_missing_refs":["projection_watermark_refs"],"expected_stale_projection_refs":["projection-watermark:stale-dashboard-projection:stale"]}

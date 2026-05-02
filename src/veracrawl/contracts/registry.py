@@ -213,6 +213,71 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "agent",
         tests=["tests/integration/test_multi_agent_fixtures.py"],
     ),
+    "ReviewItem": _contract(
+        "ReviewItem",
+        OwnerService.REVIEW_REPLAY,
+        "ops",
+        mutation_allowed=True,
+        tests=["tests/contract/test_ops_contracts.py"],
+    ),
+    "ReplayAuditView": _contract(
+        "ReplayAuditView",
+        OwnerService.REVIEW_REPLAY,
+        "ops",
+        mutation_allowed=True,
+        tests=["tests/unit/test_ops_replay.py"],
+    ),
+    "FailureRecord": _contract(
+        "FailureRecord",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_ops_review_recovery_boundary.py"],
+    ),
+    "RecoveryAction": _contract(
+        "RecoveryAction",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_ops_review_recovery_boundary.py"],
+    ),
+    "DRRestoreReport": _contract(
+        "DRRestoreReport",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_ops_contracts.py"],
+    ),
+    "QualityReport": _contract(
+        "QualityReport",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        tests=["tests/contract/test_ops_contracts.py"],
+    ),
+    "OpsDashboardSnapshot": _contract(
+        "OpsDashboardSnapshot",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        tests=["tests/unit/test_ops_console.py"],
+    ),
+    "OpsConsoleReport": _contract(
+        "OpsConsoleReport",
+        OwnerService.REVIEW_REPLAY,
+        "ops",
+        mutation_allowed=True,
+        tests=["tests/unit/test_ops_replay.py"],
+    ),
+    "OpsFixtureManifest": _contract(
+        "OpsFixtureManifest",
+        OwnerService.TESTS,
+        "ops",
+        tests=["tests/integration/test_ops_fixtures.py"],
+    ),
     "ReplayBundleManifest": _contract(
         "ReplayBundleManifest",
         OwnerService.REVIEW_REPLAY,
@@ -1129,6 +1194,69 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["multi_agent_workflow_completed"],
         ),
+        "record_review_item": CommandTypeRegistration(
+            command_type="record_review_item",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="ReviewItem",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["review_item_recorded", "review_created"],
+        ),
+        "record_replay_audit_view": CommandTypeRegistration(
+            command_type="record_replay_audit_view",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="ReplayAuditView",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["replay_audit_view_recorded"],
+        ),
+        "record_failure_record": CommandTypeRegistration(
+            command_type="record_failure_record",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="FailureRecord",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["failure_recorded", "error_recorded"],
+        ),
+        "record_recovery_action": CommandTypeRegistration(
+            command_type="record_recovery_action",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="RecoveryAction",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["ops_recovery"],
+            approval_required=True,
+            emitted_event_types=[
+                "recovery_action_recorded",
+                "recovery_action_started",
+                "recovery_action_completed",
+            ],
+        ),
+        "record_dr_restore_report": CommandTypeRegistration(
+            command_type="record_dr_restore_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="DRRestoreReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["dr_restore_reported"],
+        ),
+        "record_quality_report": CommandTypeRegistration(
+            command_type="record_quality_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="QualityReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["quality_report_recorded"],
+        ),
+        "record_ops_dashboard_snapshot": CommandTypeRegistration(
+            command_type="record_ops_dashboard_snapshot",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="OpsDashboardSnapshot",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["ops_dashboard_snapshot_recorded"],
+        ),
+        "record_ops_console_report": CommandTypeRegistration(
+            command_type="record_ops_console_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="OpsConsoleReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["ops_console_reported"],
+        ),
     }
 )
 
@@ -1239,6 +1367,16 @@ EVENT_TYPES.update(
             "agent_handoff_completed",
             "coordination_decision_recorded",
             "coordination_decision_applied",
+            "review_item_recorded",
+            "replay_audit_view_recorded",
+            "failure_recorded",
+            "recovery_action_recorded",
+            "recovery_action_started",
+            "recovery_action_completed",
+            "dr_restore_reported",
+            "quality_report_recorded",
+            "ops_dashboard_snapshot_recorded",
+            "ops_console_reported",
         ]
     }
 )
@@ -1633,6 +1771,27 @@ for _multi_agent_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _ops_fixture, _negative in {
+    "review-console-success": False,
+    "replay-audit-success": False,
+    "quality-dashboard-success": False,
+    "missing-review-evidence": True,
+    "unresolved-failure-without-recovery": True,
+    "stale-dashboard-projection": True,
+    "unsafe-recovery-without-review": True,
+}.items():
+    _base = f"tests/fixtures/{_ops_fixture}"
+    FIXTURE_ORACLES[_ops_fixture] = FixtureOracleRegistration(
+        fixture_id=_ops_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1684,7 +1843,7 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
         "replay",
         OwnerService.REVIEW_REPLAY,
         "materialized",
-        materialized=["ReplayBundleManifest"],
+        materialized=["ReplayBundleManifest", "ReplayAuditView", "OpsConsoleReport"],
     ),
     "agent_runtime": _target_area(
         "agent_runtime",
@@ -1807,8 +1966,17 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     "ops": _target_area(
         "ops",
         OwnerService.OPS,
-        "foundation_placeholder",
-        placeholders=["FailureRecord", "DRRestoreReport"],
+        "materialized",
+        materialized=[
+            "ReviewItem",
+            "ReplayAuditView",
+            "FailureRecord",
+            "RecoveryAction",
+            "DRRestoreReport",
+            "QualityReport",
+            "OpsDashboardSnapshot",
+            "OpsConsoleReport",
+        ],
     ),
     "artifact_lifecycle": _target_area(
         "artifact_lifecycle",
