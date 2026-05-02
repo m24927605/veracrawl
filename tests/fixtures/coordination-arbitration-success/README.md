@@ -1,0 +1,1 @@
+Coordination arbitration success fixture.

@@ -451,6 +451,41 @@ vector/search retrieval, export delivery, distributed storage, distributed
 queueing, production browser rendering, memory UI, or production scale
 readiness.
 
+Multi-agent repair fixture contract:
+
+```text
+veracrawl-agent-workflow run tests/fixtures/<multi_agent_fixture_id> --profile target --out .veracrawl-test-runs/<multi_agent_fixture_id>
+```
+
+Required multi-agent fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| multi-agent-repair-success | workflow, handoffs, coordination decision, repair signal, agent traces, policy refs, and replay refs are complete |
+| coordination-arbitration-success | conflicting repair proposals are resolved by explicit coordination decision and owner command ref |
+| repair-loop-evidence-success | repair loop includes before evidence, after evidence, rollback path, and policy refs |
+| owner-service-bypass | agent direct durable mutation is rejected |
+| unresolved-coordination-conflict | conflicting recommendations without coordination fail replay |
+| agent-reasoning-as-evidence | agent reasoning refs used as source evidence are rejected |
+
+Multi-agent repair acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_multi_agent_contract_registry.py`
+- `pytest tests/contract/test_multi_agent_contracts.py`
+- `pytest tests/contract/test_multi_agent_import_boundaries.py`
+- `pytest tests/unit/test_multi_agent_orchestration.py`
+- `pytest tests/unit/test_multi_agent_repair_boundary.py`
+- `pytest tests/unit/test_multi_agent_replay.py`
+- `pytest tests/integration/test_multi_agent_fixtures.py`
+
+This acceptance proves framework-neutral workflow records, handoffs,
+coordination decisions, repair signals, replay refs, owner-service mutation
+boundaries, and agent-reasoning-as-evidence rejection. It does not prove concrete
+agent framework integration, model SDK integration, review UI, export delivery,
+distributed storage, distributed queueing, production browser rendering, or
+production scale readiness.
+
 Oracle schemas:
 
 ```yaml

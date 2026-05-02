@@ -2,6 +2,7 @@
 
 from veracrawl.contracts.agent import (
     AgentActionTrace,
+    AgentHandoff,
     AgentRecommendation,
     AgentRunRequest,
     AgentRunResult,
@@ -10,9 +11,14 @@ from veracrawl.contracts.agent import (
     ContextBundle,
     ContextBundleTrace,
     ContextRef,
+    CoordinationDecision,
+    DriftRepairSignal,
     ModelCallTrace,
     ModelRequest,
     ModelResponse,
+    MultiAgentFixtureManifest,
+    MultiAgentRepairReport,
+    MultiAgentWorkflow,
     ToolCallTrace,
 )
 from veracrawl.contracts.artifact import RuntimeArtifactRef
@@ -124,6 +130,7 @@ from veracrawl.contracts.verification import ReviewDecision, VerificationDecisio
 
 __all__ = [
     "AgentActionTrace",
+    "AgentHandoff",
     "AgentRecommendation",
     "AgentRunRequest",
     "AgentRunResult",
@@ -140,6 +147,7 @@ __all__ = [
     "CommandEnvelope",
     "CommandResult",
     "CommandTypeSpec",
+    "CoordinationDecision",
     "ContextBundle",
     "ContextBundleTrace",
     "ContextRef",
@@ -150,6 +158,7 @@ __all__ = [
     "CrawlRunEvent",
     "DRRestoreOracle",
     "DocumentArtifact",
+    "DriftRepairSignal",
     "DurableCommandRecord",
     "DurableFixtureManifest",
     "DurableReplayRecoveryReport",
@@ -188,6 +197,9 @@ __all__ = [
     "ModelCallTrace",
     "ModelRequest",
     "ModelResponse",
+    "MultiAgentFixtureManifest",
+    "MultiAgentRepairReport",
+    "MultiAgentWorkflow",
     "NetworkAcquisitionReport",
     "NetworkFixtureManifest",
     "NetworkRequest",

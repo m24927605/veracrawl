@@ -1,0 +1,1 @@
+{"id":"unresolved-coordination-conflict","scenario":"unresolved-coordination-conflict","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"unresolved_coordination_conflict","negative_case":true}

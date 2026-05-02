@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/010-memory-kernel/plan.md`.
-Use it with `specs/010-memory-kernel/spec.md`,
-`specs/010-memory-kernel/research.md`,
-`specs/010-memory-kernel/data-model.md`,
-`specs/010-memory-kernel/contracts/`, and
-`specs/010-memory-kernel/quickstart.md` for VeraCrawl Memory Kernel work.
+Current active Spec Kit plan: `specs/011-multi-agent-repair/plan.md`.
+Use it with `specs/011-multi-agent-repair/spec.md`,
+`specs/011-multi-agent-repair/research.md`,
+`specs/011-multi-agent-repair/data-model.md`,
+`specs/011-multi-agent-repair/contracts/`, and
+`specs/011-multi-agent-repair/quickstart.md` for VeraCrawl Multi-Agent Repair work.
 <!-- SPECKIT END -->

@@ -77,7 +77,7 @@ deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
-projection spine, and the memory kernel spine.
+projection spine, the memory kernel spine, and the multi-agent repair spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -122,6 +122,12 @@ exclusion, tainted-memory prompt-use blocking, memory replay reports, and
 memory-as-evidence boundary checks. It is not a claim that production memory
 stores, vector/search retrieval, export delivery, distributed persistence,
 production browser rendering, or production scale operations are complete.
+The multi-agent repair spine adds framework-neutral workflow, handoff,
+coordination decision, drift repair signal, repair replay report, owner-service
+boundary, arbitration, and agent-reasoning-as-evidence checks. It is not a claim
+that any concrete agent framework, model SDK, review UI, export delivery,
+distributed persistence, production browser rendering, or production scale
+operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -328,6 +334,24 @@ for fixture in \
   memory-as-evidence
 do
   uv run --python python3.12 --extra dev veracrawl-memory run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run multi-agent repair fixtures:
+
+```sh
+for fixture in \
+  multi-agent-repair-success \
+  coordination-arbitration-success \
+  repair-loop-evidence-success \
+  owner-service-bypass \
+  unresolved-coordination-conflict \
+  agent-reasoning-as-evidence
+do
+  uv run --python python3.12 --extra dev veracrawl-agent-workflow run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

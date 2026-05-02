@@ -172,6 +172,47 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "ContextBundleTrace", OwnerService.AGENTS, "agent", privacy=True
     ),
     "AgentRecommendation": _contract("AgentRecommendation", OwnerService.AGENTS, "agent"),
+    "MultiAgentWorkflow": _contract(
+        "MultiAgentWorkflow",
+        OwnerService.AGENTS,
+        "agent",
+        mutation_allowed=True,
+        tests=["tests/contract/test_multi_agent_contracts.py"],
+    ),
+    "AgentHandoff": _contract(
+        "AgentHandoff",
+        OwnerService.AGENTS,
+        "agent",
+        mutation_allowed=True,
+        tests=["tests/unit/test_multi_agent_orchestration.py"],
+    ),
+    "CoordinationDecision": _contract(
+        "CoordinationDecision",
+        OwnerService.AGENTS,
+        "agent",
+        mutation_allowed=True,
+        tests=["tests/unit/test_multi_agent_orchestration.py"],
+    ),
+    "DriftRepairSignal": _contract(
+        "DriftRepairSignal",
+        OwnerService.AGENTS,
+        "agent",
+        mutation_allowed=True,
+        tests=["tests/unit/test_multi_agent_repair_boundary.py"],
+    ),
+    "MultiAgentRepairReport": _contract(
+        "MultiAgentRepairReport",
+        OwnerService.REVIEW_REPLAY,
+        "agent",
+        mutation_allowed=True,
+        tests=["tests/unit/test_multi_agent_replay.py"],
+    ),
+    "MultiAgentFixtureManifest": _contract(
+        "MultiAgentFixtureManifest",
+        OwnerService.TESTS,
+        "agent",
+        tests=["tests/integration/test_multi_agent_fixtures.py"],
+    ),
     "ReplayBundleManifest": _contract(
         "ReplayBundleManifest",
         OwnerService.REVIEW_REPLAY,
@@ -1057,6 +1098,37 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["memory_kernel_reported"],
         ),
+        "start_multi_agent_workflow": CommandTypeRegistration(
+            command_type="start_multi_agent_workflow",
+            owner_service=OwnerService.AGENTS,
+            target_aggregate_type="MultiAgentWorkflow",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["prompt_context", "tool_call"],
+            emitted_event_types=["multi_agent_workflow_started"],
+        ),
+        "record_agent_handoff": CommandTypeRegistration(
+            command_type="record_agent_handoff",
+            owner_service=OwnerService.AGENTS,
+            target_aggregate_type="AgentHandoff",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["prompt_context"],
+            emitted_event_types=["agent_handoff_completed"],
+        ),
+        "record_coordination_decision": CommandTypeRegistration(
+            command_type="record_coordination_decision",
+            owner_service=OwnerService.AGENTS,
+            target_aggregate_type="CoordinationDecision",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["tool_call"],
+            emitted_event_types=["coordination_decision_recorded"],
+        ),
+        "record_multi_agent_repair_report": CommandTypeRegistration(
+            command_type="record_multi_agent_repair_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="MultiAgentRepairReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["multi_agent_workflow_completed"],
+        ),
     }
 )
 
@@ -1157,6 +1229,16 @@ EVENT_TYPES.update(
             "memory_written",
             "memory_retrieved",
             "memory_kernel_reported",
+            "multi_agent_workflow_started",
+            "multi_agent_workflow_completed",
+            "multi_agent_workflow_escalated",
+            "multi_agent_workflow_failed",
+            "agent_handoff_proposed",
+            "agent_handoff_accepted",
+            "agent_handoff_rejected",
+            "agent_handoff_completed",
+            "coordination_decision_recorded",
+            "coordination_decision_applied",
         ]
     }
 )
@@ -1531,6 +1613,26 @@ for _memory_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _multi_agent_fixture, _negative in {
+    "multi-agent-repair-success": False,
+    "coordination-arbitration-success": False,
+    "repair-loop-evidence-success": False,
+    "owner-service-bypass": True,
+    "unresolved-coordination-conflict": True,
+    "agent-reasoning-as-evidence": True,
+}.items():
+    _base = f"tests/fixtures/{_multi_agent_fixture}"
+    FIXTURE_ORACLES[_multi_agent_fixture] = FixtureOracleRegistration(
+        fixture_id=_multi_agent_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1595,6 +1697,11 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "AgentRunResult",
             "AgentActionTrace",
             "AgentRecommendation",
+            "MultiAgentWorkflow",
+            "AgentHandoff",
+            "CoordinationDecision",
+            "DriftRepairSignal",
+            "MultiAgentRepairReport",
         ],
     ),
     "fixture_oracles": _target_area(

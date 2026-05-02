@@ -633,6 +633,52 @@ CoordinationDecision:
 
 Multi-agent workflows coordinate recommendations and handoffs. They do not bypass owner services, policy checks, or reviewer gates.
 
+## DriftRepairSignal
+
+```yaml
+DriftRepairSignal:
+  id: string
+  run_ref: string
+  workflow_ref: string
+  affected_refs: list
+  before_evidence_refs: list
+  after_evidence_refs: list
+  repair_proposal_refs: list
+  rollback_ref: string
+  policy_decision_refs: list
+  status: observed | reviewed | repaired | ignored
+  created_at: timestamp
+```
+
+## MultiAgentRepairReport
+
+```yaml
+MultiAgentRepairReport:
+  id: string
+  run_ref: string
+  workflow_ref: string
+  handoff_refs: list
+  coordination_decision_refs: list
+  repair_signal_refs: list
+  agent_action_trace_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+Rules:
+
+- pass requires workflow, handoff, coordination, repair, agent trace, policy, command, event cursor, and outbox refs.
+- agents cannot bypass owner-service commands for durable mutations.
+- before/after evidence and rollback refs are required for repair loops.
+- agent reasoning refs must not satisfy publication evidence requirements.
+
 ## MemoryRetrievalTrace
 
 ```yaml

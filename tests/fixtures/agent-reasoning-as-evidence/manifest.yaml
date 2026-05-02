@@ -1,0 +1,1 @@
+{"id":"agent-reasoning-as-evidence","scenario":"agent-reasoning-as-evidence","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"agent_reasoning_as_evidence","negative_case":true}

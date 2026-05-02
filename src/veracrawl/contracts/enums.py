@@ -260,6 +260,51 @@ class AgentRecommendationStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class MultiAgentWorkflowStatus(StrEnum):
+    PROPOSED = "proposed"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    ESCALATED = "escalated"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class AgentHandoffStatus(StrEnum):
+    PROPOSED = "proposed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    COMPLETED = "completed"
+
+
+class CoordinationDecisionType(StrEnum):
+    CHOOSE_PLAN = "choose_plan"
+    RESOLVE_RECOMMENDATION_CONFLICT = "resolve_recommendation_conflict"
+    TERMINATE_LOOP = "terminate_loop"
+    ESCALATE_TO_REVIEW = "escalate_to_review"
+    APPROVE_REPAIR_PROPOSAL = "approve_repair_proposal"
+
+
+class CoordinationDecisionStatus(StrEnum):
+    RECORDED = "recorded"
+    APPLIED = "applied"
+    REJECTED = "rejected"
+
+
+class RepairSignalStatus(StrEnum):
+    OBSERVED = "observed"
+    REVIEWED = "reviewed"
+    REPAIRED = "repaired"
+    IGNORED = "ignored"
+
+
+class MultiAgentFailureType(StrEnum):
+    LOOP_BUDGET_EXHAUSTED = "loop_budget_exhausted"
+    OWNER_SERVICE_BYPASS = "owner_service_bypass"
+    MISSING_REPAIR_EVIDENCE = "missing_repair_evidence"
+    UNRESOLVED_COORDINATION_CONFLICT = "unresolved_coordination_conflict"
+    AGENT_REASONING_AS_EVIDENCE = "agent_reasoning_as_evidence"
+
+
 class UnitOfWorkStatus(StrEnum):
     OPEN = "open"
     COMMITTED = "committed"

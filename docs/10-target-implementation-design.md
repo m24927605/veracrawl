@@ -352,6 +352,26 @@ does not prove production memory stores, vector/search retrieval, long-running
 memory compaction, export delivery, distributed persistence, production browser
 rendering, or production scale memory operations.
 
+## Multi-Agent Repair Spine Slice
+
+The multi-agent repair slice coordinates VeraCrawl-owned agent workflow records
+without coupling core to any concrete agent framework:
+
+- `veracrawl.contracts.agent`: `MultiAgentWorkflow`, `AgentHandoff`,
+  `CoordinationDecision`, `DriftRepairSignal`, `MultiAgentRepairReport`, and
+  `MultiAgentFixtureManifest`.
+- `veracrawl.agents.orchestration`: deterministic workflow, handoff,
+  arbitration, repair evidence, and boundary failure records.
+- `veracrawl.review_replay.agents`: multi-agent replay completeness validation.
+- `veracrawl.cli.agents`: `veracrawl-agent-workflow run` fixture runner.
+
+This slice proves framework-neutral workflow state, explicit handoffs,
+coordination decisions, owner-service command boundaries, before/after repair
+evidence, rollback refs, and agent-reasoning-as-evidence rejection. It does not
+prove concrete agent framework integration, model SDK integration, review UI,
+export delivery, distributed persistence, production browser rendering, or
+production scale agent operations.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.
