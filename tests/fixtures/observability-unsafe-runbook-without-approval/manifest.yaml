@@ -1,0 +1,1 @@
+{"id":"observability-unsafe-runbook-without-approval","scenario":"observability-unsafe-runbook-without-approval","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"observability_unsafe_runbook_without_approval","expected_failure_type":"observability_unsafe_runbook_without_approval","negative_case":true}

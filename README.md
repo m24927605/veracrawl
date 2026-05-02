@@ -108,6 +108,15 @@ report. It can claim `pass` only when the live integrated infrastructure report
 contributes refs in the same run. It is not a claim that managed cloud backup,
 cross-region replication, deployment automation, production observability,
 alerting backends, or production worker fleets are ready.
+The operational observability gate proves backend-neutral metrics, traces,
+alerts, runbook actions, cost/quality signals, dashboard projection watermarks,
+failure/recovery refs, DR refs, redaction refs, policy refs, command/event/outbox
+refs, collector handoff refs, telemetry backend refs, and replay refs in one
+operator-visible report. It can claim `pass` only through canonical VeraCrawl
+observability contracts and backend/collector handoff refs. It is not a claim
+that managed Prometheus, OpenTelemetry collectors, Grafana dashboards, cloud
+monitoring, paging integrations, deployment automation, or production worker
+fleets are ready.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -216,6 +225,12 @@ families contribute refs in the same run. It is not a claim that managed cloud,
 deployment, production worker fleets, metrics/tracing backends, production
 observability, browser rendering, model SDKs, or agent frameworks are
 production-ready.
+The operational observability gate adds canonical observability contracts and a
+`veracrawl-observability` fixture runner. `observability-runtime-unavailable`
+and `observability-data-surface-only` return `needs_review`; missing metrics,
+traces, alerts, runbooks, dashboard watermarks, DR refs, redaction refs, replay
+refs, secret leakage, and unsafe runbook actions fail deterministically. This is
+backend-neutral operational proof, not managed observability infrastructure.
 
 Run the local foundation gate with Python 3.12:
 

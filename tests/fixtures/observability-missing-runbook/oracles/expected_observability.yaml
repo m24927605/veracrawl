@@ -1,0 +1,1 @@
+{"expected_result":"fail","required_missing_ref_fields":["runbook_action_refs"],"expected_failure_type":"observability_missing_runbook_refs"}

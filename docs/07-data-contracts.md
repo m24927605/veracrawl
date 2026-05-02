@@ -4085,7 +4085,7 @@ DRRestoreFixtureManifest:
 FailureRecord:
   id: string
   run_id: string
-  failure_type: fetch | browser | session | credential | model | agent | tool | queue | lease | dead_letter | processing | verification | publication | export | projection | projection_mismatch | memory | migration | backfill | artifact_lifecycle | retention | policy | autoscaling | backpressure | disaster_recovery | missing_review_evidence | unresolved_failure_without_recovery | stale_dashboard_projection | unsafe_recovery_without_review
+  failure_type: fetch | browser | session | credential | model | agent | tool | queue | lease | dead_letter | processing | verification | publication | export | projection | projection_mismatch | memory | migration | backfill | artifact_lifecycle | retention | policy | autoscaling | backpressure | disaster_recovery | observability_gap | redaction_violation | missing_review_evidence | unresolved_failure_without_recovery | stale_dashboard_projection | unsafe_recovery_without_review
   failed_ref: string
   owner_service_ref: string
   severity: low | medium | high | critical
@@ -4107,7 +4107,7 @@ FailureRecord:
 RecoveryAction:
   id: string
   failure_record_id: string
-  action_type: retry_command | retry_queue_item | renew_lease | replay_events | tombstone_artifact | redact_artifact | delete_artifact | release_legal_hold | withdraw_output | reconcile_export | rebuild_projection | rerun_migration | rerun_backfill | invalidate_memory | quarantine_tainted_context | pause_site | scale_worker_pool | restore_from_backup | request_review | ignore
+  action_type: retry_command | retry_queue_item | renew_lease | replay_events | tombstone_artifact | redact_artifact | delete_artifact | release_legal_hold | withdraw_output | reconcile_export | rebuild_projection | rerun_migration | rerun_backfill | invalidate_memory | quarantine_tainted_context | pause_site | scale_worker_pool | restore_from_backup | restore_observability_signal | refresh_dashboard_projection | redact_sensitive_context | run_observability_runbook | request_review | ignore
   command_refs: list
   policy_decision_refs: list
   approval_decision_refs: list
@@ -4117,6 +4117,140 @@ RecoveryAction:
   created_at: timestamp
   updated_at: timestamp
 ```
+
+## Operational Observability Gate Contracts
+
+```yaml
+ObservabilitySignal:
+  id: string
+  signal_type: health | slo | cost | quality | failure | recovery | dr
+  owner_service_ref: string
+  severity: low | medium | high | critical
+  run_ref: string
+  source_ref: string
+  metric_refs: list
+  trace_refs: list
+  alert_refs: list
+  policy_decision_refs: list
+  redaction_map_refs: list
+  replay_bundle_ref: string
+  payload_refs: list
+  created_at: timestamp
+
+MetricSample:
+  id: string
+  metric_name: string
+  metric_kind: gauge | counter | histogram | slo | cost | quality
+  value: number
+  unit: string
+  run_ref: string
+  owner_service_ref: string
+  timestamp_ref: string
+  threshold_ref: string
+  policy_decision_refs: list
+  trace_refs: list
+  created_at: timestamp
+
+TraceSpan:
+  id: string
+  span_name: string
+  span_kind: command | event | adapter | agent | tool | queue | artifact | projection | export | recovery | observability
+  run_ref: string
+  parent_span_ref: string
+  command_ref: string
+  event_ref: string
+  owner_service_ref: string
+  status: ok | error | needs_review
+  duration_ms: integer
+  redacted_attribute_refs: list
+  policy_decision_refs: list
+  failure_record_refs: list
+  created_at: timestamp
+
+AlertRecord:
+  id: string
+  alert_type: string
+  severity: low | medium | high | critical
+  status: firing | resolved | needs_review
+  run_ref: string
+  metric_refs: list
+  trace_refs: list
+  failure_record_refs: list
+  dr_restore_report_refs: list
+  runbook_action_refs: list
+  policy_decision_refs: list
+  replay_bundle_ref: string
+  resolution_refs: list
+  created_at: timestamp
+
+RunbookAction:
+  id: string
+  action_type: string
+  status: recommended | approved | executed | failed | needs_review
+  run_ref: string
+  alert_ref: string
+  failure_record_refs: list
+  recovery_action_refs: list
+  dr_restore_report_refs: list
+  side_effecting: boolean
+  approval_decision_refs: list
+  policy_decision_refs: list
+  command_refs: list
+  event_refs: list
+  replay_bundle_ref: string
+  created_at: timestamp
+
+ObservabilityReport:
+  id: string
+  run_ref: string
+  signal_refs: list
+  metric_sample_refs: list
+  trace_span_refs: list
+  alert_record_refs: list
+  runbook_action_refs: list
+  quality_report_refs: list
+  cost_metric_refs: list
+  dashboard_snapshot_refs: list
+  projection_watermark_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  dr_restore_report_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  redaction_map_refs: list
+  collector_handoff_refs: list
+  telemetry_backend_refs: list
+  replay_bundle_ref: string
+  contract_only_refs: list
+  missing_ref_fields: list
+  stale_projection_refs: list
+  unredacted_sensitive_fields: list
+  unsafe_runbook_action_refs: list
+  operator_status: string
+  result: pass | fail | needs_review
+  created_at: timestamp
+
+ObservabilityFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: observability_missing_metric_refs | observability_missing_trace_refs | observability_missing_alert_refs | observability_missing_runbook_refs | observability_stale_dashboard_watermark | observability_missing_dr_refs | observability_missing_redaction_refs | observability_missing_replay_refs | observability_secret_leak_detected | observability_unsafe_runbook_without_approval
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Executable operational observability rules:
+
+- `ObservabilityReport` pass requires signal, metric, trace, alert, runbook, quality, cost, dashboard, projection watermark, failure/recovery, DR, policy, command, event cursor, outbox, redaction, collector handoff, telemetry backend, and replay refs.
+- `observability-runtime-unavailable` returns `needs_review` with contract-only refs for missing telemetry runtime, collector handoff, or backend refs.
+- `observability-data-surface-only` returns `needs_review`; ops console, quality, or dashboard data without metrics, traces, alerts, runbooks, backend refs, and collector refs is not operational observability.
+- Negative observability fixtures fail deterministically for missing metrics, traces, alerts, runbooks, dashboard watermarks, DR refs, redaction refs, replay refs, secret leakage, and unsafe runbook actions without approval.
+- Core observability contracts and validation do not import or require Prometheus, OpenTelemetry, Grafana, cloud monitoring SDKs, browser libraries, model SDKs, agent frameworks, or site-specific scraper modules.
+- These contracts prove backend-neutral observability acceptance. They do not claim managed telemetry storage, collector deployment, dashboards, paging integrations, on-call automation, production deployment, production worker fleets, production browser rendering, or production scale readiness.
 
 ## QualityReport
 
@@ -4220,4 +4354,4 @@ Executable review/replay/ops console rules:
 - `OpsDashboardSnapshot` pass requires event cursors, projection watermarks, quality refs, and no stale projection refs.
 - `OpsConsoleReport` pass requires review, replay audit, quality, dashboard, DR restore, policy, command, event cursor, and outbox refs.
 - Negative ops fixtures must fail explicitly for missing review evidence, unresolved failure without recovery, stale dashboard projection, and unsafe recovery without review or approval.
-- These contracts provide a replayable target ops data surface. They do not claim production UI, production observability storage, alerting backend, export delivery, distributed persistence, production browser rendering, or production scale readiness.
+- These contracts provide a replayable target ops data surface. Operational observability is now validated separately by `ObservabilityReport` and related signal contracts. This data surface still does not claim production UI, managed telemetry storage, alert delivery, export delivery, distributed persistence, production browser rendering, or production scale readiness.

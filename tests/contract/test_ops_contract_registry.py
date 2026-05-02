@@ -20,11 +20,18 @@ def test_ops_contracts_are_registered() -> None:
         "DRRestorePlan",
         "DRRestoreRun",
         "DRRestoreReport",
+        "ObservabilitySignal",
+        "MetricSample",
+        "TraceSpan",
+        "AlertRecord",
+        "RunbookAction",
+        "ObservabilityReport",
         "QualityReport",
         "OpsDashboardSnapshot",
         "OpsConsoleReport",
         "OpsFixtureManifest",
         "DRRestoreFixtureManifest",
+        "ObservabilityFixtureManifest",
     }
     assert expected.issubset(FOUNDATION_CONTRACTS)
     assert validate_registry().ok
@@ -40,6 +47,13 @@ def test_ops_commands_and_events_are_registered() -> None:
         "record_dr_restore_run": "dr_restore_run_recorded",
         "record_dr_restore_report": "dr_restore_reported",
         "record_dr_restore_fixture_manifest": "dr_restore_fixture_manifest_recorded",
+        "record_observability_signal": "observability_signal_recorded",
+        "record_metric_sample": "metric_sample_recorded",
+        "record_trace_span": "trace_span_recorded",
+        "record_alert_record": "alert_recorded",
+        "record_runbook_action": "runbook_action_recorded",
+        "record_observability_report": "observability_reported",
+        "record_observability_fixture_manifest": "observability_fixture_manifest_recorded",
         "record_quality_report": "quality_report_recorded",
         "record_ops_dashboard_snapshot": "ops_dashboard_snapshot_recorded",
         "record_ops_console_report": "ops_console_reported",
@@ -56,6 +70,7 @@ def test_ops_target_area_is_materialized() -> None:
     assert area.coverage_status == "materialized"
     assert "FailureRecord" in area.materialized_contract_refs
     assert "DRRestoreReport" in area.materialized_contract_refs
+    assert "ObservabilityReport" in area.materialized_contract_refs
     assert not area.placeholder_contract_refs
     assert area.followup_spec_gate is None
 
@@ -69,6 +84,9 @@ def test_ops_fixtures_are_registered() -> None:
         "unresolved-failure-without-recovery",
         "stale-dashboard-projection",
         "unsafe-recovery-without-review",
+        "observability-success",
+        "observability-runtime-unavailable",
+        "observability-missing-metrics",
     }
     assert expected.issubset(FIXTURE_ORACLES)
     assert not FIXTURE_ORACLES["review-console-success"].negative_case

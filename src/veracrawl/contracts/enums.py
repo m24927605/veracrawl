@@ -427,6 +427,8 @@ class OpsFailureType(StrEnum):
     AUTOSCALING = "autoscaling"
     BACKPRESSURE = "backpressure"
     DISASTER_RECOVERY = "disaster_recovery"
+    OBSERVABILITY_GAP = "observability_gap"
+    REDACTION_VIOLATION = "redaction_violation"
     MISSING_REVIEW_EVIDENCE = "missing_review_evidence"
     UNRESOLVED_FAILURE_WITHOUT_RECOVERY = "unresolved_failure_without_recovery"
     STALE_DASHBOARD_PROJECTION = "stale_dashboard_projection"
@@ -470,6 +472,72 @@ class DRRestoreFailureType(StrEnum):
     UNSAFE_RECOVERY_WITHOUT_APPROVAL = "dr_restore_unsafe_recovery_without_approval"
 
 
+class ObservabilitySignalType(StrEnum):
+    HEALTH = "health"
+    SLO = "slo"
+    COST = "cost"
+    QUALITY = "quality"
+    FAILURE = "failure"
+    RECOVERY = "recovery"
+    DR = "dr"
+
+
+class ObservabilityMetricKind(StrEnum):
+    GAUGE = "gauge"
+    COUNTER = "counter"
+    HISTOGRAM = "histogram"
+    SLO = "slo"
+    COST = "cost"
+    QUALITY = "quality"
+
+
+class TraceSpanKind(StrEnum):
+    COMMAND = "command"
+    EVENT = "event"
+    ADAPTER = "adapter"
+    AGENT = "agent"
+    TOOL = "tool"
+    QUEUE = "queue"
+    ARTIFACT = "artifact"
+    PROJECTION = "projection"
+    EXPORT = "export"
+    RECOVERY = "recovery"
+    OBSERVABILITY = "observability"
+
+
+class TraceSpanStatus(StrEnum):
+    OK = "ok"
+    ERROR = "error"
+    NEEDS_REVIEW = "needs_review"
+
+
+class AlertStatus(StrEnum):
+    FIRING = "firing"
+    RESOLVED = "resolved"
+    NEEDS_REVIEW = "needs_review"
+
+
+class RunbookActionStatus(StrEnum):
+    RECOMMENDED = "recommended"
+    APPROVED = "approved"
+    EXECUTED = "executed"
+    FAILED = "failed"
+    NEEDS_REVIEW = "needs_review"
+
+
+class ObservabilityFailureType(StrEnum):
+    MISSING_METRIC_REFS = "observability_missing_metric_refs"
+    MISSING_TRACE_REFS = "observability_missing_trace_refs"
+    MISSING_ALERT_REFS = "observability_missing_alert_refs"
+    MISSING_RUNBOOK_REFS = "observability_missing_runbook_refs"
+    STALE_DASHBOARD_WATERMARK = "observability_stale_dashboard_watermark"
+    MISSING_DR_REFS = "observability_missing_dr_refs"
+    MISSING_REDACTION_REFS = "observability_missing_redaction_refs"
+    MISSING_REPLAY_REFS = "observability_missing_replay_refs"
+    SECRET_LEAK_DETECTED = "observability_secret_leak_detected"
+    UNSAFE_RUNBOOK_WITHOUT_APPROVAL = "observability_unsafe_runbook_without_approval"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"
@@ -489,6 +557,10 @@ class RecoveryActionType(StrEnum):
     PAUSE_SITE = "pause_site"
     SCALE_WORKER_POOL = "scale_worker_pool"
     RESTORE_FROM_BACKUP = "restore_from_backup"
+    RESTORE_OBSERVABILITY_SIGNAL = "restore_observability_signal"
+    REFRESH_DASHBOARD_PROJECTION = "refresh_dashboard_projection"
+    REDACT_SENSITIVE_CONTEXT = "redact_sensitive_context"
+    RUN_OBSERVABILITY_RUNBOOK = "run_observability_runbook"
     REQUEST_REVIEW = "request_review"
     IGNORE = "ignore"
 

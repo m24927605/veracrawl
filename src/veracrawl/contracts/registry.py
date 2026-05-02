@@ -74,6 +74,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_events_ref: str | None = None
     expected_graph_ref: str | None = None
     expected_dr_restore_ref: str | None = None
+    expected_observability_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -267,6 +268,53 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         privacy=True,
         tests=["tests/contract/test_ops_contracts.py"],
     ),
+    "ObservabilitySignal": _contract(
+        "ObservabilitySignal",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_operational_observability_contracts.py"],
+    ),
+    "MetricSample": _contract(
+        "MetricSample",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        tests=["tests/contract/test_operational_observability_contracts.py"],
+    ),
+    "TraceSpan": _contract(
+        "TraceSpan",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_operational_observability_contracts.py"],
+    ),
+    "AlertRecord": _contract(
+        "AlertRecord",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_operational_observability_contracts.py"],
+    ),
+    "RunbookAction": _contract(
+        "RunbookAction",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_operational_observability_contracts.py"],
+    ),
+    "ObservabilityReport": _contract(
+        "ObservabilityReport",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_operational_observability_contracts.py"],
+    ),
     "QualityReport": _contract(
         "QualityReport",
         OwnerService.OPS,
@@ -299,6 +347,12 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "ops",
         tests=["tests/integration/test_operational_dr_fixtures.py"],
+    ),
+    "ObservabilityFixtureManifest": _contract(
+        "ObservabilityFixtureManifest",
+        OwnerService.TESTS,
+        "ops",
+        tests=["tests/integration/test_operational_observability_fixtures.py"],
     ),
     "ExportTargetSpec": _contract(
         "ExportTargetSpec",
@@ -1539,6 +1593,61 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["dr_restore_fixture_manifest_recorded"],
         ),
+        "record_observability_signal": CommandTypeRegistration(
+            command_type="record_observability_signal",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="ObservabilitySignal",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["observability"],
+            emitted_event_types=["observability_signal_recorded"],
+        ),
+        "record_metric_sample": CommandTypeRegistration(
+            command_type="record_metric_sample",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="MetricSample",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["observability"],
+            emitted_event_types=["metric_sample_recorded"],
+        ),
+        "record_trace_span": CommandTypeRegistration(
+            command_type="record_trace_span",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="TraceSpan",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["observability"],
+            emitted_event_types=["trace_span_recorded"],
+        ),
+        "record_alert_record": CommandTypeRegistration(
+            command_type="record_alert_record",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="AlertRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["observability_alert"],
+            emitted_event_types=["alert_recorded"],
+        ),
+        "record_runbook_action": CommandTypeRegistration(
+            command_type="record_runbook_action",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="RunbookAction",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["ops_recovery", "observability"],
+            approval_required=True,
+            emitted_event_types=["runbook_action_recorded"],
+        ),
+        "record_observability_report": CommandTypeRegistration(
+            command_type="record_observability_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="ObservabilityReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["observability_reported"],
+        ),
+        "record_observability_fixture_manifest": CommandTypeRegistration(
+            command_type="record_observability_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="ObservabilityFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["observability_fixture_manifest_recorded"],
+        ),
         "record_quality_report": CommandTypeRegistration(
             command_type="record_quality_report",
             owner_service=OwnerService.OPS,
@@ -1912,6 +2021,13 @@ EVENT_TYPES.update(
             "dr_restore_run_recorded",
             "dr_restore_reported",
             "dr_restore_fixture_manifest_recorded",
+            "observability_signal_recorded",
+            "metric_sample_recorded",
+            "trace_span_recorded",
+            "alert_recorded",
+            "runbook_action_recorded",
+            "observability_reported",
+            "observability_fixture_manifest_recorded",
             "quality_report_recorded",
             "ops_dashboard_snapshot_recorded",
             "ops_console_reported",
@@ -2539,6 +2655,34 @@ for _dr_fixture, _negative in {
     )
 
 
+for _observability_fixture, _negative in {
+    "observability-success": False,
+    "observability-runtime-unavailable": False,
+    "observability-data-surface-only": False,
+    "observability-missing-metrics": True,
+    "observability-missing-traces": True,
+    "observability-missing-alerts": True,
+    "observability-missing-runbook": True,
+    "observability-stale-dashboard-watermark": True,
+    "observability-missing-dr-refs": True,
+    "observability-missing-redaction": True,
+    "observability-missing-replay": True,
+    "observability-secret-leak": True,
+    "observability-unsafe-runbook-without-approval": True,
+}.items():
+    _base = f"tests/fixtures/{_observability_fixture}"
+    FIXTURE_ORACLES[_observability_fixture] = FixtureOracleRegistration(
+        fixture_id=_observability_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_observability_ref=f"{_base}/oracles/expected_observability.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+
 def _target_area(
     area: str,
     owner: OwnerService,
@@ -2730,10 +2874,17 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "DRRestorePlan",
             "DRRestoreRun",
             "DRRestoreReport",
+            "ObservabilitySignal",
+            "MetricSample",
+            "TraceSpan",
+            "AlertRecord",
+            "RunbookAction",
+            "ObservabilityReport",
             "QualityReport",
             "OpsDashboardSnapshot",
             "OpsConsoleReport",
             "DRRestoreFixtureManifest",
+            "ObservabilityFixtureManifest",
         ],
     ),
     "artifact_lifecycle": _target_area(
@@ -2770,6 +2921,26 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "FailureRecord",
             "RecoveryAction",
             "RuntimeInfrastructureReport",
+        ],
+    ),
+    "operational_observability_gate": _target_area(
+        "operational_observability_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "ObservabilitySignal",
+            "MetricSample",
+            "TraceSpan",
+            "AlertRecord",
+            "RunbookAction",
+            "ObservabilityReport",
+            "ObservabilityFixtureManifest",
+            "FailureRecord",
+            "RecoveryAction",
+            "OpsConsoleReport",
+            "OpsDashboardSnapshot",
+            "QualityReport",
+            "DRRestoreReport",
         ],
     ),
     "durable_persistence": _target_area(

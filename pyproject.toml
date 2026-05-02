@@ -50,6 +50,7 @@ veracrawl-queue-broker = "veracrawl.cli.queue_broker:main"
 veracrawl-object-store = "veracrawl.cli.object_store:main"
 veracrawl-infrastructure = "veracrawl.cli.infrastructure:main"
 veracrawl-dr = "veracrawl.cli.dr:main"
+veracrawl-observability = "veracrawl.cli.observability:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

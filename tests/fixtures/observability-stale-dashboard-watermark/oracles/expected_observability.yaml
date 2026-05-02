@@ -1,0 +1,1 @@
+{"expected_result":"fail","required_missing_ref_fields":["projection_watermark_refs"],"expected_failure_type":"observability_stale_dashboard_watermark","required_stale_projection_refs":true}

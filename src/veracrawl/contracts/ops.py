@@ -8,11 +8,15 @@ from pydantic import Field, field_validator, model_validator
 
 from veracrawl.contracts.common import Ref, TimestampedModel, utc_now
 from veracrawl.contracts.enums import (
+    AlertStatus,
     CompletenessResult,
     DRRestoreFailureType,
     DRRestorePhase,
     DRRestorePhaseStatus,
     DRRestoreRunStatus,
+    ObservabilityFailureType,
+    ObservabilityMetricKind,
+    ObservabilitySignalType,
     OpsDashboardType,
     OpsFailureType,
     OpsRecoveryStatus,
@@ -22,6 +26,9 @@ from veracrawl.contracts.enums import (
     ReviewItemStatus,
     ReviewItemType,
     ReviewPriority,
+    RunbookActionStatus,
+    TraceSpanKind,
+    TraceSpanStatus,
 )
 
 
@@ -29,6 +36,28 @@ def _require_utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timestamp must be timezone-aware")
     return value
+
+
+_SENSITIVE_MARKERS = (
+    "password",
+    "secret",
+    "token=",
+    "api_key",
+    "aws_access_key",
+    "aws_secret",
+    "postgres://",
+    "redis://:",
+    "s3://",
+    "raw_prompt:",
+    "raw_artifact:",
+)
+
+
+def _ensure_no_sensitive_values(values: list[str], field_name: str) -> None:
+    for value in values:
+        lowered = value.lower()
+        if any(marker in lowered for marker in _SENSITIVE_MARKERS):
+            raise ValueError(f"{field_name} contains unredacted sensitive value")
 
 
 class ReviewItem(TimestampedModel):
@@ -166,6 +195,9 @@ class RecoveryAction(TimestampedModel):
             RecoveryActionType.PAUSE_SITE,
             RecoveryActionType.SCALE_WORKER_POOL,
             RecoveryActionType.RESTORE_FROM_BACKUP,
+            RecoveryActionType.REFRESH_DASHBOARD_PROJECTION,
+            RecoveryActionType.REDACT_SENSITIVE_CONTEXT,
+            RecoveryActionType.RUN_OBSERVABILITY_RUNBOOK,
         }
         if self.action_type in side_effecting:
             if not self.policy_decision_refs or not self.approval_decision_refs:
@@ -383,6 +415,275 @@ class DRRestoreFixtureManifest(TimestampedModel):
             raise ValueError("DR restore fixture must support target profile")
         if self.negative_case and self.expected_completion_result != CompletenessResult.FAIL:
             raise ValueError("negative DR restore fixture must expect fail")
+        if self.expected_failure_type is not None and not self.negative_case:
+            raise ValueError("expected failure type requires negative case")
+        return self
+
+
+class ObservabilitySignal(TimestampedModel):
+    id: str
+    signal_type: ObservabilitySignalType
+    owner_service_ref: Ref
+    severity: OpsSeverity
+    run_ref: Ref
+    source_ref: Ref
+    metric_refs: list[Ref] = Field(default_factory=list)
+    trace_refs: list[Ref] = Field(default_factory=list)
+    alert_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    redaction_map_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref
+    payload_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_observability_signal(self) -> ObservabilitySignal:
+        if not self.owner_service_ref or not self.run_ref or not self.source_ref:
+            raise ValueError("observability signal requires owner, run, and source refs")
+        if not self.policy_decision_refs:
+            raise ValueError("observability signal requires policy refs")
+        if not self.redaction_map_refs:
+            raise ValueError("observability signal requires redaction refs")
+        if self.severity in {OpsSeverity.HIGH, OpsSeverity.CRITICAL}:
+            required = {
+                "metric_refs": self.metric_refs,
+                "trace_refs": self.trace_refs,
+                "alert_refs": self.alert_refs,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise ValueError(f"high-severity signal missing refs: {missing}")
+        _ensure_no_sensitive_values(self.payload_refs, "observability signal payload refs")
+        return self
+
+
+class MetricSample(TimestampedModel):
+    id: str
+    metric_name: str
+    metric_kind: ObservabilityMetricKind
+    value: float
+    unit: str
+    run_ref: Ref
+    owner_service_ref: Ref
+    timestamp_ref: Ref
+    threshold_ref: Ref
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    trace_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_metric_sample(self) -> MetricSample:
+        if not self.metric_name or not self.unit:
+            raise ValueError("metric sample requires name and unit")
+        if not self.run_ref or not self.owner_service_ref or not self.timestamp_ref:
+            raise ValueError("metric sample requires run, owner, and timestamp refs")
+        if not self.threshold_ref:
+            raise ValueError("metric sample requires threshold ref")
+        if not self.policy_decision_refs:
+            raise ValueError("metric sample requires policy refs")
+        if not self.trace_refs:
+            raise ValueError("metric sample requires trace refs")
+        return self
+
+
+class TraceSpan(TimestampedModel):
+    id: str
+    span_name: str
+    span_kind: TraceSpanKind
+    run_ref: Ref
+    parent_span_ref: Ref | None = None
+    command_ref: Ref | None = None
+    event_ref: Ref | None = None
+    owner_service_ref: Ref
+    status: TraceSpanStatus
+    duration_ms: int
+    redacted_attribute_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_trace_span(self) -> TraceSpan:
+        if self.duration_ms < 0:
+            raise ValueError("trace span duration must be non-negative")
+        if not self.span_name or not self.run_ref or not self.owner_service_ref:
+            raise ValueError("trace span requires name, run, and owner refs")
+        if self.span_kind == TraceSpanKind.COMMAND and not self.command_ref:
+            raise ValueError("command span requires command ref")
+        if self.span_kind == TraceSpanKind.EVENT and not self.event_ref:
+            raise ValueError("event span requires event ref")
+        if self.status == TraceSpanStatus.ERROR and not self.failure_record_refs:
+            raise ValueError("error trace span requires failure refs")
+        if not self.redacted_attribute_refs:
+            raise ValueError("trace span requires redacted attribute refs")
+        if not self.policy_decision_refs:
+            raise ValueError("trace span requires policy refs")
+        _ensure_no_sensitive_values(self.redacted_attribute_refs, "trace span attributes")
+        return self
+
+
+class AlertRecord(TimestampedModel):
+    id: str
+    alert_type: str
+    severity: OpsSeverity
+    status: AlertStatus
+    run_ref: Ref
+    metric_refs: list[Ref] = Field(default_factory=list)
+    trace_refs: list[Ref] = Field(default_factory=list)
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    dr_restore_report_refs: list[Ref] = Field(default_factory=list)
+    runbook_action_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref
+    resolution_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_alert_record(self) -> AlertRecord:
+        if not self.alert_type or not self.run_ref:
+            raise ValueError("alert record requires type and run ref")
+        if not self.metric_refs or not self.trace_refs:
+            raise ValueError("alert record requires metric and trace refs")
+        if not self.policy_decision_refs:
+            raise ValueError("alert record requires policy refs")
+        if self.status in {AlertStatus.FIRING, AlertStatus.NEEDS_REVIEW}:
+            if not self.failure_record_refs or not self.runbook_action_refs:
+                raise ValueError("firing alert requires failure and runbook refs")
+        if "recovery" in self.alert_type and not self.dr_restore_report_refs:
+            raise ValueError("recovery alert requires DR refs")
+        if self.status == AlertStatus.RESOLVED and not self.resolution_refs:
+            raise ValueError("resolved alert requires resolution refs")
+        return self
+
+
+class RunbookAction(TimestampedModel):
+    id: str
+    action_type: str
+    status: RunbookActionStatus
+    run_ref: Ref
+    alert_ref: Ref
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    recovery_action_refs: list[Ref] = Field(default_factory=list)
+    dr_restore_report_refs: list[Ref] = Field(default_factory=list)
+    side_effecting: bool = False
+    approval_decision_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_refs: list[Ref] = Field(default_factory=list)
+    event_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref
+
+    @model_validator(mode="after")
+    def validate_runbook_action(self) -> RunbookAction:
+        if not self.action_type or not self.run_ref or not self.alert_ref:
+            raise ValueError("runbook action requires action, run, and alert refs")
+        if not self.policy_decision_refs:
+            raise ValueError("runbook action requires policy refs")
+        if self.side_effecting and not self.approval_decision_refs:
+            raise ValueError("side-effecting runbook action requires approval refs")
+        if self.status == RunbookActionStatus.EXECUTED:
+            if not self.command_refs or not self.event_refs:
+                raise ValueError("executed runbook action requires command and event refs")
+        if self.status == RunbookActionStatus.RECOMMENDED:
+            if not (
+                self.failure_record_refs
+                or self.recovery_action_refs
+                or self.dr_restore_report_refs
+            ):
+                raise ValueError("recommended runbook action requires incident refs")
+        return self
+
+
+class ObservabilityReport(TimestampedModel):
+    id: str
+    run_ref: Ref
+    signal_refs: list[Ref] = Field(default_factory=list)
+    metric_sample_refs: list[Ref] = Field(default_factory=list)
+    trace_span_refs: list[Ref] = Field(default_factory=list)
+    alert_record_refs: list[Ref] = Field(default_factory=list)
+    runbook_action_refs: list[Ref] = Field(default_factory=list)
+    quality_report_refs: list[Ref] = Field(default_factory=list)
+    cost_metric_refs: list[Ref] = Field(default_factory=list)
+    dashboard_snapshot_refs: list[Ref] = Field(default_factory=list)
+    projection_watermark_refs: list[Ref] = Field(default_factory=list)
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    recovery_action_refs: list[Ref] = Field(default_factory=list)
+    dr_restore_report_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    redaction_map_refs: list[Ref] = Field(default_factory=list)
+    collector_handoff_refs: list[Ref] = Field(default_factory=list)
+    telemetry_backend_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    contract_only_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    stale_projection_refs: list[Ref] = Field(default_factory=list)
+    unredacted_sensitive_fields: list[str] = Field(default_factory=list)
+    unsafe_runbook_action_refs: list[Ref] = Field(default_factory=list)
+    operator_status: str
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_observability_report(self) -> ObservabilityReport:
+        if self.result == CompletenessResult.PASS:
+            required = {
+                "signal_refs": self.signal_refs,
+                "metric_sample_refs": self.metric_sample_refs,
+                "trace_span_refs": self.trace_span_refs,
+                "alert_record_refs": self.alert_record_refs,
+                "runbook_action_refs": self.runbook_action_refs,
+                "quality_report_refs": self.quality_report_refs,
+                "cost_metric_refs": self.cost_metric_refs,
+                "dashboard_snapshot_refs": self.dashboard_snapshot_refs,
+                "projection_watermark_refs": self.projection_watermark_refs,
+                "failure_record_refs": self.failure_record_refs,
+                "recovery_action_refs": self.recovery_action_refs,
+                "dr_restore_report_refs": self.dr_restore_report_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "redaction_map_refs": self.redaction_map_refs,
+                "collector_handoff_refs": self.collector_handoff_refs,
+                "telemetry_backend_refs": self.telemetry_backend_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.contract_only_refs
+                or self.missing_ref_fields
+                or self.stale_projection_refs
+                or self.unredacted_sensitive_fields
+                or self.unsafe_runbook_action_refs
+            ):
+                raise ValueError(f"passing observability report missing refs: {missing}")
+        elif self.result == CompletenessResult.NEEDS_REVIEW:
+            if not (self.contract_only_refs or self.missing_ref_fields):
+                raise ValueError("needs-review observability report requires review refs")
+        elif not (
+            self.failure_record_refs
+            or self.missing_ref_fields
+            or self.stale_projection_refs
+            or self.unredacted_sensitive_fields
+            or self.unsafe_runbook_action_refs
+        ):
+            raise ValueError("failed observability report requires failure details")
+        return self
+
+
+class ObservabilityFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: ObservabilityFailureType | None = None
+    negative_case: bool = False
+
+    @model_validator(mode="after")
+    def validate_fixture(self) -> ObservabilityFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("observability fixture must support target profile")
+        if self.negative_case and self.expected_completion_result != CompletenessResult.FAIL:
+            raise ValueError("negative observability fixture must expect fail")
         if self.expected_failure_type is not None and not self.negative_case:
             raise ValueError("expected failure type requires negative case")
         return self

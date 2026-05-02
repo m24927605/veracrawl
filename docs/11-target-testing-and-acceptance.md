@@ -1137,6 +1137,9 @@ Acceptance gates:
 - operational DR fixtures prove ordered restore plans, restore runs, metadata restore, artifact reachability, event replay, projection rebuild, export reconciliation, queue recovery, failure/recovery, policy, command, event cursor, outbox, validation, and replay refs only through a live integrated infrastructure report or Docker-backed gate
 - no-runtime DR fixtures must remain `needs_review` and contract-only
 - negative DR fixtures for missing metadata, artifact reachability, event replay, projection rebuild, export reconciliation, unresolved refs, data loss, and unsafe recovery without approval must fail deterministically
+- operational observability fixtures prove metrics, traces, alerts, runbooks, quality/cost signals, dashboard watermarks, failure/recovery refs, DR refs, policy, command, event cursor, outbox, redaction, collector handoff, telemetry backend, and replay refs through canonical VeraCrawl observability contracts
+- no-runtime observability and data-surface-only observability fixtures must remain `needs_review` and contract-only; an ops console report alone cannot be labeled operational observability pass
+- negative observability fixtures for missing metrics, missing traces, missing alerts, missing runbook actions, stale dashboard watermarks, missing DR refs, missing redaction refs, missing replay refs, secret leakage, and unsafe runbook without approval must fail deterministically
 
 ## Non-deceptive Completion Checklist
 

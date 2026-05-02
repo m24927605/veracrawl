@@ -358,6 +358,16 @@ Required acceptance:
   verified
 - no live integrated infrastructure report, unresolved refs, data loss, missing
   phase refs, or unsafe recovery without approval blocks operational DR pass
+- operational observability gates must prove `ObservabilitySignal`,
+  `MetricSample`, `TraceSpan`, `AlertRecord`, `RunbookAction`, and
+  `ObservabilityReport` refs across metrics, traces, alerts, runbooks,
+  quality/cost signals, dashboard watermarks, failure/recovery actions, DR
+  status, redaction, backend/collector handoff, policy, command, event cursor,
+  outbox, and replay refs before a capability can be labeled operational
+- no telemetry runtime/backend handoff returns `needs_review`; ops-console-only
+  data, missing metrics, traces, alerts, runbooks, dashboard watermarks, DR refs,
+  redaction refs, replay refs, secret leakage, or unsafe runbook actions block
+  operational observability pass
 
 ## Completion States
 

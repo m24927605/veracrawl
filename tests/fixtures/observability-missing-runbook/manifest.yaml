@@ -1,0 +1,1 @@
+{"id":"observability-missing-runbook","scenario":"observability-missing-runbook","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"observability_missing_runbook_refs","expected_failure_type":"observability_missing_runbook_refs","negative_case":true}

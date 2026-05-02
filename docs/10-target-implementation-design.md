@@ -925,6 +925,16 @@ Operational disaster recovery gate slice:
 - no-runtime DR returns `needs_review`; missing metadata, artifact, event replay, projection, export, unresolved refs, data loss, and unsafe recovery without approval are deterministic failures.
 - this slice does not implement managed cloud backup, cross-region replication, deployment automation, production observability, alerting backends, on-call runbook automation, or production worker fleets. Those remain separate target gates.
 
+Operational observability gate slice:
+
+- `veracrawl.runtime_support.observability` is core-owned and imports only VeraCrawl contracts.
+- `ObservabilitySignal` records owner service, severity, source, metric, trace, alert, policy, redaction, and replay refs for platform-visible signals.
+- `MetricSample`, `TraceSpan`, `AlertRecord`, and `RunbookAction` record backend-neutral operational measurements, execution correlation, alert state, and operator/recovery action refs.
+- `ObservabilityReport` can claim `pass` only when signal, metric, trace, alert, runbook, quality, cost, dashboard, projection watermark, failure/recovery, DR restore, policy, command, event cursor, outbox, redaction, collector handoff, telemetry backend, and replay refs are present.
+- `veracrawl-observability` runs success, no-runtime, data-surface-only, and negative observability fixtures without static dependencies on Prometheus, OpenTelemetry, Grafana, cloud monitoring SDKs, browser libraries, model SDKs, or agent frameworks.
+- no-runtime and ops-console-only observability return `needs_review`; missing metrics, traces, alerts, runbooks, dashboard watermarks, DR refs, redaction refs, replay refs, secret leakage, and unsafe runbook actions without approval are deterministic failures.
+- this slice does not implement managed telemetry storage, OpenTelemetry collector deployment, Grafana dashboards, cloud monitoring accounts, paging integrations, on-call automation, deployment automation, production worker fleets, browser rendering, model SDK integration, or concrete agent framework integration. Those remain separate target gates.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

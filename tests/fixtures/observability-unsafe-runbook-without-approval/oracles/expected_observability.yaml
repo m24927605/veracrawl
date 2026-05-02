@@ -1,0 +1,1 @@
+{"expected_result":"fail","required_missing_ref_fields":["approval_decision_refs"],"expected_failure_type":"observability_unsafe_runbook_without_approval","required_unsafe_runbook_action_refs":true}

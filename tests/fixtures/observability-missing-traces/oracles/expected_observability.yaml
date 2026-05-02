@@ -1,0 +1,1 @@
+{"expected_result":"fail","required_missing_ref_fields":["trace_span_refs"],"expected_failure_type":"observability_missing_trace_refs"}

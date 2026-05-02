@@ -1,0 +1,1 @@
+{"expected_events":["observability_signal_recorded","metric_sample_recorded","trace_span_recorded","alert_recorded","runbook_action_recorded","observability_reported"]}
