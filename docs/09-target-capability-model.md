@@ -338,6 +338,12 @@ Required acceptance:
   labeled verified
 - no live Redis/Valkey URL/runtime means `needs_review`; persistence queue refs
   alone cannot be labeled an operational broker pass
+- operational object store adapters must prove put, duplicate put after reopen,
+  get, head, list, delete, content digest verification, lifecycle, retention,
+  privacy, policy, and replay refs against a live object store before they can
+  be labeled verified
+- no live S3-compatible endpoint/runtime means `needs_review`; deterministic
+  fixture artifact refs alone cannot be labeled an operational object store pass
 
 ## Completion States
 

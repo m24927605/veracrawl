@@ -1,0 +1,1 @@
+{"id":"object-store-missing-digest","scenario":"object-store-missing-digest","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"object_store_missing_digest","expected_failure_type":"object_store_missing_digest","negative_case":true}

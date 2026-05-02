@@ -24,6 +24,9 @@ postgres = [
 queue-redis = [
   "redis>=5.0,<6",
 ]
+object-s3 = [
+  "boto3>=1.34,<2",
+]
 
 [project.scripts]
 veracrawl-contracts = "veracrawl.cli.contracts:main"
@@ -44,6 +47,7 @@ veracrawl-scale = "veracrawl.cli.scale:main"
 veracrawl-persistence = "veracrawl.cli.persistence:main"
 veracrawl-persistence-adapter = "veracrawl.cli.persistence_adapter:main"
 veracrawl-queue-broker = "veracrawl.cli.queue_broker:main"
+veracrawl-object-store = "veracrawl.cli.object_store:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

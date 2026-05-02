@@ -45,6 +45,7 @@ Target contract manifest:
 | QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
 | PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
 | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
+| ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
 | FailureRecord, RecoveryAction, DriftEvent, QualityReport | required | failure, repair, drift, recovery, and operations are evented and reviewable |
 
 Target adapter types:
@@ -1182,6 +1183,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_queue_broker_adapter | ports | QueueBrokerAdapterSpec | BaseCommandPayload | queue names, broker capabilities, fencing, idempotency, fairness, backpressure, and policy refs validate | none | queue_broker_adapter_recorded | broker missing capability blocks operational target pass |
 | record_queue_broker_operation | scheduler | QueueBrokerOperationRecord | BaseCommandPayload | enqueue, duplicate enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, visibility, retry, fairness, backpressure, and policy refs validate | lease_required | queue_broker_operation_recorded | missing fencing, heartbeat, or dead-letter refs fail conformance |
 | record_queue_broker_conformance_report | review_replay | QueueBrokerConformanceReport | BaseCommandPayload | adapter, topology, item, broker operation, lease, heartbeat, ack/nack, dead-letter, fencing, retry, fairness, backpressure, policy, contract-only, and replay refs validate | expected_version | queue_broker_conformance_reported | runtime-unavailable brokers must report needs_review, not pass |
+| record_object_store_adapter | ports | ObjectStoreAdapterSpec | BaseCommandPayload | object store capabilities, bucket, namespace, digest, lifecycle, retention, privacy, and policy refs validate | none | object_store_adapter_recorded | adapter missing required object-store capability blocks target pass |
+| record_object_store_operation | artifact_lifecycle | ObjectStoreOperationRecord | BaseCommandPayload | put, duplicate put, get, head, list, delete, digest, etag, lifecycle, retention, privacy, and policy refs validate | none | object_store_operation_recorded | missing digest, read-after-write, or delete refs fail conformance |
+| record_object_store_conformance_report | review_replay | ObjectStoreConformanceReport | BaseCommandPayload | adapter, artifact, object operation, digest, read/head/list/delete, lifecycle, retention, privacy, policy, contract-only, and replay refs validate | expected_version | object_store_conformance_reported | runtime-unavailable object stores must report needs_review, not pass |
 | record_persistence_adapter | ports | PersistenceAdapterSpec | BaseCommandPayload | all persistence capabilities and port refs declared | none | persistence_adapter_recorded | adapter missing required capability blocks target profile |
 | record_persistence_transaction | runtime_events | PersistenceTransactionRecord | BaseCommandPayload | command/event/outbox/artifact/idempotency/queue refs validate | expected_version | persistence_transaction_recorded | non-atomic commit fails replay |
 | record_persistence_migration | runtime_events | PersistenceMigrationRecord | BaseCommandPayload | migration version, rollback plan, validation cursor, and failure refs validate | expected_version | persistence_migration_recorded | missing migration refs block adapter conformance pass |
@@ -1602,6 +1606,9 @@ Target state transition matrix:
 | QueueBrokerAdapterSpec | proposed -> recorded/superseded | record_queue_broker_adapter | ports | queue broker policy | broker capability and import boundary tests |
 | QueueBrokerOperationRecord | created append-only | record_queue_broker_operation | scheduler | lease, fencing, retry, dead-letter policy | queue broker operation contract tests |
 | QueueBrokerConformanceReport | created as pass/fail/needs_review; immutable after create | record_queue_broker_conformance_report | review_replay | broker conformance refs, no-runtime, and failure boundaries | queue broker fixture tests |
+| ObjectStoreAdapterSpec | proposed -> recorded/superseded | record_object_store_adapter | ports | artifact lifecycle and retention policy | object-store capability and import boundary tests |
+| ObjectStoreOperationRecord | created append-only | record_object_store_operation | artifact_lifecycle | lifecycle, retention, privacy policy | object-store operation contract tests |
+| ObjectStoreConformanceReport | created as pass/fail/needs_review; immutable after create | record_object_store_conformance_report | review_replay | object-store conformance refs, no-runtime, and failure boundaries | object-store fixture tests |
 | PersistenceAdapterSpec | proposed -> recorded/superseded | record_persistence_adapter | ports | persistence policy | capability and port boundary tests |
 | PersistenceMigrationRecord | created as applied/rolled_back/failed; immutable after create | record_persistence_migration | runtime_events | migration validation cursor and rollback plan | migration fixture tests |
 | PersistenceAdapterConformanceReport | created as pass/fail/needs_review; immutable after create | record_persistence_adapter_conformance_report | review_replay | adapter conformance refs and contract-only boundary | concrete adapter fixture tests |
@@ -3098,6 +3105,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | backpressure_signal_recorded, autoscaling_decided, scale_recovery_reported | ops/review_replay | BackpressureSignal/AutoscalingDecision/ScaleRecoveryReport | run | yes | ops, scheduler, replay |
 | persistence_adapter_recorded, persistence_transaction_recorded, persistence_migration_recorded, idempotency_persisted, persistent_queue_operation_recorded, persistence_runtime_reported, persistence_adapter_conformance_reported | runtime_events/scheduler/review_replay | PersistenceAdapterSpec/PersistenceTransactionRecord/PersistenceMigrationRecord/IdempotencyPersistenceRecord/PersistentQueueOperationRecord/PersistenceRuntimeReport/PersistenceAdapterConformanceReport | run | yes | replay, scheduler, ops |
 | queue_broker_adapter_recorded, queue_broker_operation_recorded, queue_broker_conformance_reported | ports/scheduler/review_replay | QueueBrokerAdapterSpec/QueueBrokerOperationRecord/QueueBrokerConformanceReport | run | yes | replay, scheduler, ops |
+| object_store_adapter_recorded, object_store_operation_recorded, object_store_conformance_reported | ports/artifact_lifecycle/review_replay | ObjectStoreAdapterSpec/ObjectStoreOperationRecord/ObjectStoreConformanceReport | artifact | yes | replay, artifact lifecycle, ops |
 | dr_restore_reported | ops | DRRestoreReport | run | yes | ops, audit |
 | recovery_action_started, recovery_action_completed, error_recorded | ops or owner service | FailureRecord/RecoveryAction | recovery_action | yes | ops, replay |
 
@@ -3121,6 +3129,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
 | queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |
+| object store events | ObjectStoreEventPayload | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport | adapter capability, put/get/head/list/delete, digest, lifecycle, no-runtime, failure, and replay status | endpoint, bucket credentials, and deleted content are redacted |
 | artifact lifecycle events | ArtifactLifecycleEventPayload | ArtifactLifecycleState | lifecycle/hold status | redaction/tombstone refs remain |
 | failure/recovery/ops events | OpsEventPayload | FailureRecord, RecoveryAction, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, DRRestoreReport | recovery/status fields | incident details follow audit policy |
 
@@ -3238,6 +3247,9 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | queue_broker_adapter_recorded | QueueBrokerEventPayload | QueueBrokerAdapterSpec | after required | queue names, capability refs, visibility timeout, policy refs | broker URL and credentials redacted |
 | queue_broker_operation_recorded | QueueBrokerEventPayload | QueueBrokerOperationRecord | after required | queue item, lease, fencing token hash/ref, visibility timeout, heartbeat, retry, dead-letter refs | fencing secret material redacted |
 | queue_broker_conformance_reported | QueueBrokerEventPayload | QueueBrokerConformanceReport | after required | adapter, topology, operation, lease, heartbeat, ack/nack, dead-letter, failure, contract-only, replay refs | stable refs remain |
+| object_store_adapter_recorded | ObjectStoreEventPayload | ObjectStoreAdapterSpec | after required | bucket ref, namespace ref, capability refs, policy refs | endpoint and credentials redacted |
+| object_store_operation_recorded | ObjectStoreEventPayload | ObjectStoreOperationRecord | after required | artifact ref, object key ref, digest, etag, read/delete refs, lifecycle refs | object content and credentials redacted |
+| object_store_conformance_reported | ObjectStoreEventPayload | ObjectStoreConformanceReport | after required | adapter, artifact, operation, digest, read/head/list/delete, lifecycle, contract-only, failure, replay refs | stable refs remain |
 | persistence_adapter_recorded | PersistenceEventPayload | PersistenceAdapterSpec | after required | capability refs, port refs, policy refs | concrete credentials redacted |
 | persistence_transaction_recorded | PersistenceEventPayload | PersistenceTransactionRecord | before optional, after required | transaction refs, command/event/outbox/artifact/idempotency/queue refs | stable refs remain |
 | persistence_migration_recorded | PersistenceEventPayload | PersistenceMigrationRecord | after required | version transition, rollback plan, validation cursor, failure refs | stable refs remain |
@@ -3487,6 +3499,98 @@ Rules:
 - a passing `ScaleRecoveryReport` requires queue topology, queue item, shard lease, backpressure, autoscaling, dead-letter, failure, recovery, DR restore, policy, command, event cursor, outbox, and replay refs.
 - non-pass reports must expose failure records or missing refs; scale failures cannot be hidden as successful throughput degradation.
 - scale decisions never satisfy publication evidence; they only explain scheduling, reliability, recovery, and throughput behavior.
+
+## ObjectStoreAdapterSpec
+
+```yaml
+ObjectStoreAdapterSpec:
+  id: string
+  adapter_kind: s3_compatible | s3_contract | external_object_store
+  capability_refs: list
+  bucket_ref: string
+  namespace_ref: string
+  content_addressing_supported: boolean
+  digest_verification_supported: boolean
+  lifecycle_supported: boolean
+  retention_policy_refs: list
+  privacy_policy_refs: list
+  policy_decision_refs: list
+  created_at: timestamp
+```
+
+## ObjectStoreOperationRecord
+
+```yaml
+ObjectStoreOperationRecord:
+  id: string
+  adapter_ref: string
+  operation: put | duplicate_put | get | head | list | delete
+  artifact_ref: string
+  object_key_ref: string
+  content_digest_ref: string
+  size_bytes: integer
+  etag_ref: string
+  read_result_ref: string
+  duplicate_of_ref: string
+  deletion_marker_ref: string
+  lifecycle_state_ref: string
+  retention_policy_ref: string
+  privacy_policy_ref: string
+  policy_decision_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  created_at: timestamp
+```
+
+## ObjectStoreConformanceReport
+
+```yaml
+ObjectStoreConformanceReport:
+  id: string
+  adapter_ref: string
+  adapter_kind: s3_compatible | s3_contract | external_object_store
+  artifact_refs: list
+  object_operation_refs: list
+  content_digest_refs: list
+  read_result_refs: list
+  head_refs: list
+  list_refs: list
+  delete_refs: list
+  lifecycle_state_refs: list
+  retention_policy_refs: list
+  privacy_policy_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  policy_decision_refs: list
+  contract_only_refs: list
+  replay_bundle_ref: string
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## ObjectStoreFixtureManifest
+
+```yaml
+ObjectStoreFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: object_store_missing_digest | object_store_missing_read_after_write | object_store_missing_delete_marker
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Rules:
+
+- a passing `ObjectStoreConformanceReport` requires adapter, artifact, object operation, content digest, read, head, list, delete, lifecycle, retention, privacy, policy, and replay refs.
+- `s3-object-store-runtime-unavailable` returns `needs_review` with `contract_only_refs`; no live endpoint/runtime may be labeled `pass`.
+- duplicate put after adapter reopen must return a duplicate operation and must not create a second object.
+- object store refs do not satisfy publication evidence; they only prove artifact storage, digest verification, lifecycle, retention, recovery, and replay behavior.
+- S3-compatible clients stay behind `veracrawl.adapters.object_stores`; core imports only contracts and ports.
 
 ## QueueBrokerAdapterSpec
 

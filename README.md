@@ -90,6 +90,11 @@ contracts, a core conformance harness, a Redis adapter behind optional runtime
 loading, queue broker operation records, no-runtime `needs_review` reporting,
 negative broker fixtures, live Redis/Docker gates, and dynamic CLI loading
 without importing queue clients into core.
+The operational object store adapter spine adds S3-compatible artifact storage
+contracts, a core conformance harness, a MinIO/S3 adapter behind optional runtime
+loading, object operation records, no-runtime `needs_review` reporting, negative
+object-store fixtures, live MinIO/Docker gates, and dynamic CLI loading without
+importing object-store SDKs into core.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -184,6 +189,13 @@ backpressure, policy, and replay refs. It can claim `pass` only against an
 explicit live Redis URL or Docker-backed live gate. It is not a claim that
 managed Redis, Kafka, cloud queues, production autoscaling, production worker
 fleets, or observability backends are production-ready.
+The operational object store adapter spine proves S3-compatible artifact storage
+semantics for put, duplicate put after reopen, get, head, list, delete, content
+digest verification, lifecycle, retention, privacy, policy, and replay refs. It
+can claim `pass` only against an explicit live S3-compatible endpoint or
+Docker-backed MinIO gate. It is not a claim that managed S3, cloud IAM, CDN,
+encryption key management, production retention workers, or observability
+backends are production-ready.
 
 Run the local foundation gate with Python 3.12:
 
@@ -576,6 +588,48 @@ Run the Docker-backed live Redis integration gate:
 ```sh
 VERACRAWL_REDIS_DOCKER=1 uv run --python python3.12 --extra dev --extra queue-redis \
   pytest tests/integration/test_redis_queue_broker_live.py
+```
+
+Run object store no-runtime and negative fixtures:
+
+```sh
+for fixture in \
+  s3-object-store-runtime-unavailable \
+  object-store-missing-digest \
+  object-store-missing-read-after-write \
+  object-store-missing-delete-marker
+do
+  uv run --python python3.12 --extra dev --extra object-s3 veracrawl-object-store run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run operational S3-compatible object store fixtures with a live endpoint:
+
+```sh
+for fixture in \
+  s3-object-store-conformance-success \
+  s3-object-store-idempotency-success \
+  s3-object-store-delete-success
+do
+  uv run --python python3.12 --extra dev --extra object-s3 veracrawl-object-store run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --endpoint-url "$VERACRAWL_S3_ENDPOINT_URL" \
+    --bucket "$VERACRAWL_S3_BUCKET" \
+    --access-key-id "$VERACRAWL_S3_ACCESS_KEY_ID" \
+    --secret-access-key "$VERACRAWL_S3_SECRET_ACCESS_KEY" \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run the Docker-backed live MinIO integration gate:
+
+```sh
+VERACRAWL_S3_DOCKER=1 uv run --python python3.12 --extra dev --extra object-s3 \
+  pytest tests/integration/test_s3_object_store_live.py
 ```
 
 ## Safety Boundary

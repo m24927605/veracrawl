@@ -15,6 +15,7 @@ FORBIDDEN_CORE_IMPORTS = {
     "playwright",
     "selenium",
     "boto3",
+    "botocore",
     "psycopg",
     "sqlalchemy",
     "redis",

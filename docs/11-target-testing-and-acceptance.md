@@ -266,6 +266,29 @@ managed Redis operations, Kafka, cloud queues, production autoscaling,
 deployment, production worker fleets, metrics/tracing backends, or production
 observability.
 
+Operational object store adapter fixture contract:
+
+```text
+veracrawl-object-store run tests/fixtures/<object_store_fixture_id> --profile target --out .veracrawl-test-runs/<object_store_fixture_id>
+```
+
+Required object store fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| s3-object-store-conformance-success | live S3-compatible adapter proves put, get, head, list, delete, digest, lifecycle, retention, privacy, policy, and replay refs with `pass` |
+| s3-object-store-idempotency-success | reopened live S3-compatible adapter dedupes duplicate put and does not create a second object |
+| s3-object-store-delete-success | live S3-compatible adapter deletes the object, records delete/lifecycle refs, and leaves zero fixture objects |
+| s3-object-store-runtime-unavailable | no live endpoint/runtime returns `needs_review` and must not claim operational pass |
+| object-store-missing-digest | missing digest refs fail |
+| object-store-missing-read-after-write | missing read-after-write refs fail |
+| object-store-missing-delete-marker | missing delete marker or lifecycle refs fail |
+
+This acceptance proves operational S3-compatible/MinIO object store semantics
+only when a live endpoint or Docker-backed MinIO gate is executed. It does not
+prove managed S3 operations, cloud IAM, CDN behavior, encryption key
+management, deployment, metrics/tracing backends, or production observability.
+
 Source adapter and fetch runtime fixture contract:
 
 ```text
@@ -1052,6 +1075,10 @@ Acceptance gates:
 - concrete persistence adapter fixtures prove SQLite operational conformance through migrations, transactions, idempotency, event cursor, outbox, artifact index, queue lease/recovery, policy, and replay refs
 - Postgres adapter contract fixtures must remain `needs_review` and contract-only
 - operational Postgres adapter fixtures must pass only through a live DSN or Docker-backed Postgres conformance gate
+- operational queue broker fixtures prove Redis/Valkey-style enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, retry, fairness, backpressure, policy, and replay refs only through a live URL or Docker-backed gate
+- operational object store fixtures prove S3-compatible put, duplicate put after reopen, get, head, list, delete, content digest, lifecycle, retention, privacy, policy, and replay refs only through a live endpoint or Docker-backed MinIO gate
+- no-runtime object store fixtures must remain `needs_review` and contract-only
+- negative object store fixtures for missing digest, missing read-after-write, and missing delete marker/lifecycle refs must fail deterministically
 
 ## Non-deceptive Completion Checklist
 

@@ -36,6 +36,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "export",
         "ops",
         "artifact_lifecycle",
+        "operational_object_store_adapter",
         "durable_persistence",
         "production_persistence_queue_runtime",
         "concrete_persistence_adapters",

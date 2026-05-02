@@ -544,6 +544,33 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         privacy=True,
         tests=["tests/contract/test_runtime_command_event_contracts.py"],
     ),
+    "ObjectStoreAdapterSpec": _contract(
+        "ObjectStoreAdapterSpec",
+        OwnerService.PORTS,
+        "artifact",
+        mutation_allowed=True,
+        tests=["tests/contract/test_object_store_contracts.py"],
+    ),
+    "ObjectStoreOperationRecord": _contract(
+        "ObjectStoreOperationRecord",
+        OwnerService.ARTIFACT_LIFECYCLE,
+        "artifact",
+        mutation_allowed=True,
+        tests=["tests/contract/test_object_store_contracts.py"],
+    ),
+    "ObjectStoreConformanceReport": _contract(
+        "ObjectStoreConformanceReport",
+        OwnerService.REVIEW_REPLAY,
+        "artifact",
+        mutation_allowed=True,
+        tests=["tests/contract/test_object_store_contracts.py"],
+    ),
+    "ObjectStoreFixtureManifest": _contract(
+        "ObjectStoreFixtureManifest",
+        OwnerService.TESTS,
+        "artifact",
+        tests=["tests/integration/test_object_store_fixtures.py"],
+    ),
     "NormalizedDocument": _contract(
         "NormalizedDocument",
         OwnerService.NORMALIZE,
@@ -1607,6 +1634,29 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["queue_broker_conformance_reported"],
         ),
+        "record_object_store_adapter": CommandTypeRegistration(
+            command_type="record_object_store_adapter",
+            owner_service=OwnerService.PORTS,
+            target_aggregate_type="ObjectStoreAdapterSpec",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["artifact_lifecycle", "retention"],
+            emitted_event_types=["object_store_adapter_recorded"],
+        ),
+        "record_object_store_operation": CommandTypeRegistration(
+            command_type="record_object_store_operation",
+            owner_service=OwnerService.ARTIFACT_LIFECYCLE,
+            target_aggregate_type="ObjectStoreOperationRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["artifact_lifecycle", "retention"],
+            emitted_event_types=["object_store_operation_recorded"],
+        ),
+        "record_object_store_conformance_report": CommandTypeRegistration(
+            command_type="record_object_store_conformance_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="ObjectStoreConformanceReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["object_store_conformance_reported"],
+        ),
         "record_persistence_adapter": CommandTypeRegistration(
             command_type="record_persistence_adapter",
             owner_service=OwnerService.PORTS,
@@ -1798,6 +1848,9 @@ EVENT_TYPES.update(
             "queue_broker_adapter_recorded",
             "queue_broker_operation_recorded",
             "queue_broker_conformance_reported",
+            "object_store_adapter_recorded",
+            "object_store_operation_recorded",
+            "object_store_conformance_reported",
             "persistence_adapter_recorded",
             "persistence_transaction_recorded",
             "persistence_migration_recorded",
@@ -2284,6 +2337,26 @@ for _queue_broker_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _object_store_fixture, _negative in {
+    "s3-object-store-conformance-success": False,
+    "s3-object-store-idempotency-success": False,
+    "s3-object-store-delete-success": False,
+    "s3-object-store-runtime-unavailable": False,
+    "object-store-missing-digest": True,
+    "object-store-missing-read-after-write": True,
+    "object-store-missing-delete-marker": True,
+}.items():
+    _base = f"tests/fixtures/{_object_store_fixture}"
+    FIXTURE_ORACLES[_object_store_fixture] = FixtureOracleRegistration(
+        fixture_id=_object_store_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _persistence_fixture, _negative in {
     "persistence-transaction-success": False,
     "idempotent-replay-success": False,
@@ -2533,7 +2606,23 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
         "artifact_lifecycle",
         OwnerService.ARTIFACT_LIFECYCLE,
         "materialized",
-        materialized=["RuntimeArtifactRef"],
+        materialized=[
+            "RuntimeArtifactRef",
+            "ObjectStoreOperationRecord",
+            "ObjectStoreConformanceReport",
+        ],
+    ),
+    "operational_object_store_adapter": _target_area(
+        "operational_object_store_adapter",
+        OwnerService.PORTS,
+        "materialized",
+        materialized=[
+            "RuntimeArtifactRef",
+            "ObjectStoreAdapterSpec",
+            "ObjectStoreOperationRecord",
+            "ObjectStoreConformanceReport",
+            "ObjectStoreFixtureManifest",
+        ],
     ),
     "durable_persistence": _target_area(
         "durable_persistence",

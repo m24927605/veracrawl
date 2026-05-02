@@ -893,6 +893,18 @@ Operational queue broker adapter slice:
 - missing fencing tokens, missing heartbeat refs, and missing dead-letter refs are queue broker conformance failures.
 - this slice does not implement managed Redis operations, Kafka, cloud queues, production autoscaling, production worker fleets, deployment, metrics/tracing backends, or production observability. Those remain separate adapter and operations specs with their own live gates.
 
+Operational object store adapter slice:
+
+- `veracrawl.artifact_lifecycle.object_store_conformance` is core-owned and imports only VeraCrawl contracts/ports. It executes object store conformance without importing `veracrawl.adapters`, boto3, botocore, cloud SDKs, or object-store SDKs.
+- `ObjectStoreAdapterSpec` records adapter kind, capability refs, bucket/namespace refs, content-addressing support, digest verification support, lifecycle support, retention refs, privacy refs, and policy refs.
+- `ObjectStoreOperationRecord` records put, duplicate put, get, head, list, delete, artifact refs, object key refs, content digest refs, etag refs, read/head/list/delete refs, lifecycle refs, retention refs, privacy refs, policy refs, and failure/recovery refs.
+- `ObjectStoreConformanceReport` can claim `pass` only when a live operational object store produces adapter, artifact, object operation, content digest, read, head, list, delete, lifecycle, retention, privacy, policy, and replay refs.
+- `veracrawl.adapters.object_stores.s3` is the operational S3-compatible/MinIO adapter. It uses optional `boto3`/`botocore` only inside the adapter package and passes conformance only against an explicit live endpoint or Docker-backed MinIO gate.
+- `s3-object-store-runtime-unavailable` returns `needs_review` with `contract_only_refs`; no missing endpoint/runtime or contract-only object store path may claim operational pass.
+- `veracrawl-object-store` loads concrete object store modules dynamically so fixture execution does not create a core-to-adapter static dependency.
+- missing content digest refs, missing read-after-write refs, and missing delete/lifecycle refs are object store conformance failures.
+- this slice does not implement managed S3 operations, cloud IAM, CDN behavior, encryption key management, deployment, metrics/tracing backends, or production observability. Those remain separate adapter and operations specs with their own live gates.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

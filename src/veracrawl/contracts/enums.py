@@ -216,6 +216,41 @@ class PrivacyClassification(StrEnum):
     RESTRICTED = "restricted"
 
 
+class ObjectStoreAdapterKind(StrEnum):
+    S3_COMPATIBLE = "s3_compatible"
+    S3_CONTRACT = "s3_contract"
+    EXTERNAL_OBJECT_STORE = "external_object_store"
+
+
+class ObjectStoreCapability(StrEnum):
+    PUT = "put"
+    DUPLICATE_PUT = "duplicate_put"
+    GET = "get"
+    HEAD = "head"
+    LIST = "list"
+    DELETE = "delete"
+    CONTENT_DIGEST = "content_digest"
+    IDEMPOTENCY = "idempotency"
+    LIFECYCLE = "lifecycle"
+    RETENTION = "retention"
+    PRIVACY = "privacy"
+
+
+class ObjectStoreOperation(StrEnum):
+    PUT = "put"
+    DUPLICATE_PUT = "duplicate_put"
+    GET = "get"
+    HEAD = "head"
+    LIST = "list"
+    DELETE = "delete"
+
+
+class ObjectStoreConformanceFailureType(StrEnum):
+    OBJECT_STORE_MISSING_DIGEST = "object_store_missing_digest"
+    OBJECT_STORE_MISSING_READ_AFTER_WRITE = "object_store_missing_read_after_write"
+    OBJECT_STORE_MISSING_DELETE_MARKER = "object_store_missing_delete_marker"
+
+
 class ExtractionCandidateStatus(StrEnum):
     CANDIDATE = "candidate"
     EVIDENCE_BUILT = "evidence_built"

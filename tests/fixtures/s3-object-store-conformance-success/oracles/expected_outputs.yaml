@@ -1,0 +1,1 @@
+{"expected_operator_status":"s3_object_store_conformance_completed","requires_live_s3":true,"requires_digest":true,"requires_read_after_write":true,"requires_delete_marker":true}

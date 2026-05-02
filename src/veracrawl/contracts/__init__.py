@@ -21,7 +21,13 @@ from veracrawl.contracts.agent import (
     MultiAgentWorkflow,
     ToolCallTrace,
 )
-from veracrawl.contracts.artifact import RuntimeArtifactRef
+from veracrawl.contracts.artifact import (
+    ObjectStoreAdapterSpec,
+    ObjectStoreConformanceReport,
+    ObjectStoreFixtureManifest,
+    ObjectStoreOperationRecord,
+    RuntimeArtifactRef,
+)
 from veracrawl.contracts.browser import BrowserInteractionStep, BrowserSandboxPolicy
 from veracrawl.contracts.command import (
     BaseCommandPayload,
@@ -271,6 +277,10 @@ __all__ = [
     "OpsConsoleReport",
     "OpsDashboardSnapshot",
     "OpsFixtureManifest",
+    "ObjectStoreAdapterSpec",
+    "ObjectStoreConformanceReport",
+    "ObjectStoreFixtureManifest",
+    "ObjectStoreOperationRecord",
     "OutputManifest",
     "OutboxRecord",
     "OperationalTemporalMemoryRecord",

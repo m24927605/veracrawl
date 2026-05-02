@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/018-operational-queue-broker-adapter/plan.md`.
-Use it with `specs/018-operational-queue-broker-adapter/spec.md`,
-`specs/018-operational-queue-broker-adapter/research.md`,
-`specs/018-operational-queue-broker-adapter/data-model.md`,
-`specs/018-operational-queue-broker-adapter/contracts/`, and
-`specs/018-operational-queue-broker-adapter/quickstart.md` for VeraCrawl Operational Queue Broker Adapter work.
+Current active Spec Kit plan: `specs/019-operational-object-store-adapter/plan.md`.
+Use it with `specs/019-operational-object-store-adapter/spec.md`,
+`specs/019-operational-object-store-adapter/research.md`,
+`specs/019-operational-object-store-adapter/data-model.md`,
+`specs/019-operational-object-store-adapter/contracts/`, and
+`specs/019-operational-object-store-adapter/quickstart.md` for VeraCrawl Operational Object Store Adapter work.
 <!-- SPECKIT END -->
