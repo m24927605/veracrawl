@@ -1,0 +1,12 @@
+{
+  "adapter_type": "http",
+  "expected_completion_result": "needs_review",
+  "expected_operator_status": "source_rate_limited",
+  "expected_result_type": null,
+  "id": "source-rate-limited",
+  "negative_case": true,
+  "profile_refs": [
+    "target"
+  ],
+  "scenario": "rate-limited"
+}

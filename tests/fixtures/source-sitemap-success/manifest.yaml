@@ -1,0 +1,12 @@
+{
+  "adapter_type": "sitemap",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "source_acquired",
+  "expected_result_type": "discovered_links",
+  "id": "source-sitemap-success",
+  "negative_case": false,
+  "profile_refs": [
+    "target"
+  ],
+  "scenario": "success"
+}

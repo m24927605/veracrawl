@@ -31,6 +31,7 @@ from veracrawl.contracts.durable import (
 )
 from veracrawl.contracts.event import CrawlRunEvent, EventCursor, EventTypeSpec
 from veracrawl.contracts.evidence import EvidenceCoverageResult, EvidencePacket
+from veracrawl.contracts.fetch import DocumentArtifact, FetchAttempt, FetchResult, PageSnapshot
 from veracrawl.contracts.fixture import (
     BenchmarkFixtureManifest,
     DRRestoreOracle,
@@ -61,6 +62,12 @@ from veracrawl.contracts.source_adapter import (
     SourceAdapterResult,
     SourceAdapterSpec,
 )
+from veracrawl.contracts.source_runtime import (
+    RateLimitDecision,
+    SourceAcquisitionReport,
+    SourceFailureReport,
+    SourceFixtureManifest,
+)
 from veracrawl.contracts.verification import VerificationDecision
 
 __all__ = [
@@ -84,6 +91,7 @@ __all__ = [
     "CrawlRun",
     "CrawlRunEvent",
     "DRRestoreOracle",
+    "DocumentArtifact",
     "DurableCommandRecord",
     "DurableFixtureManifest",
     "DurableReplayRecoveryReport",
@@ -97,6 +105,8 @@ __all__ = [
     "EvidenceCoverageResult",
     "EvidencePacket",
     "ExtractionCandidate",
+    "FetchAttempt",
+    "FetchResult",
     "FailureInjectionPlan",
     "FrontierItem",
     "ModelCallTrace",
@@ -105,6 +115,7 @@ __all__ = [
     "NormalizedDocument",
     "OutputManifest",
     "OutboxRecord",
+    "PageSnapshot",
     "PolicyDecision",
     "PublishedOutput",
     "QueueLease",
@@ -115,9 +126,13 @@ __all__ = [
     "RuntimeArtifactRef",
     "RuntimeCompletionGate",
     "SchedulerRecoveryReport",
+    "RateLimitDecision",
+    "SourceAcquisitionReport",
     "SourceAdapterCommand",
     "SourceAdapterResult",
     "SourceAdapterSpec",
+    "SourceFailureReport",
+    "SourceFixtureManifest",
     "ThresholdSpec",
     "ToolCallTrace",
     "UnitOfWorkRecord",

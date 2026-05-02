@@ -341,6 +341,63 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         tests=["tests/unit/test_durable_replay_recovery.py"],
     ),
+    "FetchAttempt": _contract(
+        "FetchAttempt",
+        OwnerService.FETCH,
+        "fetch",
+        mutation_allowed=True,
+        tests=["tests/contract/test_source_adapter_runtime_contracts.py"],
+    ),
+    "FetchResult": _contract(
+        "FetchResult",
+        OwnerService.FETCH,
+        "fetch",
+        mutation_allowed=True,
+        tests=["tests/contract/test_source_adapter_runtime_contracts.py"],
+    ),
+    "PageSnapshot": _contract(
+        "PageSnapshot",
+        OwnerService.FETCH,
+        "fetch",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/integration/test_source_acquisition_runtime.py"],
+    ),
+    "DocumentArtifact": _contract(
+        "DocumentArtifact",
+        OwnerService.FETCH,
+        "fetch",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/integration/test_source_acquisition_runtime.py"],
+    ),
+    "RateLimitDecision": _contract(
+        "RateLimitDecision",
+        OwnerService.POLICY,
+        "source_runtime",
+        mutation_allowed=True,
+        tests=["tests/unit/test_source_policy_and_retry_gates.py"],
+    ),
+    "SourceFailureReport": _contract(
+        "SourceFailureReport",
+        OwnerService.FETCH,
+        "source_runtime",
+        mutation_allowed=True,
+        tests=["tests/unit/test_source_policy_and_retry_gates.py"],
+    ),
+    "SourceAcquisitionReport": _contract(
+        "SourceAcquisitionReport",
+        OwnerService.FETCH,
+        "source_runtime",
+        mutation_allowed=True,
+        tests=["tests/unit/test_source_replay_recovery.py"],
+    ),
+    "SourceFixtureManifest": _contract(
+        "SourceFixtureManifest",
+        OwnerService.TESTS,
+        "source_runtime",
+        tests=["tests/integration/test_source_acquisition_runtime.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -525,6 +582,29 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["durable_recovery_reported"],
         ),
+        "record_fetch_attempt": CommandTypeRegistration(
+            command_type="record_fetch_attempt",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="FetchAttempt",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_source"],
+            emitted_event_types=["fetch_attempt_recorded"],
+        ),
+        "record_fetch_result": CommandTypeRegistration(
+            command_type="record_fetch_result",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="FetchResult",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_source"],
+            emitted_event_types=["fetch_result_recorded"],
+        ),
+        "record_source_acquisition": CommandTypeRegistration(
+            command_type="record_source_acquisition",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="SourceAcquisitionReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["source_acquisition_reported"],
+        ),
     }
 )
 
@@ -587,6 +667,12 @@ EVENT_TYPES.update(
             "frontier_item_dead_lettered",
             "scheduler_recovery_reported",
             "durable_recovery_reported",
+            "fetch_attempt_recorded",
+            "fetch_result_recorded",
+            "page_snapshot_recorded",
+            "document_artifact_recorded",
+            "source_acquisition_reported",
+            "source_failure_reported",
         ]
     }
 )
@@ -812,6 +898,30 @@ for _durable_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _source_fixture, _negative in {
+    "source-http-success": False,
+    "source-sitemap-success": False,
+    "source-rss-success": False,
+    "source-api-success": False,
+    "source-document-success": False,
+    "source-blocked": True,
+    "source-rate-limited": True,
+    "source-adapter-mismatch": True,
+    "source-malformed-response": True,
+    "source-retry-exhausted": True,
+    "source-missing-artifact": True,
+}.items():
+    _base = f"tests/fixtures/{_source_fixture}"
+    FIXTURE_ORACLES[_source_fixture] = FixtureOracleRegistration(
+        fixture_id=_source_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -964,6 +1074,20 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
         OwnerService.SCHEDULER,
         "materialized",
         materialized=["FrontierItem", "QueueLease", "SchedulerRecoveryReport"],
+    ),
+    "source_acquisition": _target_area(
+        "source_acquisition",
+        OwnerService.FETCH,
+        "materialized",
+        materialized=[
+            "FetchAttempt",
+            "FetchResult",
+            "PageSnapshot",
+            "DocumentArtifact",
+            "RateLimitDecision",
+            "SourceFailureReport",
+            "SourceAcquisitionReport",
+        ],
     ),
 }
 

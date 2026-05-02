@@ -308,3 +308,41 @@ class DurableRecoveryStatus(StrEnum):
     INVALID_LEASE = "invalid_lease"
     MISSING_ARTIFACT = "missing_artifact"
     DEAD_LETTER = "dead_letter"
+
+
+class FetchAttemptStatus(StrEnum):
+    PLANNED = "planned"
+    SUCCEEDED = "succeeded"
+    BLOCKED = "blocked"
+    RATE_LIMITED = "rate_limited"
+    MALFORMED = "malformed"
+    RETRY_EXHAUSTED = "retry_exhausted"
+    FAILED = "failed"
+
+
+class FetchResultStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    BLOCKED = "blocked"
+    RATE_LIMITED = "rate_limited"
+    MALFORMED = "malformed"
+    FAILED = "failed"
+
+
+class RateLimitDecisionValue(StrEnum):
+    ALLOW = "allow"
+    RATE_LIMIT = "rate_limit"
+
+
+class SourceFailureType(StrEnum):
+    SOURCE_BLOCKED = "source_blocked"
+    SOURCE_RATE_LIMITED = "source_rate_limited"
+    ADAPTER_MISMATCH = "adapter_mismatch"
+    MALFORMED_RESPONSE = "malformed_response"
+    RETRY_EXHAUSTED = "retry_exhausted"
+    MISSING_RAW_ARTIFACT = "missing_raw_artifact"
+
+
+class SourceAcquisitionStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NEEDS_REVIEW = "needs_review"

@@ -151,6 +151,40 @@ without importing Postgres, Redis, Kafka, object storage, browser libraries, mod
 SDKs, or agent frameworks into core. Production adapters and migrations remain
 future specs.
 
+## Source Adapter And Fetch Runtime Slice
+
+The source adapter slice adds deterministic source acquisition on top of the
+durable scheduler foundation:
+
+- `veracrawl.contracts.fetch`: `FetchAttempt`, `FetchResult`, `PageSnapshot`, and
+  `DocumentArtifact` contracts for source acquisition outputs.
+- `veracrawl.contracts.source_runtime`: `RateLimitDecision`,
+  `SourceFailureReport`, `SourceAcquisitionReport`, and `SourceFixtureManifest`.
+- `veracrawl.fetch.acquisition`: owner-service source acquisition flow from
+  frontier lease to source adapter command, raw artifact ref, scheduler completion,
+  and replay-visible acquisition report.
+- `veracrawl.adapters.sources.deterministic`: deterministic fixture adapters for
+  HTTP, sitemap, RSS, API-like, and document-source families. These adapters prove
+  source-family semantics; they are not production network clients.
+- `veracrawl.review_replay.source`: source acquisition replay ref validation for
+  artifacts, policy, command records, event cursors, outbox, scheduler refs, and
+  durable recovery refs.
+- `veracrawl.cli.source`: `veracrawl-source run` fixture runner for source success
+  and negative acquisition scenarios.
+
+The core runtime depends on `SourceAdapterPort`, contracts, policy, scheduler,
+durable support, and replay validation. It must not import concrete browser,
+storage, queue, model SDK, or agent framework implementations. Concrete HTTP
+clients, browser engines, storage engines, queue systems, model providers, and
+agent frameworks must enter through adapters in future specs.
+
+This slice proves generic source acquisition semantics for deterministic fixtures:
+HTTP, sitemap, RSS, API-like, document-source, blocked source, rate-limited source,
+adapter mismatch, malformed response, retry exhaustion, and missing raw artifact.
+It does not prove production HTTP crawling, JavaScript browser rendering,
+distributed persistence, graph/memory intelligence, export delivery, or production
+scale readiness.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

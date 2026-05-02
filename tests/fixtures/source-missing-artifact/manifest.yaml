@@ -1,0 +1,12 @@
+{
+  "adapter_type": "http",
+  "expected_completion_result": "fail",
+  "expected_operator_status": "missing_raw_artifact",
+  "expected_result_type": null,
+  "id": "source-missing-artifact",
+  "negative_case": true,
+  "profile_refs": [
+    "target"
+  ],
+  "scenario": "missing-artifact"
+}

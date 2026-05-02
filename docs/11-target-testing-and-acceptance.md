@@ -188,6 +188,45 @@ This acceptance proves deterministic durable and scheduler semantics only. It do
 not prove production persistence adapters, distributed queueing, browser crawling,
 graph/memory intelligence, export delivery, or production scale readiness.
 
+Source adapter and fetch runtime fixture contract:
+
+```text
+veracrawl-source run tests/fixtures/<source_fixture_id> --profile target --out .veracrawl-test-runs/<source_fixture_id>
+```
+
+Required source acquisition fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| source-http-success | HTTP-family adapter result produces fetch result, page snapshot, raw artifact ref, scheduler completion, and replay-complete report |
+| source-sitemap-success | sitemap-family adapter result produces discovered-link result lineage and replay-complete report |
+| source-rss-success | RSS-family adapter result produces discovered-link result lineage and replay-complete report |
+| source-api-success | API-like adapter result produces API payload lineage and replay-complete report |
+| source-document-success | document-source adapter result produces document artifact lineage and replay-complete report |
+| source-blocked | source policy denial produces blocked-source failure and no raw artifact claim |
+| source-rate-limited | rate limit decision produces needs-review operator-visible status with retry-after lineage |
+| source-adapter-mismatch | adapter natural-result mismatch is rejected before acquisition is marked complete |
+| source-malformed-response | malformed response is typed as malformed and fails acquisition without publication claim |
+| source-retry-exhausted | exhausted retry lineage is reported as failed acquisition |
+| source-missing-artifact | missing raw artifact ref fails replay completeness and records missing artifact status |
+
+Source acquisition acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_source_acquisition_contract_registry.py`
+- `pytest tests/contract/test_source_adapter_runtime_contracts.py`
+- `pytest tests/contract/test_source_adapter_import_boundaries.py`
+- `pytest tests/unit/test_source_policy_and_retry_gates.py`
+- `pytest tests/unit/test_source_replay_recovery.py`
+- `pytest tests/integration/test_source_acquisition_runtime.py`
+- `pytest tests/integration/test_source_negative_fixtures.py`
+
+This acceptance proves deterministic source acquisition contracts, adapter
+replaceability, policy/rate/retry failure typing, raw artifact preservation, and
+replay lineage. It does not prove production network crawling, browser execution,
+distributed storage, distributed queueing, graph/memory intelligence, export
+delivery, or production scale readiness.
+
 Oracle schemas:
 
 ```yaml

@@ -1,0 +1,12 @@
+{
+  "adapter_type": "http",
+  "expected_completion_result": "fail",
+  "expected_operator_status": "adapter_mismatch",
+  "expected_result_type": null,
+  "id": "source-adapter-mismatch",
+  "negative_case": true,
+  "profile_refs": [
+    "target"
+  ],
+  "scenario": "adapter-mismatch"
+}

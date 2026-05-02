@@ -1,0 +1,12 @@
+{
+  "adapter_type": "http",
+  "expected_completion_result": "fail",
+  "expected_operator_status": "source_blocked",
+  "expected_result_type": null,
+  "id": "source-blocked",
+  "negative_case": true,
+  "profile_refs": [
+    "target"
+  ],
+  "scenario": "blocked"
+}

@@ -1,0 +1,12 @@
+{
+  "adapter_type": "http",
+  "expected_completion_result": "fail",
+  "expected_operator_status": "malformed_response",
+  "expected_result_type": null,
+  "id": "source-malformed-response",
+  "negative_case": true,
+  "profile_refs": [
+    "target"
+  ],
+  "scenario": "malformed-response"
+}

@@ -1,0 +1,12 @@
+{
+  "adapter_type": "http",
+  "expected_completion_result": "fail",
+  "expected_operator_status": "retry_exhausted",
+  "expected_result_type": null,
+  "id": "source-retry-exhausted",
+  "negative_case": true,
+  "profile_refs": [
+    "target"
+  ],
+  "scenario": "retry-exhausted"
+}

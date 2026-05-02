@@ -117,11 +117,11 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/003-durable-runtime-scheduler/plan.md`.
-Use it with `specs/003-durable-runtime-scheduler/spec.md`,
-`specs/003-durable-runtime-scheduler/research.md`,
-`specs/003-durable-runtime-scheduler/data-model.md`,
-`specs/003-durable-runtime-scheduler/contracts/`, and
-`specs/003-durable-runtime-scheduler/quickstart.md` for VeraCrawl Durable
-Runtime Persistence and Scheduler Foundation work.
+Current active Spec Kit plan: `specs/004-source-adapter-fetch-runtime/plan.md`.
+Use it with `specs/004-source-adapter-fetch-runtime/spec.md`,
+`specs/004-source-adapter-fetch-runtime/research.md`,
+`specs/004-source-adapter-fetch-runtime/data-model.md`,
+`specs/004-source-adapter-fetch-runtime/contracts/`, and
+`specs/004-source-adapter-fetch-runtime/quickstart.md` for VeraCrawl Source
+Adapter and Fetch Runtime work.
 <!-- SPECKIT END -->
