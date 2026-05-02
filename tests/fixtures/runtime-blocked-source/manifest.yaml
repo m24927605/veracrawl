@@ -1,0 +1,7 @@
+{
+  "id": "runtime-blocked-source",
+  "scenario": "blocked-source",
+  "profile_refs": ["target"],
+  "expected_completion_result": "fail",
+  "expected_publication": false
+}

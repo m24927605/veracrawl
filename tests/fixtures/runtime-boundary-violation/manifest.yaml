@@ -1,0 +1,7 @@
+{
+  "id": "runtime-boundary-violation",
+  "scenario": "boundary-violation",
+  "profile_refs": ["target"],
+  "expected_completion_result": "fail",
+  "expected_publication": false
+}

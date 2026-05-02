@@ -117,6 +117,42 @@ Runner requirements:
 - validates event cursors, replay bundle, artifact hashes, graph oracle, evidence oracle, and output oracle
 - exits non-zero on any missing required oracle or undeclared tolerance
 
+Target runtime spine fixture contract:
+
+```text
+veracrawl-runtime run tests/fixtures/<runtime_fixture_id> --profile target --out .veracrawl-test-runs/<runtime_fixture_id>
+```
+
+Required runtime spine fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| runtime-record-success | approved objective reaches published output, output manifest, and replay-complete report |
+| runtime-blocked-source | source policy denial produces blocked result and no publication |
+| runtime-missing-evidence | missing field evidence produces needs-review and no publication |
+| runtime-verification-conflict | verification conflict produces conflict status and no publication |
+| runtime-adapter-mismatch | invalid adapter natural-result mapping fails before publication |
+| runtime-replay-gap | missing replay refs fail publication gate |
+| runtime-boundary-violation | wrong-owner mutation is rejected and evented |
+
+Runtime spine acceptance requires:
+
+- `veracrawl-contracts validate --format json` reports no registry errors
+- `pytest tests/contract/test_runtime_contract_registry.py`
+- `pytest tests/contract/test_runtime_command_event_contracts.py`
+- `pytest tests/contract/test_runtime_import_boundaries.py`
+- `pytest tests/contract/test_agent_recommendation_contracts.py`
+- `pytest tests/unit/test_runtime_completion_gates.py`
+- `pytest tests/unit/test_evidence_publication_gates.py`
+- `pytest tests/unit/test_runtime_replay_validation.py`
+- `pytest tests/integration/test_objective_to_output_runtime.py`
+- `pytest tests/integration/test_runtime_negative_fixtures.py`
+
+The runtime spine is accepted only as the executable target architecture spine. It
+must not be described as full crawler completion until browser, graph, memory,
+export, distributed persistence, queueing, operational recovery, and production
+scale acceptance suites are implemented and pass.
+
 Oracle schemas:
 
 ```yaml

@@ -1,0 +1,7 @@
+{
+  "id": "runtime-missing-evidence",
+  "scenario": "missing-evidence",
+  "profile_refs": ["target"],
+  "expected_completion_result": "needs_review",
+  "expected_publication": false
+}

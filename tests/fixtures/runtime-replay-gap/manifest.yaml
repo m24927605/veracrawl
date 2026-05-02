@@ -1,0 +1,7 @@
+{
+  "id": "runtime-replay-gap",
+  "scenario": "replay-gap",
+  "profile_refs": ["target"],
+  "expected_completion_result": "fail",
+  "expected_publication": false
+}

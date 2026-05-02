@@ -1,0 +1,3 @@
+{
+  "requires_event": "record_verification_decision_committed"
+}

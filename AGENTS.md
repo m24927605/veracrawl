@@ -117,11 +117,11 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/001-target-architecture-foundation/plan.md`.
-Use it with `specs/001-target-architecture-foundation/spec.md`,
-`specs/001-target-architecture-foundation/research.md`,
-`specs/001-target-architecture-foundation/data-model.md`,
-`specs/001-target-architecture-foundation/contracts/`, and
-`specs/001-target-architecture-foundation/quickstart.md` for VeraCrawl Target
-Architecture Foundation work.
+Current active Spec Kit plan: `specs/002-core-runtime-spine/plan.md`.
+Use it with `specs/002-core-runtime-spine/spec.md`,
+`specs/002-core-runtime-spine/research.md`,
+`specs/002-core-runtime-spine/data-model.md`,
+`specs/002-core-runtime-spine/contracts/`, and
+`specs/002-core-runtime-spine/quickstart.md` for VeraCrawl Target Core Runtime
+Spine work.
 <!-- SPECKIT END -->

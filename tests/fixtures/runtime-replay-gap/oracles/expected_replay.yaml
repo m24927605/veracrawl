@@ -1,0 +1,4 @@
+{
+  "completion_result": "fail",
+  "missing_ref_fields": ["redaction_map_ref", "output_manifest_refs"]
+}

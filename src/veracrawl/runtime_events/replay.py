@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from veracrawl.contracts.enums import CompletenessResult, ReplayMissingRefBehavior
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
 
@@ -37,6 +39,44 @@ def missing_replay_refs(manifest: ReplayBundleManifest) -> list[str]:
 
 def validate_replay_manifest(manifest: ReplayBundleManifest) -> ReplayValidationReport:
     missing = missing_replay_refs(manifest)
+    if not missing:
+        result = CompletenessResult.PASS
+        gap_report_ref = None
+    elif manifest.missing_ref_behavior == ReplayMissingRefBehavior.FAIL_REPLAY:
+        result = CompletenessResult.FAIL
+        gap_report_ref = f"gap:{manifest.id}"
+    else:
+        result = CompletenessResult.NEEDS_REVIEW
+        gap_report_ref = f"gap:{manifest.id}"
+    return ReplayValidationReport(
+        id=f"replay-report:{manifest.id}",
+        manifest_id=manifest.id,
+        completeness_result=result,
+        missing_ref_fields=missing,
+        gap_report_ref=gap_report_ref,
+    )
+
+
+def missing_runtime_replay_refs(
+    manifest: ReplayBundleManifest,
+    *,
+    runtime_refs: Mapping[str, object],
+) -> list[str]:
+    missing = missing_replay_refs(manifest)
+    for field_name, value in runtime_refs.items():
+        if value in (None, ""):
+            missing.append(field_name)
+        elif isinstance(value, list | tuple | set | dict) and not value:
+            missing.append(field_name)
+    return missing
+
+
+def validate_runtime_replay_manifest(
+    manifest: ReplayBundleManifest,
+    *,
+    runtime_refs: Mapping[str, object],
+) -> ReplayValidationReport:
+    missing = missing_runtime_replay_refs(manifest, runtime_refs=runtime_refs)
     if not missing:
         result = CompletenessResult.PASS
         gap_report_ref = None

@@ -6,6 +6,8 @@ from pydantic import Field, model_validator
 
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import (
+    AgentRecommendationStatus,
+    AgentRecommendationSubject,
     AgentRole,
     AgentRunStatus,
     FrameworkStatePersistence,
@@ -207,3 +209,30 @@ class ContextBundleTrace(TimestampedModel):
     memory_retrieval_trace_refs: list[Ref] = Field(default_factory=list)
     graph_snapshot_refs: list[Ref] = Field(default_factory=list)
     evidence_refs: list[Ref] = Field(default_factory=list)
+
+
+class AgentRecommendation(TimestampedModel):
+    id: str
+    run_ref: Ref
+    subject_type: AgentRecommendationSubject
+    subject_ref: Ref
+    agent_role: AgentRole
+    context_bundle_trace_ref: Ref
+    agent_action_trace_ref: Ref
+    recommendation_payload_ref: Ref
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    model_call_trace_ref: Ref | None = None
+    tool_call_trace_refs: list[Ref] = Field(default_factory=list)
+    owner_command_ref: Ref | None = None
+    rejection_reasons: list[str] = Field(default_factory=list)
+    status: AgentRecommendationStatus = AgentRecommendationStatus.PROPOSED
+
+    @model_validator(mode="after")
+    def validate_recommendation(self) -> AgentRecommendation:
+        if self.status == AgentRecommendationStatus.ACCEPTED and not self.owner_command_ref:
+            raise ValueError("accepted recommendation requires owner_command_ref")
+        if self.status == AgentRecommendationStatus.REJECTED and not self.rejection_reasons:
+            raise ValueError("rejected recommendation requires rejection_reasons")
+        if not self.policy_decision_refs:
+            raise ValueError("agent recommendation requires policy_decision_refs")
+        return self

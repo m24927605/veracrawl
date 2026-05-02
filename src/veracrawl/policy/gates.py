@@ -6,6 +6,17 @@ from veracrawl.contracts.enums import PolicyDecisionValue
 from veracrawl.contracts.errors import PolicyViolationError
 from veracrawl.contracts.policy import BlockedActionReport, PolicyDecision
 
+RUNTIME_POLICY_DECISION_TYPES = {
+    "runtime_source",
+    "runtime_evidence",
+    "runtime_verification",
+    "runtime_publication",
+    "artifact_lifecycle",
+    "retention",
+    "recovery",
+    "prompt_context",
+}
+
 
 def is_allowed(decision: PolicyDecision) -> bool:
     return decision.decision == PolicyDecisionValue.ALLOW
@@ -25,6 +36,16 @@ def require_allowed(decision: PolicyDecision) -> None:
     if not is_allowed(decision):
         report = blocked_action_report(decision)
         raise PolicyViolationError(report.blocked_reason)
+
+
+def require_runtime_policy(decision: PolicyDecision, *, expected_type: str) -> None:
+    if expected_type not in RUNTIME_POLICY_DECISION_TYPES:
+        raise PolicyViolationError(f"unknown runtime policy decision type: {expected_type}")
+    if decision.decision_type != expected_type:
+        raise PolicyViolationError(
+            f"policy decision type mismatch: expected {expected_type}, got {decision.decision_type}"
+        )
+    require_allowed(decision)
 
 
 def decision_for(

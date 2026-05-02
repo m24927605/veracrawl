@@ -87,6 +87,42 @@ negative cases all pass. It must not be described as a completed production craw
 runtime; it is the foundation that prevents later runtime work from becoming a
 single-site scraper or framework-coupled agent script.
 
+## Target Runtime Spine Slice
+
+The next implemented slice materializes the first executable target runtime spine.
+It keeps the same target architecture constraints while adding deterministic runtime
+behavior across owner packages:
+
+- `veracrawl.contracts`: objective, plan, run, run-plan snapshot, runtime completion
+  gate, runtime artifact ref, normalized document, extraction candidate, evidence
+  coverage, evidence packet, verification decision, published output, output
+  manifest, and agent recommendation contracts.
+- `veracrawl.ports`: runtime repository and artifact store protocols for replacing
+  deterministic fixture storage with production adapters later.
+- `veracrawl.runtime_support`: in-memory repository profile used only behind ports.
+- `veracrawl.artifact_lifecycle`: deterministic artifact store with content digest,
+  lifecycle ref, privacy classification, and retention ref.
+- `veracrawl.control`: objective-to-run bootstrap, owner command validation,
+  command result creation, completion gate evaluation, and deterministic fixture
+  orchestration.
+- `veracrawl.fetch`, `normalize`, `extract`, `evidence`, `verify`, `publish`, and
+  `review_replay`: cohesive owner-service runtime functions for source results,
+  processing, source-backed evidence, verification, publication preconditions, and
+  replay bundle validation.
+- `veracrawl.agents`: framework-neutral recommendation intake. Accepted
+  recommendations become owner-service commands; rejected recommendations preserve
+  typed rejection reasons. Core state never depends on OpenAI Agent SDK, LangGraph,
+  LangChain, CrewAI, AutoGen, Semantic Kernel, or framework-native state.
+- `veracrawl.cli.runtime`: `veracrawl-runtime run` fixture runner that writes
+  deterministic JSON reports under `.veracrawl-test-runs/`.
+
+This slice proves the target architecture spine can move from approved objective to
+published output with evidence and replay, and can block source policy denial,
+missing evidence, verification conflict, adapter natural-result mismatch, replay
+gap, and wrong-owner mutation. It does not implement full browser capability, graph
+intelligence, memory intelligence, export connectors, distributed storage, queue
+workers, or production scale crawling.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

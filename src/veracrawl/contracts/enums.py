@@ -151,3 +151,110 @@ class ComparisonMode(StrEnum):
     EXACT = "exact"
     NORMALIZED = "normalized"
     TOLERANCE = "tolerance"
+
+
+class ObjectiveStatus(StrEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    ARCHIVED = "archived"
+
+
+class PlanStatus(StrEnum):
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"
+
+
+class RunStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class RuntimeCompletionGateType(StrEnum):
+    OBJECTIVE = "objective"
+    PLAN = "plan"
+    SOURCE = "source"
+    NORMALIZATION = "normalization"
+    EXTRACTION = "extraction"
+    EVIDENCE = "evidence"
+    VERIFICATION = "verification"
+    PUBLICATION = "publication"
+    REPLAY = "replay"
+
+
+class RuntimeGateStatus(StrEnum):
+    PENDING = "pending"
+    PASS = "pass"
+    FAIL = "fail"
+    NEEDS_REVIEW = "needs_review"
+    BLOCKED = "blocked"
+    CONFLICT = "conflict"
+
+
+class ArtifactType(StrEnum):
+    RAW_SOURCE = "raw_source"
+    NORMALIZED_DOCUMENT = "normalized_document"
+    ANCHOR_MAP = "anchor_map"
+    CANDIDATE_PAYLOAD = "candidate_payload"
+    EVIDENCE_BUNDLE = "evidence_bundle"
+    OUTPUT_MANIFEST = "output_manifest"
+    REPLAY_BUNDLE = "replay_bundle"
+    REDACTION_MAP = "redaction_map"
+
+
+class PrivacyClassification(StrEnum):
+    PUBLIC = "public"
+    INTERNAL = "internal"
+    CONFIDENTIAL = "confidential"
+    RESTRICTED = "restricted"
+
+
+class ExtractionCandidateStatus(StrEnum):
+    CANDIDATE = "candidate"
+    EVIDENCE_BUILT = "evidence_built"
+    REJECTED = "rejected"
+    CONFLICTED = "conflicted"
+    SUPERSEDED = "superseded"
+    PUBLISHED = "published"
+
+
+class EvidencePacketStatus(StrEnum):
+    BUILT = "built"
+    ACCEPTED_FOR_VERIFICATION = "accepted_for_verification"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"
+
+
+class VerificationDecisionValue(StrEnum):
+    ACCEPT = "accept"
+    REJECT = "reject"
+    REVIEW = "review"
+    CONFLICT = "conflict"
+
+
+class PublishedOutputStatus(StrEnum):
+    PUBLISHED = "published"
+    SUPERSEDED = "superseded"
+    WITHDRAWN = "withdrawn"
+    EXPIRED = "expired"
+
+
+class AgentRecommendationSubject(StrEnum):
+    CRAWL_PLAN = "crawl_plan"
+    EXTRACTION_STRATEGY = "extraction_strategy"
+    EVIDENCE_ANCHOR = "evidence_anchor"
+    VERIFICATION = "verification"
+    REPAIR = "repair"
+
+
+class AgentRecommendationStatus(StrEnum):
+    PROPOSED = "proposed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"

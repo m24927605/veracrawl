@@ -8,12 +8,17 @@ from __future__ import annotations
 
 from veracrawl.contracts.agent import (
     AgentActionTrace,
+    AgentRecommendation,
     AgentRunRequest,
     AgentRunResult,
     ContextBundleTrace,
     ModelCallTrace,
 )
-from veracrawl.contracts.enums import AgentRunStatus
+from veracrawl.contracts.enums import (
+    AgentRecommendationSubject,
+    AgentRole,
+    AgentRunStatus,
+)
 
 
 class OpenAIAgentSDKConformanceAdapter:
@@ -83,4 +88,24 @@ class OpenAIAgentSDKConformanceAdapter:
             proposed_tool_call_refs=[],
             recommendation_refs=[f"recommendation:{request.id}"],
             status=AgentRunStatus.COMPLETED,
+        )
+
+    def recommendation_fixture(self, request: AgentRunRequest) -> AgentRecommendation:
+        if self.last_trace is None or self.last_context_trace is None:
+            self.run(request)
+        assert self.last_trace is not None
+        assert self.last_context_trace is not None
+        return AgentRecommendation(
+            id=f"recommendation:{request.id}:openai-agent-sdk",
+            run_ref=request.run_id,
+            subject_type=AgentRecommendationSubject.CRAWL_PLAN,
+            subject_ref=request.objective_ref,
+            agent_role=AgentRole.PLANNER,
+            context_bundle_trace_ref=self.last_context_trace.id,
+            agent_action_trace_ref=self.last_trace.id,
+            recommendation_payload_ref=f"recommendation-payload:{request.id}",
+            policy_decision_refs=request.policy_decision_refs,
+            model_call_trace_ref=(
+                self.last_model_trace.id if self.last_model_trace is not None else None
+            ),
         )

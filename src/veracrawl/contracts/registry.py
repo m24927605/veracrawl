@@ -171,6 +171,7 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
     "ContextBundleTrace": _contract(
         "ContextBundleTrace", OwnerService.AGENTS, "agent", privacy=True
     ),
+    "AgentRecommendation": _contract("AgentRecommendation", OwnerService.AGENTS, "agent"),
     "ReplayBundleManifest": _contract(
         "ReplayBundleManifest",
         OwnerService.REVIEW_REPLAY,
@@ -191,6 +192,93 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
     "FailureInjectionPlan": _contract("FailureInjectionPlan", OwnerService.TESTS, "fixture"),
     "DRRestoreOracle": _contract("DRRestoreOracle", OwnerService.TESTS, "fixture"),
     "ReplayBundleOracle": _contract("ReplayBundleOracle", OwnerService.TESTS, "fixture"),
+    "CrawlObjective": _contract(
+        "CrawlObjective",
+        OwnerService.CONTROL,
+        "objective",
+        mutation_allowed=True,
+        tests=["tests/contract/test_runtime_command_event_contracts.py"],
+    ),
+    "CrawlPlan": _contract(
+        "CrawlPlan",
+        OwnerService.CONTROL,
+        "objective",
+        mutation_allowed=True,
+        tests=["tests/contract/test_runtime_command_event_contracts.py"],
+    ),
+    "CrawlRun": _contract(
+        "CrawlRun",
+        OwnerService.CONTROL,
+        "objective",
+        mutation_allowed=True,
+        tests=["tests/contract/test_runtime_command_event_contracts.py"],
+    ),
+    "RunPlanSnapshot": _contract("RunPlanSnapshot", OwnerService.CONTROL, "objective"),
+    "RuntimeCompletionGate": _contract(
+        "RuntimeCompletionGate",
+        OwnerService.CONTROL,
+        "objective",
+        mutation_allowed=True,
+        tests=["tests/unit/test_runtime_completion_gates.py"],
+    ),
+    "RuntimeArtifactRef": _contract(
+        "RuntimeArtifactRef",
+        OwnerService.ARTIFACT_LIFECYCLE,
+        "artifact",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_runtime_command_event_contracts.py"],
+    ),
+    "NormalizedDocument": _contract(
+        "NormalizedDocument",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/contract/test_runtime_command_event_contracts.py"],
+    ),
+    "ExtractionCandidate": _contract(
+        "ExtractionCandidate",
+        OwnerService.EXTRACT,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/contract/test_runtime_command_event_contracts.py"],
+    ),
+    "EvidenceCoverageResult": _contract(
+        "EvidenceCoverageResult",
+        OwnerService.EVIDENCE,
+        "evidence",
+        mutation_allowed=True,
+        tests=["tests/unit/test_evidence_publication_gates.py"],
+    ),
+    "EvidencePacket": _contract(
+        "EvidencePacket",
+        OwnerService.EVIDENCE,
+        "evidence",
+        mutation_allowed=True,
+        tests=["tests/unit/test_evidence_publication_gates.py"],
+    ),
+    "VerificationDecision": _contract(
+        "VerificationDecision",
+        OwnerService.VERIFY,
+        "verification",
+        mutation_allowed=True,
+        tests=["tests/unit/test_evidence_publication_gates.py"],
+    ),
+    "OutputManifest": _contract(
+        "OutputManifest",
+        OwnerService.PUBLISH,
+        "publication",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_evidence_publication_gates.py"],
+    ),
+    "PublishedOutput": _contract(
+        "PublishedOutput",
+        OwnerService.PUBLISH,
+        "publication",
+        mutation_allowed=True,
+        tests=["tests/unit/test_evidence_publication_gates.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -252,6 +340,94 @@ COMMAND_TYPES: dict[str, CommandTypeRegistration] = {
     ),
 }
 
+COMMAND_TYPES.update(
+    {
+        "create_crawl_objective": CommandTypeRegistration(
+            command_type="create_crawl_objective",
+            owner_service=OwnerService.CONTROL,
+            target_aggregate_type="CrawlObjective",
+            payload_schema_ref="BaseCommandPayload",
+            approval_required=True,
+            emitted_event_types=["create_crawl_objective_committed"],
+        ),
+        "approve_crawl_plan": CommandTypeRegistration(
+            command_type="approve_crawl_plan",
+            owner_service=OwnerService.CONTROL,
+            target_aggregate_type="CrawlPlan",
+            payload_schema_ref="BaseCommandPayload",
+            approval_required=True,
+            emitted_event_types=["approve_crawl_plan_committed"],
+        ),
+        "start_crawl_run": CommandTypeRegistration(
+            command_type="start_crawl_run",
+            owner_service=OwnerService.CONTROL,
+            target_aggregate_type="CrawlRun",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["start_crawl_run_committed"],
+        ),
+        "record_source_adapter_result": CommandTypeRegistration(
+            command_type="record_source_adapter_result",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="SourceAdapterResult",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_source"],
+            emitted_event_types=["record_source_adapter_result_committed"],
+        ),
+        "record_normalized_document": CommandTypeRegistration(
+            command_type="record_normalized_document",
+            owner_service=OwnerService.NORMALIZE,
+            target_aggregate_type="NormalizedDocument",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["record_normalized_document_committed"],
+        ),
+        "record_extraction_candidate": CommandTypeRegistration(
+            command_type="record_extraction_candidate",
+            owner_service=OwnerService.EXTRACT,
+            target_aggregate_type="ExtractionCandidate",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["record_extraction_candidate_committed"],
+        ),
+        "build_evidence_packet": CommandTypeRegistration(
+            command_type="build_evidence_packet",
+            owner_service=OwnerService.EVIDENCE,
+            target_aggregate_type="EvidencePacket",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["build_evidence_packet_committed"],
+        ),
+        "record_verification_decision": CommandTypeRegistration(
+            command_type="record_verification_decision",
+            owner_service=OwnerService.VERIFY,
+            target_aggregate_type="VerificationDecision",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["record_verification_decision_committed"],
+        ),
+        "publish_output_manifest": CommandTypeRegistration(
+            command_type="publish_output_manifest",
+            owner_service=OwnerService.PUBLISH,
+            target_aggregate_type="PublishedOutput",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_publication"],
+            emitted_event_types=["publish_output_manifest_committed"],
+        ),
+        "record_replay_bundle": CommandTypeRegistration(
+            command_type="record_replay_bundle",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="ReplayBundleManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["record_replay_bundle_committed"],
+        ),
+        "accept_agent_recommendation": CommandTypeRegistration(
+            command_type="accept_agent_recommendation",
+            owner_service=OwnerService.AGENTS,
+            target_aggregate_type="AgentRecommendation",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["prompt_context"],
+            emitted_event_types=["accept_agent_recommendation_committed"],
+        ),
+    }
+)
+
 EVENT_TYPES: dict[str, EventTypeRegistration] = {
     name: EventTypeRegistration(
         event_type=name,
@@ -275,6 +451,34 @@ EVENT_TYPES: dict[str, EventTypeRegistration] = {
         "error_recorded",
     ]
 }
+
+EVENT_TYPES.update(
+    {
+        name: EventTypeRegistration(
+            event_type=name,
+            event_version="1.0",
+            payload_schema_ref="BaseCommandPayload",
+            owner_service=OwnerService.RUNTIME_EVENTS,
+            state_before_required=name.endswith("_committed"),
+            state_after_required=name.endswith("_committed"),
+            replay_critical_refs=["payload_ref", "causation_id", "correlation_id"],
+        )
+        for name in [
+            "create_crawl_objective_committed",
+            "approve_crawl_plan_committed",
+            "start_crawl_run_committed",
+            "record_source_adapter_result_committed",
+            "record_normalized_document_committed",
+            "record_extraction_candidate_committed",
+            "build_evidence_packet_committed",
+            "record_verification_decision_committed",
+            "publish_output_manifest_committed",
+            "record_replay_bundle_committed",
+            "accept_agent_recommendation_committed",
+            "runtime_owner_violation_recorded",
+        ]
+    }
+)
 
 SOURCE_ADAPTER_TYPES: dict[str, SourceAdapterTypeRegistration] = {
     "http": SourceAdapterTypeRegistration(
@@ -456,6 +660,27 @@ FIXTURE_ORACLES: dict[str, FixtureOracleRegistration] = {
     ),
 }
 
+for _runtime_fixture, _negative in {
+    "runtime-record-success": False,
+    "runtime-blocked-source": True,
+    "runtime-missing-evidence": True,
+    "runtime-verification-conflict": True,
+    "runtime-adapter-mismatch": True,
+    "runtime-replay-gap": True,
+    "runtime-boundary-violation": True,
+}.items():
+    _base = f"tests/fixtures/{_runtime_fixture}"
+    FIXTURE_ORACLES[_runtime_fixture] = FixtureOracleRegistration(
+        fixture_id=_runtime_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -519,6 +744,7 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "AgentRunRequest",
             "AgentRunResult",
             "AgentActionTrace",
+            "AgentRecommendation",
         ],
     ),
     "fixture_oracles": _target_area(
@@ -539,20 +765,20 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     "evidence": _target_area(
         "evidence",
         OwnerService.EVIDENCE,
-        "foundation_placeholder",
-        placeholders=["EvidencePacket"],
+        "materialized",
+        materialized=["EvidencePacket", "EvidenceCoverageResult"],
     ),
     "verification": _target_area(
         "verification",
         OwnerService.VERIFY,
-        "foundation_placeholder",
-        placeholders=["VerificationDecision"],
+        "materialized",
+        materialized=["VerificationDecision"],
     ),
     "publication": _target_area(
         "publication",
         OwnerService.PUBLISH,
-        "foundation_placeholder",
-        placeholders=["PublishedOutput", "OutputManifest"],
+        "materialized",
+        materialized=["PublishedOutput", "OutputManifest"],
     ),
     "projection": _target_area(
         "projection",
@@ -587,8 +813,8 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     "artifact_lifecycle": _target_area(
         "artifact_lifecycle",
         OwnerService.ARTIFACT_LIFECYCLE,
-        "foundation_placeholder",
-        placeholders=["ArtifactLifecycleState"],
+        "materialized",
+        materialized=["RuntimeArtifactRef"],
     ),
 }
 

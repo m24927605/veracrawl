@@ -67,14 +67,18 @@ Key documents:
 
 ## Development Workflow
 
-This repository uses GitHub Spec Kit for spec-driven development. See [AGENT.md](AGENT.md) for agent workflow rules, including when to use Spec Kit, which VeraCrawl V1 constraints must be read before implementation, and how to keep specs, plans, tasks, and code aligned.
+This repository uses GitHub Spec Kit for spec-driven development. See [AGENTS.md](AGENTS.md) for agent workflow rules, including when to use Spec Kit, which VeraCrawl V1 constraints must be read before implementation, and how to keep specs, plans, tasks, and code aligned.
 
-## Foundation Commands
+## Foundation And Runtime Commands
 
 The current Python foundation implements the target architecture contracts, ports,
 framework-neutral adapter boundaries, command/event/replay primitives, policy gates,
-and deterministic fixture/oracle checks. It is an architecture foundation, not a
-claim that the full production crawler runtime is complete.
+deterministic fixture/oracle checks, and the first target runtime spine. The runtime
+spine can execute deterministic objective-to-output fixtures, enforce owner
+boundaries, block unsafe publication, validate replay refs, and accept
+framework-neutral agent recommendations through commands. It is not a claim that
+the full production crawler runtime, browser fleet, graph intelligence, memory
+system, export system, or production scale operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -97,6 +101,33 @@ uv run --python python3.12 --extra dev veracrawl-fixture run \
   tests/fixtures/foundation-fetch-like \
   --profile target \
   --out .veracrawl-test-runs/foundation-fetch-like
+```
+
+Run the target runtime spine success fixture:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-runtime run \
+  tests/fixtures/runtime-record-success \
+  --profile target \
+  --out .veracrawl-test-runs/runtime-record-success
+```
+
+Run negative runtime publication gates:
+
+```sh
+for fixture in \
+  runtime-blocked-source \
+  runtime-missing-evidence \
+  runtime-verification-conflict \
+  runtime-adapter-mismatch \
+  runtime-replay-gap \
+  runtime-boundary-violation
+do
+  uv run --python python3.12 --extra dev veracrawl-runtime run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
 ```
 
 ## Safety Boundary

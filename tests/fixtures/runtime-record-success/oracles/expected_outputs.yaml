@@ -1,0 +1,4 @@
+{
+  "published": true,
+  "required_refs": ["published_output_ref", "output_manifest_ref", "replay_manifest_ref"]
+}

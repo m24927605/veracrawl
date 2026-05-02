@@ -2,6 +2,7 @@
 
 from veracrawl.contracts.agent import (
     AgentActionTrace,
+    AgentRecommendation,
     AgentRunRequest,
     AgentRunResult,
     AgentRuntimeSpec,
@@ -14,6 +15,7 @@ from veracrawl.contracts.agent import (
     ModelResponse,
     ToolCallTrace,
 )
+from veracrawl.contracts.artifact import RuntimeArtifactRef
 from veracrawl.contracts.command import (
     BaseCommandPayload,
     CommandEnvelope,
@@ -21,6 +23,7 @@ from veracrawl.contracts.command import (
     CommandTypeSpec,
 )
 from veracrawl.contracts.event import CrawlRunEvent, EventCursor, EventTypeSpec
+from veracrawl.contracts.evidence import EvidenceCoverageResult, EvidencePacket
 from veracrawl.contracts.fixture import (
     BenchmarkFixtureManifest,
     DRRestoreOracle,
@@ -32,7 +35,16 @@ from veracrawl.contracts.fixture import (
     ReplayBundleOracle,
     ThresholdSpec,
 )
+from veracrawl.contracts.objective import (
+    CrawlObjective,
+    CrawlPlan,
+    CrawlRun,
+    RunPlanSnapshot,
+    RuntimeCompletionGate,
+)
 from veracrawl.contracts.policy import BlockedActionReport, PolicyDecision
+from veracrawl.contracts.processing import ExtractionCandidate, NormalizedDocument
+from veracrawl.contracts.publication import OutputManifest, PublishedOutput
 from veracrawl.contracts.registry import registry_json, validate_registry
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
 from veracrawl.contracts.source_adapter import (
@@ -40,9 +52,11 @@ from veracrawl.contracts.source_adapter import (
     SourceAdapterResult,
     SourceAdapterSpec,
 )
+from veracrawl.contracts.verification import VerificationDecision
 
 __all__ = [
     "AgentActionTrace",
+    "AgentRecommendation",
     "AgentRunRequest",
     "AgentRunResult",
     "AgentRuntimeSpec",
@@ -56,6 +70,9 @@ __all__ = [
     "ContextBundle",
     "ContextBundleTrace",
     "ContextRef",
+    "CrawlObjective",
+    "CrawlPlan",
+    "CrawlRun",
     "CrawlRunEvent",
     "DRRestoreOracle",
     "EventCursor",
@@ -64,19 +81,29 @@ __all__ = [
     "ExpectedEvidenceCoverageOracle",
     "ExpectedGraphOracle",
     "ExpectedOutputOracle",
+    "EvidenceCoverageResult",
+    "EvidencePacket",
+    "ExtractionCandidate",
     "FailureInjectionPlan",
     "ModelCallTrace",
     "ModelRequest",
     "ModelResponse",
+    "NormalizedDocument",
+    "OutputManifest",
     "PolicyDecision",
+    "PublishedOutput",
     "ReplayBundleManifest",
     "ReplayBundleOracle",
     "ReplayValidationReport",
+    "RunPlanSnapshot",
+    "RuntimeArtifactRef",
+    "RuntimeCompletionGate",
     "SourceAdapterCommand",
     "SourceAdapterResult",
     "SourceAdapterSpec",
     "ThresholdSpec",
     "ToolCallTrace",
+    "VerificationDecision",
     "registry_json",
     "validate_registry",
 ]
