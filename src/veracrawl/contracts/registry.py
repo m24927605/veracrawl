@@ -424,6 +424,47 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "graph",
         tests=["tests/integration/test_advanced_graph_projection_fixtures.py"],
     ),
+    "MemoryEvent": _contract(
+        "MemoryEvent",
+        OwnerService.MEMORY,
+        "memory",
+        mutation_allowed=True,
+        tests=["tests/contract/test_memory_contracts.py"],
+    ),
+    "MemoryRetrievalTrace": _contract(
+        "MemoryRetrievalTrace",
+        OwnerService.MEMORY,
+        "memory",
+        mutation_allowed=True,
+        tests=["tests/unit/test_memory_retrieval.py"],
+    ),
+    "CrossScopeMemoryTunnel": _contract(
+        "CrossScopeMemoryTunnel",
+        OwnerService.MEMORY,
+        "memory",
+        mutation_allowed=True,
+        tests=["tests/unit/test_cross_scope_memory_policy.py"],
+    ),
+    "OperationalTemporalMemoryRecord": _contract(
+        "OperationalTemporalMemoryRecord",
+        OwnerService.MEMORY,
+        "memory",
+        mutation_allowed=True,
+        tests=["tests/unit/test_memory_kernel.py"],
+    ),
+    "MemoryKernelReport": _contract(
+        "MemoryKernelReport",
+        OwnerService.REVIEW_REPLAY,
+        "memory",
+        mutation_allowed=True,
+        tests=["tests/unit/test_memory_replay.py"],
+    ),
+    "MemoryFixtureManifest": _contract(
+        "MemoryFixtureManifest",
+        OwnerService.TESTS,
+        "memory",
+        tests=["tests/integration/test_memory_fixtures.py"],
+    ),
     "UnitOfWorkRecord": _contract(
         "UnitOfWorkRecord",
         OwnerService.RUNTIME_EVENTS,
@@ -993,6 +1034,29 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["projection_mismatch_reported"],
         ),
+        "write_memory_event": CommandTypeRegistration(
+            command_type="write_memory_event",
+            owner_service=OwnerService.MEMORY,
+            target_aggregate_type="MemoryEvent",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["memory_retrieval"],
+            emitted_event_types=["memory_written"],
+        ),
+        "retrieve_memory": CommandTypeRegistration(
+            command_type="retrieve_memory",
+            owner_service=OwnerService.MEMORY,
+            target_aggregate_type="MemoryRetrievalTrace",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["memory_retrieval"],
+            emitted_event_types=["memory_retrieved"],
+        ),
+        "record_memory_kernel_report": CommandTypeRegistration(
+            command_type="record_memory_kernel_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="MemoryKernelReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["memory_kernel_reported"],
+        ),
     }
 )
 
@@ -1090,6 +1154,9 @@ EVENT_TYPES.update(
             "graph_signal_recorded",
             "temporal_graph_recorded",
             "advanced_graph_projection_reported",
+            "memory_written",
+            "memory_retrieved",
+            "memory_kernel_reported",
         ]
     }
 )
@@ -1444,6 +1511,26 @@ for _advanced_graph_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _memory_fixture, _negative in {
+    "memory-write-retrieve-success": False,
+    "memory-invalidation-exclusion": False,
+    "cross-scope-sanitized-memory": False,
+    "poisoned-memory-blocked": True,
+    "unauthorized-cross-scope-memory": True,
+    "memory-as-evidence": True,
+}.items():
+    _base = f"tests/fixtures/{_memory_fixture}"
+    FIXTURE_ORACLES[_memory_fixture] = FixtureOracleRegistration(
+        fixture_id=_memory_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1595,8 +1682,14 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     "memory": _target_area(
         "memory",
         OwnerService.MEMORY,
-        "foundation_placeholder",
-        placeholders=["MemoryEvent"],
+        "materialized",
+        materialized=[
+            "MemoryEvent",
+            "MemoryRetrievalTrace",
+            "CrossScopeMemoryTunnel",
+            "OperationalTemporalMemoryRecord",
+            "MemoryKernelReport",
+        ],
     ),
     "export": _target_area(
         "export",

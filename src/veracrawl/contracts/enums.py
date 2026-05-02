@@ -452,3 +452,48 @@ class GraphFailureType(StrEnum):
     MISSING_PROJECTION_WATERMARK = "missing_projection_watermark"
     PROJECTION_MISMATCH = "projection_mismatch"
     GRAPH_SIGNAL_AS_EVIDENCE = "graph_signal_as_evidence"
+
+
+class MemoryType(StrEnum):
+    SITE_BEHAVIOR = "site_behavior"
+    PAGE_TYPE = "page_type"
+    EXTRACTION_STRATEGY = "extraction_strategy"
+    FAILURE_REPAIR = "failure_repair"
+    TASK_CONTEXT = "task_context"
+    AGENT_DIARY = "agent_diary"
+
+
+class MemoryTrustLevel(StrEnum):
+    TRUSTED = "trusted"
+    UNTRUSTED = "untrusted"
+    MIXED = "mixed"
+    DERIVED = "derived"
+
+
+class MemoryPromptUse(StrEnum):
+    FORBIDDEN = "forbidden"
+    SANITIZED_SUMMARY = "sanitized_summary"
+    SCOPED_CONTEXT_REF = "scoped_context_ref"
+
+
+class MemoryEventStatus(StrEnum):
+    ACTIVE = "active"
+    STALE = "stale"
+    INVALIDATED = "invalidated"
+    SUPERSEDED = "superseded"
+
+
+class CrossScopeTunnelStatus(StrEnum):
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+
+class MemoryFailureType(StrEnum):
+    MISSING_MEMORY_INPUT = "missing_memory_input"
+    TAINTED_MEMORY_FOR_PROMPT = "tainted_memory_for_prompt"
+    INVALIDATED_MEMORY_RETRIEVED = "invalidated_memory_retrieved"
+    UNAUTHORIZED_CROSS_SCOPE_TUNNEL = "unauthorized_cross_scope_tunnel"
+    MEMORY_AS_EVIDENCE = "memory_as_evidence"
+    MISSING_REANCHOR_EVIDENCE = "missing_reanchor_evidence"

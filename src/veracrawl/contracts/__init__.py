@@ -68,6 +68,14 @@ from veracrawl.contracts.graph import (
     ProjectionWatermark,
     TemporalGraphProjectionRecord,
 )
+from veracrawl.contracts.memory import (
+    CrossScopeMemoryTunnel,
+    MemoryEvent,
+    MemoryFixtureManifest,
+    MemoryKernelReport,
+    MemoryRetrievalTrace,
+    OperationalTemporalMemoryRecord,
+)
 from veracrawl.contracts.network import (
     NetworkAcquisitionReport,
     NetworkFixtureManifest,
@@ -135,6 +143,7 @@ __all__ = [
     "ContextBundle",
     "ContextBundleTrace",
     "ContextRef",
+    "CrossScopeMemoryTunnel",
     "CrawlObjective",
     "CrawlPlan",
     "CrawlRun",
@@ -172,6 +181,10 @@ __all__ = [
     "GraphQualityReport",
     "GraphSignal",
     "LinkProvenance",
+    "MemoryEvent",
+    "MemoryFixtureManifest",
+    "MemoryKernelReport",
+    "MemoryRetrievalTrace",
     "ModelCallTrace",
     "ModelRequest",
     "ModelResponse",
@@ -184,6 +197,7 @@ __all__ = [
     "NormalizedDocument",
     "OutputManifest",
     "OutboxRecord",
+    "OperationalTemporalMemoryRecord",
     "PageSnapshot",
     "PageTypeClassification",
     "PolicyDecision",

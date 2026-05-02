@@ -413,6 +413,44 @@ graph-driven scheduling, memory, export delivery, distributed storage,
 distributed queueing, production browser rendering, graph explorer UI, or
 production scale readiness.
 
+Memory kernel fixture contract:
+
+```text
+veracrawl-memory run tests/fixtures/<memory_fixture_id> --profile target --out .veracrawl-test-runs/<memory_fixture_id>
+```
+
+Required memory fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| memory-write-retrieve-success | memory event, retrieval trace, operational temporal memory record, policy refs, and replay refs are complete |
+| memory-invalidation-exclusion | invalidated memory is excluded from retrieved refs and replay explains exclusion |
+| cross-scope-sanitized-memory | cross-scope retrieval uses authorization, policy refs, sanitized-only transfer, evidence anchoring, and taint exclusion rules |
+| poisoned-memory-blocked | tainted or prompt-forbidden memory cannot enter prompt/tool context |
+| unauthorized-cross-scope-memory | cross-scope retrieval without authorization fails |
+| memory-as-evidence | memory refs used as source evidence are rejected and must re-anchor to evidence |
+
+Memory kernel acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_memory_contract_registry.py`
+- `pytest tests/contract/test_memory_contracts.py`
+- `pytest tests/contract/test_memory_import_boundaries.py`
+- `pytest tests/unit/test_memory_kernel.py`
+- `pytest tests/unit/test_memory_retrieval.py`
+- `pytest tests/unit/test_memory_replay.py`
+- `pytest tests/unit/test_memory_evidence_boundary.py`
+- `pytest tests/unit/test_cross_scope_memory_policy.py`
+- `pytest tests/integration/test_memory_fixtures.py`
+
+This acceptance proves memory event contracts, scoped retrieval traces,
+invalidated memory exclusion, cross-scope sanitized tunnel contracts,
+operational temporal memory records, replay refs, tainted-memory blocking, and
+memory-as-evidence rejection. It does not prove production memory stores,
+vector/search retrieval, export delivery, distributed storage, distributed
+queueing, production browser rendering, memory UI, or production scale
+readiness.
+
 Oracle schemas:
 
 ```yaml

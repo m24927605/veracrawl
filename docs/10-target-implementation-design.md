@@ -328,6 +328,30 @@ adapters, concrete graph-driven scheduling, memory, export, distributed
 persistence, production browser rendering, graph explorer UI, or production
 scale graph operations.
 
+## Memory Kernel Slice
+
+The memory kernel slice turns verified operational lessons and evidence-backed
+run context into replayable scoped memory records while preserving the rule that
+memory cannot become publication source evidence:
+
+- `veracrawl.contracts.memory`: `MemoryEvent`, `MemoryRetrievalTrace`,
+  `CrossScopeMemoryTunnel`, `OperationalTemporalMemoryRecord`,
+  `MemoryKernelReport`, and `MemoryFixtureManifest`.
+- `veracrawl.memory.kernel`: deterministic memory write/retrieve,
+  invalidation-exclusion, cross-scope tunnel, and memory-as-evidence failure
+  records.
+- `veracrawl.review_replay.memory`: memory replay completeness validation for
+  memory event, retrieval, operational temporal, policy, command, event, and
+  outbox refs.
+- `veracrawl.cli.memory`: `veracrawl-memory run` fixture runner.
+
+This slice proves scoped memory events, sanitized retrieval traces, invalidated
+memory exclusion, cross-scope sanitized tunnel contracts, operational temporal
+memory records, tainted-memory blocking, and memory-as-evidence rejection. It
+does not prove production memory stores, vector/search retrieval, long-running
+memory compaction, export delivery, distributed persistence, production browser
+rendering, or production scale memory operations.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

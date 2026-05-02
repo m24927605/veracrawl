@@ -656,8 +656,15 @@ MemoryRetrievalTrace:
   freshness_cutoff: timestamp
   retrieval_index_ref: string
   sanitized_context_ref: string
+  completion_result: pass | fail | needs_review
   created_at: timestamp
 ```
+
+Retrieval rules:
+
+- retrieved memory requires sanitized context refs.
+- invalidated, stale, tainted, or prompt-forbidden memory must be excluded unless policy explicitly allows sanitized summary use.
+- excluded memory refs and reasons are replay-critical.
 
 ## CrossScopeMemoryTunnel
 
@@ -683,6 +690,13 @@ CrossScopeMemoryTunnel:
 ```
 
 Cross-scope memory tunnels may transfer sanitized patterns, failure lessons, or extraction repair strategies. They must not transfer raw customer data, secrets, untrusted page instructions, or publication evidence across scopes.
+
+Cross-scope tunnel rules:
+
+- approved tunnels require authorization refs and policy refs.
+- approved tunnels must be sanitized-only and evidence-anchored.
+- source and target scopes must differ.
+- taint exclusion rules must be recorded before retrieval.
 
 ## SourceAdapterSpec
 
@@ -2782,6 +2796,41 @@ MemoryEvent:
   retention_policy_ref: string
   created_at: timestamp
 ```
+
+Executable memory event rules:
+
+- memory writes require scope, content, provenance, promotion policy, poisoning check, freshness, and policy refs.
+- prompt-eligible memory requires a sanitized context ref.
+- invalidated memory requires an invalidation ref and must be excluded from retrieval.
+- superseded memory requires a replacement memory ref.
+- memory refs must not satisfy publication evidence coverage.
+
+## MemoryKernelReport
+
+```yaml
+MemoryKernelReport:
+  id: string
+  run_ref: string
+  memory_event_refs: list
+  retrieval_trace_ref: string
+  tunnel_ref: string
+  operational_record_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+Rules:
+
+- pass requires memory event, retrieval trace, operational temporal record, policy, command, event cursor, and outbox refs.
+- non-pass requires typed failure refs or missing refs.
+- memory-as-evidence produces `memory_as_evidence` and `missing_reanchor_evidence`.
 
 ## CrawlRunEvent
 

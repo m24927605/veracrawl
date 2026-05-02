@@ -1,0 +1,1 @@
+{"id":"unauthorized-cross-scope-memory","scenario":"unauthorized-cross-scope-memory","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"unauthorized_cross_scope_tunnel","negative_case":true}

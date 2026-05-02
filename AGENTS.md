@@ -117,11 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/009-advanced-graph-projection/plan.md`.
-Use it with `specs/009-advanced-graph-projection/spec.md`,
-`specs/009-advanced-graph-projection/research.md`,
-`specs/009-advanced-graph-projection/data-model.md`,
-`specs/009-advanced-graph-projection/contracts/`, and
-`specs/009-advanced-graph-projection/quickstart.md` for VeraCrawl Advanced Graph
-Projection work.
+Current active Spec Kit plan: `specs/010-memory-kernel/plan.md`.
+Use it with `specs/010-memory-kernel/spec.md`,
+`specs/010-memory-kernel/research.md`,
+`specs/010-memory-kernel/data-model.md`,
+`specs/010-memory-kernel/contracts/`, and
+`specs/010-memory-kernel/quickstart.md` for VeraCrawl Memory Kernel work.
 <!-- SPECKIT END -->

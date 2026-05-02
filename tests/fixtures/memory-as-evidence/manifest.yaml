@@ -1,0 +1,1 @@
+{"id":"memory-as-evidence","scenario":"memory-as-evidence","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"memory_as_evidence","negative_case":true}

@@ -1,0 +1,1 @@
+{"id":"poisoned-memory-blocked","scenario":"poisoned-memory-blocked","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"tainted_memory_for_prompt","negative_case":true}

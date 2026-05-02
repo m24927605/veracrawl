@@ -76,8 +76,8 @@ framework-neutral adapter boundaries, command/event/replay primitives, policy ga
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
-evidence/publication spine, the basic site graph spine, and the advanced graph
-projection spine.
+evidence/publication spine, the basic site graph spine, the advanced graph
+projection spine, and the memory kernel spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -116,6 +116,12 @@ source evidence. It is not a claim that memory intelligence, export delivery,
 distributed persistence, production browser rendering, production graph store
 operations, concrete graph-driven scheduling, or production scale operations are
 complete.
+The memory kernel spine adds memory events, scoped retrieval traces,
+cross-scope memory tunnels, operational temporal memory records, invalidation
+exclusion, tainted-memory prompt-use blocking, memory replay reports, and
+memory-as-evidence boundary checks. It is not a claim that production memory
+stores, vector/search retrieval, export delivery, distributed persistence,
+production browser rendering, or production scale operations are complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -304,6 +310,24 @@ for fixture in \
   graph-signal-as-evidence
 do
   uv run --python python3.12 --extra dev veracrawl-projection run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run memory kernel fixtures:
+
+```sh
+for fixture in \
+  memory-write-retrieve-success \
+  memory-invalidation-exclusion \
+  cross-scope-sanitized-memory \
+  poisoned-memory-blocked \
+  unauthorized-cross-scope-memory \
+  memory-as-evidence
+do
+  uv run --python python3.12 --extra dev veracrawl-memory run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture
