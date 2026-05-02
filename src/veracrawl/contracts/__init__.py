@@ -118,6 +118,14 @@ from veracrawl.contracts.ops import (
     ReplayAuditView,
     ReviewItem,
 )
+from veracrawl.contracts.persistence import (
+    IdempotencyPersistenceRecord,
+    PersistenceAdapterSpec,
+    PersistenceFixtureManifest,
+    PersistenceRuntimeReport,
+    PersistenceTransactionRecord,
+    PersistentQueueOperationRecord,
+)
 from veracrawl.contracts.policy import BlockedActionReport, PolicyDecision
 from veracrawl.contracts.processing import (
     AnchorMap,
@@ -234,6 +242,7 @@ __all__ = [
     "GraphNode",
     "GraphQualityReport",
     "GraphSignal",
+    "IdempotencyPersistenceRecord",
     "LinkProvenance",
     "MemoryEvent",
     "MemoryFixtureManifest",
@@ -260,6 +269,11 @@ __all__ = [
     "OperationalTemporalMemoryRecord",
     "PageSnapshot",
     "PageTypeClassification",
+    "PersistenceAdapterSpec",
+    "PersistenceFixtureManifest",
+    "PersistenceRuntimeReport",
+    "PersistenceTransactionRecord",
+    "PersistentQueueOperationRecord",
     "PolicyDecision",
     "ProjectionMismatchReport",
     "ProjectionRebuildJob",

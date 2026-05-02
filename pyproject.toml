@@ -35,6 +35,7 @@ veracrawl-agent-workflow = "veracrawl.cli.agents:main"
 veracrawl-ops = "veracrawl.cli.ops:main"
 veracrawl-export = "veracrawl.cli.export:main"
 veracrawl-scale = "veracrawl.cli.scale:main"
+veracrawl-persistence = "veracrawl.cli.persistence:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

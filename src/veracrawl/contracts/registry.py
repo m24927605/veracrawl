@@ -399,6 +399,47 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "scale",
         tests=["tests/integration/test_scale_fixtures.py"],
     ),
+    "PersistenceAdapterSpec": _contract(
+        "PersistenceAdapterSpec",
+        OwnerService.PORTS,
+        "persistence",
+        mutation_allowed=True,
+        tests=["tests/contract/test_persistence_contracts.py"],
+    ),
+    "PersistenceTransactionRecord": _contract(
+        "PersistenceTransactionRecord",
+        OwnerService.RUNTIME_EVENTS,
+        "persistence",
+        mutation_allowed=True,
+        tests=["tests/contract/test_persistence_contracts.py"],
+    ),
+    "IdempotencyPersistenceRecord": _contract(
+        "IdempotencyPersistenceRecord",
+        OwnerService.RUNTIME_EVENTS,
+        "persistence",
+        mutation_allowed=True,
+        tests=["tests/unit/test_persistence_reference_store.py"],
+    ),
+    "PersistentQueueOperationRecord": _contract(
+        "PersistentQueueOperationRecord",
+        OwnerService.SCHEDULER,
+        "persistence",
+        mutation_allowed=True,
+        tests=["tests/unit/test_persistence_reference_store.py"],
+    ),
+    "PersistenceRuntimeReport": _contract(
+        "PersistenceRuntimeReport",
+        OwnerService.REVIEW_REPLAY,
+        "persistence",
+        mutation_allowed=True,
+        tests=["tests/unit/test_persistence_replay.py"],
+    ),
+    "PersistenceFixtureManifest": _contract(
+        "PersistenceFixtureManifest",
+        OwnerService.TESTS,
+        "persistence",
+        tests=["tests/integration/test_persistence_fixtures.py"],
+    ),
     "ReplayBundleManifest": _contract(
         "ReplayBundleManifest",
         OwnerService.REVIEW_REPLAY,
@@ -1496,6 +1537,44 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["scale_recovery_reported"],
         ),
+        "record_persistence_adapter": CommandTypeRegistration(
+            command_type="record_persistence_adapter",
+            owner_service=OwnerService.PORTS,
+            target_aggregate_type="PersistenceAdapterSpec",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["persistence"],
+            emitted_event_types=["persistence_adapter_recorded"],
+        ),
+        "record_persistence_transaction": CommandTypeRegistration(
+            command_type="record_persistence_transaction",
+            owner_service=OwnerService.RUNTIME_EVENTS,
+            target_aggregate_type="PersistenceTransactionRecord",
+            payload_schema_ref="BaseCommandPayload",
+            expected_version_required=True,
+            emitted_event_types=["persistence_transaction_recorded"],
+        ),
+        "record_idempotency_persistence": CommandTypeRegistration(
+            command_type="record_idempotency_persistence",
+            owner_service=OwnerService.RUNTIME_EVENTS,
+            target_aggregate_type="IdempotencyPersistenceRecord",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["idempotency_persisted"],
+        ),
+        "record_persistent_queue_operation": CommandTypeRegistration(
+            command_type="record_persistent_queue_operation",
+            owner_service=OwnerService.SCHEDULER,
+            target_aggregate_type="PersistentQueueOperationRecord",
+            payload_schema_ref="BaseCommandPayload",
+            lease_required=True,
+            emitted_event_types=["persistent_queue_operation_recorded"],
+        ),
+        "record_persistence_runtime_report": CommandTypeRegistration(
+            command_type="record_persistence_runtime_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="PersistenceRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["persistence_runtime_reported"],
+        ),
     }
 )
 
@@ -1631,6 +1710,11 @@ EVENT_TYPES.update(
             "autoscaling_decided",
             "retry_dead_letter_recorded",
             "scale_recovery_reported",
+            "persistence_adapter_recorded",
+            "persistence_transaction_recorded",
+            "idempotency_persisted",
+            "persistent_queue_operation_recorded",
+            "persistence_runtime_reported",
         ]
     }
 )
@@ -2090,6 +2174,29 @@ for _scale_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _persistence_fixture, _negative in {
+    "persistence-transaction-success": False,
+    "idempotent-replay-success": False,
+    "queue-lease-recovery-success": False,
+    "non-atomic-commit": True,
+    "idempotency-not-persisted": True,
+    "event-log-gap": True,
+    "outbox-dispatch-missing": True,
+    "artifact-index-missing": True,
+    "lease-heartbeat-missing": True,
+}.items():
+    _base = f"tests/fixtures/{_persistence_fixture}"
+    FIXTURE_ORACLES[_persistence_fixture] = FixtureOracleRegistration(
+        fixture_id=_persistence_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -2301,6 +2408,18 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "OutboxRecord",
             "EventCursorRecord",
             "DurableReplayRecoveryReport",
+        ],
+    ),
+    "production_persistence_queue_runtime": _target_area(
+        "production_persistence_queue_runtime",
+        OwnerService.RUNTIME_EVENTS,
+        "materialized",
+        materialized=[
+            "PersistenceAdapterSpec",
+            "PersistenceTransactionRecord",
+            "IdempotencyPersistenceRecord",
+            "PersistentQueueOperationRecord",
+            "PersistenceRuntimeReport",
         ],
     ),
     "scheduler": _target_area(

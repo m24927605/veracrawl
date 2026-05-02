@@ -1,0 +1,1 @@
+{"expected_operator_status":"persistence_queue_runtime_completed","requires_transaction":true,"requires_event_cursor":true,"requires_outbox":true,"requires_artifact_index":true}

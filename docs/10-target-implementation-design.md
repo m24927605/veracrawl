@@ -859,6 +859,16 @@ Scale hardening executable slice:
 - stale leases, unfair site starvation, autoscaling without policy, dead letters without failure records, and replay gaps are target-profile failures.
 - the target spine remains queue/storage/cloud/metrics/tracing-neutral; concrete brokers, stores, telemetry backends, and cloud autoscalers are adapter work, not core coupling.
 
+Production persistence and queue runtime slice:
+
+- `PersistenceAdapterSpec` records adapter capability refs for metadata store, event log, outbox, artifact index, and queue ports without binding core to a concrete database, queue broker, object store, or cloud SDK.
+- `PersistenceTransactionRecord` records atomic unit-of-work boundaries across command, event, outbox, artifact, idempotency, and queue operation refs.
+- `IdempotencyPersistenceRecord` persists command identity, idempotency key, command result, event, outbox, duplicate, and rejection refs so worker retries are side-effect safe after adapter reopen.
+- `PersistentQueueOperationRecord` records enqueue, lease, heartbeat, ack, nack, and dead-letter transitions with lease/fencing, failure, and recovery refs.
+- `PersistenceRuntimeReport` ties adapter, transaction, durable command, idempotency, event cursor, outbox, artifact index, queue operation, lease, policy, and replay refs into one replayable acceptance record.
+- the standard-library reference filesystem store proves adapter contract semantics in fixtures; it is not the target's only production storage strategy.
+- non-atomic commits, missing idempotency persistence, event cursor gaps, unrecovered pending outbox records, missing artifact index refs, and missing lease heartbeat/recovery refs are target-profile failures.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

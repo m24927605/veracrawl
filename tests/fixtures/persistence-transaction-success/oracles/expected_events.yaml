@@ -1,0 +1,1 @@
+{"expected_events":["persistence_adapter_recorded","persistence_transaction_recorded","idempotency_persisted","persistent_queue_operation_recorded","persistence_runtime_reported"]}

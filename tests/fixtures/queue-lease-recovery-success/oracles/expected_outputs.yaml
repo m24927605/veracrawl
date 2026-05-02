@@ -1,0 +1,1 @@
+{"expected_operator_status":"persistence_queue_runtime_completed","requires_heartbeat":true,"requires_dead_letter":true,"requires_recovery_action":true}

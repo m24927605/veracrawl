@@ -78,8 +78,8 @@ runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
-review/replay/ops console spine, the export connector spine, and the scale
-hardening spine.
+review/replay/ops console spine, the export connector spine, the scale
+hardening spine, and the production persistence/queue runtime spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -130,6 +130,14 @@ boundary, arbitration, and agent-reasoning-as-evidence checks. It is not a claim
 that any concrete agent framework, model SDK, review UI, export delivery,
 distributed persistence, production browser rendering, or production scale
 operations are complete.
+The production persistence/queue runtime spine adds persistence adapter specs,
+transaction records, durable idempotency records, persistent queue operation
+records, a standard-library reference filesystem store, event cursor replay,
+outbox dispatch visibility, artifact index refs, queue lease heartbeat, ack,
+nack, dead-letter recovery refs, and fixture gates. It is not a claim that concrete
+database, queue broker, cloud storage, metrics/tracing backend, production
+deployment, production worker fleet, or production observability operations are
+complete.
 The review/replay/ops console spine adds review items, replay audit views,
 failure records, recovery actions, DR restore reports, quality reports,
 dashboard snapshots, ops console reports, fixture manifests, policy/review
@@ -435,6 +443,27 @@ for fixture in \
   replay-missing-scale-refs
 do
   uv run --python python3.12 --extra dev veracrawl-scale run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run persistence and queue runtime fixtures:
+
+```sh
+for fixture in \
+  persistence-transaction-success \
+  idempotent-replay-success \
+  queue-lease-recovery-success \
+  non-atomic-commit \
+  idempotency-not-persisted \
+  event-log-gap \
+  outbox-dispatch-missing \
+  artifact-index-missing \
+  lease-heartbeat-missing
+do
+  uv run --python python3.12 --extra dev veracrawl-persistence run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

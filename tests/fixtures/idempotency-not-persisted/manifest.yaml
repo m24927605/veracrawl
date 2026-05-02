@@ -1,0 +1,1 @@
+{"id":"idempotency-not-persisted","scenario":"idempotency-not-persisted","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"idempotency_not_persisted","expected_failure_type":"idempotency_not_persisted","negative_case":true}

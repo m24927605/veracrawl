@@ -1,0 +1,1 @@
+{"id":"idempotent-replay-success","scenario":"idempotent-replay-success","profile_refs":["target"],"expected_completion_result":"pass","expected_operator_status":"persistence_queue_runtime_completed","negative_case":false}

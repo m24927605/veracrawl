@@ -559,6 +559,37 @@ class ScaleFailureType(StrEnum):
     REPLAY_MISSING_SCALE_REFS = "replay_missing_scale_refs"
 
 
+class PersistenceAdapterKind(StrEnum):
+    REFERENCE_FILESYSTEM = "reference_filesystem"
+    EXTERNAL_ADAPTER = "external_adapter"
+
+
+class PersistenceCapability(StrEnum):
+    METADATA_STORE = "metadata_store"
+    EVENT_LOG = "event_log"
+    OUTBOX = "outbox"
+    ARTIFACT_INDEX = "artifact_index"
+    QUEUE = "queue"
+
+
+class PersistentQueueOperation(StrEnum):
+    ENQUEUE = "enqueue"
+    LEASE = "lease"
+    HEARTBEAT = "heartbeat"
+    ACK = "ack"
+    NACK = "nack"
+    DEAD_LETTER = "dead_letter"
+
+
+class PersistenceFailureType(StrEnum):
+    NON_ATOMIC_COMMIT = "non_atomic_commit"
+    IDEMPOTENCY_NOT_PERSISTED = "idempotency_not_persisted"
+    EVENT_LOG_GAP = "event_log_gap"
+    OUTBOX_DISPATCH_MISSING = "outbox_dispatch_missing"
+    ARTIFACT_INDEX_MISSING = "artifact_index_missing"
+    LEASE_HEARTBEAT_MISSING = "lease_heartbeat_missing"
+
+
 class UnitOfWorkStatus(StrEnum):
     OPEN = "open"
     COMMITTED = "committed"

@@ -188,6 +188,30 @@ This acceptance proves deterministic durable and scheduler semantics only. It do
 not prove production persistence adapters, distributed queueing, browser crawling,
 graph/memory intelligence, export delivery, or production scale readiness.
 
+Production persistence and queue runtime fixture contract:
+
+```text
+veracrawl-persistence run tests/fixtures/<persistence_fixture_id> --profile target --out .veracrawl-test-runs/<persistence_fixture_id>
+```
+
+Required persistence fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| persistence-transaction-success | adapter, transaction, command, event cursor, outbox, artifact, idempotency, queue, policy, and replay refs complete with `pass` |
+| idempotent-replay-success | reopened adapter dedupes duplicate command with 0 duplicate events and 0 duplicate outbox records |
+| queue-lease-recovery-success | persisted queue lease heartbeat, nack, dead-letter, failure, and recovery refs complete with `pass` |
+| non-atomic-commit | missing atomic transaction refs fail |
+| idempotency-not-persisted | missing idempotency refs fail duplicate-safe replay |
+| event-log-gap | missing event cursor refs fail replay |
+| outbox-dispatch-missing | unrecovered outbox refs fail |
+| artifact-index-missing | missing artifact index refs fail replay and lineage |
+| lease-heartbeat-missing | missing lease heartbeat/queue operation refs fail |
+
+This acceptance proves production-facing adapter semantics through a reference
+filesystem adapter. It does not prove concrete database, broker, cloud, metrics,
+tracing, deployment, or production worker readiness.
+
 Source adapter and fetch runtime fixture contract:
 
 ```text
@@ -966,6 +990,11 @@ Acceptance gates:
 - dead-letter/recovery fixtures prove exhausted retries create failure records and recovery action refs
 - replay fixtures prove passing scale reports include queue topology, queue item, shard lease, backpressure, autoscaling, dead-letter, failure, recovery, DR restore, policy, command, event cursor, outbox, and replay refs
 - negative fixtures for stale leases, unfair site starvation, autoscaling without policy, missing dead-letter failure records, and replay missing scale refs must fail deterministically
+- persistence transaction fixtures prove command, event, outbox, artifact index, idempotency, queue operation, policy, and replay refs commit together
+- idempotency fixtures prove duplicate commands after adapter reopen create 0 duplicate events and 0 duplicate outbox records
+- queue persistence fixtures prove enqueue, lease, heartbeat, ack, nack, dead-letter, failure, and recovery refs are durable and replay-visible
+- negative fixtures for non-atomic commits, missing idempotency persistence, event log gaps, unrecovered pending outbox, missing artifact indexes, and missing lease heartbeat refs must fail deterministically
+- reference filesystem persistence is accepted only as an adapter-contract proof; concrete database, queue broker, object store, cloud, metrics, tracing, and deployment readiness require separate adapter specs and gates
 
 ## Non-deceptive Completion Checklist
 

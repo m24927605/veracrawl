@@ -1,0 +1,1 @@
+{"expected_completion_result":"pass","required_refs":["adapter_ref","transaction_ref","command_record_refs","idempotency_record_refs","event_cursor_ref","outbox_refs","artifact_refs","queue_operation_refs","lease_refs","policy_decision_refs","replay_bundle_ref"]}
