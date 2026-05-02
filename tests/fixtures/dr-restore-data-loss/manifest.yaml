@@ -1,0 +1,1 @@
+{"id":"dr-restore-data-loss","scenario":"dr-restore-data-loss","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"dr_restore_data_loss_detected","expected_failure_type":"dr_restore_data_loss_detected","negative_case":true}

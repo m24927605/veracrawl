@@ -1,0 +1,1 @@
+{"id":"dr-restore-missing-export-reconciliation","scenario":"dr-restore-missing-export-reconciliation","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"dr_restore_missing_export_reconciliation_refs","expected_failure_type":"dr_restore_missing_export_reconciliation_refs","negative_case":true}

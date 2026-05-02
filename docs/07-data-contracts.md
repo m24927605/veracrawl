@@ -47,6 +47,7 @@ Target contract manifest:
 | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
 | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
 | RuntimeInfrastructureSpec, RuntimeInfrastructureReport, RuntimeInfrastructureFixtureManifest | required | integrated operational Postgres, Redis/Valkey, and S3-compatible infrastructure gate semantics, no-runtime, negative, idempotency, policy, and replay behavior are contracted |
+| DRRestorePlan, DRRestoreRun, DRRestoreReport, DRRestoreFixtureManifest | required | operational disaster recovery gate semantics, ordered restore phases, live infrastructure restore refs, no-runtime, negative, policy, recovery, and replay behavior are contracted |
 | FailureRecord, RecoveryAction, DriftEvent, QualityReport | required | failure, repair, drift, recovery, and operations are evented and reviewable |
 
 Target adapter types:
@@ -1017,7 +1018,7 @@ Target ownership coverage:
 | ContextRef, ContextBundle, AgentRunRequest, AgentRunResult, ModelRequest, ModelResponse, AgentActionTrace, ModelCallTrace, ToolCallTrace, ContextBundleTrace, FrontierRecommendation, MultiAgentWorkflow, AgentHandoff, CoordinationDecision | agents | agent runtime request -> context/model/tool/workflow trace -> event | framework-native state is diagnostic only |
 | ReviewItem, ReviewDecision | review_replay | review command -> reviewer decision -> event | reviewer authority and separation of duties are recorded |
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | export | export/outbox command -> idempotent dispatch -> receipt/withdrawal event | destination object mappings reconcile delivery and withdrawal |
-| DRRestorePlan, DRRestoreRun, DRRestoreReport | ops | restore plan/run command -> phase execution -> validation report event | restore phases are ordered, replayable, and validated before pass result |
+| DRRestorePlan, DRRestoreRun, DRRestoreReport, DRRestoreFixtureManifest | ops | restore plan/run command -> phase execution -> validation report event -> fixture gate | restore phases are ordered, replayable, live infrastructure-backed, and validated before pass result |
 | FailureRecord, RecoveryAction, QualityReport, BackpressureSignal, AutoscalingDecision | ops | failure/signal/recovery command -> ops record -> event | recovery is replayable and never silently mutates source of truth |
 | ArtifactLifecycleState | artifact_lifecycle | classify/redact/tombstone/delete/legal-hold command -> lifecycle event -> projection cleanup | deletion is blocked by legal hold; cleanup is evented |
 
@@ -1201,6 +1202,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | complete_dr_restore | ops | DRRestoreRun, DRRestoreReport | DRRestoreResultPayload | all validation gates pass or needs_review recorded | expected_version | dr_restore_reported | unresolved refs force fail or needs_review |
 | fail_dr_restore | ops | DRRestoreRun, DRRestoreReport | DRRestoreFailurePayload | failed phase and validation refs recorded | expected_version | dr_restore_reported, error_recorded | recovery action or manual review created |
 | record_dr_restore | ops | DRRestoreReport | DRRestorePayload | restore validation refs present | expected_version | dr_restore_reported | restore mismatch creates FailureRecord |
+| record_dr_restore_plan | ops | DRRestorePlan | BaseCommandPayload | restore scope, restore point, backup refs, ordered phases, policy refs, and approval refs validate | expected_version | dr_restore_plan_recorded | invalid phase graph rejected |
+| record_dr_restore_run | ops | DRRestoreRun | BaseCommandPayload | phase results, emitted events, policy refs, and failure/unresolved refs validate | expected_version | dr_restore_run_recorded | completed run without all phases rejects |
+| record_dr_restore_fixture_manifest | tests | DRRestoreFixtureManifest | BaseCommandPayload | expected result and negative flag validate | expected_version | dr_restore_fixture_manifest_recorded | negative pass expectation rejects |
 
 Additional transition commands required by `StateMachineSpec`:
 
@@ -3137,6 +3141,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |
 | object store events | ObjectStoreEventPayload | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport | adapter capability, put/get/head/list/delete, digest, lifecycle, no-runtime, failure, and replay status | endpoint, bucket credentials, and deleted content are redacted |
 | runtime infrastructure events | RuntimeInfrastructureEventPayload | RuntimeInfrastructureSpec, RuntimeInfrastructureReport | integrated persistence, queue, object, no-runtime, failure, policy, and replay status | DSNs, URLs, endpoint credentials, and object content are redacted |
+| operational DR events | OpsEventPayload | DRRestorePlan, DRRestoreRun, DRRestoreReport, DRRestoreFixtureManifest | restore plan, run, report, no-runtime, failure, policy, recovery, and replay status | DSNs, URLs, endpoint credentials, artifact content, and incident details are redacted |
 | artifact lifecycle events | ArtifactLifecycleEventPayload | ArtifactLifecycleState | lifecycle/hold status | redaction/tombstone refs remain |
 | failure/recovery/ops events | OpsEventPayload | FailureRecord, RecoveryAction, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, DRRestoreReport | recovery/status fields | incident details follow audit policy |
 
@@ -3970,6 +3975,11 @@ ProjectionMismatchReport:
 DRRestorePlan:
   id: string
   restore_scope_ref: string
+  restore_point_ref: string
+  backup_manifest_ref: string
+  metadata_snapshot_ref: string
+  artifact_snapshot_refs: list
+  event_cursor_refs: list
   restore_point:
     event_cursor_refs: list
     metadata_snapshot_ref: string
@@ -3983,6 +3993,7 @@ DRRestorePlan:
       validation_gate_refs: list
       rollback_behavior: retry | pause | rollback | manual_review
   required_validation_gates: list
+  policy_decision_refs: list
   approval_decision_refs: list
   created_at: timestamp
 ```
@@ -4006,6 +4017,9 @@ DRRestoreRun:
   current_phase: string
   status: planned | running | completed | failed | needs_review
   emitted_event_refs: list
+  failure_record_refs: list
+  unresolved_refs: list
+  policy_decision_refs: list
   created_at: timestamp
   updated_at: timestamp
 ```
@@ -4025,14 +4039,43 @@ DRRestoreReport:
   restore_scope_ref: string
   dr_restore_plan_id: string
   dr_restore_run_id: string
+  restore_point_ref: string
+  backup_manifest_ref: string
   metadata_restore_ref: string
   artifact_reachability_report_ref: string
   event_replay_report_ref: string
   projection_rebuild_job_refs: list
   export_reconciliation_refs: list
+  queue_recovery_refs: list
+  runtime_infrastructure_report_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  policy_decision_refs: list
+  replay_bundle_ref: string
+  validation_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  contract_only_refs: list
+  missing_ref_fields: list
   data_loss_detected: boolean
   unresolved_refs: list
+  operator_status: string
   result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## DRRestoreFixtureManifest
+
+```yaml
+DRRestoreFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: string
+  negative_case: boolean
   created_at: timestamp
 ```
 

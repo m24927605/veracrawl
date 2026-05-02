@@ -1,0 +1,1 @@
+{"expected_result":"pass","required_refs":["restore_point_ref","backup_manifest_ref","metadata_restore_ref","artifact_reachability_report_ref","event_replay_report_ref","projection_rebuild_job_refs","export_reconciliation_refs","queue_recovery_refs","runtime_infrastructure_report_refs"]}

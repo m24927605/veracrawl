@@ -1,0 +1,1 @@
+{"id":"dr-restore-unresolved-refs","scenario":"dr-restore-unresolved-refs","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"dr_restore_unresolved_refs","expected_failure_type":"dr_restore_unresolved_refs","negative_case":true}

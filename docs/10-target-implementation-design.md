@@ -915,6 +915,16 @@ Operational runtime infrastructure gate slice:
 - missing persistence refs, missing queue refs, missing object refs, and missing replay refs are runtime infrastructure conformance failures.
 - this slice does not implement managed cloud operations, deployment, production worker fleets, metrics/tracing backends, production observability, browser rendering, model SDK integration, or concrete agent framework integration. Those remain separate target gates.
 
+Operational disaster recovery gate slice:
+
+- `veracrawl.runtime_support.disaster_recovery` is core-owned and imports only VeraCrawl contracts plus the integrated runtime infrastructure report contract.
+- `DRRestorePlan` records restore scope, restore point, backup manifest, metadata and artifact snapshot refs, ordered phase refs, validation gates, rollback behavior, policy refs, and approval refs.
+- `DRRestoreRun` records ordered phase execution, phase validation outputs, emitted events, unresolved refs, failures, and terminal status.
+- `DRRestoreReport` can claim `pass` only when metadata restore, artifact reachability, event replay, projection rebuild, export reconciliation, queue recovery, integrated runtime infrastructure, policy, command, event cursor, outbox, validation, failure/recovery, and replay refs are present and no unresolved refs or data loss exist.
+- `veracrawl-dr` loads operational infrastructure through adapter-owned boundaries so fixture execution does not create static core dependencies on `psycopg`, `redis`, `boto3`, `botocore`, cloud SDKs, browser libraries, model SDKs, or agent frameworks.
+- no-runtime DR returns `needs_review`; missing metadata, artifact, event replay, projection, export, unresolved refs, data loss, and unsafe recovery without approval are deterministic failures.
+- this slice does not implement managed cloud backup, cross-region replication, deployment automation, production observability, alerting backends, on-call runbook automation, or production worker fleets. Those remain separate target gates.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

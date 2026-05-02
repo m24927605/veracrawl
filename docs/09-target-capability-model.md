@@ -350,6 +350,14 @@ Required acceptance:
   substrate can be labeled verified
 - an isolated adapter conformance pass cannot be labeled an integrated runtime
   infrastructure pass
+- operational DR gates must prove `DRRestorePlan`, `DRRestoreRun`, and
+  `DRRestoreReport` refs across live infrastructure, ordered restore phases,
+  metadata restore, artifact reachability, event replay, projection rebuild,
+  export reconciliation, failure/recovery actions, policy, command, event
+  cursor, outbox, and replay refs before disaster recovery can be labeled
+  verified
+- no live integrated infrastructure report, unresolved refs, data loss, missing
+  phase refs, or unsafe recovery without approval blocks operational DR pass
 
 ## Completion States
 

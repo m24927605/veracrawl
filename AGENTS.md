@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/020-operational-runtime-infrastructure-gate/plan.md`.
-Use it with `specs/020-operational-runtime-infrastructure-gate/spec.md`,
-`specs/020-operational-runtime-infrastructure-gate/research.md`,
-`specs/020-operational-runtime-infrastructure-gate/data-model.md`,
-`specs/020-operational-runtime-infrastructure-gate/contracts/`, and
-`specs/020-operational-runtime-infrastructure-gate/quickstart.md` for VeraCrawl Operational Runtime Infrastructure Gate work.
+Current active Spec Kit plan: `specs/021-operational-disaster-recovery-gate/plan.md`.
+Use it with `specs/021-operational-disaster-recovery-gate/spec.md`,
+`specs/021-operational-disaster-recovery-gate/research.md`,
+`specs/021-operational-disaster-recovery-gate/data-model.md`,
+`specs/021-operational-disaster-recovery-gate/contracts/`, and
+`specs/021-operational-disaster-recovery-gate/quickstart.md` for VeraCrawl Operational Disaster Recovery Gate work.
 <!-- SPECKIT END -->

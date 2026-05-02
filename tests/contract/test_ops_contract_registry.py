@@ -17,11 +17,14 @@ def test_ops_contracts_are_registered() -> None:
         "ReplayAuditView",
         "FailureRecord",
         "RecoveryAction",
+        "DRRestorePlan",
+        "DRRestoreRun",
         "DRRestoreReport",
         "QualityReport",
         "OpsDashboardSnapshot",
         "OpsConsoleReport",
         "OpsFixtureManifest",
+        "DRRestoreFixtureManifest",
     }
     assert expected.issubset(FOUNDATION_CONTRACTS)
     assert validate_registry().ok
@@ -33,7 +36,10 @@ def test_ops_commands_and_events_are_registered() -> None:
         "record_replay_audit_view": "replay_audit_view_recorded",
         "record_failure_record": "failure_recorded",
         "record_recovery_action": "recovery_action_recorded",
+        "record_dr_restore_plan": "dr_restore_plan_recorded",
+        "record_dr_restore_run": "dr_restore_run_recorded",
         "record_dr_restore_report": "dr_restore_reported",
+        "record_dr_restore_fixture_manifest": "dr_restore_fixture_manifest_recorded",
         "record_quality_report": "quality_report_recorded",
         "record_ops_dashboard_snapshot": "ops_dashboard_snapshot_recorded",
         "record_ops_console_report": "ops_console_reported",

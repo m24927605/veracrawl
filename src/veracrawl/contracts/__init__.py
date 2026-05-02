@@ -119,7 +119,10 @@ from veracrawl.contracts.objective import (
     RuntimeCompletionGate,
 )
 from veracrawl.contracts.ops import (
+    DRRestoreFixtureManifest,
+    DRRestorePlan,
     DRRestoreReport,
+    DRRestoreRun,
     FailureRecord,
     OpsConsoleReport,
     OpsDashboardSnapshot,
@@ -217,7 +220,10 @@ __all__ = [
     "CrawlRun",
     "CrawlRunEvent",
     "DRRestoreReport",
+    "DRRestoreFixtureManifest",
     "DRRestoreOracle",
+    "DRRestorePlan",
+    "DRRestoreRun",
     "DocumentArtifact",
     "DriftRepairSignal",
     "DurableCommandRecord",

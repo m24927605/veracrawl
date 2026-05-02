@@ -243,6 +243,22 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         privacy=True,
         tests=["tests/unit/test_ops_review_recovery_boundary.py"],
     ),
+    "DRRestorePlan": _contract(
+        "DRRestorePlan",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_operational_dr_contracts.py"],
+    ),
+    "DRRestoreRun": _contract(
+        "DRRestoreRun",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_operational_dr_contracts.py"],
+    ),
     "DRRestoreReport": _contract(
         "DRRestoreReport",
         OwnerService.OPS,
@@ -277,6 +293,12 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "ops",
         tests=["tests/integration/test_ops_fixtures.py"],
+    ),
+    "DRRestoreFixtureManifest": _contract(
+        "DRRestoreFixtureManifest",
+        OwnerService.TESTS,
+        "ops",
+        tests=["tests/integration/test_operational_dr_fixtures.py"],
     ),
     "ExportTargetSpec": _contract(
         "ExportTargetSpec",
@@ -1486,12 +1508,36 @@ COMMAND_TYPES.update(
                 "recovery_action_completed",
             ],
         ),
+        "record_dr_restore_plan": CommandTypeRegistration(
+            command_type="record_dr_restore_plan",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="DRRestorePlan",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["dr_restore"],
+            approval_required=True,
+            emitted_event_types=["dr_restore_plan_recorded"],
+        ),
+        "record_dr_restore_run": CommandTypeRegistration(
+            command_type="record_dr_restore_run",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="DRRestoreRun",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["dr_restore"],
+            emitted_event_types=["dr_restore_run_recorded"],
+        ),
         "record_dr_restore_report": CommandTypeRegistration(
             command_type="record_dr_restore_report",
             owner_service=OwnerService.OPS,
             target_aggregate_type="DRRestoreReport",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["dr_restore_reported"],
+        ),
+        "record_dr_restore_fixture_manifest": CommandTypeRegistration(
+            command_type="record_dr_restore_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="DRRestoreFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["dr_restore_fixture_manifest_recorded"],
         ),
         "record_quality_report": CommandTypeRegistration(
             command_type="record_quality_report",
@@ -1862,7 +1908,10 @@ EVENT_TYPES.update(
             "recovery_action_recorded",
             "recovery_action_started",
             "recovery_action_completed",
+            "dr_restore_plan_recorded",
+            "dr_restore_run_recorded",
             "dr_restore_reported",
+            "dr_restore_fixture_manifest_recorded",
             "quality_report_recorded",
             "ops_dashboard_snapshot_recorded",
             "ops_console_reported",
@@ -2465,6 +2514,30 @@ for _infrastructure_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _dr_fixture, _negative in {
+    "dr-restore-success": False,
+    "dr-restore-runtime-unavailable": False,
+    "dr-restore-missing-metadata": True,
+    "dr-restore-missing-artifact-reachability": True,
+    "dr-restore-missing-event-replay": True,
+    "dr-restore-missing-projection-rebuild": True,
+    "dr-restore-missing-export-reconciliation": True,
+    "dr-restore-unresolved-refs": True,
+    "dr-restore-data-loss": True,
+    "dr-restore-unsafe-recovery-without-approval": True,
+}.items():
+    _base = f"tests/fixtures/{_dr_fixture}"
+    FIXTURE_ORACLES[_dr_fixture] = FixtureOracleRegistration(
+        fixture_id=_dr_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_dr_restore_ref=f"{_base}/oracles/expected_dr_restore.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -2654,10 +2727,13 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "ReplayAuditView",
             "FailureRecord",
             "RecoveryAction",
+            "DRRestorePlan",
+            "DRRestoreRun",
             "DRRestoreReport",
             "QualityReport",
             "OpsDashboardSnapshot",
             "OpsConsoleReport",
+            "DRRestoreFixtureManifest",
         ],
     ),
     "artifact_lifecycle": _target_area(
@@ -2680,6 +2756,20 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "ObjectStoreOperationRecord",
             "ObjectStoreConformanceReport",
             "ObjectStoreFixtureManifest",
+        ],
+    ),
+    "operational_disaster_recovery_gate": _target_area(
+        "operational_disaster_recovery_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "DRRestorePlan",
+            "DRRestoreRun",
+            "DRRestoreReport",
+            "DRRestoreFixtureManifest",
+            "FailureRecord",
+            "RecoveryAction",
+            "RuntimeInfrastructureReport",
         ],
     ),
     "durable_persistence": _target_area(

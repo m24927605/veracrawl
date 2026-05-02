@@ -9,6 +9,10 @@ from pydantic import Field, field_validator, model_validator
 from veracrawl.contracts.common import Ref, TimestampedModel, utc_now
 from veracrawl.contracts.enums import (
     CompletenessResult,
+    DRRestoreFailureType,
+    DRRestorePhase,
+    DRRestorePhaseStatus,
+    DRRestoreRunStatus,
     OpsDashboardType,
     OpsFailureType,
     OpsRecoveryStatus,
@@ -176,40 +180,211 @@ class RecoveryAction(TimestampedModel):
         return self
 
 
+class DRRestorePlanPhase(TimestampedModel):
+    phase_name: DRRestorePhase
+    phase_order: int
+    input_refs: list[Ref] = Field(default_factory=list)
+    output_contract_refs: list[Ref] = Field(default_factory=list)
+    validation_gate_refs: list[Ref] = Field(default_factory=list)
+    rollback_behavior: str = "manual_review"
+
+    @model_validator(mode="after")
+    def validate_plan_phase(self) -> DRRestorePlanPhase:
+        if self.phase_order < 1:
+            raise ValueError("DR restore phase order must be positive")
+        if not self.input_refs:
+            raise ValueError("DR restore plan phase requires input refs")
+        if not self.output_contract_refs:
+            raise ValueError("DR restore plan phase requires output contract refs")
+        if not self.validation_gate_refs:
+            raise ValueError("DR restore plan phase requires validation gates")
+        return self
+
+
+class DRRestorePlan(TimestampedModel):
+    id: str
+    restore_scope_ref: Ref
+    restore_point_ref: Ref
+    backup_manifest_ref: Ref
+    metadata_snapshot_ref: Ref
+    artifact_snapshot_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    ordered_phases: list[DRRestorePlanPhase] = Field(default_factory=list)
+    required_validation_gate_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    approval_decision_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_dr_restore_plan(self) -> DRRestorePlan:
+        if not self.artifact_snapshot_refs:
+            raise ValueError("DR restore plan requires artifact snapshot refs")
+        if not self.event_cursor_refs:
+            raise ValueError("DR restore plan requires event cursor refs")
+        if not self.policy_decision_refs:
+            raise ValueError("DR restore plan requires policy refs")
+        if not self.approval_decision_refs:
+            raise ValueError("DR restore plan requires approval refs")
+        required_phases = set(DRRestorePhase)
+        present_phases = {phase.phase_name for phase in self.ordered_phases}
+        if present_phases != required_phases:
+            raise ValueError("DR restore plan must include every required phase exactly once")
+        orders = [phase.phase_order for phase in self.ordered_phases]
+        if orders != sorted(orders) or len(orders) != len(set(orders)):
+            raise ValueError("DR restore plan phases must be strictly ordered")
+        phase_gate_refs = {
+            ref for phase in self.ordered_phases for ref in phase.validation_gate_refs
+        }
+        if not set(self.required_validation_gate_refs).issubset(phase_gate_refs):
+            raise ValueError("DR restore plan required gates must be declared on phases")
+        return self
+
+
+class DRRestorePhaseResult(TimestampedModel):
+    phase_name: DRRestorePhase
+    status: DRRestorePhaseStatus
+    input_refs: list[Ref] = Field(default_factory=list)
+    output_refs: list[Ref] = Field(default_factory=list)
+    validation_result_refs: list[Ref] = Field(default_factory=list)
+    failure_record_ref: Ref | None = None
+
+    @model_validator(mode="after")
+    def validate_phase_result(self) -> DRRestorePhaseResult:
+        if self.status == DRRestorePhaseStatus.COMPLETED:
+            if not self.output_refs or not self.validation_result_refs:
+                raise ValueError("completed DR phase requires output and validation refs")
+        if self.status == DRRestorePhaseStatus.FAILED and not self.failure_record_ref:
+            raise ValueError("failed DR phase requires failure ref")
+        return self
+
+
+class DRRestoreRun(TimestampedModel):
+    id: str
+    dr_restore_plan_id: str
+    restore_scope_ref: Ref
+    phase_results: list[DRRestorePhaseResult] = Field(default_factory=list)
+    current_phase: DRRestorePhase
+    status: DRRestoreRunStatus
+    emitted_event_refs: list[Ref] = Field(default_factory=list)
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    unresolved_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("updated_at")
+    @classmethod
+    def require_updated_at_utc(cls, value: datetime) -> datetime:
+        return _require_utc(value)
+
+    @model_validator(mode="after")
+    def validate_dr_restore_run(self) -> DRRestoreRun:
+        if not self.dr_restore_plan_id:
+            raise ValueError("DR restore run requires plan id")
+        if not self.policy_decision_refs:
+            raise ValueError("DR restore run requires policy refs")
+        if self.status == DRRestoreRunStatus.COMPLETED:
+            required_phases = set(DRRestorePhase)
+            completed_phases = {
+                result.phase_name
+                for result in self.phase_results
+                if result.status == DRRestorePhaseStatus.COMPLETED
+            }
+            if completed_phases != required_phases:
+                raise ValueError("completed DR restore run requires all phases completed")
+            if not self.emitted_event_refs:
+                raise ValueError("completed DR restore run requires emitted event refs")
+        if self.status == DRRestoreRunStatus.FAILED and not self.failure_record_refs:
+            raise ValueError("failed DR restore run requires failure refs")
+        if self.status == DRRestoreRunStatus.NEEDS_REVIEW and not self.unresolved_refs:
+            raise ValueError("needs-review DR restore run requires unresolved refs")
+        return self
+
+
 class DRRestoreReport(TimestampedModel):
     id: str
     restore_scope_ref: Ref
     dr_restore_plan_id: str
     dr_restore_run_id: str
-    metadata_restore_ref: Ref
-    artifact_reachability_report_ref: Ref
-    event_replay_report_ref: Ref
+    restore_point_ref: Ref | None = None
+    backup_manifest_ref: Ref | None = None
+    metadata_restore_ref: Ref | None = None
+    artifact_reachability_report_ref: Ref | None = None
+    event_replay_report_ref: Ref | None = None
     projection_rebuild_job_refs: list[Ref] = Field(default_factory=list)
     export_reconciliation_refs: list[Ref] = Field(default_factory=list)
+    queue_recovery_refs: list[Ref] = Field(default_factory=list)
+    runtime_infrastructure_report_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
     validation_refs: list[Ref] = Field(default_factory=list)
     failure_record_refs: list[Ref] = Field(default_factory=list)
     recovery_action_refs: list[Ref] = Field(default_factory=list)
+    contract_only_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
     data_loss_detected: bool
     unresolved_refs: list[Ref] = Field(default_factory=list)
+    operator_status: str = ""
     result: CompletenessResult
 
     @model_validator(mode="after")
     def validate_dr_restore_report(self) -> DRRestoreReport:
         if self.result == CompletenessResult.PASS:
-            required = [
-                self.restore_scope_ref,
-                self.metadata_restore_ref,
-                self.artifact_reachability_report_ref,
-                self.event_replay_report_ref,
-                self.projection_rebuild_job_refs,
-                self.validation_refs,
-            ]
-            if not all(required) or self.data_loss_detected or self.unresolved_refs:
+            required = {
+                "restore_scope_ref": self.restore_scope_ref,
+                "restore_point_ref": self.restore_point_ref,
+                "backup_manifest_ref": self.backup_manifest_ref,
+                "metadata_restore_ref": self.metadata_restore_ref,
+                "artifact_reachability_report_ref": self.artifact_reachability_report_ref,
+                "event_replay_report_ref": self.event_replay_report_ref,
+                "projection_rebuild_job_refs": self.projection_rebuild_job_refs,
+                "export_reconciliation_refs": self.export_reconciliation_refs,
+                "queue_recovery_refs": self.queue_recovery_refs,
+                "runtime_infrastructure_report_refs": self.runtime_infrastructure_report_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+                "validation_refs": self.validation_refs,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.missing_ref_fields
+                or self.contract_only_refs
+                or self.data_loss_detected
+                or self.unresolved_refs
+            ):
                 raise ValueError(
-                    "passing DR restore report requires complete refs and no data loss"
+                    f"passing DR restore report requires complete refs: {missing}"
                 )
+        elif self.result == CompletenessResult.NEEDS_REVIEW:
+            if not (self.contract_only_refs or self.unresolved_refs or self.missing_ref_fields):
+                raise ValueError("needs-review DR restore report requires review refs")
         elif not (self.failure_record_refs or self.unresolved_refs):
             raise ValueError("non-pass DR restore report requires failure or unresolved refs")
+        return self
+
+
+class DRRestoreFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: DRRestoreFailureType | None = None
+    negative_case: bool = False
+
+    @model_validator(mode="after")
+    def validate_fixture(self) -> DRRestoreFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("DR restore fixture must support target profile")
+        if self.negative_case and self.expected_completion_result != CompletenessResult.FAIL:
+            raise ValueError("negative DR restore fixture must expect fail")
+        if self.expected_failure_type is not None and not self.negative_case:
+            raise ValueError("expected failure type requires negative case")
         return self
 
 

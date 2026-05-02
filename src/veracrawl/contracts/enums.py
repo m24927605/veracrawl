@@ -433,6 +433,43 @@ class OpsFailureType(StrEnum):
     UNSAFE_RECOVERY_WITHOUT_REVIEW = "unsafe_recovery_without_review"
 
 
+class DRRestorePhase(StrEnum):
+    RESTORE_METADATA = "restore_metadata"
+    RESTORE_ARTIFACTS = "restore_artifacts"
+    REPLAY_EVENTS = "replay_events"
+    REBUILD_PROJECTIONS = "rebuild_projections"
+    RECONCILE_EXPORTS = "reconcile_exports"
+    VALIDATE_REFERENCES = "validate_references"
+    PUBLISH_REPORT = "publish_report"
+
+
+class DRRestorePhaseStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class DRRestoreRunStatus(StrEnum):
+    PLANNED = "planned"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    NEEDS_REVIEW = "needs_review"
+
+
+class DRRestoreFailureType(StrEnum):
+    MISSING_METADATA_RESTORE_REFS = "dr_restore_missing_metadata_restore_refs"
+    MISSING_ARTIFACT_REACHABILITY_REFS = "dr_restore_missing_artifact_reachability_refs"
+    MISSING_EVENT_REPLAY_REFS = "dr_restore_missing_event_replay_refs"
+    MISSING_PROJECTION_REBUILD_REFS = "dr_restore_missing_projection_rebuild_refs"
+    MISSING_EXPORT_RECONCILIATION_REFS = "dr_restore_missing_export_reconciliation_refs"
+    UNRESOLVED_REFS = "dr_restore_unresolved_refs"
+    DATA_LOSS_DETECTED = "dr_restore_data_loss_detected"
+    UNSAFE_RECOVERY_WITHOUT_APPROVAL = "dr_restore_unsafe_recovery_without_approval"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"

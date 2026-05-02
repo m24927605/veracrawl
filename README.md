@@ -100,6 +100,14 @@ Redis/Valkey, and S3-compatible adapters into one acceptance report so
 metadata/event/outbox/idempotency refs, queue broker refs, object artifact refs,
 policy refs, and replay refs are validated together rather than as isolated
 adapter passes.
+The operational disaster recovery gate builds on that live substrate and proves
+DR restore plans, ordered restore phases, metadata restore, artifact
+reachability, event replay, projection rebuild, export reconciliation,
+failure/recovery refs, policy refs, and replay refs in one operator-visible DR
+report. It can claim `pass` only when the live integrated infrastructure report
+contributes refs in the same run. It is not a claim that managed cloud backup,
+cross-region replication, deployment automation, production observability,
+alerting backends, or production worker fleets are ready.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -689,6 +697,36 @@ Run the Docker-backed integrated infrastructure gate:
 VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev \
   --extra postgres --extra queue-redis --extra object-s3 \
   pytest tests/integration/test_operational_infrastructure_live.py
+```
+
+Run operational DR no-runtime and negative fixtures:
+
+```sh
+for fixture in \
+  dr-restore-runtime-unavailable \
+  dr-restore-missing-metadata \
+  dr-restore-missing-artifact-reachability \
+  dr-restore-missing-event-replay \
+  dr-restore-missing-projection-rebuild \
+  dr-restore-missing-export-reconciliation \
+  dr-restore-unresolved-refs \
+  dr-restore-data-loss \
+  dr-restore-unsafe-recovery-without-approval
+do
+  uv run --python python3.12 --extra dev --extra postgres --extra queue-redis --extra object-s3 \
+    veracrawl-dr run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run the Docker-backed operational DR gate:
+
+```sh
+VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev \
+  --extra postgres --extra queue-redis --extra object-s3 \
+  pytest tests/integration/test_operational_disaster_recovery_live.py
 ```
 
 ## Safety Boundary

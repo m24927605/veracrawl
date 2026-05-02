@@ -314,6 +314,33 @@ production worker fleets, metrics/tracing backends, production observability,
 browser rendering, model SDK integration, or concrete agent framework
 integration.
 
+Operational disaster recovery gate fixture contract:
+
+```text
+veracrawl-dr run tests/fixtures/<dr_fixture_id> --profile target --out .veracrawl-test-runs/<dr_fixture_id>
+```
+
+Required operational DR fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| dr-restore-success | live integrated infrastructure report plus DR plan, run, metadata restore, artifact reachability, event replay, projection rebuild, export reconciliation, queue recovery, failure/recovery, policy, command, event cursor, outbox, validation, and replay refs produce one `pass` report |
+| dr-restore-runtime-unavailable | no live integrated infrastructure returns `needs_review` with contract-only refs and must not claim operational DR pass |
+| dr-restore-missing-metadata | missing metadata restore refs fail |
+| dr-restore-missing-artifact-reachability | missing artifact reachability refs fail |
+| dr-restore-missing-event-replay | missing event replay refs fail |
+| dr-restore-missing-projection-rebuild | missing projection rebuild refs fail |
+| dr-restore-missing-export-reconciliation | missing export reconciliation refs fail |
+| dr-restore-unresolved-refs | unresolved refs fail |
+| dr-restore-data-loss | detected data loss fails |
+| dr-restore-unsafe-recovery-without-approval | side-effecting recovery without approval fails |
+
+This acceptance proves operational DR only when live Postgres, Redis/Valkey,
+and S3-compatible infrastructure refs feed the same DR restore gate. It does
+not prove managed cloud backup, cross-region replication, deployment
+automation, production observability, alerting backends, on-call runbook
+automation, or production worker fleet readiness.
+
 Source adapter and fetch runtime fixture contract:
 
 ```text
@@ -1107,6 +1134,9 @@ Acceptance gates:
 - operational infrastructure fixtures prove live Postgres, Redis/Valkey, and S3-compatible refs in one runtime report only through explicit live runtimes or a Docker-backed integrated gate
 - no-runtime infrastructure fixtures must remain `needs_review` and contract-only
 - negative infrastructure fixtures for missing persistence, queue, object, and replay refs must fail deterministically
+- operational DR fixtures prove ordered restore plans, restore runs, metadata restore, artifact reachability, event replay, projection rebuild, export reconciliation, queue recovery, failure/recovery, policy, command, event cursor, outbox, validation, and replay refs only through a live integrated infrastructure report or Docker-backed gate
+- no-runtime DR fixtures must remain `needs_review` and contract-only
+- negative DR fixtures for missing metadata, artifact reachability, event replay, projection rebuild, export reconciliation, unresolved refs, data loss, and unsafe recovery without approval must fail deterministically
 
 ## Non-deceptive Completion Checklist
 
