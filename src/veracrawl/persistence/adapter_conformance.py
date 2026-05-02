@@ -195,12 +195,40 @@ def run_sqlite_adapter_conformance(
             missing_field="adapter_ref",
             policy_refs=policy_refs,
         )
-    return _sqlite_success_result(
+    return _operational_success_result(
         fixture_id=fixture_id,
         scenario=scenario,
         store=store,
         adapter=adapter_spec,
         policy_refs=policy_refs,
+        operator_status="sqlite_adapter_conformance_completed",
+    )
+
+
+def run_postgres_adapter_conformance(
+    *,
+    fixture_id: str,
+    scenario: str,
+    store: OperationalPersistenceAdapter,
+    adapter_spec: PersistenceAdapterSpec,
+    policy_decision_refs: list[Ref] | None = None,
+) -> PersistenceAdapterConformanceResult:
+    policy_refs = policy_decision_refs or [f"policy:{fixture_id}:persistence-adapter"]
+    if set(adapter_spec.capability_refs) != set(PersistenceCapability):
+        return _failure_result(
+            fixture_id=fixture_id,
+            adapter=adapter_spec,
+            failure=PersistenceAdapterConformanceFailureType.ADAPTER_MISSING_CAPABILITY,
+            missing_field="adapter_ref",
+            policy_refs=policy_refs,
+        )
+    return _operational_success_result(
+        fixture_id=fixture_id,
+        scenario=scenario,
+        store=store,
+        adapter=adapter_spec,
+        policy_refs=policy_refs,
+        operator_status="postgres_adapter_conformance_completed",
     )
 
 
@@ -239,13 +267,45 @@ def run_postgres_contract_conformance(
     )
 
 
-def _sqlite_success_result(
+def run_postgres_runtime_unavailable_conformance(
+    *,
+    fixture_id: str,
+    adapter_spec: PersistenceAdapterSpec,
+    policy_decision_refs: list[Ref] | None = None,
+) -> PersistenceAdapterConformanceResult:
+    policy_refs = policy_decision_refs or [f"policy:{fixture_id}:persistence-adapter"]
+    report = PersistenceAdapterConformanceReport(
+        id=f"persistence-adapter-conformance-report:{fixture_id}",
+        adapter_ref=adapter_spec.id,
+        adapter_kind=adapter_spec.adapter_kind,
+        policy_decision_refs=policy_refs,
+        contract_only_refs=[
+            "runtime:postgres:dsn-required",
+            "runtime:postgres:live-conformance-not-executed",
+        ],
+        operator_status="postgres_runtime_unavailable",
+        completion_result=CompletenessResult.NEEDS_REVIEW,
+    )
+    return PersistenceAdapterConformanceResult(
+        adapter=adapter_spec,
+        migrations=[],
+        transaction=None,
+        command_records=[],
+        idempotency_records=[],
+        outbox_records=[],
+        queue_operations=[],
+        report=report,
+    )
+
+
+def _operational_success_result(
     *,
     fixture_id: str,
     scenario: str,
     store: OperationalPersistenceAdapter,
     adapter: PersistenceAdapterSpec,
     policy_refs: list[Ref],
+    operator_status: str,
 ) -> PersistenceAdapterConformanceResult:
     run_ref = f"run:{fixture_id}"
     transaction = store.begin_transaction(
@@ -274,7 +334,10 @@ def _sqlite_success_result(
     command_records = [command_record]
     idempotency_records = [idempotency]
     reloaded = False
-    if scenario == "sqlite-reopen-idempotency-success":
+    if scenario in {
+        "sqlite-reopen-idempotency-success",
+        "postgres-reopen-idempotency-success",
+    }:
         reopened = store.reopen()
         duplicate_record, _, _, duplicate_idempotency, duplicate = reopened.handle_command_once(
             command.model_copy(update={"id": f"cmd:{fixture_id}:persist:retry"}),
@@ -297,7 +360,11 @@ def _sqlite_success_result(
         fixture_id=fixture_id,
         command_result_ref=command_result.id,
         policy_refs=policy_refs,
-        include_dead_letter=scenario == "sqlite-queue-recovery-success",
+        include_dead_letter=scenario
+        in {
+            "sqlite-queue-recovery-success",
+            "postgres-queue-recovery-success",
+        },
     )
     cursor = store.build_event_cursor(run_ref)
     migration = PersistenceMigrationRecord(
@@ -341,7 +408,7 @@ def _sqlite_success_result(
         lease_refs=lease_refs,
         policy_decision_refs=policy_refs,
         replay_bundle_ref=f"replay-bundle:{fixture_id}:persistence-adapter",
-        operator_status="sqlite_adapter_conformance_completed",
+        operator_status=operator_status,
         completion_result=CompletenessResult.PASS,
     )
     return PersistenceAdapterConformanceResult(

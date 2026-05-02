@@ -81,9 +81,10 @@ projection spine, the memory kernel spine, the multi-agent repair spine, the
 review/replay/ops console spine, the export connector spine, the scale
 hardening spine, and the production persistence/queue runtime spine.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
-Postgres contract descriptor, core adapter conformance harness, migration
-records, adapter conformance reports, adapter fixtures, and dynamic adapter CLI
-loading without importing concrete storage into core.
+Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
+conformance harness, migration records, adapter conformance reports, adapter
+fixtures, and dynamic adapter CLI loading without importing concrete storage
+into core.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -167,9 +168,10 @@ operations are complete.
 The concrete persistence adapter spine proves executable SQLite adapter
 semantics for transactions, migrations, idempotency, event cursors, outbox,
 artifact index, queue leases, and replay refs. The Postgres descriptor is
-contract-only and returns `needs_review`; it is not a claim that live Postgres,
-external queue brokers, object storage, cloud deployment, or observability
-backends are production-ready.
+contract-only and returns `needs_review`; the operational Postgres adapter can
+claim `pass` only against an explicit live DSN or Docker-backed live gate. It is
+not a claim that external queue brokers, object storage, cloud deployment,
+managed Postgres operations, or observability backends are production-ready.
 
 Run the local foundation gate with Python 3.12:
 
@@ -488,6 +490,7 @@ for fixture in \
   sqlite-reopen-idempotency-success \
   sqlite-queue-recovery-success \
   postgres-adapter-contract-harness \
+  postgres-runtime-unavailable \
   adapter-missing-capability \
   sqlite-idempotency-gap \
   sqlite-event-cursor-gap \
@@ -499,6 +502,29 @@ do
     --profile target \
     --out .veracrawl-test-runs/$fixture
 done
+```
+
+Run operational Postgres adapter fixtures with a live DSN:
+
+```sh
+for fixture in \
+  postgres-adapter-conformance-success \
+  postgres-reopen-idempotency-success \
+  postgres-queue-recovery-success
+do
+  uv run --python python3.12 --extra dev --extra postgres veracrawl-persistence-adapter run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --postgres-dsn "$VERACRAWL_POSTGRES_DSN" \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run the Docker-backed live Postgres integration gate:
+
+```sh
+VERACRAWL_POSTGRES_DOCKER=1 uv run --python python3.12 --extra dev --extra postgres \
+  pytest tests/integration/test_postgres_persistence_adapter_live.py
 ```
 
 ## Safety Boundary

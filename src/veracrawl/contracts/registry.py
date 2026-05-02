@@ -2239,6 +2239,10 @@ for _persistence_adapter_fixture, _negative in {
     "sqlite-reopen-idempotency-success": False,
     "sqlite-queue-recovery-success": False,
     "postgres-adapter-contract-harness": False,
+    "postgres-adapter-conformance-success": False,
+    "postgres-reopen-idempotency-success": False,
+    "postgres-queue-recovery-success": False,
+    "postgres-runtime-unavailable": False,
     "adapter-missing-capability": True,
     "sqlite-idempotency-gap": True,
     "sqlite-event-cursor-gap": True,
@@ -2484,6 +2488,20 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
     ),
     "concrete_persistence_adapters": _target_area(
         "concrete_persistence_adapters",
+        OwnerService.PORTS,
+        "materialized",
+        materialized=[
+            "PersistenceAdapterSpec",
+            "PersistenceMigrationRecord",
+            "PersistenceAdapterConformanceReport",
+            "PersistenceAdapterFixtureManifest",
+            "PersistenceTransactionRecord",
+            "IdempotencyPersistenceRecord",
+            "PersistentQueueOperationRecord",
+        ],
+    ),
+    "operational_postgres_persistence_adapter": _target_area(
+        "operational_postgres_persistence_adapter",
         OwnerService.PORTS,
         "materialized",
         materialized=[

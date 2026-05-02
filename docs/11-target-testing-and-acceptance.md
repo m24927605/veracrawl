@@ -226,16 +226,21 @@ Required persistence adapter fixtures:
 | sqlite-reopen-idempotency-success | reopened SQLite adapter dedupes duplicate command with 0 duplicate events and 0 duplicate outbox records |
 | sqlite-queue-recovery-success | SQLite adapter persists heartbeat, nack, dead-letter, failure, and recovery queue operation refs with `pass` |
 | postgres-adapter-contract-harness | Postgres descriptor returns `needs_review` with `contract_only_refs` and does not claim operational pass |
+| postgres-adapter-conformance-success | live Postgres adapter proves adapter, transaction, migration, command, idempotency, event cursor, outbox, artifact, queue, lease, policy, and replay refs with `pass` |
+| postgres-reopen-idempotency-success | reopened live Postgres adapter dedupes duplicate command with 0 duplicate events and 0 duplicate outbox records |
+| postgres-queue-recovery-success | live Postgres adapter persists heartbeat, nack, dead-letter, failure, and recovery queue operation refs with `pass` |
+| postgres-runtime-unavailable | no live DSN/runtime returns `needs_review` and must not claim operational pass |
 | adapter-missing-capability | missing capability blocks conformance pass |
 | sqlite-idempotency-gap | missing SQLite idempotency refs fail |
 | sqlite-event-cursor-gap | missing SQLite event cursor refs fail |
 | sqlite-outbox-gap | missing SQLite outbox visibility refs fail |
 | sqlite-migration-missing | missing SQLite migration refs fail |
 
-This acceptance proves executable SQLite adapter semantics and Postgres adapter
-contract boundaries. It does not prove live Postgres connectivity, external
-queue brokers, object storage, cloud deployment, metrics/tracing backends,
-production observability, or production worker readiness.
+This acceptance proves executable SQLite adapter semantics, Postgres adapter
+contract boundaries, and operational Postgres adapter semantics when a live DSN
+or Docker-backed live gate is executed. It does not prove external queue
+brokers, object storage, cloud deployment, metrics/tracing backends, managed
+Postgres operations, production observability, or production worker readiness.
 
 Source adapter and fetch runtime fixture contract:
 
@@ -1021,7 +1026,8 @@ Acceptance gates:
 - negative fixtures for non-atomic commits, missing idempotency persistence, event log gaps, unrecovered pending outbox, missing artifact indexes, and missing lease heartbeat refs must fail deterministically
 - reference filesystem persistence is accepted only as an adapter-contract proof; concrete database, queue broker, object store, cloud, metrics, tracing, and deployment readiness require separate adapter specs and gates
 - concrete persistence adapter fixtures prove SQLite operational conformance through migrations, transactions, idempotency, event cursor, outbox, artifact index, queue lease/recovery, policy, and replay refs
-- Postgres adapter contract fixtures must remain `needs_review` and contract-only until a live adapter passes the same executable conformance harness
+- Postgres adapter contract fixtures must remain `needs_review` and contract-only
+- operational Postgres adapter fixtures must pass only through a live DSN or Docker-backed Postgres conformance gate
 
 ## Non-deceptive Completion Checklist
 

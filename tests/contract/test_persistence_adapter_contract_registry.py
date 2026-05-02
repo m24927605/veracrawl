@@ -47,6 +47,10 @@ def test_persistence_adapter_fixtures_are_registered() -> None:
         "sqlite-reopen-idempotency-success",
         "sqlite-queue-recovery-success",
         "postgres-adapter-contract-harness",
+        "postgres-adapter-conformance-success",
+        "postgres-reopen-idempotency-success",
+        "postgres-queue-recovery-success",
+        "postgres-runtime-unavailable",
         "adapter-missing-capability",
         "sqlite-idempotency-gap",
         "sqlite-event-cursor-gap",
@@ -56,4 +60,5 @@ def test_persistence_adapter_fixtures_are_registered() -> None:
     assert expected.issubset(FIXTURE_ORACLES)
     assert not FIXTURE_ORACLES["sqlite-adapter-conformance-success"].negative_case
     assert not FIXTURE_ORACLES["postgres-adapter-contract-harness"].negative_case
+    assert not FIXTURE_ORACLES["postgres-runtime-unavailable"].negative_case
     assert FIXTURE_ORACLES["adapter-missing-capability"].negative_case

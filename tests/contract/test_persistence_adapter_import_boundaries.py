@@ -16,3 +16,5 @@ def test_persistence_adapter_cli_uses_dynamic_adapter_imports() -> None:
     assert "importlib" in imports
     assert "veracrawl.adapters.persistence.sqlite" not in imports
     assert "veracrawl.adapters.persistence.postgres_contract" not in imports
+    assert "veracrawl.adapters.persistence.postgres" not in imports
+    assert "psycopg" not in imports

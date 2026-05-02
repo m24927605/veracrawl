@@ -1,0 +1,1 @@
+{"required_refs":["adapter_ref","contract_only_refs"],"must_not_claim":["transaction_refs","migration_record_refs","event_cursor_refs","outbox_refs"]}

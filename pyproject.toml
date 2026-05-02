@@ -18,6 +18,9 @@ dev = [
   "ruff>=0.5,<1",
   "mypy>=1.10,<2",
 ]
+postgres = [
+  "psycopg[binary]>=3.2,<4",
+]
 
 [project.scripts]
 veracrawl-contracts = "veracrawl.cli.contracts:main"

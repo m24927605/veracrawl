@@ -874,11 +874,12 @@ Concrete persistence adapter family slice:
 - `veracrawl.persistence.adapter_conformance` is core-owned and imports only VeraCrawl contracts/ports. It executes adapter conformance for operational adapters without importing `veracrawl.adapters`, database drivers, queue clients, or cloud SDKs.
 - `veracrawl.adapters.persistence.sqlite` is the executable standard-library SQLite adapter. It persists canonical documents for metadata, events, outbox, artifact index, queue operations, transactions, idempotency records, and migrations behind the same port-shaped API.
 - `veracrawl.adapters.persistence.postgres_contract` is a contract descriptor only. It declares required Postgres-facing ports and returns `needs_review` in the conformance harness until an operational Postgres adapter is implemented and tested.
+- `veracrawl.adapters.persistence.postgres` is the operational Postgres JSONB adapter. It uses optional `psycopg` only inside the adapter package, runs adapter-owned SQL migrations, and passes conformance only against an explicit live DSN.
 - `PersistenceMigrationRecord` proves migration version transitions, rollback plans, validation event cursors, and failure refs.
 - `PersistenceAdapterConformanceReport` proves adapter, transaction, migration, idempotency, event cursor, outbox, artifact, queue, lease, policy, and replay refs for operational passes; contract-only descriptors must use `contract_only_refs` and cannot claim pass.
 - `veracrawl-persistence-adapter` loads concrete adapter modules dynamically so CLI fixture execution does not create a core-to-adapter static dependency.
 - missing adapter capability, missing idempotency persistence, event cursor gaps, outbox visibility gaps, and missing migration refs are adapter conformance failures.
-- this slice does not implement live Postgres connectivity, external queue brokers, object storage, cloud deployment, metrics/tracing backends, or production observability. Those remain future concrete adapter specs and gates.
+- this slice does not implement external queue brokers, object storage, cloud deployment, metrics/tracing backends, managed Postgres operations, or production observability. Those remain future concrete adapter specs and gates.
 
 Disaster recovery:
 

@@ -563,6 +563,7 @@ class PersistenceAdapterKind(StrEnum):
     REFERENCE_FILESYSTEM = "reference_filesystem"
     EXTERNAL_ADAPTER = "external_adapter"
     SQLITE = "sqlite"
+    POSTGRES = "postgres"
     POSTGRES_CONTRACT = "postgres_contract"
 
 

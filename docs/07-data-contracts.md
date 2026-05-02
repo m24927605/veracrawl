@@ -3481,7 +3481,7 @@ Rules:
 ```yaml
 PersistenceAdapterSpec:
   id: string
-  adapter_kind: reference_filesystem | external_adapter | sqlite | postgres_contract
+  adapter_kind: reference_filesystem | external_adapter | sqlite | postgres | postgres_contract
   capability_refs:
     - metadata_store
     - event_log
@@ -3601,7 +3601,7 @@ PersistenceRuntimeReport:
 PersistenceAdapterConformanceReport:
   id: string
   adapter_ref: string
-  adapter_kind: reference_filesystem | external_adapter | sqlite | postgres_contract
+  adapter_kind: reference_filesystem | external_adapter | sqlite | postgres | postgres_contract
   transaction_refs: list
   migration_record_refs: list
   command_record_refs: list
@@ -3639,7 +3639,8 @@ Rules:
 
 - a passing `PersistenceRuntimeReport` requires adapter, transaction, durable command, idempotency, event cursor, outbox, artifact, queue operation, lease, policy, and replay refs.
 - a passing `PersistenceAdapterConformanceReport` requires adapter, transaction, migration, durable command, idempotency, event cursor, outbox, artifact, queue operation, lease, policy, and replay refs.
-- a `postgres_contract` conformance report may use `needs_review` with `contract_only_refs`; it must not claim `pass` until an operational Postgres adapter runs the executable harness.
+- a `postgres_contract` conformance report may use `needs_review` with `contract_only_refs`; it must not claim `pass`.
+- a `postgres` conformance report may claim `pass` only after a live Postgres DSN executes the operational adapter harness.
 - duplicate commands must return persisted idempotency refs and must not create duplicate event or outbox refs after adapter reopen.
 - queue operation records must persist lease, heartbeat, ack/nack, dead-letter, failure, and recovery refs as applicable.
 - persistence refs do not satisfy publication evidence; they only prove canonical state, replay, queue, and recovery behavior.

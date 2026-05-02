@@ -117,10 +117,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/016-concrete-persistence-adapters/plan.md`.
-Use it with `specs/016-concrete-persistence-adapters/spec.md`,
-`specs/016-concrete-persistence-adapters/research.md`,
-`specs/016-concrete-persistence-adapters/data-model.md`,
-`specs/016-concrete-persistence-adapters/contracts/`, and
-`specs/016-concrete-persistence-adapters/quickstart.md` for VeraCrawl Concrete Persistence Adapter Family work.
+Current active Spec Kit plan: `specs/017-operational-postgres-persistence-adapter/plan.md`.
+Use it with `specs/017-operational-postgres-persistence-adapter/spec.md`,
+`specs/017-operational-postgres-persistence-adapter/research.md`,
+`specs/017-operational-postgres-persistence-adapter/data-model.md`,
+`specs/017-operational-postgres-persistence-adapter/contracts/`, and
+`specs/017-operational-postgres-persistence-adapter/quickstart.md` for VeraCrawl Operational Postgres Persistence Adapter work.
 <!-- SPECKIT END -->

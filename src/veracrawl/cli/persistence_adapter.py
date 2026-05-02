@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -22,7 +23,9 @@ from veracrawl.contracts.persistence import (
 from veracrawl.persistence.adapter_conformance import (
     OperationalPersistenceAdapter,
     PersistenceAdapterConformanceResult,
+    run_postgres_adapter_conformance,
     run_postgres_contract_conformance,
+    run_postgres_runtime_unavailable_conformance,
     run_sqlite_adapter_conformance,
 )
 
@@ -94,17 +97,64 @@ def _postgres_adapter_spec(fixture_id: str, policy_refs: list[Ref]) -> Persisten
     return spec_builder(fixture_id, policy_refs)
 
 
+def _operational_postgres_adapter(
+    fixture_id: str,
+    policy_refs: list[Ref],
+    dsn: str,
+) -> tuple[OperationalPersistenceAdapter, PersistenceAdapterSpec]:
+    module = _load_module("veracrawl.adapters.persistence.postgres")
+    adapter_factory = cast(
+        Callable[[str], OperationalPersistenceAdapter],
+        module.__dict__["PostgresPersistenceAdapter"],
+    )
+    spec_builder = cast(
+        Callable[[str, list[Ref]], PersistenceAdapterSpec],
+        module.__dict__["postgres_adapter_spec"],
+    )
+    return adapter_factory(dsn), spec_builder(fixture_id, policy_refs)
+
+
 def run_persistence_adapter_fixture(
     manifest: PersistenceAdapterFixtureManifest,
     *,
     profile: str,
     state_root: Path,
+    postgres_dsn: str | None = None,
 ) -> PersistenceAdapterFixtureRunReport:
     policy_refs = [f"policy:{manifest.id}:persistence-adapter"]
     if manifest.scenario == "postgres-adapter-contract-harness":
         adapter_spec = _postgres_adapter_spec(manifest.id, policy_refs)
         result = run_postgres_contract_conformance(
             fixture_id=manifest.id,
+            adapter_spec=adapter_spec,
+            policy_decision_refs=policy_refs,
+        )
+    elif manifest.scenario == "postgres-runtime-unavailable":
+        module = _load_module("veracrawl.adapters.persistence.postgres")
+        spec_builder = cast(
+            Callable[[str, list[Ref]], PersistenceAdapterSpec],
+            module.__dict__["postgres_adapter_spec"],
+        )
+        result = run_postgres_runtime_unavailable_conformance(
+            fixture_id=manifest.id,
+            adapter_spec=spec_builder(manifest.id, policy_refs),
+            policy_decision_refs=policy_refs,
+        )
+    elif manifest.scenario.startswith("postgres-"):
+        resolved_dsn = postgres_dsn or os.getenv("VERACRAWL_POSTGRES_DSN")
+        if not resolved_dsn:
+            raise ValueError(
+                f"fixture {manifest.id} requires --postgres-dsn or VERACRAWL_POSTGRES_DSN"
+            )
+        adapter, adapter_spec = _operational_postgres_adapter(
+            manifest.id,
+            policy_refs,
+            resolved_dsn,
+        )
+        result = run_postgres_adapter_conformance(
+            fixture_id=manifest.id,
+            scenario=manifest.scenario,
+            store=adapter,
             adapter_spec=adapter_spec,
             policy_decision_refs=policy_refs,
         )
@@ -168,6 +218,7 @@ def run_fixture(
     *,
     profile: str,
     out: Path,
+    postgres_dsn: str | None = None,
 ) -> PersistenceAdapterFixtureRunReport:
     manifest = PersistenceAdapterFixtureManifest.model_validate(
         _load_json_like(fixture_dir / "manifest.yaml")
@@ -175,7 +226,12 @@ def run_fixture(
     if profile not in manifest.profile_refs:
         raise ValueError(f"fixture {manifest.id} does not support profile {profile}")
     state_root = out / "state"
-    report = run_persistence_adapter_fixture(manifest, profile=profile, state_root=state_root)
+    report = run_persistence_adapter_fixture(
+        manifest,
+        profile=profile,
+        state_root=state_root,
+        postgres_dsn=postgres_dsn,
+    )
     if report.completion_result.value != manifest.expected_completion_result:
         raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
@@ -194,6 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run")
     run.add_argument("fixture_dir")
     run.add_argument("--profile", default="target")
+    run.add_argument("--postgres-dsn")
     run.add_argument("--out", required=True)
     return parser
 
@@ -203,8 +260,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "run":
         try:
-            report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (AttributeError, ImportError, OSError, ValueError) as exc:
+            report = run_fixture(
+                Path(args.fixture_dir),
+                profile=args.profile,
+                out=Path(args.out),
+                postgres_dsn=args.postgres_dsn,
+            )
+        except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
             print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
             return 1
         print(

@@ -1,3 +1,3 @@
 {
-  "feature_directory": "specs/016-concrete-persistence-adapters"
+  "feature_directory": "specs/017-operational-postgres-persistence-adapter"
 }
