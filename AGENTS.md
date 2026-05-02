@@ -117,11 +117,11 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/006-normalize-extract-plane/plan.md`.
-Use it with `specs/006-normalize-extract-plane/spec.md`,
-`specs/006-normalize-extract-plane/research.md`,
-`specs/006-normalize-extract-plane/data-model.md`,
-`specs/006-normalize-extract-plane/contracts/`, and
-`specs/006-normalize-extract-plane/quickstart.md` for VeraCrawl Normalize and
-Extract Plane work.
+Current active Spec Kit plan: `specs/007-evidence-publication-spine/plan.md`.
+Use it with `specs/007-evidence-publication-spine/spec.md`,
+`specs/007-evidence-publication-spine/research.md`,
+`specs/007-evidence-publication-spine/data-model.md`,
+`specs/007-evidence-publication-spine/contracts/`, and
+`specs/007-evidence-publication-spine/quickstart.md` for VeraCrawl Evidence and
+Publication Spine work.
 <!-- SPECKIT END -->

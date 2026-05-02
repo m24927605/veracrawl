@@ -31,7 +31,13 @@ from veracrawl.contracts.durable import (
     UnitOfWorkRecord,
 )
 from veracrawl.contracts.event import CrawlRunEvent, EventCursor, EventTypeSpec
-from veracrawl.contracts.evidence import EvidenceCoverageResult, EvidencePacket
+from veracrawl.contracts.evidence import (
+    EvidenceAnchor,
+    EvidenceCoverageResult,
+    EvidencePacket,
+    EvidencePacketManifest,
+    EvidencePublicationFixtureManifest,
+)
 from veracrawl.contracts.fetch import DocumentArtifact, FetchAttempt, FetchResult, PageSnapshot
 from veracrawl.contracts.fixture import (
     BenchmarkFixtureManifest,
@@ -72,7 +78,7 @@ from veracrawl.contracts.processing import (
     SiteModel,
     TextAnchor,
 )
-from veracrawl.contracts.publication import OutputManifest, PublishedOutput
+from veracrawl.contracts.publication import OutputManifest, PublicationReport, PublishedOutput
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
@@ -88,7 +94,7 @@ from veracrawl.contracts.source_runtime import (
     SourceFailureReport,
     SourceFixtureManifest,
 )
-from veracrawl.contracts.verification import VerificationDecision
+from veracrawl.contracts.verification import ReviewDecision, VerificationDecision
 
 __all__ = [
     "AgentActionTrace",
@@ -127,6 +133,9 @@ __all__ = [
     "ExpectedOutputOracle",
     "EvidenceCoverageResult",
     "EvidencePacket",
+    "EvidenceAnchor",
+    "EvidencePacketManifest",
+    "EvidencePublicationFixtureManifest",
     "ExtractionCandidate",
     "ExtractionStrategy",
     "FetchAttempt",
@@ -151,6 +160,7 @@ __all__ = [
     "PolicyDecision",
     "ProcessFixtureManifest",
     "PublishedOutput",
+    "PublicationReport",
     "QueueLease",
     "ReplayBundleManifest",
     "ReplayBundleOracle",
@@ -161,6 +171,7 @@ __all__ = [
     "RuntimeCompletionGate",
     "SchedulerRecoveryReport",
     "RateLimitDecision",
+    "ReviewDecision",
     "SiteModel",
     "SourceAcquisitionReport",
     "SourceAdapterCommand",

@@ -304,6 +304,44 @@ prove evidence packet construction, publication completion, graph/memory
 intelligence, export delivery, distributed storage, distributed queueing,
 production browser rendering, or production scale readiness.
 
+Evidence and publication fixture contract:
+
+```text
+veracrawl-evidence run tests/fixtures/<evidence_fixture_id> --profile target --out .veracrawl-test-runs/<evidence_fixture_id>
+```
+
+Required evidence/publication fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| evidence-field-coverage | candidate fields produce source-backed evidence anchors, coverage result, evidence packet, evidence manifest, and no publication attempt |
+| evidence-verification-review | complete evidence produces accepted verification and review decisions with policy refs |
+| evidence-publication-success | evidence coverage, verification, review, publication policy, privacy refs, and replay refs produce output manifest and published output |
+| evidence-missing-anchor | missing field evidence produces needs-review and no output manifest |
+| evidence-verification-conflict | conflict verification blocks publication and records conflict diagnostics |
+| evidence-policy-denied | publication policy denial blocks publication and records typed failure |
+| evidence-replay-gap | missing command/event/outbox/replay refs block publication |
+| evidence-candidate-direct-publication | direct candidate publication is rejected before output manifest creation |
+
+Evidence/publication acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_evidence_publication_contract_registry.py`
+- `pytest tests/contract/test_evidence_publication_contracts.py`
+- `pytest tests/contract/test_evidence_publication_import_boundaries.py`
+- `pytest tests/unit/test_evidence_coverage.py`
+- `pytest tests/unit/test_verification_review.py`
+- `pytest tests/unit/test_publication_gates.py`
+- `pytest tests/unit/test_publication_replay.py`
+- `pytest tests/integration/test_evidence_publication_fixtures.py`
+
+This acceptance proves field evidence coverage, source-backed evidence anchors,
+evidence manifests, verification/review decisions, publication policy gates,
+direct candidate publication rejection, immutable output manifests, typed
+publication failures, and replay refs. It does not prove graph intelligence,
+memory intelligence, export delivery, distributed storage, distributed queueing,
+production browser rendering, review UI, or production scale readiness.
+
 Oracle schemas:
 
 ```yaml

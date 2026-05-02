@@ -1,0 +1,1 @@
+Verification conflict negative fixture.

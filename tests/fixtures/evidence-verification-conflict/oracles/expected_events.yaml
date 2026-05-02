@@ -1,0 +1,1 @@
+{"required_event_types":["record_verification_decision_committed"],"forbidden_event_types":["publish_output_manifest_committed"]}

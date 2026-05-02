@@ -1,0 +1,1 @@
+{"id":"evidence-missing-anchor","scenario":"missing-anchor","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"missing_evidence_anchor","negative_case":true}

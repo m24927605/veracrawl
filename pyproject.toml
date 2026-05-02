@@ -27,6 +27,7 @@ veracrawl-durable = "veracrawl.cli.durable:main"
 veracrawl-source = "veracrawl.cli.source:main"
 veracrawl-network = "veracrawl.cli.network:main"
 veracrawl-process = "veracrawl.cli.process:main"
+veracrawl-evidence = "veracrawl.cli.evidence:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

@@ -1,0 +1,1 @@
+{"id":"evidence-policy-denied","scenario":"policy-denied","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"publication_policy_denied","negative_case":true}

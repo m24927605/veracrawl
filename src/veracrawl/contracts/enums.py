@@ -397,3 +397,12 @@ class ProcessFailureType(StrEnum):
     EMPTY_NORMALIZED_CONTENT = "empty_normalized_content"
     CANDIDATE_ANCHOR_GAP = "candidate_anchor_gap"
     NORMALIZATION_FAILED = "normalization_failed"
+
+
+class PublicationFailureType(StrEnum):
+    MISSING_EVIDENCE_ANCHOR = "missing_evidence_anchor"
+    VERIFICATION_CONFLICT = "verification_conflict"
+    PUBLICATION_POLICY_DENIED = "publication_policy_denied"
+    REPLAY_GAP = "replay_gap"
+    CANDIDATE_DIRECT_PUBLICATION = "candidate_direct_publication"
+    REVIEW_NOT_ACCEPTED = "review_not_accepted"

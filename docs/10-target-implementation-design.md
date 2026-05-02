@@ -250,6 +250,36 @@ prove evidence packet construction, publication completion, graph or memory
 intelligence, export delivery, distributed persistence, production browser
 rendering, or production scale readiness.
 
+## Evidence And Publication Spine Slice
+
+The evidence/publication slice turns extraction candidates into evidence-backed
+outputs only after explicit gates pass:
+
+- `veracrawl.contracts.evidence`: `EvidenceCoverageResult`, `EvidencePacket`,
+  `EvidenceAnchor`, `EvidencePacketManifest`, and
+  `EvidencePublicationFixtureManifest`.
+- `veracrawl.contracts.verification`: `VerificationDecision` and
+  `ReviewDecision`.
+- `veracrawl.contracts.publication`: `PublishedOutput`, `OutputManifest`, and
+  `PublicationReport`.
+- `veracrawl.evidence.coverage`: field evidence coverage from extraction
+  candidate field anchors, with graph, memory, and agent reasoning refs preserved
+  only as diagnostics.
+- `veracrawl.verify.review`: deterministic verification and review decision
+  records for fixture acceptance and conflict cases.
+- `veracrawl.publish.gates`: publication gate evaluation, immutable output
+  manifest construction, and direct candidate publication rejection.
+- `veracrawl.review_replay.publication`: replay completeness validation for
+  evidence, verification, review, publication, policy, privacy, command, event,
+  outbox, artifact, output, and replay refs.
+- `veracrawl.cli.evidence`: `veracrawl-evidence run` fixture runner.
+
+This slice proves the candidate-not-output boundary with source-backed field
+evidence, accepted verification/review decisions, publication policy, privacy
+refs, and replay completeness. It does not prove graph intelligence, memory
+intelligence, export delivery, distributed persistence, production browser
+rendering, review UI, or production scale readiness.
+
 ## Target Port Matrix
 
 Every concrete infrastructure dependency must be reached through a VeraCrawl-owned port.

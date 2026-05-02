@@ -75,7 +75,8 @@ The current Python foundation implements the target architecture contracts, port
 framework-neutral adapter boundaries, command/event/replay primitives, policy gates,
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
-the local network/browser acquisition runtime, and the normalize/extract plane.
+the local network/browser acquisition runtime, the normalize/extract plane, and
+the evidence/publication spine.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -92,9 +93,15 @@ document manifests, text anchors, anchor maps, link provenance, page type
 classification, site model records, extraction strategies, anchored extraction
 candidates, and replay checks from raw snapshot to candidate. It is not a claim
 that the full production crawler runtime, production browser rendering fleet,
-production persistence adapters, authenticated crawling, evidence/publication
-completion, graph intelligence, memory system, export system, or production scale
-operations are complete.
+production persistence adapters, authenticated crawling, graph intelligence,
+memory system, export system, or production scale operations are complete. The
+evidence/publication spine adds field evidence anchors, evidence manifests,
+verification and review decisions, publication policy gates, output manifests,
+publication reports, and replay checks that prevent candidates from becoming
+outputs without source-backed evidence and accepted gates. It is not a claim that
+graph intelligence, memory intelligence, export delivery, distributed
+persistence, production browser rendering, or production scale operations are
+complete.
 
 Run the local foundation gate with Python 3.12:
 
@@ -227,6 +234,26 @@ for fixture in \
   process-anchor-gap
 do
   uv run --python python3.12 --extra dev veracrawl-process run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run evidence and publication fixtures:
+
+```sh
+for fixture in \
+  evidence-field-coverage \
+  evidence-verification-review \
+  evidence-publication-success \
+  evidence-missing-anchor \
+  evidence-verification-conflict \
+  evidence-policy-denied \
+  evidence-replay-gap \
+  evidence-candidate-direct-publication
+do
+  uv run --python python3.12 --extra dev veracrawl-evidence run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

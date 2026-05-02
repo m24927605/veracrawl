@@ -257,12 +257,40 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         tests=["tests/unit/test_evidence_publication_gates.py"],
     ),
+    "EvidenceAnchor": _contract(
+        "EvidenceAnchor",
+        OwnerService.EVIDENCE,
+        "evidence",
+        mutation_allowed=True,
+        tests=["tests/contract/test_evidence_publication_contracts.py"],
+    ),
+    "EvidencePacketManifest": _contract(
+        "EvidencePacketManifest",
+        OwnerService.EVIDENCE,
+        "evidence",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_evidence_publication_contracts.py"],
+    ),
+    "EvidencePublicationFixtureManifest": _contract(
+        "EvidencePublicationFixtureManifest",
+        OwnerService.TESTS,
+        "evidence",
+        tests=["tests/integration/test_evidence_publication_fixtures.py"],
+    ),
     "VerificationDecision": _contract(
         "VerificationDecision",
         OwnerService.VERIFY,
         "verification",
         mutation_allowed=True,
         tests=["tests/unit/test_evidence_publication_gates.py"],
+    ),
+    "ReviewDecision": _contract(
+        "ReviewDecision",
+        OwnerService.VERIFY,
+        "verification",
+        mutation_allowed=True,
+        tests=["tests/contract/test_evidence_publication_contracts.py"],
     ),
     "OutputManifest": _contract(
         "OutputManifest",
@@ -278,6 +306,13 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "publication",
         mutation_allowed=True,
         tests=["tests/unit/test_evidence_publication_gates.py"],
+    ),
+    "PublicationReport": _contract(
+        "PublicationReport",
+        OwnerService.REVIEW_REPLAY,
+        "publication",
+        mutation_allowed=True,
+        tests=["tests/unit/test_publication_replay.py"],
     ),
     "UnitOfWorkRecord": _contract(
         "UnitOfWorkRecord",
@@ -774,6 +809,37 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["process_report_recorded"],
         ),
+        "record_evidence_anchor": CommandTypeRegistration(
+            command_type="record_evidence_anchor",
+            owner_service=OwnerService.EVIDENCE,
+            target_aggregate_type="EvidenceAnchor",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_evidence"],
+            emitted_event_types=["evidence_anchor_recorded"],
+        ),
+        "record_evidence_manifest": CommandTypeRegistration(
+            command_type="record_evidence_manifest",
+            owner_service=OwnerService.EVIDENCE,
+            target_aggregate_type="EvidencePacketManifest",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_evidence"],
+            emitted_event_types=["evidence_manifest_recorded"],
+        ),
+        "record_review_decision": CommandTypeRegistration(
+            command_type="record_review_decision",
+            owner_service=OwnerService.VERIFY,
+            target_aggregate_type="ReviewDecision",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["review_decision_recorded"],
+        ),
+        "record_publication_report": CommandTypeRegistration(
+            command_type="record_publication_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="PublicationReport",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["publication_report_recorded"],
+        ),
     }
 )
 
@@ -854,6 +920,10 @@ EVENT_TYPES.update(
             "site_model_recorded",
             "extraction_strategy_recorded",
             "process_report_recorded",
+            "evidence_anchor_recorded",
+            "evidence_manifest_recorded",
+            "review_decision_recorded",
+            "publication_report_recorded",
         ]
     }
 )
@@ -1146,6 +1216,28 @@ for _process_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _evidence_fixture, _negative in {
+    "evidence-field-coverage": False,
+    "evidence-verification-review": False,
+    "evidence-publication-success": False,
+    "evidence-missing-anchor": True,
+    "evidence-verification-conflict": True,
+    "evidence-policy-denied": True,
+    "evidence-replay-gap": True,
+    "evidence-candidate-direct-publication": True,
+}.items():
+    _base = f"tests/fixtures/{_evidence_fixture}"
+    FIXTURE_ORACLES[_evidence_fixture] = FixtureOracleRegistration(
+        fixture_id=_evidence_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -1231,19 +1323,40 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
         "evidence",
         OwnerService.EVIDENCE,
         "materialized",
-        materialized=["EvidencePacket", "EvidenceCoverageResult"],
+        materialized=[
+            "EvidencePacket",
+            "EvidenceCoverageResult",
+            "EvidenceAnchor",
+            "EvidencePacketManifest",
+        ],
     ),
     "verification": _target_area(
         "verification",
         OwnerService.VERIFY,
         "materialized",
-        materialized=["VerificationDecision"],
+        materialized=["VerificationDecision", "ReviewDecision"],
     ),
     "publication": _target_area(
         "publication",
         OwnerService.PUBLISH,
         "materialized",
-        materialized=["PublishedOutput", "OutputManifest"],
+        materialized=["PublishedOutput", "OutputManifest", "PublicationReport"],
+    ),
+    "evidence_publication": _target_area(
+        "evidence_publication",
+        OwnerService.EVIDENCE,
+        "materialized",
+        materialized=[
+            "EvidenceCoverageResult",
+            "EvidencePacket",
+            "EvidenceAnchor",
+            "EvidencePacketManifest",
+            "VerificationDecision",
+            "ReviewDecision",
+            "PublishedOutput",
+            "OutputManifest",
+            "PublicationReport",
+        ],
     ),
     "projection": _target_area(
         "projection",

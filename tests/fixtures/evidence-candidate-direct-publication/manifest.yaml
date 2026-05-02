@@ -1,0 +1,1 @@
+{"id":"evidence-candidate-direct-publication","scenario":"candidate-direct-publication","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"candidate_direct_publication","negative_case":true}
