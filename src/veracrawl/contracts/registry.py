@@ -1449,6 +1449,28 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "source_runtime",
         tests=["tests/integration/test_dynamic_source_runtime_fixtures.py"],
     ),
+    "StructuredSourceAdapterRecord": _contract(
+        "StructuredSourceAdapterRecord",
+        OwnerService.PORTS,
+        "source_runtime",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_structured_source_adapters_contracts.py"],
+    ),
+    "StructuredSourceAdaptersRuntimeReport": _contract(
+        "StructuredSourceAdaptersRuntimeReport",
+        OwnerService.FETCH,
+        "source_runtime",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_structured_source_adapters_contracts.py"],
+    ),
+    "StructuredSourceAdaptersFixtureManifest": _contract(
+        "StructuredSourceAdaptersFixtureManifest",
+        OwnerService.TESTS,
+        "source_runtime",
+        tests=["tests/integration/test_structured_source_adapters_fixtures.py"],
+    ),
     "NormalizationManifest": _contract(
         "NormalizationManifest",
         OwnerService.NORMALIZE,
@@ -1695,6 +1717,29 @@ COMMAND_TYPES: dict[str, CommandTypeRegistration] = {
         target_aggregate_type="DynamicSourceRuntimeFixtureManifest",
         payload_schema_ref="BaseCommandPayload",
         emitted_event_types=["dynamic_source_runtime_fixture_manifest_recorded"],
+    ),
+    "record_structured_source_adapter": CommandTypeRegistration(
+        command_type="record_structured_source_adapter",
+        owner_service=OwnerService.PORTS,
+        target_aggregate_type="StructuredSourceAdapterRecord",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["source_adapter"],
+        emitted_event_types=["structured_source_adapter_recorded"],
+    ),
+    "record_structured_source_adapters_runtime_report": CommandTypeRegistration(
+        command_type="record_structured_source_adapters_runtime_report",
+        owner_service=OwnerService.FETCH,
+        target_aggregate_type="StructuredSourceAdaptersRuntimeReport",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["source_adapter"],
+        emitted_event_types=["structured_source_adapters_runtime_reported"],
+    ),
+    "record_structured_source_adapters_fixture_manifest": CommandTypeRegistration(
+        command_type="record_structured_source_adapters_fixture_manifest",
+        owner_service=OwnerService.TESTS,
+        target_aggregate_type="StructuredSourceAdaptersFixtureManifest",
+        payload_schema_ref="BaseCommandPayload",
+        emitted_event_types=["structured_source_adapters_fixture_manifest_recorded"],
     ),
     "execute_agent_tool": CommandTypeRegistration(
         command_type="execute_agent_tool",
@@ -2869,6 +2914,9 @@ EVENT_TYPES: dict[str, EventTypeRegistration] = {
         "dynamic_source_runtime_adapter_recorded",
         "dynamic_source_runtime_reported",
         "dynamic_source_runtime_fixture_manifest_recorded",
+        "structured_source_adapter_recorded",
+        "structured_source_adapters_runtime_reported",
+        "structured_source_adapters_fixture_manifest_recorded",
         "graph_frontier_decision_recorded",
         "graph_review_route_decision_recorded",
         "graph_frontier_review_reported",
@@ -4112,6 +4160,25 @@ for _dynamic_source_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _structured_source_fixture, _negative in {
+    "structured-source-adapters-success": False,
+    "structured-source-adapters-policy-denied": True,
+    "structured-source-adapters-malformed-source": True,
+    "structured-source-adapters-unsupported-adapter": True,
+    "structured-source-adapters-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_structured_source_fixture}"
+    FIXTURE_ORACLES[_structured_source_fixture] = FixtureOracleRegistration(
+        fixture_id=_structured_source_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_dynamic_source_runtime_ref=f"{_base}/oracles/expected_structured_source.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -4261,6 +4328,28 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "DynamicSourceRuntimeFixtureManifest",
             "ObservabilityReport",
             "SecurityPrivacyReport",
+        ],
+    ),
+    "structured_source_adapters_runtime": _target_area(
+        "structured_source_adapters_runtime",
+        OwnerService.FETCH,
+        "materialized",
+        materialized=[
+            "StructuredSourceAdapterRecord",
+            "StructuredSourceAdaptersRuntimeReport",
+            "StructuredSourceAdaptersFixtureManifest",
+            "SourceAdapterSpec",
+            "SourceAdapterCommand",
+            "SourceAdapterResult",
+            "FetchAttempt",
+            "FetchResult",
+            "PageSnapshot",
+            "DocumentArtifact",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "ReplayBundleManifest",
         ],
     ),
     "agent_runtime_adapter_operational_gate": _target_area(

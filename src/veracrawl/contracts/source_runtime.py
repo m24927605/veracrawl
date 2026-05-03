@@ -11,6 +11,7 @@ from veracrawl.contracts.enums import (
     DynamicSourceRuntimeFailureType,
     RateLimitDecisionValue,
     SourceFailureType,
+    StructuredSourceAdapterFailureType,
 )
 
 REQUIRED_DYNAMIC_SOURCE_RUNTIME_ADAPTERS = (
@@ -32,6 +33,14 @@ _NON_FETCH_RUNTIME_ADAPTERS = {
     AdapterType.MANUAL_SEED,
     AdapterType.PRIOR_SNAPSHOT,
 }
+
+REQUIRED_STRUCTURED_SOURCE_ADAPTERS = (
+    AdapterType.SITEMAP,
+    AdapterType.RSS,
+    AdapterType.API_SOURCE,
+    AdapterType.DOCUMENT_SOURCE,
+    AdapterType.FILE_IMPORT,
+)
 
 
 class RateLimitDecision(TimestampedModel):
@@ -127,6 +136,171 @@ class SourceFixtureManifest(TimestampedModel):
             raise ValueError("source fixture must support target profile")
         if self.negative_case and self.expected_completion_result == "pass":
             raise ValueError("negative source fixture must not expect pass")
+        return self
+
+
+class StructuredSourceAdapterRecord(TimestampedModel):
+    id: str
+    adapter_type: AdapterType
+    source_adapter_result_ref: Ref | None = None
+    natural_result_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    metadata_refs: list[Ref] = Field(default_factory=list)
+    evidence_seed_refs: list[Ref] = Field(default_factory=list)
+    discovered_url_refs: list[Ref] = Field(default_factory=list)
+    api_payload_refs: list[Ref] = Field(default_factory=list)
+    document_artifact_refs: list[Ref] = Field(default_factory=list)
+    file_artifact_refs: list[Ref] = Field(default_factory=list)
+    fetch_attempt_refs: list[Ref] = Field(default_factory=list)
+    fetch_result_refs: list[Ref] = Field(default_factory=list)
+    page_snapshot_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_refs: list[Ref] = Field(default_factory=list)
+    content_hash_refs: list[Ref] = Field(default_factory=list)
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: StructuredSourceAdapterFailureType | None = None
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_structured_source_record(self) -> StructuredSourceAdapterRecord:
+        if self.adapter_type not in REQUIRED_STRUCTURED_SOURCE_ADAPTERS:
+            raise ValueError("structured source adapter record uses unsupported adapter type")
+        if self.result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "source_adapter_result_ref": self.source_adapter_result_ref,
+                "natural_result_refs": self.natural_result_refs,
+                "artifact_refs": self.artifact_refs,
+                "metadata_refs": self.metadata_refs,
+                "evidence_seed_refs": self.evidence_seed_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_refs": self.replay_refs,
+                "content_hash_refs": self.content_hash_refs,
+            }
+            if self.adapter_type in {AdapterType.SITEMAP, AdapterType.RSS}:
+                required["discovered_url_refs"] = self.discovered_url_refs
+            if self.adapter_type == AdapterType.API_SOURCE:
+                required["api_payload_refs"] = self.api_payload_refs
+            if self.adapter_type == AdapterType.DOCUMENT_SOURCE:
+                required["document_artifact_refs"] = self.document_artifact_refs
+            if self.adapter_type == AdapterType.FILE_IMPORT:
+                required["file_artifact_refs"] = self.file_artifact_refs
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+            ):
+                raise ValueError(f"passing structured source record missing refs: {missing}")
+        elif not (
+            self.failure_type and (self.failure_report_refs or self.missing_ref_fields)
+        ):
+            raise ValueError("failed structured source record requires typed diagnostics")
+        return self
+
+
+class StructuredSourceAdaptersRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    required_adapter_types: list[AdapterType] = Field(
+        default_factory=lambda: list(REQUIRED_STRUCTURED_SOURCE_ADAPTERS)
+    )
+    verified_adapter_types: list[AdapterType] = Field(default_factory=list)
+    source_adapter_record_refs: list[Ref] = Field(default_factory=list)
+    source_adapter_result_refs: list[Ref] = Field(default_factory=list)
+    natural_result_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    evidence_seed_refs: list[Ref] = Field(default_factory=list)
+    discovered_url_refs: list[Ref] = Field(default_factory=list)
+    api_payload_refs: list[Ref] = Field(default_factory=list)
+    document_artifact_refs: list[Ref] = Field(default_factory=list)
+    file_artifact_refs: list[Ref] = Field(default_factory=list)
+    fetch_attempt_refs: list[Ref] = Field(default_factory=list)
+    fetch_result_refs: list[Ref] = Field(default_factory=list)
+    page_snapshot_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: StructuredSourceAdapterFailureType | None = None
+    operator_status: str
+    completion_result: CompletenessResult
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_structured_source_report(self) -> StructuredSourceAdaptersRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "source_adapter_record_refs": self.source_adapter_record_refs,
+                "source_adapter_result_refs": self.source_adapter_result_refs,
+                "natural_result_refs": self.natural_result_refs,
+                "artifact_refs": self.artifact_refs,
+                "evidence_seed_refs": self.evidence_seed_refs,
+                "discovered_url_refs": self.discovered_url_refs,
+                "api_payload_refs": self.api_payload_refs,
+                "document_artifact_refs": self.document_artifact_refs,
+                "file_artifact_refs": self.file_artifact_refs,
+                "fetch_attempt_refs": self.fetch_attempt_refs,
+                "fetch_result_refs": self.fetch_result_refs,
+                "page_snapshot_refs": self.page_snapshot_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            adapter_gap = set(self.required_adapter_types) - set(self.verified_adapter_types)
+            if (
+                missing
+                or adapter_gap
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+            ):
+                raise ValueError(
+                    "passing structured source report missing refs: "
+                    f"{missing}, adapter_gap={sorted(adapter_gap)}"
+                )
+        elif not (
+            self.failure_type and (self.failure_report_refs or self.missing_ref_fields)
+        ):
+            raise ValueError("failed structured source report requires typed diagnostics")
+        return self
+
+
+class StructuredSourceAdaptersFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: StructuredSourceAdapterFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_structured_source_fixture(self) -> StructuredSourceAdaptersFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("structured source fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("structured source fixture must declare required ref types")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative structured source fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError("negative structured source fixture requires failure type")
         return self
 
 

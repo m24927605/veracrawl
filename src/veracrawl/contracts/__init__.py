@@ -253,6 +253,9 @@ from veracrawl.contracts.source_runtime import (
     SourceAcquisitionReport,
     SourceFailureReport,
     SourceFixtureManifest,
+    StructuredSourceAdapterRecord,
+    StructuredSourceAdaptersFixtureManifest,
+    StructuredSourceAdaptersRuntimeReport,
 )
 from veracrawl.contracts.target_runtime import (
     TargetAdapterBackedSourceEntry,
@@ -481,6 +484,9 @@ __all__ = [
     "SourceCoverageAdapterReport",
     "SourceFailureReport",
     "SourceFixtureManifest",
+    "StructuredSourceAdapterRecord",
+    "StructuredSourceAdaptersFixtureManifest",
+    "StructuredSourceAdaptersRuntimeReport",
     "ThresholdSpec",
     "QualityReport",
     "TemporalGraphProjectionRecord",

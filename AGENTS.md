@@ -118,13 +118,13 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/041-live-http-acquisition-runtime/plan.md`.
-Use it with `specs/041-live-http-acquisition-runtime/spec.md`,
-`specs/041-live-http-acquisition-runtime/research.md`,
-`specs/041-live-http-acquisition-runtime/data-model.md`,
-`specs/041-live-http-acquisition-runtime/contracts/`, and
-`specs/041-live-http-acquisition-runtime/quickstart.md` for Live HTTP
-Acquisition Runtime work. The post-037 roadmap remains governed by
+Current active Spec Kit plan: `specs/042-structured-source-adapters-runtime/plan.md`.
+Use it with `specs/042-structured-source-adapters-runtime/spec.md`,
+`specs/042-structured-source-adapters-runtime/research.md`,
+`specs/042-structured-source-adapters-runtime/data-model.md`,
+`specs/042-structured-source-adapters-runtime/contracts/`, and
+`specs/042-structured-source-adapters-runtime/quickstart.md` for Structured
+Source Adapters Runtime work. The post-037 roadmap remains governed by
 `specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
 do not invent additional production specs unless both are amended first.
 <!-- SPECKIT END -->

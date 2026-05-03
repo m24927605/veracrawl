@@ -76,7 +76,7 @@ framework-neutral adapter boundaries, command/event/replay primitives, policy ga
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the live HTTP acquisition runtime,
-the normalize/extract plane, the
+the structured source adapters runtime, the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
 agent runtime adapter operational gate, the model provider adapter operational
@@ -99,6 +99,12 @@ URL refs, command/event/outbox refs, and replay refs. Scope denial,
 private-network denial, malformed responses, missing artifacts, replay mismatch,
 and direct-source bypass fail with typed diagnostics; core still does not import
 the concrete HTTP adapter.
+The structured source adapters runtime adds sitemap, RSS/feed, API-like,
+document, and file-import source family support behind source adapter ports.
+`veracrawl-structured-source` proves adapter-owned parsing can produce source
+adapter result refs, natural output refs, artifacts, evidence seed refs, content
+hash refs, family-specific refs, policy refs, command/event/outbox refs, and
+replay refs without making core parse fixture files directly.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
@@ -462,6 +468,23 @@ for fixture in \
   live-http-direct-source-bypass
 do
   uv run --python python3.12 --extra dev veracrawl-live-http run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run structured source adapter fixtures:
+
+```sh
+for fixture in \
+  structured-source-adapters-success \
+  structured-source-adapters-policy-denied \
+  structured-source-adapters-malformed-source \
+  structured-source-adapters-unsupported-adapter \
+  structured-source-adapters-replay-mismatch
+do
+  uv run --python python3.12 --extra dev veracrawl-structured-source run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

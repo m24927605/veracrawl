@@ -665,6 +665,14 @@ class DynamicSourceRuntimeFailureType(StrEnum):
     UNSUPPORTED_ADAPTER = "dynamic_source_runtime_unsupported_adapter"
 
 
+class StructuredSourceAdapterFailureType(StrEnum):
+    POLICY_DENIED = "structured_source_policy_denied"
+    MALFORMED_SOURCE = "structured_source_malformed_source"
+    UNSUPPORTED_ADAPTER = "structured_source_unsupported_adapter"
+    REPLAY_MISMATCH = "structured_source_replay_mismatch"
+    MISSING_ARTIFACT = "structured_source_missing_artifact"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"

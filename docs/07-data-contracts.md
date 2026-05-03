@@ -5810,6 +5810,15 @@ Executable target runtime rules:
   cursor, outbox, and replay refs. Scope denial, private-network denial,
   malformed response, missing artifact, replay mismatch, and direct-source
   bypass fail with typed `LiveHttpAcquisitionFailureType` diagnostics.
+- Structured source adapter runtime reports can claim `pass` only when sitemap,
+  RSS/feed, API-like, document, and file-import adapter records are all present.
+  Each passing record requires source adapter result, natural output, artifact,
+  metadata, evidence seed, content hash, policy, command, event cursor, outbox,
+  and replay refs. Sitemap/RSS require discovered URL refs; API-like sources
+  require API payload refs; document sources require document artifact refs; file
+  imports require file artifact refs. Policy denial, malformed structured
+  source, unsupported adapter, missing artifact, or replay mismatch fail with
+  typed `StructuredSourceAdapterFailureType` diagnostics.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

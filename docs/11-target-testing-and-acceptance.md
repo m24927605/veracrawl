@@ -319,6 +319,34 @@ does not replace later structured source adapter, browser snapshot,
 credentialed session, normalization/evidence, worker scale, external benchmark,
 or release gates.
 
+Structured source adapters fixture contract:
+
+```text
+veracrawl-structured-source run tests/fixtures/<structured_source_fixture_id> --profile target --out .veracrawl-test-runs/<structured_source_fixture_id>
+```
+
+Required structured source fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| structured-source-adapters-success | sitemap, RSS/feed, API-like, document, and file-import adapters produce source adapter result, natural output, artifact, evidence seed, content hash, policy, command/event/outbox, and replay refs |
+| structured-source-adapters-policy-denied | policy-denied structured acquisition fails with `structured_source_policy_denied` |
+| structured-source-adapters-malformed-source | malformed structured source fails with `structured_source_malformed_source` |
+| structured-source-adapters-unsupported-adapter | unsupported structured adapter fails with `structured_source_unsupported_adapter` |
+| structured-source-adapters-replay-mismatch | missing or inconsistent replay refs fail with `structured_source_replay_mismatch` |
+
+Structured source adapters acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_structured_source_adapters_contracts.py`
+- `pytest tests/unit/test_structured_source_adapters_runtime.py`
+- `pytest tests/integration/test_structured_source_adapters_fixtures.py`
+- `veracrawl-structured-source` CLI loop over all structured source fixtures
+
+This acceptance proves structured source adapter runtime semantics. It does not
+replace browser snapshot, credentialed session, normalization/extraction,
+evidence, publication, worker scale, external benchmark, or release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

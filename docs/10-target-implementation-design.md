@@ -278,6 +278,30 @@ sitemap/RSS/API/document adapters, browser rendering, credentialed sessions,
 distributed worker fleets, external website benchmarking, or production network
 operations.
 
+## Structured Source Adapters Runtime Slice
+
+The structured source adapters runtime proves non-browser structured source
+families behind source adapter ports:
+
+- `veracrawl.contracts.source_runtime`: `StructuredSourceAdapterRecord`,
+  `StructuredSourceAdaptersRuntimeReport`, and
+  `StructuredSourceAdaptersFixtureManifest` require sitemap, RSS/feed,
+  API-like, document, and file-import source families before pass.
+- `veracrawl.fetch.structured_source`: core aggregate runtime validates typed
+  records and remains independent from concrete parsers, filesystems, network
+  clients, browser libraries, model SDKs, and agent frameworks.
+- `veracrawl.adapters.sources.structured_runtime`: adapter-owned fixture parser
+  uses standard-library XML, JSON, document, and CSV parsing to materialize
+  discovered URL refs, API payload refs, document artifact refs, file artifact
+  refs, content hashes, evidence seed refs, and replay refs.
+- `veracrawl.cli.structured_source`: `veracrawl-structured-source` dynamically
+  loads the adapter module and runs success plus malformed/policy/unsupported
+  and replay negative fixtures.
+
+This slice proves structured source adapter semantics and lineage. It does not
+normalize, extract, publish, render browser pages, handle credentials, run
+external website benchmarks, or claim production worker fleet readiness.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable
