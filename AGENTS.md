@@ -119,13 +119,13 @@ For all Spec Kit plans and implementation tasks:
 
 <!-- SPECKIT START -->
 Current active Spec Kit plan:
-`specs/059-js-browser-crawl-quality-benchmark/plan.md`.
-Use it with `specs/059-js-browser-crawl-quality-benchmark/spec.md`,
-`specs/059-js-browser-crawl-quality-benchmark/research.md`,
-`specs/059-js-browser-crawl-quality-benchmark/data-model.md`,
-`specs/059-js-browser-crawl-quality-benchmark/contracts/`, and
-`specs/059-js-browser-crawl-quality-benchmark/quickstart.md` for JavaScript
-browser crawl quality benchmark work. Production quality specs remain governed by
+`specs/060-multi-page-deep-crawl-frontier-benchmark/plan.md`.
+Use it with `specs/060-multi-page-deep-crawl-frontier-benchmark/spec.md`,
+`specs/060-multi-page-deep-crawl-frontier-benchmark/research.md`,
+`specs/060-multi-page-deep-crawl-frontier-benchmark/data-model.md`,
+`specs/060-multi-page-deep-crawl-frontier-benchmark/contracts/`, and
+`specs/060-multi-page-deep-crawl-frontier-benchmark/quickstart.md` for
+multi-page deep crawl frontier benchmark work. Production quality specs remain governed by
 `specs/057-production-quality-benchmark-roadmap/spec.md`,
 `specs/038-production-runtime-closure/spec.md`, and
 `docs/08-build-roadmap.md`; do not invent additional production or

@@ -1,0 +1,1 @@
+{"expected_failure_type": "deep_crawl_duplicate_not_suppressed", "fixture_id": "deep-crawl-duplicate-loop", "required_refs": ["duplicate_suppression", "policy", "replay"]}

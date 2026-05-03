@@ -1072,7 +1072,8 @@ targets, 15 passing origins, 10 passing pattern families, policy refs,
 artifact/content hash/canonical URL refs, command/event/outbox refs, and replay
 refs. This gate does not claim JS/browser quality, deep crawl quality,
 field-level oracle quality, precision/recall, repair success, or final
-production-quality release readiness; those remain specs 059-064.
+production-quality release readiness; those are handled by the later quality
+gates 059-064.
 
 Run the JavaScript browser quality benchmark:
 
@@ -1095,6 +1096,24 @@ adapter-owned; core benchmark code depends on VeraCrawl ports/contracts, not a
 browser engine. This gate does not claim deep crawl, credentialed browsing,
 CAPTCHA solving, stealth automation, field-level oracle quality,
 precision/recall, repair success, or final production-quality release readiness.
+
+Run the multi-page deep crawl frontier benchmark:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-deep-crawl-benchmark run \
+  tests/fixtures/deep-crawl-quality-corpus \
+  --profile quality \
+  --out .veracrawl-real-runs/deep-crawl-quality-corpus
+```
+
+The deep crawl gate covers at least 5 bounded fixture/public-style sites and 50
+required pages through general frontier planning, pagination, detail pages,
+sitemap/feed links, canonical duplicate suppression, off-origin/private-network
+skips, robots-denied skips, AI-prioritized frontier decisions, graph refs,
+source anchors, artifacts/content hashes, command/event/outbox refs, and replay
+refs. AI/agent traces can influence priority but never serve as source evidence.
+This gate does not claim field-level oracle quality, precision/recall, repair
+success, or final production-quality release readiness.
 
 Run persistence and queue runtime fixtures:
 

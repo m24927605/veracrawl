@@ -87,6 +87,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_dynamic_source_runtime_ref: str | None = None
     expected_browser_snapshot_ref: str | None = None
     expected_browser_quality_ref: str | None = None
+    expected_deep_crawl_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -1893,6 +1894,56 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "browser_quality",
         tests=["tests/integration/test_browser_quality_fixtures.py"],
     ),
+    "DeepCrawlPageSpec": _contract(
+        "DeepCrawlPageSpec",
+        OwnerService.FETCH,
+        "deep_crawl",
+        tests=["tests/contract/test_deep_crawl_contracts.py"],
+    ),
+    "DeepCrawlSiteSpec": _contract(
+        "DeepCrawlSiteSpec",
+        OwnerService.FETCH,
+        "deep_crawl",
+        tests=["tests/contract/test_deep_crawl_contracts.py"],
+    ),
+    "FrontierDecisionTrace": _contract(
+        "FrontierDecisionTrace",
+        OwnerService.FETCH,
+        "deep_crawl",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_deep_crawl_contracts.py"],
+    ),
+    "DeepCrawlPageObservation": _contract(
+        "DeepCrawlPageObservation",
+        OwnerService.FETCH,
+        "deep_crawl",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_deep_crawl_contracts.py"],
+    ),
+    "DeepCrawlStopReasonRecord": _contract(
+        "DeepCrawlStopReasonRecord",
+        OwnerService.FETCH,
+        "deep_crawl",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_deep_crawl_contracts.py"],
+    ),
+    "DeepCrawlQualityReport": _contract(
+        "DeepCrawlQualityReport",
+        OwnerService.FETCH,
+        "deep_crawl",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_deep_crawl_contracts.py"],
+    ),
+    "DeepCrawlQualityManifest": _contract(
+        "DeepCrawlQualityManifest",
+        OwnerService.TESTS,
+        "deep_crawl",
+        tests=["tests/integration/test_deep_crawl_fixtures.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -2508,6 +2559,45 @@ COMMAND_TYPES.update(
             target_aggregate_type="BrowserQualityCorpusManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["browser_quality_manifest_recorded"],
+        ),
+        "record_deep_crawl_frontier_decision": CommandTypeRegistration(
+            command_type="record_deep_crawl_frontier_decision",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="FrontierDecisionTrace",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["crawl_scope", "rate_limit"],
+            emitted_event_types=["deep_crawl_frontier_decision_recorded"],
+        ),
+        "record_deep_crawl_page_observation": CommandTypeRegistration(
+            command_type="record_deep_crawl_page_observation",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="DeepCrawlPageObservation",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["crawl_scope", "rate_limit"],
+            emitted_event_types=["deep_crawl_page_observed"],
+        ),
+        "record_deep_crawl_stop_reason": CommandTypeRegistration(
+            command_type="record_deep_crawl_stop_reason",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="DeepCrawlStopReasonRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["crawl_scope", "rate_limit"],
+            emitted_event_types=["deep_crawl_stop_reason_recorded"],
+        ),
+        "record_deep_crawl_report": CommandTypeRegistration(
+            command_type="record_deep_crawl_report",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="DeepCrawlQualityReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["crawl_scope", "rate_limit"],
+            emitted_event_types=["deep_crawl_reported"],
+        ),
+        "record_deep_crawl_manifest": CommandTypeRegistration(
+            command_type="record_deep_crawl_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="DeepCrawlQualityManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["deep_crawl_manifest_recorded"],
         ),
         "record_normalization_manifest": CommandTypeRegistration(
             command_type="record_normalization_manifest",
@@ -3641,6 +3731,11 @@ EVENT_TYPES.update(
         "browser_quality_delta_recorded",
         "browser_quality_reported",
         "browser_quality_manifest_recorded",
+        "deep_crawl_frontier_decision_recorded",
+        "deep_crawl_page_observed",
+        "deep_crawl_stop_reason_recorded",
+        "deep_crawl_reported",
+        "deep_crawl_manifest_recorded",
         "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
@@ -5056,6 +5151,27 @@ for _browser_quality_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _deep_crawl_fixture, _negative in {
+    "deep-crawl-quality-corpus": False,
+    "deep-crawl-duplicate-loop": True,
+    "deep-crawl-off-origin-pollution": True,
+    "deep-crawl-robots-denied": True,
+    "deep-crawl-budget-exhausted": True,
+    "deep-crawl-infinite-pagination": True,
+    "deep-crawl-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_deep_crawl_fixture}"
+    FIXTURE_ORACLES[_deep_crawl_fixture] = FixtureOracleRegistration(
+        fixture_id=_deep_crawl_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_deep_crawl_ref=f"{_base}/oracles/expected_deep_crawl.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _credentialed_session_fixture, _negative in {
     "credentialed-session-success": False,
     "credentialed-session-missing-authorization": True,
@@ -5422,6 +5538,32 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "OutboxRecord",
             "PolicyDecision",
             "PromptTaintBoundary",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "deep_crawl_frontier_benchmark": _target_area(
+        "deep_crawl_frontier_benchmark",
+        OwnerService.FETCH,
+        "materialized",
+        materialized=[
+            "DeepCrawlQualityManifest",
+            "DeepCrawlSiteSpec",
+            "DeepCrawlPageSpec",
+            "FrontierDecisionTrace",
+            "DeepCrawlPageObservation",
+            "DeepCrawlStopReasonRecord",
+            "DeepCrawlQualityReport",
+            "GraphFrontierDecisionRecord",
+            "GraphBuildReport",
+            "MemoryRetrievalTrace",
+            "AgentActionTrace",
+            "ModelCallTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
             "ReplayBundleManifest",
         ],
     ),

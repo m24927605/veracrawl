@@ -6431,3 +6431,15 @@ Executable target runtime rules:
   candidate anchors, evidence packets, publication report refs, mismatched
   adapter/source lineage, or graph-only derived context as evidence fail target
   completion with typed failure refs.
+- Multi-page deep crawl frontier benchmark contracts are
+  `DeepCrawlQualityManifest`, `DeepCrawlSiteSpec`, `DeepCrawlPageSpec`,
+  `FrontierDecisionTrace`, `DeepCrawlPageObservation`,
+  `DeepCrawlStopReasonRecord`, and `DeepCrawlQualityReport`. Passing reports
+  require bounded site/page coverage, frontier decisions, page observations,
+  stop reasons, source anchors, artifacts, content hashes, link provenance,
+  canonical URL refs, duplicate suppression refs, graph refs, policy refs,
+  command/event/outbox refs, and replay refs. AI/model/agent/tool/context refs
+  may influence frontier priority but cannot satisfy source evidence. Duplicate
+  loops, off-origin pollution, robots bypass, private-network bypass, budget
+  exhaustion, infinite pagination, missing frontier/graph/replay/stop refs, and
+  insufficient coverage fail with typed `DeepCrawlFailureType` diagnostics.

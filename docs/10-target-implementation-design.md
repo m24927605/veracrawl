@@ -1740,7 +1740,8 @@ Expanded real-world public quality corpus gate:
   quality coverage.
 - this gate proves expanded corpus and pattern coverage only. JavaScript/browser
   quality, multi-page deep crawl quality, field-level oracles, precision/recall,
-  repair success, and cost/latency/stability release remain specs 059-064.
+  repair success, and cost/latency/stability release are handled by later
+  quality gates 059-064.
 
 JavaScript browser quality benchmark:
 
@@ -1763,9 +1764,37 @@ JavaScript browser quality benchmark:
   and insufficient browser-required target coverage fail with
   `BrowserQualityFailureType`.
 - this gate proves JS/browser rendering quality for declared targets only.
-  Multi-page deep crawl, credentialed browsing, CAPTCHA solving, stealth
-  automation, field-level oracles, precision/recall, repair success, and
-  cost/latency/stability release remain separate specs.
+  Credentialed browsing, CAPTCHA solving, stealth automation, field-level
+  oracles, precision/recall, repair success, and cost/latency/stability release
+  remain separate specs.
+
+Multi-page deep crawl frontier benchmark:
+
+- `veracrawl.contracts.deep_crawl` owns `DeepCrawlQualityManifest`,
+  `DeepCrawlSiteSpec`, `DeepCrawlPageSpec`, `FrontierDecisionTrace`,
+  `DeepCrawlPageObservation`, `DeepCrawlStopReasonRecord`, and
+  `DeepCrawlQualityReport`.
+- `veracrawl.benchmarks.deep_crawl` executes manifest-declared bounded site
+  graphs through general frontier expansion, pagination/detail coverage,
+  sitemap/feed links, canonicalization, duplicate suppression, off-origin and
+  private-network skips, robots skips, depth/page/rate budgets, and replayable
+  stop reasons.
+- AI/agent/graph/memory influence is represented only as VeraCrawl model call,
+  agent action, tool call, context bundle, graph, and memory refs on frontier
+  priority decisions. Those refs can explain priority but cannot satisfy page
+  source evidence.
+- `veracrawl.cli.deep_crawl` exposes `veracrawl-deep-crawl-benchmark run`.
+  Passing reports require at least 5 sites and 50 required pages plus source
+  anchors, artifacts, content hashes, link provenance, canonical refs, duplicate
+  suppression refs, graph refs, policy refs, command/event/outbox refs, and
+  replay refs.
+- duplicate loops, off-origin pollution, robots-denied bypass, budget
+  exhaustion, infinite pagination, replay mismatch, missing frontier decisions,
+  missing graph refs, missing replay refs, missing stop reasons, and
+  insufficient coverage fail with `DeepCrawlFailureType`.
+- this gate proves bounded deep crawl frontier quality only. Field-level oracle
+  extraction, precision/recall, repair success, and cost/latency/stability
+  release remain later production-quality specs.
 
 Disaster recovery:
 

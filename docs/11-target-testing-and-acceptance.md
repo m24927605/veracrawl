@@ -2187,6 +2187,40 @@ It does not prove bounded deep crawl quality, credentialed browsing, CAPTCHA
 solving, stealth automation, field-level oracle extraction, precision/recall,
 repair success, or cost/latency/stability release readiness.
 
+Multi-page deep crawl frontier benchmark acceptance:
+
+```text
+veracrawl-deep-crawl-benchmark run tests/fixtures/<deep_crawl_fixture_id> --profile quality --out .veracrawl-test-runs/<deep_crawl_fixture_id>
+```
+
+Required deep crawl fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| deep-crawl-quality-corpus | at least 5 bounded sites and 50 required pages pass with frontier decisions, page observations, stop reasons, source anchors, artifacts, content hashes, link provenance, canonical refs, duplicate suppression, graph refs, AI trace refs where priority is AI-influenced, policy, command/event/outbox, and replay refs |
+| deep-crawl-duplicate-loop | unsuppressed duplicate canonical loop fails with typed diagnostics |
+| deep-crawl-off-origin-pollution | off-origin frontier pollution fails with typed diagnostics |
+| deep-crawl-robots-denied | robots-denied bypass fails with typed diagnostics |
+| deep-crawl-budget-exhausted | budget exhaustion fails with typed diagnostics |
+| deep-crawl-infinite-pagination | infinite pagination without replayable stop reason fails |
+| deep-crawl-replay-mismatch | replay mismatch fails |
+
+Deep crawl acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_deep_crawl_contracts.py`
+- `pytest tests/contract/test_deep_crawl_contract_registry.py`
+- `pytest tests/contract/test_deep_crawl_import_boundaries.py`
+- `pytest tests/unit/test_deep_crawl_runtime.py`
+- `pytest tests/unit/test_deep_crawl_replay.py`
+- `pytest tests/integration/test_deep_crawl_fixtures.py`
+- one recorded deterministic CLI run against
+  `tests/fixtures/deep-crawl-quality-corpus`
+
+This acceptance proves only bounded multi-page frontier quality. It does not
+prove field-level oracle extraction, precision/recall, repair success, or
+cost/latency/stability release readiness.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

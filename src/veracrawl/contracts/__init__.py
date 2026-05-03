@@ -64,6 +64,15 @@ from veracrawl.contracts.command import (
     CommandResult,
     CommandTypeSpec,
 )
+from veracrawl.contracts.deep_crawl import (
+    DeepCrawlPageObservation,
+    DeepCrawlPageSpec,
+    DeepCrawlQualityManifest,
+    DeepCrawlQualityReport,
+    DeepCrawlSiteSpec,
+    DeepCrawlStopReasonRecord,
+    FrontierDecisionTrace,
+)
 from veracrawl.contracts.durable import (
     DurableCommandRecord,
     DurableFixtureManifest,
@@ -392,6 +401,12 @@ __all__ = [
     "DRRestoreOracle",
     "DRRestorePlan",
     "DRRestoreRun",
+    "DeepCrawlPageObservation",
+    "DeepCrawlPageSpec",
+    "DeepCrawlQualityManifest",
+    "DeepCrawlQualityReport",
+    "DeepCrawlSiteSpec",
+    "DeepCrawlStopReasonRecord",
     "DocumentArtifact",
     "DriftRepairSignal",
     "DynamicSourceRuntimeAdapterRecord",
@@ -429,6 +444,7 @@ __all__ = [
     "FetchResult",
     "FailureRecord",
     "FailureInjectionPlan",
+    "FrontierDecisionTrace",
     "FrontierItem",
     "GraphDeltaReport",
     "GraphBuildManifest",

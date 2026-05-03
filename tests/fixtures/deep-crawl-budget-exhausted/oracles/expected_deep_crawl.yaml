@@ -1,0 +1,1 @@
+{"expected_failure_type": "deep_crawl_budget_exhausted", "fixture_id": "deep-crawl-budget-exhausted", "required_refs": ["rate_budget", "policy", "replay"]}

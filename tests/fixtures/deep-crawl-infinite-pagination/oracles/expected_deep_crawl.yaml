@@ -1,0 +1,1 @@
+{"expected_failure_type": "deep_crawl_infinite_pagination", "fixture_id": "deep-crawl-infinite-pagination", "required_refs": ["stop_reason", "policy", "replay"]}

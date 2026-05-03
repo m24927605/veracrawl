@@ -1,0 +1,1 @@
+{"expected_failure_type": "deep_crawl_frontier_pollution", "fixture_id": "deep-crawl-off-origin-pollution", "required_refs": ["skipped_link", "policy", "replay"]}

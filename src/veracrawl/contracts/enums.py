@@ -1188,6 +1188,47 @@ class BrowserQualityFailureType(StrEnum):
     )
 
 
+class DeepCrawlFailureType(StrEnum):
+    INSUFFICIENT_PAGE_COVERAGE = "deep_crawl_insufficient_page_coverage"
+    MISSING_FRONTIER_DECISION = "deep_crawl_missing_frontier_decision"
+    DUPLICATE_NOT_SUPPRESSED = "deep_crawl_duplicate_not_suppressed"
+    FRONTIER_POLLUTION = "deep_crawl_frontier_pollution"
+    ROBOTS_DENIAL_BYPASSED = "deep_crawl_robots_denial_bypassed"
+    PRIVATE_NETWORK_BYPASS = "deep_crawl_private_network_bypass"
+    BUDGET_EXHAUSTED = "deep_crawl_budget_exhausted"
+    INFINITE_PAGINATION = "deep_crawl_infinite_pagination"
+    REPLAY_MISMATCH = "deep_crawl_replay_mismatch"
+    POLICY_DENIED = "deep_crawl_policy_denied"
+    MISSING_REPLAY_REFS = "deep_crawl_missing_replay_refs"
+    MISSING_GRAPH_REFS = "deep_crawl_missing_graph_refs"
+    STOP_REASON_MISSING = "deep_crawl_stop_reason_missing"
+
+
+class DeepCrawlFrontierAction(StrEnum):
+    KEEP = "keep"
+    PRIORITIZE = "prioritize"
+    SKIP = "skip"
+    STOP = "stop"
+
+
+class DeepCrawlPageType(StrEnum):
+    LISTING = "listing"
+    DETAIL = "detail"
+    PAGINATION = "pagination"
+    SITEMAP = "sitemap"
+    FEED = "feed"
+    CANONICAL = "canonical"
+    OTHER = "other"
+
+
+class DeepCrawlStopReason(StrEnum):
+    FRONTIER_EXHAUSTED = "frontier_exhausted"
+    MAX_DEPTH_REACHED = "max_depth_reached"
+    MAX_PAGES_REACHED = "max_pages_reached"
+    RATE_BUDGET_EXHAUSTED = "rate_budget_exhausted"
+    POLICY_DENIED = "policy_denied"
+
+
 class CredentialedSessionFailureType(StrEnum):
     POLICY_DENIED = "credentialed_session_policy_denied"
     MISSING_AUTHORIZATION = "credentialed_session_missing_authorization"

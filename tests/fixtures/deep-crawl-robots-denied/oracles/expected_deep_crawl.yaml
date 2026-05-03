@@ -1,0 +1,1 @@
+{"expected_failure_type": "deep_crawl_robots_denial_bypassed", "fixture_id": "deep-crawl-robots-denied", "required_refs": ["robots", "policy", "replay"]}
