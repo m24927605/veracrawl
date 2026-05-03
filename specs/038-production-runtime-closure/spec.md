@@ -22,7 +22,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
   capability across source types, website patterns, schemas, evidence paths,
   graph/memory intelligence, and operations. It does not narrow VeraCrawl into a
   single-site scraper or workflow demo.
-- **Target/V1 boundary**: Specs 039-056 are production sequencing specs. They
+- **Target/V1 boundary**: Specs 039-064 are production sequencing specs. They
   connect the already completed target architecture foundation to real source
   acquisition, processing, orchestration, AI adapters, persistence, benchmark,
   and operations paths without reducing target architecture.
@@ -40,7 +40,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 
 ## Roadmap Rules
 
-- **RR-001**: Specs 039-056 are the approved remaining production runtime specs.
+- **RR-001**: Specs 039-064 are the approved remaining production runtime specs.
 - **RR-002**: A later implementation spec may be activated only after all prior
   blocking specs listed in the roadmap are complete or explicitly marked
   non-blocking by an amendment to this spec.
@@ -79,6 +79,14 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 | 054 | Production Benchmark And Release Gate | Define and run the final authorized benchmark suite proving target production readiness. | 039-053 | Live benchmark passes with all source, processing, evidence, publication, replay, ops, scale, and safety gates. |
 | 055 | Real-World Benchmark Corpus Gate | Add authorized public website corpus validation that supplements deterministic release gates with real external acquisition, policy, observation, artifact, and replay proof. | 054 | A declared public corpus runs through live HTTP acquisition with origin/robots/private-network safety, observation oracles, artifact/content hash refs, command/event/outbox refs, and replay refs. |
 | 056 | Real-World AI Agent Crawl Planning And Extraction Benchmark | Prove the public corpus crawl actually invokes framework-neutral AI planning, site understanding, extraction candidate generation, and verification/repair decisions without making model output evidence or coupling core to agent frameworks. | 055, 049, 047 | A declared public corpus runs through live HTTP acquisition and framework-neutral model/agent ports with model call, agent action, tool call, context bundle, source anchor, candidate, evidence/verification gate, command/event/outbox, and replay refs; LLM-as-evidence, publication bypass, framework-native state, missing traces, and replay gaps fail. |
+| 057 | Production Crawl Quality Benchmark Roadmap | Fix the finite post-056 quality benchmark spec set so production-grade crawl quality is not asserted from the small AI smoke corpus alone. | 056 | Specs 058-064 are defined with purpose, dependency, measurable thresholds, non-goals, and completion gates; no additional production quality spec may be invented without amending this spec and `docs/08-build-roadmap.md`. |
+| 058 | Expanded Real-World Public Corpus Benchmark | Expand real public validation from a four-target smoke corpus into a diverse quality-tier public corpus. | 055, 056, 057 | An authorized quality-tier corpus has at least 40 public targets, 15 origins, and 10 website/source pattern families, with observation, policy, artifact, hash, command/event/outbox, and replay refs gating pass. |
+| 059 | JavaScript Browser Crawl Quality Benchmark | Prove browser rendering improves crawl evidence when HTTP-only acquisition is insufficient. | 043, 055, 056, 058 | JS-required targets produce browser DOM/screenshot/network/console/timing artifacts, source anchors, policy/budget refs, AI traces where used, and HTTP-only degradation evidence. |
+| 060 | Multi-Page Deep Crawl Frontier Benchmark | Prove bounded multi-page crawling with frontier planning, pagination, detail coverage, canonicalization, duplicate suppression, and replayable stop reasons. | 045, 050, 051, 052, 058, 059 | Depth-limited public/fixture crawls produce frontier decisions, graph refs, page coverage oracles, duplicate/canonical controls, rate budgets, and replayable stop reasons. |
+| 061 | Field-Level Oracle Extraction Benchmark | Evaluate extraction quality at field level with schema-specific expected values, anchors, normalization rules, and verification gates. | 046, 047, 048, 058, 060 | At least 8 schemas and 200 expected fields are evaluated; every accepted field has source anchors, content hashes, evidence packet refs, normalized value refs, and typed mismatch diagnostics. |
+| 062 | Precision Recall Quality Benchmark | Compute precision, recall, F1, false-positive, false-negative, unsupported-field, and abstention metrics from field-level oracle reports. | 061 | Corpus-level and per-pattern precision/recall/F1, confidence calibration, no direct LLM evidence, and release-blocking thresholds are reported. |
+| 063 | Repair Success Rate Benchmark | Measure crawl, extraction, verification, drift, and replay repair success under seeded failures without owner-service bypass or policy weakening. | 050, 061, 062 | Seeded repair cases report repair success rate, attempts, model/tool traces, before/after evidence, rollback refs, unresolved escalation, and no unsafe repair bypass. |
+| 064 | Cost Latency Stability Release Gate | Aggregate quality, cost, latency, throughput, token/call usage, retry behavior, and multi-run stability into the production crawl quality release decision. | 058-063 | Quality release passes only when all prior quality benchmark reports exist, SLO/cost budgets are met, three-run stability is acceptable, replay is complete, and no false-ready status is emitted. |
 
 ## Activation Policy
 
@@ -98,11 +106,11 @@ When a roadmap spec is activated:
 - This spec does not implement runtime code.
 - This spec does not claim production readiness.
 - This spec does not authorize creating additional production implementation
-  specs outside 039-056 without first amending this roadmap.
+  specs outside 039-064 without first amending this roadmap.
 
 ## Success Criteria
 
-- **SC-001**: Specs 039-056 exist as planned spec files with fixed purpose,
+- **SC-001**: Specs 039-064 exist as planned spec files with fixed purpose,
   dependency, and completion gate.
 - **SC-002**: `docs/08-build-roadmap.md` contains the same post-037 roadmap.
 - **SC-003**: `AGENTS.md` points future production work to this roadmap before
