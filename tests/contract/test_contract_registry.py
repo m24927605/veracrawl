@@ -79,6 +79,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "worker_orchestration_scale_runtime",
         "ops_replay_observability_runtime",
         "production_benchmark_release_gate",
+        "real_world_benchmark_corpus_gate",
     }
     assert set(TARGET_CONTRACT_AREAS) == expected
     for area, registration in TARGET_CONTRACT_AREAS.items():

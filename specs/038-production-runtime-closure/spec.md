@@ -22,7 +22,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
   capability across source types, website patterns, schemas, evidence paths,
   graph/memory intelligence, and operations. It does not narrow VeraCrawl into a
   single-site scraper or workflow demo.
-- **Target/V1 boundary**: Specs 039-054 are production sequencing specs. They
+- **Target/V1 boundary**: Specs 039-055 are production sequencing specs. They
   connect the already completed target architecture foundation to real source
   acquisition, processing, orchestration, AI adapters, persistence, benchmark,
   and operations paths without reducing target architecture.
@@ -40,7 +40,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 
 ## Roadmap Rules
 
-- **RR-001**: Specs 039-054 are the approved remaining production runtime specs.
+- **RR-001**: Specs 039-055 are the approved remaining production runtime specs.
 - **RR-002**: A later implementation spec may be activated only after all prior
   blocking specs listed in the roadmap are complete or explicitly marked
   non-blocking by an amendment to this spec.
@@ -77,6 +77,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 | 052 | Worker Orchestration And Scale Runtime | Run production worker pools, queues, leases, retries, dead-letter, sharding, backpressure, and autoscaling. | 040, 041, 045, 047 | Long-running crawls tolerate worker failure, retries, and load without state corruption or silent item loss. |
 | 053 | Ops Console, Replay, And Observability Runtime | Expose operator workflows for run review, evidence review, replay, graph/debug views, alerts, cost, and recovery. | 048, 052 | Operators can inspect, pause/resume, replay, recover, and explain outputs through canonical refs. |
 | 054 | Production Benchmark And Release Gate | Define and run the final authorized benchmark suite proving target production readiness. | 039-053 | Live benchmark passes with all source, processing, evidence, publication, replay, ops, scale, and safety gates. |
+| 055 | Real-World Benchmark Corpus Gate | Add authorized public website corpus validation that supplements deterministic release gates with real external acquisition, policy, observation, artifact, and replay proof. | 054 | A declared public corpus runs through live HTTP acquisition with origin/robots/private-network safety, observation oracles, artifact/content hash refs, command/event/outbox refs, and replay refs. |
 
 ## Activation Policy
 
@@ -96,11 +97,11 @@ When a roadmap spec is activated:
 - This spec does not implement runtime code.
 - This spec does not claim production readiness.
 - This spec does not authorize creating additional production implementation
-  specs outside 039-054 without first amending this roadmap.
+  specs outside 039-055 without first amending this roadmap.
 
 ## Success Criteria
 
-- **SC-001**: Specs 039-054 exist as planned spec files with fixed purpose,
+- **SC-001**: Specs 039-055 exist as planned spec files with fixed purpose,
   dependency, and completion gate.
 - **SC-002**: `docs/08-build-roadmap.md` contains the same post-037 roadmap.
 - **SC-003**: `AGENTS.md` points future production work to this roadmap before

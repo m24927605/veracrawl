@@ -232,6 +232,12 @@ from veracrawl.contracts.publication import (
     ResultPublicationExportFixtureManifest,
     ResultPublicationExportRuntimeReport,
 )
+from veracrawl.contracts.real_world_benchmark import (
+    RealWorldBenchmarkCorpusManifest,
+    RealWorldBenchmarkRunReport,
+    RealWorldBenchmarkSiteObservation,
+    RealWorldBenchmarkSiteSpec,
+)
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
 from veracrawl.contracts.release import (
@@ -472,6 +478,10 @@ __all__ = [
     "ProductWorkflowReadinessRecord",
     "ProductionBenchmarkReleaseFixtureManifest",
     "ProductionBenchmarkReleaseReport",
+    "RealWorldBenchmarkCorpusManifest",
+    "RealWorldBenchmarkRunReport",
+    "RealWorldBenchmarkSiteObservation",
+    "RealWorldBenchmarkSiteSpec",
     "ProjectionCleanupRecord",
     "ProjectionMismatchReport",
     "ProjectionRebuildJob",

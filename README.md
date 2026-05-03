@@ -400,6 +400,13 @@ export, replay, ops, scale, safety, policy, command/event/outbox, artifact,
 redaction, SLO, release decision, and audit refs are present. Missing lower
 runtime gates, SLO violations, release blockers, false-ready status, and replay
 mismatch fail with typed diagnostics.
+The real-world benchmark corpus gate supplements deterministic release gates
+with authorized public website validation. `veracrawl-real-benchmark` runs a
+manifest-declared corpus through origin allowlists, robots preflight,
+private-network denial, live HTTP acquisition, coarse observation oracles,
+artifact/content hash refs, source observation refs, command/event/outbox refs,
+and replay refs. The default corpus covers static, listing/detail, pagination,
+and API-like public targets without site-specific scraper code.
 The concrete persistence adapter spine proves executable SQLite adapter
 semantics for transactions, migrations, idempotency, event cursors, outbox,
 artifact index, queue leases, and replay refs. The Postgres descriptor is
@@ -1010,6 +1017,15 @@ for fixture in tests/fixtures/production-release-*; do
     --collector-handoff-ref collector-handoff:local \
     --out ".veracrawl-test-runs/$(basename "$fixture")"
 done
+```
+
+Run the real-world public benchmark corpus:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-real-benchmark run \
+  tests/fixtures/real-world-public-corpus \
+  --profile target \
+  --out .veracrawl-real-runs/real-world-public-corpus
 ```
 
 Run persistence and queue runtime fixtures:

@@ -17,6 +17,7 @@ build/
 .coverage
 htmlcov/
 .veracrawl-test-runs/
+.veracrawl-real-runs/
 .DS_Store
 *.tmp
 *.swp

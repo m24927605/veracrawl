@@ -1656,6 +1656,31 @@ Graph and memory production runtime:
   storage clients, browser engines, model SDKs, agent frameworks, or
   site-specific scraper code.
 
+Real-world benchmark corpus gate:
+
+- `veracrawl.contracts.real_world_benchmark` owns
+  `RealWorldBenchmarkCorpusManifest`, `RealWorldBenchmarkSiteSpec`,
+  `RealWorldBenchmarkSiteObservation`, and `RealWorldBenchmarkRunReport`.
+- `veracrawl.benchmarks.real_world` composes manifest-declared public site specs
+  with existing live HTTP acquisition. It accepts injected robots fetchers and
+  network adapter factories so tests can stay deterministic while the CLI can
+  run a real external corpus.
+- `veracrawl.cli.real_benchmark` exposes `veracrawl-real-benchmark run` for
+  public corpus execution. The CLI performs same-origin robots preflight,
+  constructs the stdlib HTTP adapter, writes `run_report.json`,
+  `site_observations.json`, `summary.json`, and state files under the selected
+  output directory.
+- passing real-world benchmark reports require origin allowlist refs, robots
+  policy refs, live HTTP report refs, network response refs, source observation
+  refs, artifact/content hash/canonical URL refs, observation refs,
+  command/event/outbox refs, and replay refs.
+- private-network targets, off-allowlist origins, robots denial, live HTTP
+  failure, observation mismatch, missing evidence refs, and replay mismatch fail
+  with `RealWorldBenchmarkFailureType`.
+- the runtime does not import concrete HTTP adapters, browser engines, model
+  SDKs, agent frameworks, credential systems, export targets, or site-specific
+  scraper modules into core.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

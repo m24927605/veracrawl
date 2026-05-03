@@ -77,6 +77,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_observability_ref: str | None = None
     expected_ops_runtime_ref: str | None = None
     expected_release_ref: str | None = None
+    expected_real_world_benchmark_ref: str | None = None
     expected_security_privacy_ref: str | None = None
     expected_agent_adapter_ref: str | None = None
     expected_agent_model_adapter_ref: str | None = None
@@ -465,6 +466,32 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "release",
         tests=["tests/integration/test_production_benchmark_release_fixtures.py"],
+    ),
+    "RealWorldBenchmarkSiteSpec": _contract(
+        "RealWorldBenchmarkSiteSpec",
+        OwnerService.OPS,
+        "real_world_benchmark",
+        tests=["tests/contract/test_real_world_benchmark_contracts.py"],
+    ),
+    "RealWorldBenchmarkSiteObservation": _contract(
+        "RealWorldBenchmarkSiteObservation",
+        OwnerService.OPS,
+        "real_world_benchmark",
+        mutation_allowed=True,
+        tests=["tests/contract/test_real_world_benchmark_contracts.py"],
+    ),
+    "RealWorldBenchmarkRunReport": _contract(
+        "RealWorldBenchmarkRunReport",
+        OwnerService.OPS,
+        "real_world_benchmark",
+        mutation_allowed=True,
+        tests=["tests/contract/test_real_world_benchmark_contracts.py"],
+    ),
+    "RealWorldBenchmarkCorpusManifest": _contract(
+        "RealWorldBenchmarkCorpusManifest",
+        OwnerService.TESTS,
+        "real_world_benchmark",
+        tests=["tests/integration/test_real_world_benchmark_fixtures.py"],
     ),
     "DRRestoreFixtureManifest": _contract(
         "DRRestoreFixtureManifest",
@@ -2979,6 +3006,37 @@ COMMAND_TYPES.update(
                 ],
             )
         ),
+        "record_real_world_benchmark_site_observation": CommandTypeRegistration(
+            command_type="record_real_world_benchmark_site_observation",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="RealWorldBenchmarkSiteObservation",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "fetch",
+                "runtime_verification",
+            ],
+            emitted_event_types=["real_world_benchmark_site_observed"],
+        ),
+        "record_real_world_benchmark_run_report": CommandTypeRegistration(
+            command_type="record_real_world_benchmark_run_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="RealWorldBenchmarkRunReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "fetch",
+                "runtime_verification",
+            ],
+            emitted_event_types=["real_world_benchmark_run_reported"],
+        ),
+        "record_real_world_benchmark_corpus_manifest": CommandTypeRegistration(
+            command_type="record_real_world_benchmark_corpus_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="RealWorldBenchmarkCorpusManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["real_world_benchmark_corpus_manifest_recorded"],
+        ),
         "record_export_target_spec": CommandTypeRegistration(
             command_type="record_export_target_spec",
             owner_service=OwnerService.EXPORT,
@@ -3467,6 +3525,9 @@ EVENT_TYPES.update(
             "ops_replay_observability_fixture_manifest_recorded",
             "production_benchmark_release_reported",
             "production_benchmark_release_fixture_manifest_recorded",
+            "real_world_benchmark_site_observed",
+            "real_world_benchmark_run_reported",
+            "real_world_benchmark_corpus_manifest_recorded",
             "export_target_recorded",
             "export_dispatched",
             "export_delivered",
@@ -4283,6 +4344,21 @@ for _production_release_fixture, _negative in {
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
         expected_release_ref=f"{_base}/oracles/expected_release.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _real_world_fixture, _negative in {
+    "real-world-public-corpus": False,
+}.items():
+    _base = f"tests/fixtures/{_real_world_fixture}"
+    FIXTURE_ORACLES[_real_world_fixture] = FixtureOracleRegistration(
+        fixture_id=_real_world_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_real_world_benchmark_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -5751,6 +5827,24 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "ResultPublicationExportRuntimeReport",
             "WorkerOrchestrationRuntimeReport",
             "OpsReplayObservabilityRuntimeReport",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "real_world_benchmark_corpus_gate": _target_area(
+        "real_world_benchmark_corpus_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "RealWorldBenchmarkCorpusManifest",
+            "RealWorldBenchmarkSiteSpec",
+            "RealWorldBenchmarkSiteObservation",
+            "RealWorldBenchmarkRunReport",
+            "LiveHttpAcquisitionReport",
+            "NetworkResponse",
+            "TargetSourceObservationRecord",
             "CommandResult",
             "EventCursorRecord",
             "OutboxRecord",

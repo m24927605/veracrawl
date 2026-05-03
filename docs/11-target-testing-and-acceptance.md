@@ -2048,6 +2048,34 @@ Acceptance gates:
 - import-boundary tests prove target runtime core does not import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
 - registry validation includes target runtime contracts, commands, events, fixtures, and target area coverage
 
+Real-world benchmark corpus acceptance:
+
+```text
+veracrawl-real-benchmark run tests/fixtures/<real_world_corpus_fixture_id> --profile target --out .veracrawl-real-runs/<real_world_corpus_fixture_id>
+```
+
+Required real-world corpus fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| real-world-public-corpus | authorized public targets for static, listing/detail, pagination, and API-like pages pass with live HTTP, robots, observation, artifact, command/event/outbox, and replay refs |
+
+Real-world benchmark acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_real_world_benchmark_contracts.py`
+- `pytest tests/contract/test_real_world_benchmark_contract_registry.py`
+- `pytest tests/contract/test_real_world_benchmark_import_boundaries.py`
+- `pytest tests/unit/test_real_world_benchmark_runtime.py`
+- `pytest tests/unit/test_real_world_benchmark_replay.py`
+- `pytest tests/integration/test_real_world_benchmark_fixtures.py`
+- one recorded live CLI run against `tests/fixtures/real-world-public-corpus`
+
+This acceptance proves that deterministic release gates are supplemented by a
+real external public corpus. It does not replace the synthetic benchmark suite
+and does not claim full browser, authenticated-session, extraction publication,
+export, scale, or long-running production readiness by itself.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

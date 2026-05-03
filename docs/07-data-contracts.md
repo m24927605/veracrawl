@@ -42,7 +42,7 @@ Target contract manifest:
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
-| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, OpsReplayObservabilityRuntimeReport, OpsReplayObservabilityFixtureManifest, ProductionBenchmarkReleaseReport, ProductionBenchmarkReleaseFixtureManifest, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, ops replay/observability, production release, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
+| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, OpsReplayObservabilityRuntimeReport, OpsReplayObservabilityFixtureManifest, ProductionBenchmarkReleaseReport, ProductionBenchmarkReleaseFixtureManifest, RealWorldBenchmarkCorpusManifest, RealWorldBenchmarkSiteSpec, RealWorldBenchmarkSiteObservation, RealWorldBenchmarkRunReport, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, ops replay/observability, production release, real-world benchmark validation, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
 | PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
 | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
 | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
@@ -1221,6 +1221,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_ops_replay_observability_fixture_manifest | tests | OpsReplayObservabilityFixtureManifest | BaseCommandPayload | target profile, expected result, expected status, typed failure, and required refs validate | none | ops_replay_observability_fixture_manifest_recorded | negative fixture claiming pass is rejected |
 | record_production_benchmark_release_report | ops | ProductionBenchmarkReleaseReport | BaseCommandPayload | target runtime, source coverage, product acceptance, security/privacy, publication/export, worker orchestration, ops runtime, policy, command/event/outbox, SLO, release decision, audit, and replay refs validate | expected_version | production_benchmark_release_reported | missing gate, blocker, false-ready, SLO, or replay gaps fail release |
 | record_production_benchmark_release_fixture_manifest | tests | ProductionBenchmarkReleaseFixtureManifest | BaseCommandPayload | target profile, expected result, expected release status, typed failure, and required gate refs validate | none | production_benchmark_release_fixture_manifest_recorded | negative fixture claiming pass is rejected |
+| record_real_world_benchmark_site_observation | ops | RealWorldBenchmarkSiteObservation | BaseCommandPayload | live HTTP, robots policy, observation oracle, artifact, content hash, policy, command/event/outbox, and replay refs validate | expected_version | real_world_benchmark_site_observed | robots denial, scope denial, observation mismatch, missing evidence, or replay gaps fail site observation |
+| record_real_world_benchmark_run_report | ops | RealWorldBenchmarkRunReport | BaseCommandPayload | manifest, site observations, live HTTP refs, artifact refs, content hashes, policy, command/event/outbox, and replay refs validate | expected_version | real_world_benchmark_run_reported | any non-pass site observation or replay gap fails aggregate report |
+| record_real_world_benchmark_corpus_manifest | tests | RealWorldBenchmarkCorpusManifest | BaseCommandPayload | target profile, public site specs, allowed origins, robots policy, expected observations, and required refs validate | none | real_world_benchmark_corpus_manifest_recorded | unsafe public corpus manifest is rejected |
 | record_queue_broker_adapter | ports | QueueBrokerAdapterSpec | BaseCommandPayload | queue names, broker capabilities, fencing, idempotency, fairness, backpressure, and policy refs validate | none | queue_broker_adapter_recorded | broker missing capability blocks operational target pass |
 | record_queue_broker_operation | scheduler | QueueBrokerOperationRecord | BaseCommandPayload | enqueue, duplicate enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, visibility, retry, fairness, backpressure, and policy refs validate | lease_required | queue_broker_operation_recorded | missing fencing, heartbeat, or dead-letter refs fail conformance |
 | record_queue_broker_conformance_report | review_replay | QueueBrokerConformanceReport | BaseCommandPayload | adapter, topology, item, broker operation, lease, heartbeat, ack/nack, dead-letter, fencing, retry, fairness, backpressure, policy, contract-only, and replay refs validate | expected_version | queue_broker_conformance_reported | runtime-unavailable brokers must report needs_review, not pass |
@@ -1655,6 +1658,9 @@ Target state transition matrix:
 | OpsReplayObservabilityFixtureManifest | created before fixture execution; immutable after create | record_ops_replay_observability_fixture_manifest | tests | target fixture expectations and required refs | negative pass rejection tests |
 | ProductionBenchmarkReleaseReport | created as pass/fail/needs_review; immutable after create | record_production_benchmark_release_report | ops | target runtime, source coverage, product acceptance, security/privacy, publication, worker, ops, SLO, release, audit, policy, and replay refs | missing gate, release blocker, false-ready, SLO, and replay mismatch tests |
 | ProductionBenchmarkReleaseFixtureManifest | created before fixture execution; immutable after create | record_production_benchmark_release_fixture_manifest | tests | target fixture expectations and required gate refs | negative pass rejection tests |
+| RealWorldBenchmarkSiteObservation | created as pass/fail/needs_review; immutable after create | record_real_world_benchmark_site_observation | ops | live HTTP refs, robots policy, observation oracle, artifact, content hash, command/event/outbox, and replay refs | robots, scope, observation mismatch, evidence gap, and replay tests |
+| RealWorldBenchmarkRunReport | created as pass/fail/needs_review; immutable after create | record_real_world_benchmark_run_report | ops | corpus manifest, site observations, live HTTP, artifact, policy, command/event/outbox, and replay refs | public corpus, missing evidence, and replay mismatch tests |
+| RealWorldBenchmarkCorpusManifest | created before corpus execution; immutable after create | record_real_world_benchmark_corpus_manifest | tests | public corpus site specs, allowed origins, robots status policy, observation oracles, and expected status | unsafe manifest and negative pass rejection tests |
 | QueueBrokerAdapterSpec | proposed -> recorded/superseded | record_queue_broker_adapter | ports | queue broker policy | broker capability and import boundary tests |
 | QueueBrokerOperationRecord | created append-only | record_queue_broker_operation | scheduler | lease, fencing, retry, dead-letter policy | queue broker operation contract tests |
 | QueueBrokerConformanceReport | created as pass/fail/needs_review; immutable after create | record_queue_broker_conformance_report | review_replay | broker conformance refs, no-runtime, and failure boundaries | queue broker fixture tests |
@@ -3901,6 +3907,9 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | ops_replay_observability_fixture_manifest_recorded | OpsEventPayload | OpsReplayObservabilityFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required refs | fixture refs remain |
 | production_benchmark_release_reported | OpsEventPayload | ProductionBenchmarkReleaseReport | after required | target runtime, source coverage, product acceptance, security/privacy, publication/export, worker orchestration, ops runtime, SLO, release decision, audit, command/event/outbox, and replay refs | operational refs remain |
 | production_benchmark_release_fixture_manifest_recorded | OpsEventPayload | ProductionBenchmarkReleaseFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required gate refs | fixture refs remain |
+| real_world_benchmark_site_observed | OpsEventPayload | RealWorldBenchmarkSiteObservation | after required | public site id, live HTTP report, robots policy, observation refs, artifact/content hash, command/event/outbox, and replay refs | raw external body remains artifact-backed |
+| real_world_benchmark_run_reported | OpsEventPayload | RealWorldBenchmarkRunReport | after required | corpus id, site observations, live HTTP refs, artifact/content hash refs, policy, command/event/outbox, and replay refs | raw external bodies remain artifact-backed |
+| real_world_benchmark_corpus_manifest_recorded | OpsEventPayload | RealWorldBenchmarkCorpusManifest | after required | fixture id, scenario, site specs, allowed origins, expected observations, and required refs | public URL metadata remains |
 | queue_broker_adapter_recorded | QueueBrokerEventPayload | QueueBrokerAdapterSpec | after required | queue names, capability refs, visibility timeout, policy refs | broker URL and credentials redacted |
 | queue_broker_operation_recorded | QueueBrokerEventPayload | QueueBrokerOperationRecord | after required | queue item, lease, fencing token hash/ref, visibility timeout, heartbeat, retry, dead-letter refs | fencing secret material redacted |
 | queue_broker_conformance_reported | QueueBrokerEventPayload | QueueBrokerConformanceReport | after required | adapter, topology, operation, lease, heartbeat, ack/nack, dead-letter, failure, contract-only, replay refs | stable refs remain |
@@ -5693,6 +5702,116 @@ Executable production benchmark release rules:
 - non-pass reports must expose `ProductionBenchmarkReleaseFailureType` diagnostics and at least one failure, missing gate, SLO, blocker, false-ready, replay, or missing-ref detail.
 - target fixtures must cover benchmark success, missing target runtime, missing source coverage, missing product acceptance, missing security/privacy, missing publication, missing worker orchestration, missing ops runtime, SLO violation, release blocker, false-ready status, and replay mismatch.
 - this release gate does not contact unauthorized public websites and does not import concrete UI frameworks, telemetry backends, storage clients, queue clients, browser engines, model SDKs, agent frameworks, cloud SDKs, or site-specific scraper modules into core.
+
+## RealWorldBenchmarkSiteSpec
+
+```yaml
+RealWorldBenchmarkSiteSpec:
+  id: string
+  target_url: string
+  robots_url: string
+  allowed_origin: string
+  expected_status_code: integer
+  expected_content_type: string
+  min_body_size_bytes: integer
+  required_title_fragments: list
+  required_body_fragments: list
+  required_regex_counts: map
+  allowed_robots_status_codes: list
+  timeout_ms: integer
+  size_budget_bytes: integer
+  pattern_refs: list
+  created_at: timestamp
+```
+
+## RealWorldBenchmarkSiteObservation
+
+```yaml
+RealWorldBenchmarkSiteObservation:
+  id: string
+  site_spec_ref: string
+  target_url: string
+  robots_policy_ref: string
+  live_http_report_ref: string
+  network_response_ref: string
+  source_observation_refs: list
+  artifact_refs: list
+  content_hash_refs: list
+  canonical_url_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  status_code: integer
+  content_type: string
+  body_size_bytes: integer
+  content_digest: string
+  matched_observation_refs: list
+  failure_type: real_world_scope_denied | real_world_private_network_denied | real_world_robots_denied | real_world_network_unavailable | real_world_live_http_failed | real_world_observation_mismatch | real_world_missing_evidence_refs | real_world_replay_mismatch
+  failure_report_refs: list
+  missing_ref_fields: list
+  diagnostics: list
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## RealWorldBenchmarkRunReport
+
+```yaml
+RealWorldBenchmarkRunReport:
+  id: string
+  fixture_id: string
+  run_ref: string
+  benchmark_corpus_ref: string
+  benchmark_run_refs: list
+  site_observation_refs: list
+  live_http_report_refs: list
+  network_response_refs: list
+  source_observation_refs: list
+  artifact_refs: list
+  content_hash_refs: list
+  canonical_url_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_refs: list
+  observation_summary_refs: list
+  failure_type: real_world_scope_denied | real_world_private_network_denied | real_world_robots_denied | real_world_network_unavailable | real_world_live_http_failed | real_world_observation_mismatch | real_world_missing_evidence_refs | real_world_replay_mismatch
+  failure_report_refs: list
+  missing_ref_fields: list
+  diagnostics: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## RealWorldBenchmarkCorpusManifest
+
+```yaml
+RealWorldBenchmarkCorpusManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  site_specs: list
+  allowed_origin_refs: list
+  rate_budget_ref: string
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: real_world_scope_denied | real_world_private_network_denied | real_world_robots_denied | real_world_network_unavailable | real_world_live_http_failed | real_world_observation_mismatch | real_world_missing_evidence_refs | real_world_replay_mismatch
+  negative_case: boolean
+  required_ref_types: list
+  created_at: timestamp
+```
+
+Executable real-world benchmark corpus rules:
+
+- pass requires a manifest-declared public corpus, explicit origin allowlist, same-origin robots preflight, read-only live HTTP acquisition, observation oracle matches, artifact/content hash refs, source observation refs, command/event/outbox refs, and replay refs.
+- pass is rejected when target URLs are private-network or off-allowlist, robots disallows the target, live HTTP fails, observation oracles mismatch, evidence refs are missing, or replay refs are missing.
+- raw external response bodies remain artifact-backed and must not be copied into command/event payloads.
+- target fixtures cover the public corpus shape and deterministic fake-adapter execution; live public runs supplement deterministic tests and are recorded in `tasks.md` validation results.
+- this gate does not implement site-specific scraper logic, browser execution, credentialed sessions, published extraction outputs, export delivery, or long-running distributed load tests.
 
 ## Target Crawl Runtime Contracts
 

@@ -601,6 +601,17 @@ class ProductionBenchmarkReleaseFailureType(StrEnum):
     REPLAY_MISMATCH = "production_release_replay_mismatch"
 
 
+class RealWorldBenchmarkFailureType(StrEnum):
+    SCOPE_DENIED = "real_world_scope_denied"
+    PRIVATE_NETWORK_DENIED = "real_world_private_network_denied"
+    ROBOTS_DENIED = "real_world_robots_denied"
+    NETWORK_UNAVAILABLE = "real_world_network_unavailable"
+    LIVE_HTTP_FAILED = "real_world_live_http_failed"
+    OBSERVATION_MISMATCH = "real_world_observation_mismatch"
+    MISSING_EVIDENCE_REFS = "real_world_missing_evidence_refs"
+    REPLAY_MISMATCH = "real_world_replay_mismatch"
+
+
 class SecurityActionSurface(StrEnum):
     NETWORK = "network"
     PROMPT = "prompt"

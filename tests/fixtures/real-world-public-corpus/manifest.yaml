@@ -1,0 +1,100 @@
+{
+  "id": "real-world-public-corpus",
+  "scenario": "success",
+  "profile_refs": ["target"],
+  "allowed_origin_refs": [
+    "https://books.toscrape.com",
+    "https://quotes.toscrape.com",
+    "https://example.com",
+    "https://httpbin.org"
+  ],
+  "rate_budget_ref": "budget:real-world-public-corpus:one-request-per-target",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "real_world_benchmark_completed",
+  "required_ref_types": [
+    "site_observation_refs",
+    "live_http_report_refs",
+    "network_response_refs",
+    "artifact_refs",
+    "content_hash_refs",
+    "canonical_url_refs",
+    "command_record_refs",
+    "event_cursor_refs",
+    "outbox_refs",
+    "replay_bundle_refs"
+  ],
+  "site_specs": [
+    {
+      "id": "books-toscrape-travel",
+      "target_url": "https://books.toscrape.com/catalogue/category/books/travel_2/index.html",
+      "robots_url": "https://books.toscrape.com/robots.txt",
+      "allowed_origin": "https://books.toscrape.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": ["Travel", "Books to Scrape"],
+      "required_body_fragments": ["Books to Scrape"],
+      "required_regex_counts": {
+        "class=\"product_pod\"": 1
+      },
+      "allowed_robots_status_codes": [404],
+      "timeout_ms": 10000,
+      "size_budget_bytes": 65536,
+      "pattern_refs": ["pattern:listing-detail", "pattern:pagination"]
+    },
+    {
+      "id": "quotes-toscrape-page",
+      "target_url": "https://quotes.toscrape.com/page/1/",
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "allowed_origin": "https://quotes.toscrape.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": ["Quotes to Scrape"],
+      "required_body_fragments": ["The world as we have created it"],
+      "required_regex_counts": {
+        "class=\"quote\"": 10
+      },
+      "allowed_robots_status_codes": [404],
+      "timeout_ms": 10000,
+      "size_budget_bytes": 65536,
+      "pattern_refs": ["pattern:static", "pattern:pagination"]
+    },
+    {
+      "id": "example-static",
+      "target_url": "https://example.com/",
+      "robots_url": "https://example.com/robots.txt",
+      "allowed_origin": "https://example.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 100,
+      "required_title_fragments": ["Example Domain"],
+      "required_body_fragments": ["Example Domain"],
+      "required_regex_counts": {
+        "Example Domain": 1
+      },
+      "allowed_robots_status_codes": [404],
+      "timeout_ms": 10000,
+      "size_budget_bytes": 65536,
+      "pattern_refs": ["pattern:static"]
+    },
+    {
+      "id": "httpbin-json",
+      "target_url": "https://httpbin.org/json",
+      "robots_url": "https://httpbin.org/robots.txt",
+      "allowed_origin": "https://httpbin.org",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 100,
+      "required_title_fragments": [],
+      "required_body_fragments": ["slideshow"],
+      "required_regex_counts": {
+        "\"title\"": 1
+      },
+      "allowed_robots_status_codes": [200],
+      "timeout_ms": 10000,
+      "size_budget_bytes": 65536,
+      "pattern_refs": ["pattern:api-like"]
+    }
+  ]
+}
