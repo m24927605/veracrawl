@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/032-product-acceptance-gate/plan.md`.
-Use it with `specs/032-product-acceptance-gate/spec.md`,
-`specs/032-product-acceptance-gate/research.md`,
-`specs/032-product-acceptance-gate/data-model.md`,
-`specs/032-product-acceptance-gate/contracts/`, and
-`specs/032-product-acceptance-gate/quickstart.md` for VeraCrawl Target Product Acceptance Gate work.
+Current active Spec Kit plan: `specs/033-target-area-readiness-closure/plan.md`.
+Use it with `specs/033-target-area-readiness-closure/spec.md`,
+`specs/033-target-area-readiness-closure/research.md`,
+`specs/033-target-area-readiness-closure/data-model.md`,
+`specs/033-target-area-readiness-closure/contracts/`, and
+`specs/033-target-area-readiness-closure/quickstart.md` for VeraCrawl Target Area Readiness Impact Closure work.
 <!-- SPECKIT END -->

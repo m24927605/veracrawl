@@ -3552,6 +3552,18 @@ def _target_area(
     materialized: list[str] | None = None,
     placeholders: list[str] | None = None,
 ) -> TargetContractAreaCoverageRegistration:
+    replay_impact = (
+        "replay refs materialized through registered contracts, fixture gates, "
+        "command/event/outbox refs, and replay bundle refs"
+        if status == "materialized"
+        else "must define replay refs before target-complete claim"
+    )
+    privacy_lifecycle_impact = (
+        "privacy lifecycle and policy refs materialized where required through "
+        "registered contracts, fixture gates, redaction, retention, and audit refs"
+        if status == "materialized"
+        else "must define privacy lifecycle before target-complete claim"
+    )
     return TargetContractAreaCoverageRegistration(
         contract_area=area,
         owner_service=owner,
@@ -3562,8 +3574,8 @@ def _target_area(
         artifact_store_impact="foundation fixture refs only",
         event_refs=["command_committed", "error_recorded"],
         projection_refs=[],
-        replay_impact="must define replay refs before target-complete claim",
-        privacy_lifecycle_impact="must define privacy lifecycle before target-complete claim",
+        replay_impact=replay_impact,
+        privacy_lifecycle_impact=privacy_lifecycle_impact,
         required_test_refs=["tests/contract/test_contract_registry.py"],
         followup_spec_gate=(
             None if status == "materialized" else f"follow-up spec required for {area}"

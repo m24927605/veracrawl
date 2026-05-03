@@ -69,6 +69,23 @@ def test_target_contract_area_coverage_is_explicit() -> None:
             assert registration.followup_spec_gate
 
 
+def test_materialized_target_areas_have_closed_readiness_impact() -> None:
+    unresolved_terms = ("before target-complete", "must define", "placeholder")
+    for area, registration in TARGET_CONTRACT_AREAS.items():
+        if registration.coverage_status != "materialized":
+            assert registration.followup_spec_gate
+            continue
+        assert registration.materialized_contract_refs, area
+        assert not registration.placeholder_contract_refs, area
+        assert registration.followup_spec_gate is None, area
+        impact_text = (
+            f"{registration.replay_impact} {registration.privacy_lifecycle_impact}"
+        ).lower()
+        for term in unresolved_terms:
+            assert term not in impact_text, (area, term, impact_text)
+        assert "materialized" in impact_text
+
+
 def test_command_and_event_schema_refs_resolve() -> None:
     schema_refs = set(FOUNDATION_CONTRACTS)
     for command in COMMAND_TYPES.values():
