@@ -313,6 +313,40 @@ Rules:
   external export delivery, warehouse/database/object-store writes, production
   persistence, or production browser rendering.
 
+## Target Website Pattern Coverage Gate Slice
+
+The website pattern coverage gate proves that every target website pattern has a
+deterministic benchmark fixture/oracle path before target completion can be
+claimed:
+
+- `WebsitePatternCoverageRecord` records per-pattern source adapter, source
+  evidence, site model/page type, output/evidence oracle, policy, artifact,
+  event, graph, safety, pattern-specific, command, event cursor, outbox, and
+  replay refs.
+- `WebsitePatternCoverageReport` can claim `pass` only when `static`,
+  `sitemap_rss_feed`, `listing_detail`, `search`, `non_destructive_forms`,
+  `javascript_pages`, `authenticated_sources`, `api_like_endpoints`,
+  `documents`, `multi_language_pages`, `drifted_sites`, and `high_volume_sites`
+  are all covered.
+- `veracrawl.patterns.coverage` is deterministic and imports only VeraCrawl
+  contracts.
+- `veracrawl-website-patterns` runs success, no-runtime, single-site,
+  scaffold-only, unsupported, missing-ref, unsafe-interaction, and replay
+  fixtures without static dependencies on storage, queues, browsers, HTTP
+  clients, model SDKs, agent frameworks, export targets, or site-specific
+  scrapers.
+
+Rules:
+
+- single-site fixtures, fixed selector sets, and scaffold-only manifests cannot
+  satisfy target website pattern coverage.
+- browser, forms, authenticated, API, document, multilingual, drift, and
+  high-volume patterns require explicit pattern-specific safety/evidence refs.
+- this slice proves target website pattern benchmark readiness. It does not
+  prove production browser fleets, production external websites, managed
+  credential vaults, production parser farms, production queue scale, or
+  production scale readiness.
+
 ## Basic Site Graph Spine Slice
 
 The basic graph slice turns acquisition, normalization, and site-understanding

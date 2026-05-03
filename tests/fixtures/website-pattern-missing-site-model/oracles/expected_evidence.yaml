@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"website_pattern_missing_site_model","required_refs":["site_model_refs","page_type_refs"]}

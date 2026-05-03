@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"website_pattern_missing_output_evidence","required_refs":["expected_output_oracle_refs","evidence_coverage_refs"]}

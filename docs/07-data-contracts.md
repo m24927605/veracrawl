@@ -36,7 +36,7 @@ Target contract manifest:
 | FetchAttempt, FetchResult, PageSnapshot, NormalizedDocument, NormalizationManifest | required | raw artifacts, rendered artifacts, documents, and normalized outputs carry replayable transformation refs |
 | ExtractionStrategy, ExtractionCandidate, EvidencePacket | required | schema-bound and approved exploratory extraction preserve anchors and source refs |
 | VerificationRecommendation, VerificationDecision, ConflictRecord, AdjudicationDecision | required | evidence, contradictions, freshness, and review/adjudication are explicit |
-| PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact, OutputTypeCoverageRecord, OutputTypePublicationGateReport | required | immutable publication and fact projection preserve evidence and verification lineage across all target output types |
+| PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact, OutputTypeCoverageRecord, OutputTypePublicationGateReport, WebsitePatternCoverageRecord, WebsitePatternCoverageReport | required | immutable publication and target coverage gates preserve evidence, verification, website pattern, and output type lineage |
 | GraphBuildManifest, GraphNode, GraphEdge, GraphSignal, TemporalKGProjectionRecord, TemporalKGEntityIdentity, TemporalKGRuntimeReport | required | graph projections have input refs, watermarks, quality metrics, graph-driven frontier/review decisions, and evidence-derived temporal semantics |
 | MemoryEvent, CrossScopeMemoryTunnel, OperationalTemporalMemoryRecord | required | memory has scope, trust, taint, promotion policy, freshness, invalidation, cross-scope authorization, operational temporal records, evidence refs, and prompt-use restrictions |
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
@@ -1169,6 +1169,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_output_type_coverage | publish | OutputTypeCoverageRecord | BaseCommandPayload | output type has source evidence, verification, publication, manifest, lifecycle, policy, and replay refs | expected_version | output_type_coverage_recorded | candidate/graph/memory/agent/temporal KG context cannot satisfy source evidence |
 | record_output_type_coverage_report | publish | OutputTypePublicationGateReport | BaseCommandPayload | every target output type has coverage record refs or typed failure/review refs | expected_version | output_type_coverage_reported | missing output type, unsupported type, missing type refs, or missing replay fails |
 | record_output_type_coverage_fixture_manifest | tests | OutputTypeCoverageFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | output_type_coverage_fixture_manifest_recorded | invalid negative/pass pairing rejected |
+| record_website_pattern_coverage | review_replay | WebsitePatternCoverageRecord | BaseCommandPayload | website pattern has source adapter, site model, source evidence, oracle, policy, pattern-specific, and replay refs | expected_version | website_pattern_coverage_recorded | single-site, scaffold-only, unsafe, or missing pattern refs fail |
+| record_website_pattern_coverage_report | review_replay | WebsitePatternCoverageReport | BaseCommandPayload | every target website pattern has coverage record refs or typed failure/review refs | expected_version | website_pattern_coverage_reported | missing pattern, unsupported pattern, missing source adapter, missing output/evidence, or missing replay fails |
+| record_website_pattern_coverage_fixture_manifest | tests | WebsitePatternCoverageFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | website_pattern_coverage_fixture_manifest_recorded | invalid negative/pass pairing rejected |
 | dispatch_export | export | ExportJob, ExportAttempt | ExportDispatchPayload | export target approved; output manifest immutable | expected_version | export_dispatched | idempotency preserves destination mapping |
 | complete_export | export | ExportAttempt, ExportDeliveryReceipt | ExportReceiptPayload | destination receipt validates | expected_version | export_delivered | rejected destination marks attempt failed |
 | fail_export | export | ExportAttempt | ExportFailurePayload | retry classification recorded | expected_version | error_recorded | transient retry or permanent failure decision |
@@ -3033,6 +3036,89 @@ types, unsupported types, aggregate or source-specific derived context as
 evidence, missing type-specific refs, and missing replay refs fail
 deterministically. Source-specific derived context failures include candidate,
 graph, memory, agent reasoning, and temporal KG refs used as source evidence.
+
+## WebsitePatternCoverageRecord
+
+`WebsitePatternCoverageRecord` is the executable target coverage contract for one
+authorized website pattern.
+
+```yaml
+WebsitePatternCoverageRecord:
+  id: string
+  run_ref: string
+  website_pattern: static | sitemap_rss_feed | listing_detail | search | non_destructive_forms | javascript_pages | authenticated_sources | api_like_endpoints | documents | multi_language_pages | drifted_sites | high_volume_sites
+  benchmark_fixture_ref: string
+  source_adapter_refs: list
+  source_evidence_refs: list
+  site_model_refs: list
+  page_type_refs: list
+  expected_output_oracle_refs: list
+  evidence_coverage_refs: list
+  policy_decision_refs: list
+  artifact_oracle_refs: list
+  event_oracle_refs: list
+  graph_oracle_refs: list
+  pattern_specific_refs: map
+  safety_refs: list
+  diagnostic_single_site_refs: list
+  scaffold_only_refs: list
+  unsupported_pattern_refs: list
+  unsafe_interaction_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  missing_ref_fields: list
+  result: pass | fail | needs_review
+```
+
+Rules:
+
+- pass requires source adapter, source evidence, site model/page type,
+  output/evidence oracle, policy, artifact/event/graph oracle, safety, command,
+  event cursor, outbox, and replay refs.
+- each pattern has explicit pattern-specific refs for feed freshness,
+  listing/detail pagination/canonicalization, bounded search, non-destructive
+  forms, browser artifacts, authenticated credential audit, API payload
+  provenance, document anchors, language metadata, drift repair/review, or
+  high-volume queue/backpressure.
+- single-site assumptions, scaffold-only manifests, unsupported patterns, and
+  unsafe interactions cannot satisfy target website pattern coverage.
+
+## WebsitePatternCoverageReport
+
+```yaml
+WebsitePatternCoverageReport:
+  id: string
+  run_ref: string
+  coverage_record_refs: list
+  covered_patterns: list
+  missing_patterns: list
+  unsupported_pattern_refs: list
+  single_site_assumption_refs: list
+  scaffold_only_refs: list
+  unsafe_interaction_refs: list
+  missing_pattern_specific_refs: list
+  missing_replay_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  contract_only_refs: list
+  missing_runtime_refs: list
+  failure_type: string
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+```
+
+Pass requires coverage records for all target website patterns. Missing pattern,
+unsupported pattern, single-site assumptions, scaffold-only claims, missing
+source adapters, missing site models, missing output/evidence refs, missing
+pattern-specific refs, unsafe interactions, and missing replay refs fail
+deterministically.
 
 ## EvidenceCoverageMap
 

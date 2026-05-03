@@ -1054,6 +1054,21 @@ class TargetOutputType(StrEnum):
     FACT = "fact"
 
 
+class TargetWebsitePattern(StrEnum):
+    STATIC = "static"
+    SITEMAP_RSS_FEED = "sitemap_rss_feed"
+    LISTING_DETAIL = "listing_detail"
+    SEARCH = "search"
+    NON_DESTRUCTIVE_FORMS = "non_destructive_forms"
+    JAVASCRIPT_PAGES = "javascript_pages"
+    AUTHENTICATED_SOURCES = "authenticated_sources"
+    API_LIKE_ENDPOINTS = "api_like_endpoints"
+    DOCUMENTS = "documents"
+    MULTI_LANGUAGE_PAGES = "multi_language_pages"
+    DRIFTED_SITES = "drifted_sites"
+    HIGH_VOLUME_SITES = "high_volume_sites"
+
+
 class OutputTypeCoverageFailureType(StrEnum):
     MISSING_RUNTIME_REFS = "output_type_coverage_missing_runtime_refs"
     MISSING_OUTPUT_TYPE = "output_type_coverage_missing_output_type"
@@ -1073,6 +1088,20 @@ class OutputTypeCoverageFailureType(StrEnum):
     )
     MISSING_FACT_VERIFICATION = "output_type_coverage_missing_fact_verification"
     MISSING_REPLAY_REFS = "output_type_coverage_missing_replay_refs"
+
+
+class WebsitePatternCoverageFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "website_pattern_missing_runtime_refs"
+    MISSING_PATTERN = "website_pattern_missing_pattern"
+    UNSUPPORTED_PATTERN = "website_pattern_unsupported_pattern"
+    SINGLE_SITE_ASSUMPTION = "website_pattern_single_site_assumption"
+    SCAFFOLD_ONLY = "website_pattern_scaffold_only"
+    MISSING_SOURCE_ADAPTER = "website_pattern_missing_source_adapter"
+    MISSING_SITE_MODEL = "website_pattern_missing_site_model"
+    MISSING_OUTPUT_EVIDENCE = "website_pattern_missing_output_evidence"
+    MISSING_PATTERN_SPECIFIC_REFS = "website_pattern_missing_pattern_specific_refs"
+    UNSAFE_INTERACTION = "website_pattern_unsafe_interaction"
+    MISSING_REPLAY_REFS = "website_pattern_missing_replay_refs"
 
 
 class GraphNodeType(StrEnum):

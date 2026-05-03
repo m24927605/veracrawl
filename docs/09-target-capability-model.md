@@ -226,7 +226,8 @@ Required capabilities:
 Required acceptance:
 
 - every target adapter has contract, policy, replay, and fixture coverage
-- every website pattern has a deterministic benchmark fixture and pass/fail oracle
+- every website pattern has a deterministic benchmark fixture, pass/fail oracle,
+  and `WebsitePatternCoverageReport`
 - every output type has evidence coverage and publication acceptance checks
 - no adapter, pattern, or output type can be labeled target-complete while scaffolded, untested, or manually simulated
 
@@ -300,6 +301,8 @@ Required acceptance:
 - missing live temporal KG runtime refs return `needs_review`; provisional identity, projection-as-evidence, missing canonical source, missing bitemporal refs, false merge without adjudication, false split without supersession, or missing replay fail deterministically
 - `OutputTypePublicationGateReport` pass requires `record`, `table`, `document_metadata`, `document`, `file`, `dataset`, and `fact` output coverage records with source evidence, evidence coverage, verification, publication, output manifest, privacy lifecycle, command/event/outbox, and replay refs
 - candidate, graph, memory, agent reasoning, or temporal KG refs cannot satisfy source evidence for any output type; missing output type, unsupported output type, missing type-specific refs, or missing replay fail deterministically
+- `WebsitePatternCoverageReport` pass requires `static`, `sitemap_rss_feed`, `listing_detail`, `search`, `non_destructive_forms`, `javascript_pages`, `authenticated_sources`, `api_like_endpoints`, `documents`, `multi_language_pages`, `drifted_sites`, and `high_volume_sites` benchmark coverage records with source adapter, site model/page type, source evidence, oracle, policy, pattern-specific, command/event/outbox, and replay refs
+- single-site assumptions, scaffold-only manifests, unsupported patterns, unsafe interactions, missing source adapters, missing output/evidence refs, missing pattern-specific refs, or missing replay block target website pattern completion
 
 ### Export And Correction Profile
 

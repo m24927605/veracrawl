@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/030-output-type-coverage-gate/plan.md`.
-Use it with `specs/030-output-type-coverage-gate/spec.md`,
-`specs/030-output-type-coverage-gate/research.md`,
-`specs/030-output-type-coverage-gate/data-model.md`,
-`specs/030-output-type-coverage-gate/contracts/`, and
-`specs/030-output-type-coverage-gate/quickstart.md` for VeraCrawl Target Output Type Coverage Gate work.
+Current active Spec Kit plan: `specs/031-website-pattern-coverage-gate/plan.md`.
+Use it with `specs/031-website-pattern-coverage-gate/spec.md`,
+`specs/031-website-pattern-coverage-gate/research.md`,
+`specs/031-website-pattern-coverage-gate/data-model.md`,
+`specs/031-website-pattern-coverage-gate/contracts/`, and
+`specs/031-website-pattern-coverage-gate/quickstart.md` for VeraCrawl Target Website Pattern Coverage Gate work.
 <!-- SPECKIT END -->

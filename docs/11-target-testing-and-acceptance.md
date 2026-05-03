@@ -117,6 +117,44 @@ Runner requirements:
 - validates event cursors, replay bundle, artifact hashes, graph oracle, evidence oracle, and output oracle
 - exits non-zero on any missing required oracle or undeclared tolerance
 
+Target website pattern coverage fixture contract:
+
+```text
+veracrawl-website-patterns run tests/fixtures/<website_pattern_fixture_id> --profile target --out .veracrawl-test-runs/<website_pattern_fixture_id>
+```
+
+Required website pattern coverage fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| website-pattern-coverage-success | all 12 target website patterns produce source-backed coverage records and a pass report |
+| website-pattern-runtime-unavailable | contract-only website pattern coverage reports needs-review with missing runtime refs |
+| website-pattern-missing-pattern | missing target website pattern fails with typed missing-pattern diagnostics |
+| website-pattern-unsupported-pattern | unsupported pattern fails before target pass |
+| website-pattern-single-site-assumption | single-site or fixed-selector coverage cannot claim target completion |
+| website-pattern-scaffold-only | manifest-only or scaffold-only fixture coverage fails |
+| website-pattern-missing-source-adapter | missing source adapter refs fail |
+| website-pattern-missing-site-model | missing site model or page type refs fail |
+| website-pattern-missing-output-evidence | missing output/evidence oracle refs fail |
+| website-pattern-missing-pattern-specific-refs | missing feed/listing/search/form/browser/auth/API/document/language/drift/scale refs fail |
+| website-pattern-unsafe-interaction | unsafe browser/form/auth interaction refs fail |
+| website-pattern-missing-replay | missing command, event, outbox, or replay refs fail |
+
+Website pattern coverage acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_website_pattern_coverage_contract_registry.py`
+- `pytest tests/contract/test_website_pattern_coverage_contracts.py`
+- `pytest tests/contract/test_website_pattern_coverage_import_boundaries.py`
+- `pytest tests/unit/test_website_pattern_coverage_gate.py`
+- `pytest tests/integration/test_website_pattern_coverage_fixtures.py`
+
+This acceptance proves deterministic target website pattern benchmark coverage,
+single-site/scaffold rejection, pattern-specific safety/evidence refs, and replay
+refs. It does not prove production browser fleets, production external
+websites, managed credential vaults, production parser farms, production queue
+scale, or production scale readiness.
+
 Target runtime spine fixture contract:
 
 ```text

@@ -1,0 +1,1 @@
+{"id":"website-pattern-missing-pattern-specific-refs","scenario":"website-pattern-missing-pattern-specific-refs","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"website_pattern_missing_pattern_specific_refs","expected_failure_type":"website_pattern_missing_pattern_specific_refs","negative_case":true}

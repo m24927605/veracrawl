@@ -451,6 +451,30 @@ do
 done
 ```
 
+Run target website pattern coverage fixtures:
+
+```sh
+for fixture in \
+  website-pattern-coverage-success \
+  website-pattern-runtime-unavailable \
+  website-pattern-missing-pattern \
+  website-pattern-unsupported-pattern \
+  website-pattern-single-site-assumption \
+  website-pattern-scaffold-only \
+  website-pattern-missing-source-adapter \
+  website-pattern-missing-site-model \
+  website-pattern-missing-output-evidence \
+  website-pattern-missing-pattern-specific-refs \
+  website-pattern-unsafe-interaction \
+  website-pattern-missing-replay
+do
+  uv run --python python3.12 --extra dev veracrawl-website-patterns run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
 Run basic site graph fixtures:
 
 ```sh

@@ -238,6 +238,11 @@ from veracrawl.contracts.source_runtime import (
     SourceFixtureManifest,
 )
 from veracrawl.contracts.verification import ReviewDecision, VerificationDecision
+from veracrawl.contracts.website_pattern import (
+    WebsitePatternCoverageFixtureManifest,
+    WebsitePatternCoverageRecord,
+    WebsitePatternCoverageReport,
+)
 
 __all__ = [
     "AgentActionTrace",
@@ -442,6 +447,9 @@ __all__ = [
     "TraceSpan",
     "UnitOfWorkRecord",
     "VerificationDecision",
+    "WebsitePatternCoverageFixtureManifest",
+    "WebsitePatternCoverageRecord",
+    "WebsitePatternCoverageReport",
     "registry_json",
     "validate_registry",
 ]

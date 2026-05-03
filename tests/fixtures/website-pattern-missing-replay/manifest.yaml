@@ -1,0 +1,1 @@
+{"id":"website-pattern-missing-replay","scenario":"website-pattern-missing-replay","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"website_pattern_missing_replay_refs","expected_failure_type":"website_pattern_missing_replay_refs","negative_case":true}
