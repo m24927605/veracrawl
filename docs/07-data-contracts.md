@@ -3533,6 +3533,79 @@ Rules:
 - non-pass requires typed failure refs or missing refs.
 - memory-as-evidence produces `memory_as_evidence` and `missing_reanchor_evidence`.
 
+## GraphMemoryProductionRuntimeReport
+
+`GraphMemoryProductionRuntimeReport` is the row 051 aggregate proving that graph
+and memory intelligence are wired into crawl planning, frontier prioritization,
+repair explanation, and operator audit without becoming source evidence.
+
+```yaml
+GraphMemoryProductionRuntimeReport:
+  id: string
+  fixture_id: string
+  run_ref: string
+  live_normalization_runtime_report_ref: string
+  live_evidence_verification_runtime_report_ref: string
+  multi_agent_repair_report_ref: string
+  advanced_graph_projection_report_ref: string
+  graph_frontier_review_runtime_report_ref: string
+  temporal_kg_runtime_report_ref: string
+  memory_kernel_report_ref: string
+  url_graph_refs: list
+  redirect_graph_refs: list
+  canonical_graph_refs: list
+  page_structure_graph_refs: list
+  entity_graph_refs: list
+  task_graph_refs: list
+  temporal_graph_refs: list
+  graph_signal_refs: list
+  projection_watermark_refs: list
+  site_memory_event_refs: list
+  task_memory_event_refs: list
+  repair_memory_event_refs: list
+  run_diary_memory_event_refs: list
+  memory_retrieval_trace_refs: list
+  memory_write_refs: list
+  memory_freshness_refs: list
+  memory_invalidation_refs: list
+  frontier_decision_refs: list
+  repair_explanation_refs: list
+  operator_explanation_refs: list
+  owner_command_refs: list
+  review_escalation_refs: list
+  source_evidence_refs: list
+  verification_decision_refs: list
+  policy_decision_refs: list
+  privacy_lifecycle_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  failure_type: string
+  failure_report_refs: list
+  missing_ref_fields: list
+  graph_as_evidence_refs: list
+  memory_as_evidence_refs: list
+  stale_memory_refs: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+```
+
+Rules:
+
+- pass requires live normalization, live evidence, multi-agent repair, advanced
+  graph, graph frontier/review, temporal KG, memory kernel, graph category,
+  memory category, explanation, source evidence, verification, policy,
+  command/event/outbox, and replay refs.
+- graph, temporal KG, memory, and agent reasoning refs are planning,
+  prioritization, repair, or diagnostic context only; they cannot satisfy source
+  evidence or publication eligibility.
+- stale memory requires freshness plus invalidation/exclusion refs before a run
+  can pass.
+- missing live normalization, live evidence, multi-agent repair, graph
+  projection, temporal KG, memory kernel, frontier explanation, repair
+  explanation, invalidation, or replay refs fail with typed diagnostics.
+
 ## CrawlRunEvent
 
 ```yaml
@@ -3688,6 +3761,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | source coverage adapter events | SourceCoverageAdapterEventPayload | SourceCoverageAdapterExecutionRecord, SourceCoverageAdapterReport, SourceCoverageAdapterFixtureManifest | source mapping, runtime availability, adapter-specific refs, policy/security/observability/replay status | raw secrets, unsafe browser side effects, and adapter-native state are never canonical |
 | dynamic source runtime events | DynamicSourceRuntimeEventPayload | DynamicSourceRuntimeAdapterRecord, DynamicSourceRuntimeReport, DynamicSourceRuntimeFixtureManifest | source runtime availability, adapter-specific runtime refs, policy/security/observability/replay status | raw secrets, unsafe browser side effects, and adapter-native runtime state are never canonical |
 | graph frontier/review events | GraphFrontierReviewEventPayload | GraphFrontierDecisionRecord, GraphReviewRouteDecisionRecord, GraphFrontierReviewRuntimeReport, GraphFrontierReviewFixtureManifest | graph signal use, frontier decision, review route, runtime availability, policy, command/event/outbox, and replay status | graph signals are never source evidence or publication truth |
+| graph memory production events | GraphMemoryProductionEventPayload | GraphMemoryProductionRuntimeReport, GraphMemoryProductionFixtureManifest | graph/memory-influenced frontier and repair decisions, dependency refs, evidence boundary, freshness, invalidation, command/event/outbox, and replay status | graph, temporal KG, memory, and agent reasoning refs are never source evidence |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
 | queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |

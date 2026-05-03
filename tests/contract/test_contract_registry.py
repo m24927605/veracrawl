@@ -70,6 +70,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "real_agent_model_adapter_runtime",
         "graph_frontier_review_runtime_gate",
         "temporal_kg_identity_projection_gate",
+        "graph_memory_production_runtime",
         "scheduler",
         "source_acquisition",
         "network_browser_acquisition",

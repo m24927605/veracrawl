@@ -1,0 +1,1 @@
+{"expected_result":"pass","required_refs":["repair_explanation_refs","owner_command_refs","review_escalation_refs","graph_signal_refs","memory_retrieval_trace_refs","source_evidence_refs","replay_bundle_ref"],"graph_and_memory_are_not_source_evidence":true}

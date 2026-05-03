@@ -118,12 +118,12 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/050-multi-agent-orchestration-repair-runtime/plan.md`.
-Use it with `specs/050-multi-agent-orchestration-repair-runtime/spec.md`,
-`specs/050-multi-agent-orchestration-repair-runtime/research.md`,
-`specs/050-multi-agent-orchestration-repair-runtime/data-model.md`,
-`specs/050-multi-agent-orchestration-repair-runtime/contracts/`, and
-`specs/050-multi-agent-orchestration-repair-runtime/quickstart.md` for Multi-Agent Orchestration And Repair Runtime
+Current active Spec Kit plan: `specs/051-graph-memory-production-runtime/plan.md`.
+Use it with `specs/051-graph-memory-production-runtime/spec.md`,
+`specs/051-graph-memory-production-runtime/research.md`,
+`specs/051-graph-memory-production-runtime/data-model.md`,
+`specs/051-graph-memory-production-runtime/contracts/`, and
+`specs/051-graph-memory-production-runtime/quickstart.md` for Graph And Memory Production Runtime
 work. The post-037 roadmap remains governed by
 `specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
 do not invent additional production specs unless both are amended first.

@@ -1920,6 +1920,24 @@ Acceptance gates:
   `processing-evidence-target-graph-only-evidence`, and
   `processing-evidence-target-publication-bypass` fail deterministically with
   typed target runtime failure refs and no false complete report
+- `graph-memory-production-success`,
+  `graph-memory-frontier-priority-success`, and
+  `graph-memory-repair-explanation-success` complete only when live
+  normalization, live evidence, multi-agent repair, advanced graph, graph
+  frontier/review, temporal KG, memory kernel, graph category, memory category,
+  source evidence, verification, explanation, policy, command/event/outbox, and
+  replay refs are present
+- `graph-memory-missing-live-normalization`,
+  `graph-memory-missing-live-evidence`,
+  `graph-memory-missing-multi-agent`, `graph-memory-graph-as-evidence`,
+  `graph-memory-memory-as-evidence`, `graph-memory-stale-memory`,
+  `graph-memory-missing-invalidation`,
+  `graph-memory-missing-frontier-explanation`, and
+  `graph-memory-replay-mismatch` fail deterministically with typed
+  `GraphMemoryProductionFailureType` refs and no publication eligibility claim
+- graph/memory production import-boundary tests prove core does not import graph
+  stores, vector stores, concrete queues, storage clients, browser runtimes,
+  model SDKs, agent frameworks, or site-specific scraper modules
 - import-boundary tests prove target runtime core does not import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
 - registry validation includes target runtime contracts, commands, events, fixtures, and target area coverage
 

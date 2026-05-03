@@ -87,6 +87,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_schema_extraction_ref: str | None = None
     expected_live_evidence_ref: str | None = None
     expected_result_publication_ref: str | None = None
+    expected_graph_memory_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -1338,6 +1339,20 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "graph",
         tests=["tests/integration/test_temporal_kg_fixtures.py"],
     ),
+    "GraphMemoryProductionRuntimeReport": _contract(
+        "GraphMemoryProductionRuntimeReport",
+        OwnerService.REVIEW_REPLAY,
+        "graph_memory",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_graph_memory_production_contracts.py"],
+    ),
+    "GraphMemoryProductionFixtureManifest": _contract(
+        "GraphMemoryProductionFixtureManifest",
+        OwnerService.TESTS,
+        "graph_memory",
+        tests=["tests/integration/test_graph_memory_production_fixtures.py"],
+    ),
     "MemoryEvent": _contract(
         "MemoryEvent",
         OwnerService.MEMORY,
@@ -2186,6 +2201,21 @@ COMMAND_TYPES.update(
             target_aggregate_type="TemporalKGFixtureManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["temporal_kg_fixture_manifest_recorded"],
+        ),
+        "record_graph_memory_production_runtime_report": CommandTypeRegistration(
+            command_type="record_graph_memory_production_runtime_report",
+            owner_service=OwnerService.REVIEW_REPLAY,
+            target_aggregate_type="GraphMemoryProductionRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["graph", "memory_retrieval", "runtime_verification"],
+            emitted_event_types=["graph_memory_production_runtime_reported"],
+        ),
+        "record_graph_memory_production_fixture_manifest": CommandTypeRegistration(
+            command_type="record_graph_memory_production_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="GraphMemoryProductionFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["graph_memory_production_fixture_manifest_recorded"],
         ),
         "record_durable_recovery": CommandTypeRegistration(
             command_type="record_durable_recovery",
@@ -3295,6 +3325,8 @@ EVENT_TYPES.update(
             "memory_written",
             "memory_retrieved",
             "memory_kernel_reported",
+            "graph_memory_production_runtime_reported",
+            "graph_memory_production_fixture_manifest_recorded",
             "multi_agent_workflow_started",
             "multi_agent_workflow_completed",
             "multi_agent_workflow_escalated",
@@ -4020,6 +4052,34 @@ for _memory_fixture, _negative in {
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _graph_memory_fixture, _negative in {
+    "graph-memory-production-success": False,
+    "graph-memory-frontier-priority-success": False,
+    "graph-memory-repair-explanation-success": False,
+    "graph-memory-missing-live-normalization": True,
+    "graph-memory-missing-live-evidence": True,
+    "graph-memory-missing-multi-agent": True,
+    "graph-memory-graph-as-evidence": True,
+    "graph-memory-memory-as-evidence": True,
+    "graph-memory-stale-memory": True,
+    "graph-memory-missing-invalidation": True,
+    "graph-memory-missing-frontier-explanation": True,
+    "graph-memory-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_graph_memory_fixture}"
+    FIXTURE_ORACLES[_graph_memory_fixture] = FixtureOracleRegistration(
+        fixture_id=_graph_memory_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_graph_ref=f"{_base}/oracles/expected_graph.yaml",
+        expected_graph_memory_ref=f"{_base}/oracles/expected_graph_memory.yaml",
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -5342,6 +5402,26 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "CrossScopeMemoryTunnel",
             "OperationalTemporalMemoryRecord",
             "MemoryKernelReport",
+        ],
+    ),
+    "graph_memory_production_runtime": _target_area(
+        "graph_memory_production_runtime",
+        OwnerService.REVIEW_REPLAY,
+        "materialized",
+        materialized=[
+            "GraphMemoryProductionRuntimeReport",
+            "GraphMemoryProductionFixtureManifest",
+            "AdvancedGraphProjectionReport",
+            "GraphFrontierReviewRuntimeReport",
+            "TemporalKGRuntimeReport",
+            "MemoryKernelReport",
+            "MultiAgentRepairReport",
+            "LiveEvidenceVerificationRuntimeReport",
+            "LiveNormalizationRuntimeReport",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
         ],
     ),
     "export": _target_area(

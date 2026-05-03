@@ -1599,6 +1599,36 @@ Target crawl runtime slice:
   bypass, or mismatched adapter/source lineage fail deterministically.
 - this slice is an executable target architecture runtime path over deterministic fixtures. It is not a claim that live Internet crawling, production browser fleets, production credential vaults, concrete agent frameworks, managed model providers, production export destinations, or production worker fleets are operational.
 
+Graph and memory production runtime:
+
+- `veracrawl.contracts.graph_memory` owns
+  `GraphMemoryProductionRuntimeReport` and
+  `GraphMemoryProductionFixtureManifest`; graph and memory owner-service
+  contracts remain authoritative for their own lower-level records.
+- `veracrawl.graph_memory.runtime` composes row 045 live normalization refs, row
+  047 live evidence refs, row 050 multi-agent repair refs, advanced graph
+  projection refs, graph frontier/review refs, temporal KG refs, and memory
+  kernel refs into one replayable aggregate.
+- `veracrawl.cli.graph_memory_runtime` exposes
+  `veracrawl-graph-memory-runtime run` for deterministic success and negative
+  fixtures. The CLI validates target profile, expected status, typed failure,
+  and writes `run_report.json`.
+- passing graph/memory production requires URL, redirect, canonical,
+  page-structure, entity, task, temporal graph refs, graph signal refs, site,
+  task, repair, and run-diary memory refs, retrieval trace refs, freshness,
+  invalidation/exclusion refs, frontier and repair explanations, source
+  evidence, verification, policy, command/event/outbox, and replay refs.
+- graph, temporal KG, memory, and agent reasoning influence planning and repair
+  only. They cannot satisfy source evidence, verification, publication, or
+  output manifest requirements.
+- missing dependencies, graph-as-evidence, memory-as-evidence, stale memory,
+  missing invalidation, missing frontier/repair explanation, and replay mismatch
+  fail deterministically with `GraphMemoryProductionFailureType`.
+- the runtime imports only VeraCrawl contracts and core deterministic runtime
+  modules. It does not import graph stores, vector stores, concrete queues,
+  storage clients, browser engines, model SDKs, agent frameworks, or
+  site-specific scraper code.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

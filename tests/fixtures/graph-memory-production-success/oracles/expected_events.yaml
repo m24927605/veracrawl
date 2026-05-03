@@ -1,0 +1,1 @@
+{"required_event_types":["graph_memory_production_runtime_reported","memory_retrieved","graph_frontier_review_reported","temporal_kg_reported"]}

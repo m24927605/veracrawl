@@ -334,6 +334,13 @@ escalation, and agent-reasoning-as-evidence checks. It is not a claim that any
 concrete external agent framework, vendor model account, review UI, export
 delivery, distributed persistence, production browser rendering, or production
 scale operations are complete.
+The graph and memory production runtime composes row 045 live normalization,
+row 047 live evidence, row 050 multi-agent repair, advanced graph projections,
+graph frontier/review decisions, temporal KG records, and memory kernel refs
+into one replayable production report. It proves graph and memory influence
+planning, frontier priority, and repair explanations while source evidence and
+verification remain mandatory and graph/memory-as-evidence, stale memory, missing
+invalidation, missing explanations, and replay gaps fail deterministically.
 The production persistence/queue runtime spine adds persistence adapter specs,
 transaction records, durable idempotency records, persistent queue operation
 records, a standard-library reference filesystem store, event cursor replay,
@@ -826,6 +833,30 @@ for fixture in \
   multi-agent-replay-mismatch
 do
   uv run --python python3.12 --extra dev veracrawl-agent-workflow run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run graph/memory production runtime fixtures:
+
+```sh
+for fixture in \
+  graph-memory-production-success \
+  graph-memory-frontier-priority-success \
+  graph-memory-repair-explanation-success \
+  graph-memory-missing-live-normalization \
+  graph-memory-missing-live-evidence \
+  graph-memory-missing-multi-agent \
+  graph-memory-graph-as-evidence \
+  graph-memory-memory-as-evidence \
+  graph-memory-stale-memory \
+  graph-memory-missing-invalidation \
+  graph-memory-missing-frontier-explanation \
+  graph-memory-replay-mismatch
+do
+  uv run --python python3.12 --extra dev veracrawl-graph-memory-runtime run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

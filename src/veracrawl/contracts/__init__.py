@@ -116,6 +116,10 @@ from veracrawl.contracts.graph import (
     TemporalKGProjectionRecord,
     TemporalKGRuntimeReport,
 )
+from veracrawl.contracts.graph_memory import (
+    GraphMemoryProductionFixtureManifest,
+    GraphMemoryProductionRuntimeReport,
+)
 from veracrawl.contracts.infrastructure import (
     RuntimeInfrastructureFixtureManifest,
     RuntimeInfrastructureReport,
@@ -393,6 +397,8 @@ __all__ = [
     "GraphFrontierDecisionRecord",
     "GraphFrontierReviewFixtureManifest",
     "GraphFrontierReviewRuntimeReport",
+    "GraphMemoryProductionFixtureManifest",
+    "GraphMemoryProductionRuntimeReport",
     "GraphNode",
     "GraphQualityReport",
     "GraphReviewRouteDecisionRecord",

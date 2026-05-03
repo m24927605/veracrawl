@@ -1,0 +1,1 @@
+{"id":"graph-memory-missing-invalidation","scenario":"graph-memory-missing-invalidation","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"graph_memory_missing_invalidation_ref","expected_failure_type":"graph_memory_missing_invalidation_ref","negative_case":true,"required_ref_types":["memory_invalidation","memory_freshness","replay"]}

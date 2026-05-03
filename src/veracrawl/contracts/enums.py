@@ -1478,3 +1478,19 @@ class MemoryFailureType(StrEnum):
     UNAUTHORIZED_CROSS_SCOPE_TUNNEL = "unauthorized_cross_scope_tunnel"
     MEMORY_AS_EVIDENCE = "memory_as_evidence"
     MISSING_REANCHOR_EVIDENCE = "missing_reanchor_evidence"
+
+
+class GraphMemoryProductionFailureType(StrEnum):
+    MISSING_LIVE_NORMALIZATION = "graph_memory_missing_live_normalization"
+    MISSING_LIVE_EVIDENCE = "graph_memory_missing_live_evidence"
+    MISSING_MULTI_AGENT_REPAIR = "graph_memory_missing_multi_agent_repair"
+    MISSING_GRAPH_PROJECTION = "graph_memory_missing_graph_projection"
+    MISSING_TEMPORAL_KG = "graph_memory_missing_temporal_kg"
+    MISSING_MEMORY_KERNEL = "graph_memory_missing_memory_kernel"
+    MISSING_FRONTIER_EXPLANATION = "graph_memory_missing_frontier_explanation"
+    MISSING_REPAIR_EXPLANATION = "graph_memory_missing_repair_explanation"
+    MISSING_INVALIDATION_REF = "graph_memory_missing_invalidation_ref"
+    GRAPH_AS_EVIDENCE = "graph_memory_graph_as_evidence"
+    MEMORY_AS_EVIDENCE = "graph_memory_memory_as_evidence"
+    STALE_MEMORY_USED = "graph_memory_stale_memory_used"
+    REPLAY_MISMATCH = "graph_memory_replay_mismatch"
