@@ -2221,6 +2221,40 @@ This acceptance proves only bounded multi-page frontier quality. It does not
 prove field-level oracle extraction, precision/recall, repair success, or
 cost/latency/stability release readiness.
 
+Field-level oracle extraction benchmark acceptance:
+
+```text
+veracrawl-field-oracle-benchmark run tests/fixtures/<field_oracle_fixture_id> --profile quality --out .veracrawl-test-runs/<field_oracle_fixture_id>
+```
+
+Required field oracle fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| field-oracle-quality-corpus | at least 8 schemas and 200 expected fields pass with source anchors, artifacts, content hashes, normalized values, evidence packets, verification decisions, policy, command/event/outbox, and replay refs |
+| field-oracle-wrong-value | wrong value fails with typed diagnostics |
+| field-oracle-missing-anchor | missing source anchor fails |
+| field-oracle-schema-violation | schema violation fails |
+| field-oracle-stale-evidence | stale evidence fails |
+| field-oracle-publication-bypass | direct publication bypass fails |
+| field-oracle-llm-as-evidence | LLM output as evidence fails |
+
+Field oracle acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_field_oracle_contracts.py`
+- `pytest tests/contract/test_field_oracle_contract_registry.py`
+- `pytest tests/contract/test_field_oracle_import_boundaries.py`
+- `pytest tests/unit/test_field_oracle_runtime.py`
+- `pytest tests/unit/test_field_oracle_replay.py`
+- `pytest tests/integration/test_field_oracle_fixtures.py`
+- one recorded deterministic CLI run against
+  `tests/fixtures/field-oracle-quality-corpus`
+
+This acceptance proves only field-level oracle extraction quality. It does not
+prove precision/recall thresholds, repair success, or cost/latency/stability
+release readiness.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

@@ -1,0 +1,1 @@
+{"expected_failure_type": null, "fixture_id": "field-oracle-quality-corpus", "minimum_expected_field_count": 200, "minimum_schema_count": 8, "required_refs": ["source_anchor", "artifact", "content_hash", "normalized_value", "evidence_packet", "verification", "policy", "command", "event_cursor", "outbox", "replay"]}

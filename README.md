@@ -1115,6 +1115,23 @@ refs. AI/agent traces can influence priority but never serve as source evidence.
 This gate does not claim field-level oracle quality, precision/recall, repair
 success, or final production-quality release readiness.
 
+Run the field-level oracle extraction benchmark:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-field-oracle-benchmark run \
+  tests/fixtures/field-oracle-quality-corpus \
+  --profile quality \
+  --out .veracrawl-real-runs/field-oracle-quality-corpus
+```
+
+The field oracle gate evaluates at least 8 schemas and 200 expected fields. Each
+accepted field carries source anchors, artifacts, content hashes, normalized
+value refs, evidence packet refs, verification decision refs,
+command/event/outbox refs, and replay refs. Model/agent traces may explain
+candidate generation but cannot satisfy evidence. This gate emits field-level
+JSON for later precision/recall, but it does not claim precision/recall, repair
+success, or final production-quality release readiness.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

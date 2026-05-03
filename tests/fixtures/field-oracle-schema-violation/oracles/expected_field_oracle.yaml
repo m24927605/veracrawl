@@ -1,0 +1,1 @@
+{"expected_failure_type": "field_oracle_schema_violation", "fixture_id": "field-oracle-schema-violation", "required_refs": ["schema", "policy", "replay"]}

@@ -6443,3 +6443,15 @@ Executable target runtime rules:
   loops, off-origin pollution, robots bypass, private-network bypass, budget
   exhaustion, infinite pagination, missing frontier/graph/replay/stop refs, and
   insufficient coverage fail with typed `DeepCrawlFailureType` diagnostics.
+- Field-level oracle extraction benchmark contracts are
+  `FieldOracleBenchmarkManifest`, `FieldOracleSchema`,
+  `FieldOracleFieldSpec`, `ExpectedFieldValue`, `FieldEvaluationRecord`, and
+  `FieldOracleBenchmarkReport`. Passing reports require at least 8 schemas and
+  200 expected fields, with accepted field evaluations carrying source anchor
+  refs, artifact refs, content hash refs, normalized value refs, evidence packet
+  refs, verification decision refs, policy refs, command/event/outbox refs, and
+  replay refs. Model/agent/tool/context refs are proposal traces only and cannot
+  satisfy field evidence. Wrong values, missing anchors, schema violations,
+  stale evidence, direct publication, LLM-as-evidence, missing evidence,
+  missing verification, missing replay, and insufficient schema/field coverage
+  fail with typed `FieldOracleFailureType` diagnostics.

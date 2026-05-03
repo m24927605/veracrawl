@@ -1229,6 +1229,43 @@ class DeepCrawlStopReason(StrEnum):
     POLICY_DENIED = "policy_denied"
 
 
+class FieldOracleFailureType(StrEnum):
+    WRONG_VALUE = "field_oracle_wrong_value"
+    MISSING_ANCHOR = "field_oracle_missing_anchor"
+    SCHEMA_VIOLATION = "field_oracle_schema_violation"
+    STALE_EVIDENCE = "field_oracle_stale_evidence"
+    PUBLICATION_BYPASS = "field_oracle_publication_bypass"
+    LLM_AS_EVIDENCE = "field_oracle_llm_as_evidence"
+    MISSING_EVIDENCE = "field_oracle_missing_evidence"
+    MISSING_VERIFICATION = "field_oracle_missing_verification"
+    MISSING_REPLAY_REFS = "field_oracle_missing_replay_refs"
+    INSUFFICIENT_SCHEMA_COVERAGE = "field_oracle_insufficient_schema_coverage"
+    INSUFFICIENT_FIELD_COVERAGE = "field_oracle_insufficient_field_coverage"
+
+
+class FieldOracleMatchResult(StrEnum):
+    EXACT = "exact"
+    NORMALIZED_MATCH = "normalized_match"
+    ACCEPTABLE_PARTIAL = "acceptable_partial"
+    MISSING = "missing"
+    FALSE_POSITIVE = "false_positive"
+    FALSE_NEGATIVE = "false_negative"
+    AMBIGUOUS = "ambiguous"
+    REJECTED = "rejected"
+    NEEDS_REVIEW = "needs_review"
+
+
+class FieldOracleValueType(StrEnum):
+    TEXT = "text"
+    NUMBER = "number"
+    PRICE = "price"
+    DATE = "date"
+    URL = "url"
+    BOOLEAN = "boolean"
+    COUNT = "count"
+    UNIT = "unit"
+
+
 class CredentialedSessionFailureType(StrEnum):
     POLICY_DENIED = "credentialed_session_policy_denied"
     MISSING_AUTHORIZATION = "credentialed_session_missing_authorization"

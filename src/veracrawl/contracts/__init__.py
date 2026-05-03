@@ -102,6 +102,14 @@ from veracrawl.contracts.export import (
     ExportWithdrawalJob,
 )
 from veracrawl.contracts.fetch import DocumentArtifact, FetchAttempt, FetchResult, PageSnapshot
+from veracrawl.contracts.field_oracle import (
+    ExpectedFieldValue,
+    FieldEvaluationRecord,
+    FieldOracleBenchmarkManifest,
+    FieldOracleBenchmarkReport,
+    FieldOracleFieldSpec,
+    FieldOracleSchema,
+)
 from veracrawl.contracts.fixture import (
     BenchmarkFixtureManifest,
     DRRestoreOracle,
@@ -429,6 +437,7 @@ __all__ = [
     "ExportWithdrawalJob",
     "ExpectedEventSequenceOracle",
     "ExpectedEvidenceCoverageOracle",
+    "ExpectedFieldValue",
     "ExpectedGraphOracle",
     "ExpectedOutputOracle",
     "EvidenceCoverageResult",
@@ -442,6 +451,11 @@ __all__ = [
     "ExtractionStrategy",
     "FetchAttempt",
     "FetchResult",
+    "FieldEvaluationRecord",
+    "FieldOracleBenchmarkManifest",
+    "FieldOracleBenchmarkReport",
+    "FieldOracleFieldSpec",
+    "FieldOracleSchema",
     "FailureRecord",
     "FailureInjectionPlan",
     "FrontierDecisionTrace",

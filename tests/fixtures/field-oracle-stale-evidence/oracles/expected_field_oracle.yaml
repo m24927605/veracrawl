@@ -1,0 +1,1 @@
+{"expected_failure_type": "field_oracle_stale_evidence", "fixture_id": "field-oracle-stale-evidence", "required_refs": ["verification", "policy", "replay"]}

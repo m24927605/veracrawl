@@ -1,0 +1,1 @@
+{"expected_failure_type": "field_oracle_publication_bypass", "fixture_id": "field-oracle-publication-bypass", "required_refs": ["publication_gate", "policy", "replay"]}

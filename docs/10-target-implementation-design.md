@@ -1793,8 +1793,30 @@ Multi-page deep crawl frontier benchmark:
   missing graph refs, missing replay refs, missing stop reasons, and
   insufficient coverage fail with `DeepCrawlFailureType`.
 - this gate proves bounded deep crawl frontier quality only. Field-level oracle
-  extraction, precision/recall, repair success, and cost/latency/stability
-  release remain later production-quality specs.
+  extraction is a separate gate; precision/recall, repair success, and
+  cost/latency/stability release remain later production-quality specs.
+
+Field-level oracle extraction benchmark:
+
+- `veracrawl.contracts.field_oracle` owns `FieldOracleBenchmarkManifest`,
+  `FieldOracleSchema`, `FieldOracleFieldSpec`, `ExpectedFieldValue`,
+  `FieldEvaluationRecord`, and `FieldOracleBenchmarkReport`.
+- `veracrawl.benchmarks.field_oracle` evaluates generated or explicit
+  schema-driven field oracles. Passing quality reports require at least 8
+  schemas and 200 expected fields and emit field-level JSON for row 062
+  precision/recall computation.
+- accepted fields require source anchors, artifacts, content hashes, normalized
+  value refs, evidence packet refs, verification decision refs, policy refs,
+  command/event/outbox refs, and replay refs.
+- model/agent/tool/context refs may describe candidate generation, but they do
+  not satisfy evidence and cannot become published output.
+- wrong value, missing anchor, schema violation, stale evidence, publication
+  bypass, LLM-as-evidence, missing evidence, missing verification, missing
+  replay, and insufficient schema/field coverage fail with
+  `FieldOracleFailureType`.
+- this gate proves field-level oracle extraction quality only. Precision/recall,
+  repair success, and cost/latency/stability release remain later
+  production-quality specs.
 
 Disaster recovery:
 

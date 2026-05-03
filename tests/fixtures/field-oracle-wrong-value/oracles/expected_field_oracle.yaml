@@ -1,0 +1,1 @@
+{"expected_failure_type": "field_oracle_wrong_value", "fixture_id": "field-oracle-wrong-value", "required_refs": ["candidate_value", "policy", "replay"]}

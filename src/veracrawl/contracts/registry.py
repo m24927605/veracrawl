@@ -88,6 +88,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_browser_snapshot_ref: str | None = None
     expected_browser_quality_ref: str | None = None
     expected_deep_crawl_ref: str | None = None
+    expected_field_oracle_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -1944,6 +1945,46 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "deep_crawl",
         tests=["tests/integration/test_deep_crawl_fixtures.py"],
     ),
+    "FieldOracleFieldSpec": _contract(
+        "FieldOracleFieldSpec",
+        OwnerService.EXTRACT,
+        "field_oracle",
+        tests=["tests/contract/test_field_oracle_contracts.py"],
+    ),
+    "FieldOracleSchema": _contract(
+        "FieldOracleSchema",
+        OwnerService.EXTRACT,
+        "field_oracle",
+        tests=["tests/contract/test_field_oracle_contracts.py"],
+    ),
+    "ExpectedFieldValue": _contract(
+        "ExpectedFieldValue",
+        OwnerService.EXTRACT,
+        "field_oracle",
+        tests=["tests/contract/test_field_oracle_contracts.py"],
+    ),
+    "FieldEvaluationRecord": _contract(
+        "FieldEvaluationRecord",
+        OwnerService.EXTRACT,
+        "field_oracle",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_field_oracle_contracts.py"],
+    ),
+    "FieldOracleBenchmarkReport": _contract(
+        "FieldOracleBenchmarkReport",
+        OwnerService.EXTRACT,
+        "field_oracle",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_field_oracle_contracts.py"],
+    ),
+    "FieldOracleBenchmarkManifest": _contract(
+        "FieldOracleBenchmarkManifest",
+        OwnerService.TESTS,
+        "field_oracle",
+        tests=["tests/integration/test_field_oracle_fixtures.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -2598,6 +2639,29 @@ COMMAND_TYPES.update(
             target_aggregate_type="DeepCrawlQualityManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["deep_crawl_manifest_recorded"],
+        ),
+        "record_field_oracle_evaluation": CommandTypeRegistration(
+            command_type="record_field_oracle_evaluation",
+            owner_service=OwnerService.EXTRACT,
+            target_aggregate_type="FieldEvaluationRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["field_oracle_evaluation_recorded"],
+        ),
+        "record_field_oracle_report": CommandTypeRegistration(
+            command_type="record_field_oracle_report",
+            owner_service=OwnerService.EXTRACT,
+            target_aggregate_type="FieldOracleBenchmarkReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["field_oracle_reported"],
+        ),
+        "record_field_oracle_manifest": CommandTypeRegistration(
+            command_type="record_field_oracle_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="FieldOracleBenchmarkManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["field_oracle_manifest_recorded"],
         ),
         "record_normalization_manifest": CommandTypeRegistration(
             command_type="record_normalization_manifest",
@@ -3736,6 +3800,9 @@ EVENT_TYPES.update(
         "deep_crawl_stop_reason_recorded",
         "deep_crawl_reported",
         "deep_crawl_manifest_recorded",
+        "field_oracle_evaluation_recorded",
+        "field_oracle_reported",
+        "field_oracle_manifest_recorded",
         "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
@@ -5172,6 +5239,27 @@ for _deep_crawl_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _field_oracle_fixture, _negative in {
+    "field-oracle-quality-corpus": False,
+    "field-oracle-wrong-value": True,
+    "field-oracle-missing-anchor": True,
+    "field-oracle-schema-violation": True,
+    "field-oracle-stale-evidence": True,
+    "field-oracle-publication-bypass": True,
+    "field-oracle-llm-as-evidence": True,
+}.items():
+    _base = f"tests/fixtures/{_field_oracle_fixture}"
+    FIXTURE_ORACLES[_field_oracle_fixture] = FixtureOracleRegistration(
+        fixture_id=_field_oracle_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_field_oracle_ref=f"{_base}/oracles/expected_field_oracle.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _credentialed_session_fixture, _negative in {
     "credentialed-session-success": False,
     "credentialed-session-missing-authorization": True,
@@ -5558,6 +5646,31 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "MemoryRetrievalTrace",
             "AgentActionTrace",
             "ModelCallTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "field_oracle_extraction_benchmark": _target_area(
+        "field_oracle_extraction_benchmark",
+        OwnerService.EXTRACT,
+        "materialized",
+        materialized=[
+            "FieldOracleBenchmarkManifest",
+            "FieldOracleSchema",
+            "FieldOracleFieldSpec",
+            "ExpectedFieldValue",
+            "FieldEvaluationRecord",
+            "FieldOracleBenchmarkReport",
+            "ExtractionCandidate",
+            "EvidencePacket",
+            "VerificationDecision",
+            "ModelCallTrace",
+            "AgentActionTrace",
             "ToolCallTrace",
             "ContextBundleTrace",
             "CommandResult",
