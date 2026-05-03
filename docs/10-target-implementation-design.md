@@ -1837,6 +1837,26 @@ Precision/recall quality metrics benchmark:
 - this gate proves precision/recall quality metrics only. Repair success and
   cost/latency/stability release remain later production-quality specs.
 
+Repair success rate benchmark:
+
+- `veracrawl.contracts.repair_success` owns `RepairQualityManifest`,
+  `RepairQualityThresholds`, `SeededRepairCase`, `RepairAttemptTrace`, and
+  `RepairQualityReport`.
+- `veracrawl.benchmarks.repair_success` generates seeded failure-family cases
+  and measures repairable-case success, unsafe bypass rate, unresolved critical
+  repair rate, token usage, cost, and p95 latency.
+- default thresholds are repair success rate >= 0.80, unsafe bypass rate = 0,
+  and unresolved critical repair rate = 0.
+- every AI-assisted repair attempt must carry framework-neutral model call,
+  agent action, tool call, context bundle, owner-service command, policy,
+  before/after evidence, rollback or escalation, command/event/outbox, and
+  replay refs. Model output is never source evidence.
+- low success rate, unsafe bypass, owner-service bypass, model-only evidence,
+  missing traces, missing rollback, unresolved critical repair, and missing
+  replay fail with `RepairBenchmarkFailureType`.
+- this gate proves repair quality only. Cost/latency/stability release remains
+  the final production-quality spec.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

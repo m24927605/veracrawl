@@ -6466,3 +6466,16 @@ Executable target runtime rules:
   publication bypass counted as true positive, missing evidence, missing replay,
   low precision, low recall, low F1, and low critical-field precision fail with
   typed `QualityMetricFailureType` diagnostics.
+- Repair success rate contracts are `RepairQualityManifest`,
+  `RepairQualityThresholds`, `SeededRepairCase`, `RepairAttemptTrace`, and
+  `RepairQualityReport`. Passing reports require at least 30 seeded cases across
+  crawl planning, fetch/browser, normalization, extraction, verification,
+  publication, drift, and replay failures; repair success rate >= 0.80 for
+  repairable cases; unsafe bypass rate = 0; unresolved critical repair rate =
+  0; framework-neutral model/agent/tool/context trace refs for AI-assisted
+  repairs; owner-service command refs; before/after evidence refs; rollback or
+  escalation refs where applicable; policy refs; command/event/outbox refs; and
+  replay refs. Low success rate, unsafe bypass, owner-service bypass,
+  model-only evidence, missing traces, missing rollback, unresolved critical
+  repairs, and missing replay fail with typed `RepairBenchmarkFailureType`
+  diagnostics.

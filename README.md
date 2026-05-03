@@ -1149,6 +1149,24 @@ publication gate, policy, command/event/outbox, and replay refs for every metric
 component. This gate does not run repair or claim final production-quality
 release readiness.
 
+Run the repair success rate benchmark:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-repair-quality-benchmark run \
+  tests/fixtures/repair-success-quality \
+  --profile quality \
+  --out .veracrawl-real-runs/repair-success-quality
+```
+
+The repair quality gate runs seeded crawl planning, fetch/browser,
+normalization, extraction, verification, publication, drift, and replay repair
+cases. Passing reports require at least 30 seeded cases, repair success rate >=
+0.80 for repairable cases, unsafe bypass rate = 0, unresolved critical repair
+rate = 0, framework-neutral model/agent/tool/context traces for AI-assisted
+repairs, owner-service command refs, before/after evidence, rollback/escalation
+refs, policy refs, command/event/outbox refs, and replay refs. This gate does
+not claim final production-quality release readiness.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

@@ -296,6 +296,13 @@ from veracrawl.contracts.release import (
     ProductionBenchmarkReleaseFixtureManifest,
     ProductionBenchmarkReleaseReport,
 )
+from veracrawl.contracts.repair_success import (
+    RepairAttemptTrace,
+    RepairQualityManifest,
+    RepairQualityReport,
+    RepairQualityThresholds,
+    SeededRepairCase,
+)
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
 from veracrawl.contracts.scale import (
     AutoscalingDecision,
@@ -589,6 +596,10 @@ __all__ = [
     "ReplayValidationReport",
     "RetryDeadLetterRecord",
     "RedirectHop",
+    "RepairAttemptTrace",
+    "RepairQualityManifest",
+    "RepairQualityReport",
+    "RepairQualityThresholds",
     "RunApprovalRecord",
     "RunBudget",
     "RunLifecycleRecord",
@@ -608,6 +619,7 @@ __all__ = [
     "SecurityPolicyCheck",
     "SecurityPrivacyFixtureManifest",
     "SecurityPrivacyReport",
+    "SeededRepairCase",
     "ShardLease",
     "RateLimitDecision",
     "RecoveryAction",

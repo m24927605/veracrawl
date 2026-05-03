@@ -2288,6 +2288,40 @@ Quality metrics acceptance requires:
 This acceptance proves only precision/recall metric quality. It does not prove
 repair success or cost/latency/stability release readiness.
 
+Repair success rate benchmark acceptance:
+
+```text
+veracrawl-repair-quality-benchmark run tests/fixtures/<repair_quality_fixture_id> --profile quality --out .veracrawl-test-runs/<repair_quality_fixture_id>
+```
+
+Required repair quality fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| repair-success-quality | at least 30 seeded repair cases pass with repair success rate >= 0.80, unsafe bypass rate = 0, unresolved critical repair rate = 0, model/agent/tool/context traces, owner-service commands, before/after evidence, rollback/escalation refs, policy, command/event/outbox, and replay refs |
+| repair-success-low-rate | low repair success rate fails with typed diagnostics |
+| repair-success-unsafe-bypass | unsafe repair bypass fails |
+| repair-success-owner-service-bypass | owner-service bypass fails |
+| repair-success-model-only-evidence | model-only evidence fails |
+| repair-success-missing-trace | missing model/agent/tool/context trace refs fail |
+| repair-success-rollback-missing | missing rollback refs fail |
+| repair-success-unresolved-hidden | unresolved critical repair fails |
+| repair-success-replay-missing | missing replay fails |
+
+Repair quality acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_repair_success_contracts.py`
+- `pytest tests/contract/test_repair_success_contract_registry.py`
+- `pytest tests/contract/test_repair_success_import_boundaries.py`
+- `pytest tests/unit/test_repair_success_runtime.py`
+- `pytest tests/unit/test_repair_success_replay.py`
+- `pytest tests/integration/test_repair_success_fixtures.py`
+- one recorded deterministic CLI run against `tests/fixtures/repair-success-quality`
+
+This acceptance proves only repair success quality. It does not prove final
+cost/latency/stability release readiness.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

@@ -90,6 +90,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_deep_crawl_ref: str | None = None
     expected_field_oracle_ref: str | None = None
     expected_quality_metrics_ref: str | None = None
+    expected_repair_quality_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -2020,6 +2021,42 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "quality_metrics",
         tests=["tests/integration/test_quality_metrics_fixtures.py"],
     ),
+    "RepairQualityThresholds": _contract(
+        "RepairQualityThresholds",
+        OwnerService.VERIFY,
+        "repair_success",
+        tests=["tests/contract/test_repair_success_contracts.py"],
+    ),
+    "SeededRepairCase": _contract(
+        "SeededRepairCase",
+        OwnerService.VERIFY,
+        "repair_success",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_repair_success_contracts.py"],
+    ),
+    "RepairAttemptTrace": _contract(
+        "RepairAttemptTrace",
+        OwnerService.AGENTS,
+        "repair_success",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_repair_success_contracts.py"],
+    ),
+    "RepairQualityReport": _contract(
+        "RepairQualityReport",
+        OwnerService.VERIFY,
+        "repair_success",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_repair_success_contracts.py"],
+    ),
+    "RepairQualityManifest": _contract(
+        "RepairQualityManifest",
+        OwnerService.TESTS,
+        "repair_success",
+        tests=["tests/integration/test_repair_success_fixtures.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -2720,6 +2757,37 @@ COMMAND_TYPES.update(
             target_aggregate_type="QualityMetricManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["quality_metric_manifest_recorded"],
+        ),
+        "record_seeded_repair_case": CommandTypeRegistration(
+            command_type="record_seeded_repair_case",
+            owner_service=OwnerService.VERIFY,
+            target_aggregate_type="SeededRepairCase",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["seeded_repair_case_recorded"],
+        ),
+        "record_repair_attempt_trace": CommandTypeRegistration(
+            command_type="record_repair_attempt_trace",
+            owner_service=OwnerService.AGENTS,
+            target_aggregate_type="RepairAttemptTrace",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["repair_attempt_trace_recorded"],
+        ),
+        "record_repair_quality_report": CommandTypeRegistration(
+            command_type="record_repair_quality_report",
+            owner_service=OwnerService.VERIFY,
+            target_aggregate_type="RepairQualityReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["repair_quality_reported"],
+        ),
+        "record_repair_quality_manifest": CommandTypeRegistration(
+            command_type="record_repair_quality_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="RepairQualityManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["repair_quality_manifest_recorded"],
         ),
         "record_normalization_manifest": CommandTypeRegistration(
             command_type="record_normalization_manifest",
@@ -3864,6 +3932,10 @@ EVENT_TYPES.update(
         "quality_metric_confusion_recorded",
         "quality_metric_reported",
         "quality_metric_manifest_recorded",
+        "seeded_repair_case_recorded",
+        "repair_attempt_trace_recorded",
+        "repair_quality_reported",
+        "repair_quality_manifest_recorded",
         "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
@@ -5342,6 +5414,29 @@ for _quality_metric_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _repair_quality_fixture, _negative in {
+    "repair-success-quality": False,
+    "repair-success-low-rate": True,
+    "repair-success-unsafe-bypass": True,
+    "repair-success-owner-service-bypass": True,
+    "repair-success-model-only-evidence": True,
+    "repair-success-missing-trace": True,
+    "repair-success-rollback-missing": True,
+    "repair-success-unresolved-hidden": True,
+    "repair-success-replay-missing": True,
+}.items():
+    _base = f"tests/fixtures/{_repair_quality_fixture}"
+    FIXTURE_ORACLES[_repair_quality_fixture] = FixtureOracleRegistration(
+        fixture_id=_repair_quality_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_repair_quality_ref=f"{_base}/oracles/expected_repair_quality.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _credentialed_session_fixture, _negative in {
     "credentialed-session-success": False,
     "credentialed-session-missing-authorization": True,
@@ -5776,6 +5871,31 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "EvidencePacket",
             "PublicationReport",
             "VerificationDecision",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "repair_success_rate_benchmark": _target_area(
+        "repair_success_rate_benchmark",
+        OwnerService.VERIFY,
+        "materialized",
+        materialized=[
+            "RepairQualityManifest",
+            "RepairQualityThresholds",
+            "SeededRepairCase",
+            "RepairAttemptTrace",
+            "RepairQualityReport",
+            "DriftRepairSignal",
+            "ModelCallTrace",
+            "AgentActionTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
+            "EvidencePacket",
+            "VerificationDecision",
+            "PublicationReport",
             "CommandResult",
             "EventCursorRecord",
             "OutboxRecord",

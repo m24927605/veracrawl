@@ -1300,6 +1300,37 @@ class QualityMetricSliceDimension(StrEnum):
     CONFIDENCE_BUCKET = "confidence_bucket"
 
 
+class RepairBenchmarkFailureType(StrEnum):
+    SUCCESS_RATE_BELOW_THRESHOLD = "repair_success_rate_below_threshold"
+    UNSAFE_BYPASS_DETECTED = "repair_unsafe_bypass_detected"
+    UNRESOLVED_CRITICAL_REPAIR = "repair_unresolved_critical_repair"
+    MODEL_ONLY_EVIDENCE = "repair_model_only_evidence"
+    OWNER_SERVICE_BYPASS = "repair_owner_service_bypass"
+    MISSING_TRACE_REFS = "repair_missing_trace_refs"
+    MISSING_ROLLBACK_REFS = "repair_missing_rollback_refs"
+    MISSING_REPLAY_REFS = "repair_missing_replay_refs"
+
+
+class RepairCaseType(StrEnum):
+    CRAWL_PLANNING = "crawl_planning"
+    FETCH_BROWSER = "fetch_browser"
+    NORMALIZATION = "normalization"
+    EXTRACTION = "extraction"
+    VERIFICATION = "verification"
+    PUBLICATION = "publication"
+    DRIFT = "drift"
+    REPLAY = "replay"
+
+
+class RepairOutcome(StrEnum):
+    REPAIRED = "repaired"
+    NON_REPAIRABLE_POLICY = "non_repairable_policy"
+    ESCALATED = "escalated"
+    ROLLBACK_APPLIED = "rollback_applied"
+    FAILED_SAFE = "failed_safe"
+    FAILED_UNSAFE = "failed_unsafe"
+
+
 class CredentialedSessionFailureType(StrEnum):
     POLICY_DENIED = "credentialed_session_policy_denied"
     MISSING_AUTHORIZATION = "credentialed_session_missing_authorization"
