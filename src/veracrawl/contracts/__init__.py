@@ -244,6 +244,13 @@ from veracrawl.contracts.real_world_benchmark import (
     RealWorldBenchmarkSiteObservation,
     RealWorldBenchmarkSiteSpec,
 )
+from veracrawl.contracts.real_world_quality import (
+    RealWorldQualityCorpusManifest,
+    RealWorldQualityCorpusReport,
+    RealWorldQualityPatternCoverageRecord,
+    RealWorldQualitySiteObservation,
+    RealWorldQualityTargetSpec,
+)
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
 from veracrawl.contracts.release import (
@@ -492,6 +499,11 @@ __all__ = [
     "RealWorldBenchmarkRunReport",
     "RealWorldBenchmarkSiteObservation",
     "RealWorldBenchmarkSiteSpec",
+    "RealWorldQualityCorpusManifest",
+    "RealWorldQualityCorpusReport",
+    "RealWorldQualityPatternCoverageRecord",
+    "RealWorldQualitySiteObservation",
+    "RealWorldQualityTargetSpec",
     "ProjectionCleanupRecord",
     "ProjectionMismatchReport",
     "ProjectionRebuildJob",

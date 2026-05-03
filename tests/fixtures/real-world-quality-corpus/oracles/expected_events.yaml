@@ -1,0 +1,7 @@
+{
+  "required_event_types": [
+    "real_world_quality_site_observed",
+    "real_world_quality_pattern_coverage_recorded",
+    "real_world_quality_corpus_reported"
+  ]
+}

@@ -1,0 +1,1067 @@
+{
+  "id": "real-world-quality-missing-replay",
+  "scenario": "missing-replay",
+  "profile_refs": [
+    "target",
+    "quality"
+  ],
+  "allowed_origin_refs": [
+    "https://example.com",
+    "https://example.org",
+    "https://example.net",
+    "https://www.iana.org",
+    "https://httpbin.org",
+    "https://jsonplaceholder.typicode.com",
+    "https://quotes.toscrape.com",
+    "https://books.toscrape.com",
+    "https://www.rfc-editor.org",
+    "https://docs.python.org",
+    "https://www.gnu.org",
+    "https://www.sqlite.org",
+    "https://www.postgresql.org",
+    "https://www.w3.org",
+    "https://pypi.org",
+    "https://packaging.python.org",
+    "https://pip.pypa.io",
+    "https://flask.palletsprojects.com",
+    "https://requests.readthedocs.io",
+    "https://www.djangoproject.com",
+    "https://fastapi.tiangolo.com"
+  ],
+  "rate_budget_ref": "budget:real-world-quality-corpus:one-request-per-target",
+  "minimum_target_count": 40,
+  "minimum_origin_count": 15,
+  "minimum_pattern_family_count": 10,
+  "expected_completion_result": "fail",
+  "expected_operator_status": "real_world_quality_missing_replay_refs",
+  "required_ref_types": [
+    "quality_observation_refs",
+    "pattern_coverage_refs",
+    "site_observation_refs",
+    "policy_decision_refs",
+    "artifact_refs",
+    "content_hash_refs",
+    "canonical_url_refs",
+    "command_record_refs",
+    "event_cursor_refs",
+    "outbox_refs",
+    "replay_bundle_refs"
+  ],
+  "target_specs": [
+    {
+      "id": "example-com-static",
+      "target_url": "https://example.com/",
+      "robots_url": "https://example.com/robots.txt",
+      "allowed_origin": "https://example.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 100,
+      "required_title_fragments": [
+        "Example Domain"
+      ],
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:static",
+        "pattern:sparse-page",
+        "pattern:error-empty-safe"
+      ],
+      "pattern_family_refs": [
+        "pattern:static",
+        "pattern:sparse-page",
+        "pattern:error-empty-safe"
+      ]
+    },
+    {
+      "id": "example-org-static",
+      "target_url": "https://example.org/",
+      "robots_url": "https://example.org/robots.txt",
+      "allowed_origin": "https://example.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 100,
+      "required_title_fragments": [
+        "Example Domain"
+      ],
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:static",
+        "pattern:sparse-page"
+      ],
+      "pattern_family_refs": [
+        "pattern:static",
+        "pattern:sparse-page"
+      ]
+    },
+    {
+      "id": "example-net-static",
+      "target_url": "https://example.net/",
+      "robots_url": "https://example.net/robots.txt",
+      "allowed_origin": "https://example.net",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 100,
+      "required_title_fragments": [
+        "Example Domain"
+      ],
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:static",
+        "pattern:sparse-page"
+      ],
+      "pattern_family_refs": [
+        "pattern:static",
+        "pattern:sparse-page"
+      ]
+    },
+    {
+      "id": "iana-reserved-domains",
+      "target_url": "https://www.iana.org/domains/reserved",
+      "robots_url": "https://www.iana.org/robots.txt",
+      "allowed_origin": "https://www.iana.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Reserved Domains"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation",
+        "pattern:static"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation",
+        "pattern:static"
+      ]
+    },
+    {
+      "id": "iana-root-zone",
+      "target_url": "https://www.iana.org/domains/root",
+      "robots_url": "https://www.iana.org/robots.txt",
+      "allowed_origin": "https://www.iana.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Root Zone"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation",
+        "pattern:table"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation",
+        "pattern:table"
+      ]
+    },
+    {
+      "id": "httpbin-json",
+      "target_url": "https://httpbin.org/json",
+      "robots_url": "https://httpbin.org/robots.txt",
+      "allowed_origin": "https://httpbin.org",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 100,
+      "required_body_fragments": [
+        "slideshow"
+      ],
+      "required_regex_counts": {
+        "\"title\"": 1
+      },
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-json"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-json"
+      ]
+    },
+    {
+      "id": "httpbin-html",
+      "target_url": "https://httpbin.org/html",
+      "robots_url": "https://httpbin.org/robots.txt",
+      "allowed_origin": "https://httpbin.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Herman Melville"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:static",
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:static",
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "httpbin-xml",
+      "target_url": "https://httpbin.org/xml",
+      "robots_url": "https://httpbin.org/robots.txt",
+      "allowed_origin": "https://httpbin.org",
+      "expected_status_code": 200,
+      "expected_content_type": "application/xml",
+      "min_body_size_bytes": 100,
+      "required_body_fragments": [
+        "slideshow"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-xml"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-xml"
+      ]
+    },
+    {
+      "id": "httpbin-redirect",
+      "target_url": "https://httpbin.org/redirect-to?url=/get",
+      "robots_url": "https://httpbin.org/robots.txt",
+      "allowed_origin": "https://httpbin.org",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 100,
+      "required_body_fragments": [
+        "https://httpbin.org/get"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-json",
+        "pattern:canonical-redirect"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-json",
+        "pattern:canonical-redirect"
+      ]
+    },
+    {
+      "id": "httpbin-utf8",
+      "target_url": "https://httpbin.org/encoding/utf8",
+      "robots_url": "https://httpbin.org/robots.txt",
+      "allowed_origin": "https://httpbin.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "UTF-8"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "jsonplaceholder-post-1",
+      "target_url": "https://jsonplaceholder.typicode.com/posts/1",
+      "robots_url": "https://jsonplaceholder.typicode.com/robots.txt",
+      "allowed_origin": "https://jsonplaceholder.typicode.com",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 100,
+      "required_body_fragments": [
+        "sunt aut"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ]
+    },
+    {
+      "id": "jsonplaceholder-post-2",
+      "target_url": "https://jsonplaceholder.typicode.com/posts/2",
+      "robots_url": "https://jsonplaceholder.typicode.com/robots.txt",
+      "allowed_origin": "https://jsonplaceholder.typicode.com",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 100,
+      "required_body_fragments": [
+        "qui est esse"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ]
+    },
+    {
+      "id": "jsonplaceholder-user-1",
+      "target_url": "https://jsonplaceholder.typicode.com/users/1",
+      "robots_url": "https://jsonplaceholder.typicode.com/robots.txt",
+      "allowed_origin": "https://jsonplaceholder.typicode.com",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 100,
+      "required_body_fragments": [
+        "Leanne Graham"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ]
+    },
+    {
+      "id": "jsonplaceholder-todo-1",
+      "target_url": "https://jsonplaceholder.typicode.com/todos/1",
+      "robots_url": "https://jsonplaceholder.typicode.com/robots.txt",
+      "allowed_origin": "https://jsonplaceholder.typicode.com",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 50,
+      "required_body_fragments": [
+        "delectus aut"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ]
+    },
+    {
+      "id": "jsonplaceholder-comment-1",
+      "target_url": "https://jsonplaceholder.typicode.com/comments/1",
+      "robots_url": "https://jsonplaceholder.typicode.com/robots.txt",
+      "allowed_origin": "https://jsonplaceholder.typicode.com",
+      "expected_status_code": 200,
+      "expected_content_type": "application/json",
+      "min_body_size_bytes": 100,
+      "required_body_fragments": [
+        "id labore"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ],
+      "pattern_family_refs": [
+        "pattern:api-json",
+        "pattern:detail"
+      ]
+    },
+    {
+      "id": "quotes-page-1",
+      "target_url": "https://quotes.toscrape.com/page/1/",
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "allowed_origin": "https://quotes.toscrape.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "Quotes to Scrape"
+      ],
+      "required_body_fragments": [
+        "The world as we have created it"
+      ],
+      "required_regex_counts": {
+        "class=\"quote\"": 10
+      },
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ],
+      "pattern_family_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ]
+    },
+    {
+      "id": "quotes-page-2",
+      "target_url": "https://quotes.toscrape.com/page/2/",
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "allowed_origin": "https://quotes.toscrape.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "Quotes to Scrape"
+      ],
+      "required_regex_counts": {
+        "class=\"quote\"": 10
+      },
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ],
+      "pattern_family_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ]
+    },
+    {
+      "id": "books-travel",
+      "target_url": "https://books.toscrape.com/catalogue/category/books/travel_2/index.html",
+      "robots_url": "https://books.toscrape.com/robots.txt",
+      "allowed_origin": "https://books.toscrape.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "Travel"
+      ],
+      "required_body_fragments": [
+        "Books to Scrape"
+      ],
+      "required_regex_counts": {
+        "class=\"product_pod\"": 1
+      },
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ],
+      "pattern_family_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ]
+    },
+    {
+      "id": "books-mystery",
+      "target_url": "https://books.toscrape.com/catalogue/category/books/mystery_3/index.html",
+      "robots_url": "https://books.toscrape.com/robots.txt",
+      "allowed_origin": "https://books.toscrape.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "Mystery"
+      ],
+      "required_body_fragments": [
+        "Books to Scrape"
+      ],
+      "required_regex_counts": {
+        "class=\"product_pod\"": 1
+      },
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ],
+      "pattern_family_refs": [
+        "pattern:listing",
+        "pattern:pagination"
+      ]
+    },
+    {
+      "id": "books-detail-attic",
+      "target_url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+      "robots_url": "https://books.toscrape.com/robots.txt",
+      "allowed_origin": "https://books.toscrape.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "A Light in the Attic"
+      ],
+      "required_body_fragments": [
+        "A Light in the Attic"
+      ],
+      "allowed_robots_status_codes": [
+        404
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:detail"
+      ],
+      "pattern_family_refs": [
+        "pattern:detail"
+      ]
+    },
+    {
+      "id": "rfc-9110",
+      "target_url": "https://www.rfc-editor.org/rfc/rfc9110.txt",
+      "robots_url": "https://www.rfc-editor.org/robots.txt",
+      "allowed_origin": "https://www.rfc-editor.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/plain",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "HTTP Semantics"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 524288,
+      "pattern_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "rfc-9114",
+      "target_url": "https://www.rfc-editor.org/rfc/rfc9114.txt",
+      "robots_url": "https://www.rfc-editor.org/robots.txt",
+      "allowed_origin": "https://www.rfc-editor.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/plain",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "HTTP/3"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 524288,
+      "pattern_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "rfc-9000",
+      "target_url": "https://www.rfc-editor.org/rfc/rfc9000.txt",
+      "robots_url": "https://www.rfc-editor.org/robots.txt",
+      "allowed_origin": "https://www.rfc-editor.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/plain",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "QUIC"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 524288,
+      "pattern_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "python-docs-json",
+      "target_url": "https://docs.python.org/3/library/json.html",
+      "robots_url": "https://docs.python.org/robots.txt",
+      "allowed_origin": "https://docs.python.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "json"
+      ],
+      "required_body_fragments": [
+        "JSON"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 524288,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "python-docs-urllib",
+      "target_url": "https://docs.python.org/3/library/urllib.request.html",
+      "robots_url": "https://docs.python.org/robots.txt",
+      "allowed_origin": "https://docs.python.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "urllib.request"
+      ],
+      "required_body_fragments": [
+        "urllib.request"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 1048576,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "django-start",
+      "target_url": "https://www.djangoproject.com/start/",
+      "robots_url": "https://www.djangoproject.com/robots.txt",
+      "allowed_origin": "https://www.djangoproject.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Django"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation",
+        "pattern:listing"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation",
+        "pattern:listing"
+      ]
+    },
+    {
+      "id": "fastapi-home",
+      "target_url": "https://fastapi.tiangolo.com/",
+      "robots_url": "https://fastapi.tiangolo.com/robots.txt",
+      "allowed_origin": "https://fastapi.tiangolo.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "FastAPI"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 524288,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "gnu-gpl",
+      "target_url": "https://www.gnu.org/licenses/gpl-3.0.txt",
+      "robots_url": "https://www.gnu.org/robots.txt",
+      "allowed_origin": "https://www.gnu.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/plain",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "GNU GENERAL PUBLIC LICENSE"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:feed-sitemap-document",
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "gnu-free-software",
+      "target_url": "https://www.gnu.org/philosophy/free-sw.html",
+      "robots_url": "https://www.gnu.org/robots.txt",
+      "allowed_origin": "https://www.gnu.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "free software"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "sqlite-index",
+      "target_url": "https://www.sqlite.org/index.html",
+      "robots_url": "https://www.sqlite.org/robots.txt",
+      "allowed_origin": "https://www.sqlite.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "SQLite"
+      ],
+      "required_body_fragments": [
+        "SQLite"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation",
+        "pattern:static"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation",
+        "pattern:static"
+      ]
+    },
+    {
+      "id": "sqlite-lang",
+      "target_url": "https://www.sqlite.org/lang.html",
+      "robots_url": "https://www.sqlite.org/robots.txt",
+      "allowed_origin": "https://www.sqlite.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_title_fragments": [
+        "SQL"
+      ],
+      "required_body_fragments": [
+        "SQLite"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation",
+        "pattern:table"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation",
+        "pattern:table"
+      ]
+    },
+    {
+      "id": "postgres-tutorial",
+      "target_url": "https://www.postgresql.org/docs/current/tutorial.html",
+      "robots_url": "https://www.postgresql.org/robots.txt",
+      "allowed_origin": "https://www.postgresql.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Tutorial"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "postgres-select",
+      "target_url": "https://www.postgresql.org/docs/current/sql-select.html",
+      "robots_url": "https://www.postgresql.org/robots.txt",
+      "allowed_origin": "https://www.postgresql.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "SELECT"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation",
+        "pattern:table"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation",
+        "pattern:table"
+      ]
+    },
+    {
+      "id": "w3-html52",
+      "target_url": "https://www.w3.org/TR/html52/",
+      "robots_url": "https://www.w3.org/robots.txt",
+      "allowed_origin": "https://www.w3.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "HTML"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 1048576,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "w3-wcag21",
+      "target_url": "https://www.w3.org/TR/WCAG21/",
+      "robots_url": "https://www.w3.org/robots.txt",
+      "allowed_origin": "https://www.w3.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Web Content Accessibility Guidelines"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 1048576,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "pypi-requests",
+      "target_url": "https://pypi.org/project/requests/",
+      "robots_url": "https://pypi.org/robots.txt",
+      "allowed_origin": "https://pypi.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "requests"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 524288,
+      "pattern_refs": [
+        "pattern:listing",
+        "pattern:detail",
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:listing",
+        "pattern:detail",
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "packaging-guide",
+      "target_url": "https://packaging.python.org/en/latest/",
+      "robots_url": "https://packaging.python.org/robots.txt",
+      "allowed_origin": "https://packaging.python.org",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Python Packaging"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "pip-docs",
+      "target_url": "https://pip.pypa.io/en/stable/",
+      "robots_url": "https://pip.pypa.io/robots.txt",
+      "allowed_origin": "https://pip.pypa.io",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "pip"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "flask-docs",
+      "target_url": "https://flask.palletsprojects.com/en/stable/",
+      "robots_url": "https://flask.palletsprojects.com/robots.txt",
+      "allowed_origin": "https://flask.palletsprojects.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Flask"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    },
+    {
+      "id": "requests-docs",
+      "target_url": "https://requests.readthedocs.io/en/latest/",
+      "robots_url": "https://requests.readthedocs.io/robots.txt",
+      "allowed_origin": "https://requests.readthedocs.io",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "min_body_size_bytes": 1000,
+      "required_body_fragments": [
+        "Requests"
+      ],
+      "allowed_robots_status_codes": [
+        200
+      ],
+      "timeout_ms": 15000,
+      "size_budget_bytes": 262144,
+      "pattern_refs": [
+        "pattern:documentation"
+      ],
+      "pattern_family_refs": [
+        "pattern:documentation"
+      ]
+    }
+  ],
+  "expected_failure_type": "real_world_quality_missing_replay_refs",
+  "negative_case": true
+}

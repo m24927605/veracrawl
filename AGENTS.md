@@ -118,12 +118,17 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit planning context:
-`specs/057-production-quality-benchmark-roadmap/spec.md`.
-Use it with planned specs `specs/058-expanded-real-world-corpus-benchmark/`
-through `specs/064-cost-latency-stability-release-gate/` for production crawl
-quality benchmark work. The post-037 roadmap remains governed by
-`specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
-do not invent additional production or production-quality specs unless the
-roadmap specs and build roadmap are amended first.
+Current active Spec Kit plan:
+`specs/058-expanded-real-world-corpus-benchmark/plan.md`.
+Use it with `specs/058-expanded-real-world-corpus-benchmark/spec.md`,
+`specs/058-expanded-real-world-corpus-benchmark/research.md`,
+`specs/058-expanded-real-world-corpus-benchmark/data-model.md`,
+`specs/058-expanded-real-world-corpus-benchmark/contracts/`, and
+`specs/058-expanded-real-world-corpus-benchmark/quickstart.md` for expanded
+real-world quality corpus work. Production quality specs remain governed by
+`specs/057-production-quality-benchmark-roadmap/spec.md`,
+`specs/038-production-runtime-closure/spec.md`, and
+`docs/08-build-roadmap.md`; do not invent additional production or
+production-quality specs unless the roadmap specs and build roadmap are amended
+first.
 <!-- SPECKIT END -->

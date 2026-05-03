@@ -1057,6 +1057,23 @@ reports include model call, agent action, tool call, context bundle, source
 anchor, candidate, evidence/verification gate, command/event/outbox, and replay
 refs. Model or agent output is never accepted as source evidence.
 
+Run the expanded real-world public quality corpus:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-real-quality-corpus run \
+  tests/fixtures/real-world-quality-corpus \
+  --profile quality \
+  --out .veracrawl-real-runs/real-world-quality-corpus
+```
+
+The quality corpus gate composes the row 055 public crawl runner with quality
+thresholds and pattern coverage. Passing reports require at least 40 passing
+targets, 15 passing origins, 10 passing pattern families, policy refs,
+artifact/content hash/canonical URL refs, command/event/outbox refs, and replay
+refs. This gate does not claim JS/browser quality, deep crawl quality,
+field-level oracle quality, precision/recall, repair success, or final
+production-quality release readiness; those remain specs 059-064.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

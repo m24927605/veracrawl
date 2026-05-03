@@ -1719,6 +1719,29 @@ Real-world AI agent benchmark gate:
   unavailability, and replay gaps fail with
   `RealWorldAIAgentBenchmarkFailureType`.
 
+Expanded real-world public quality corpus gate:
+
+- `veracrawl.contracts.real_world_quality` owns
+  `RealWorldQualityCorpusManifest`, `RealWorldQualityTargetSpec`,
+  `RealWorldQualitySiteObservation`, `RealWorldQualityPatternCoverageRecord`,
+  and `RealWorldQualityCorpusReport`.
+- `veracrawl.benchmarks.real_world_quality` composes row 055
+  `run_real_world_benchmark_corpus` instead of adding another HTTP path. Passing
+  quality coverage counts only row 055 passing site observations.
+- `veracrawl.cli.real_quality_corpus` exposes
+  `veracrawl-real-quality-corpus run`, dynamically reusing the row 055 CLI
+  adapter factory and robots fetcher at the CLI edge while keeping core free of
+  concrete network clients, browser engines, model SDKs, and agent frameworks.
+- passing quality reports require at least 40 passing targets, 15 passing
+  origins, and 10 passing pattern families plus policy refs, artifacts, content
+  hashes, canonical URL refs, command/event/outbox refs, and replay refs.
+- policy-denied, network-unavailable, drifted, missing-evidence, and
+  missing-replay targets are visible diagnostics and do not count as passing
+  quality coverage.
+- this gate proves expanded corpus and pattern coverage only. JavaScript/browser
+  quality, multi-page deep crawl quality, field-level oracles, precision/recall,
+  repair success, and cost/latency/stability release remain specs 059-064.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

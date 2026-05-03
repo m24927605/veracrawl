@@ -612,6 +612,18 @@ class RealWorldBenchmarkFailureType(StrEnum):
     REPLAY_MISMATCH = "real_world_replay_mismatch"
 
 
+class RealWorldQualityCorpusFailureType(StrEnum):
+    MISSING_REAL_WORLD_REPORT = "real_world_quality_missing_real_world_report"
+    INSUFFICIENT_TARGET_COVERAGE = "real_world_quality_insufficient_target_coverage"
+    INSUFFICIENT_ORIGIN_COVERAGE = "real_world_quality_insufficient_origin_coverage"
+    INSUFFICIENT_PATTERN_COVERAGE = "real_world_quality_insufficient_pattern_coverage"
+    TARGET_DRIFT = "real_world_quality_target_drift"
+    POLICY_DENIED_TARGET = "real_world_quality_policy_denied_target"
+    NETWORK_UNAVAILABLE_TARGET = "real_world_quality_network_unavailable_target"
+    MISSING_EVIDENCE_REFS = "real_world_quality_missing_evidence_refs"
+    MISSING_REPLAY_REFS = "real_world_quality_missing_replay_refs"
+
+
 class RealWorldAIAgentDecisionType(StrEnum):
     CRAWL_PLANNING = "crawl_planning"
     SITE_UNDERSTANDING = "site_understanding"

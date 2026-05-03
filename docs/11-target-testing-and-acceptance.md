@@ -2113,6 +2113,39 @@ framework-neutral AI planning and extraction candidate generation. It does not
 permit LLM output to replace source evidence, does not publish real-site outputs
 directly, and does not couple core to any concrete agent framework.
 
+Expanded real-world public quality corpus acceptance:
+
+```text
+veracrawl-real-quality-corpus run tests/fixtures/<real_world_quality_fixture_id> --profile quality --out .veracrawl-real-runs/<real_world_quality_fixture_id>
+```
+
+Required real-world quality fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| real-world-quality-corpus | quality-tier corpus with at least 40 targets, 15 origins, 10 pattern families, policy refs, artifact/content hash/canonical URL refs, command/event/outbox refs, and replay refs passes |
+| real-world-quality-insufficient-targets | target threshold failure is typed |
+| real-world-quality-insufficient-origins | origin threshold failure is typed |
+| real-world-quality-insufficient-patterns | pattern threshold failure is typed |
+| real-world-quality-target-drift | observation drift is typed and does not count as pass |
+| real-world-quality-missing-replay | missing replay refs fail |
+
+Expanded quality corpus acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_real_world_quality_contracts.py`
+- `pytest tests/contract/test_real_world_quality_contract_registry.py`
+- `pytest tests/contract/test_real_world_quality_import_boundaries.py`
+- `pytest tests/unit/test_real_world_quality_runtime.py`
+- `pytest tests/unit/test_real_world_quality_replay.py`
+- `pytest tests/integration/test_real_world_quality_fixtures.py`
+- one recorded live CLI run against `tests/fixtures/real-world-quality-corpus`
+
+This acceptance proves only expanded public corpus quality coverage. It does not
+prove JavaScript/browser rendering quality, bounded deep crawl quality,
+field-level oracle extraction, precision/recall, repair success, or
+cost/latency/stability release readiness.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:
