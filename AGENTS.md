@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/028-graph-frontier-review-runtime-gate/plan.md`.
-Use it with `specs/028-graph-frontier-review-runtime-gate/spec.md`,
-`specs/028-graph-frontier-review-runtime-gate/research.md`,
-`specs/028-graph-frontier-review-runtime-gate/data-model.md`,
-`specs/028-graph-frontier-review-runtime-gate/contracts/`, and
-`specs/028-graph-frontier-review-runtime-gate/quickstart.md` for VeraCrawl Graph-Driven Frontier And Review Runtime Gate work.
+Current active Spec Kit plan: `specs/029-temporal-kg-identity-projection-gate/plan.md`.
+Use it with `specs/029-temporal-kg-identity-projection-gate/spec.md`,
+`specs/029-temporal-kg-identity-projection-gate/research.md`,
+`specs/029-temporal-kg-identity-projection-gate/data-model.md`,
+`specs/029-temporal-kg-identity-projection-gate/contracts/`, and
+`specs/029-temporal-kg-identity-projection-gate/quickstart.md` for VeraCrawl Temporal KG Identity Projection Gate work.
 <!-- SPECKIT END -->

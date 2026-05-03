@@ -1114,6 +1114,56 @@ class GraphFrontierReviewFailureType(StrEnum):
     UNSUPPORTED_SIGNAL = "graph_frontier_review_unsupported_signal"
 
 
+class TemporalKGEntityType(StrEnum):
+    PERSON = "person"
+    ORGANIZATION = "organization"
+    PRODUCT = "product"
+    ARTICLE = "article"
+    EVENT = "event"
+    LOCATION = "location"
+    DOCUMENT = "document"
+    CLAIM = "claim"
+    OTHER = "other"
+
+
+class TemporalKGStatus(StrEnum):
+    CURRENT = "current"
+    SUPERSEDED = "superseded"
+    EXPIRED = "expired"
+    DISPUTED = "disputed"
+    INVALIDATED = "invalidated"
+
+
+class TemporalKGConflictType(StrEnum):
+    FALSE_MERGE = "false_merge"
+    FALSE_SPLIT = "false_split"
+    CONTRADICTION = "contradiction"
+    IDENTITY_DRIFT = "identity_drift"
+
+
+class TemporalKGAdjudicationDecisionType(StrEnum):
+    CONFIRM_IDENTITY = "confirm_identity"
+    SPLIT_IDENTITY = "split_identity"
+    MERGE_IDENTITY = "merge_identity"
+    INVALIDATE_IDENTITY = "invalidate_identity"
+    SUPERSEDE_PROJECTION = "supersede_projection"
+    DISPUTE_PROJECTION = "dispute_projection"
+
+
+class TemporalKGFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "temporal_kg_missing_runtime_refs"
+    PROVISIONAL_IDENTITY = "temporal_kg_provisional_identity"
+    PROJECTION_AS_EVIDENCE = "temporal_kg_projection_as_evidence"
+    MISSING_IDENTITY_EVIDENCE = "temporal_kg_missing_identity_evidence"
+    MISSING_CANONICAL_SOURCES = "temporal_kg_missing_canonical_sources"
+    MISSING_BITEMPORAL_REFS = "temporal_kg_missing_bitemporal_refs"
+    FALSE_MERGE_WITHOUT_ADJUDICATION = (
+        "temporal_kg_false_merge_without_adjudication"
+    )
+    FALSE_SPLIT_WITHOUT_SUPERSESSION = "temporal_kg_false_split_without_supersession"
+    MISSING_REPLAY_REFS = "temporal_kg_missing_replay_refs"
+
+
 class MemoryType(StrEnum):
     SITE_BEHAVIOR = "site_behavior"
     PAGE_TYPE = "page_type"

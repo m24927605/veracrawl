@@ -1,0 +1,1 @@
+{"expected_result":"pass","expected_identity_refs":["temporal-kg-identity:temporal-kg-projection-success:entity-1"],"expected_projection_refs":["temporal-kg-projection:temporal-kg-projection-success:fact-1"],"source_of_truth":"verified_facts_published_outputs_canonical_events_and_evidence_packets"}

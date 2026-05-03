@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"temporal_kg_missing_replay_refs","required_replay_refs":["command","event_cursor","outbox","replay_bundle"]}

@@ -481,6 +481,29 @@ do
 done
 ```
 
+Run temporal KG identity projection gate fixtures:
+
+```sh
+for fixture in \
+  temporal-kg-projection-success \
+  temporal-kg-false-merge-adjudicated \
+  temporal-kg-false-split-superseded \
+  temporal-kg-runtime-unavailable \
+  temporal-kg-provisional-identity \
+  temporal-kg-projection-as-evidence \
+  temporal-kg-missing-canonical-source \
+  temporal-kg-missing-bitemporal-refs \
+  temporal-kg-false-merge-without-adjudication \
+  temporal-kg-false-split-without-supersession \
+  temporal-kg-missing-replay
+do
+  uv run --python python3.12 --extra dev veracrawl-temporal-kg run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
 Run memory kernel fixtures:
 
 ```sh

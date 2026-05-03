@@ -15,6 +15,11 @@ from veracrawl.contracts.enums import (
     GraphSignalType,
     ProjectionJobStatus,
     ReviewPriority,
+    TemporalKGAdjudicationDecisionType,
+    TemporalKGConflictType,
+    TemporalKGEntityType,
+    TemporalKGFailureType,
+    TemporalKGStatus,
 )
 
 
@@ -462,6 +467,271 @@ class TemporalGraphProjectionRecord(TimestampedModel):
             raise ValueError(
                 "temporal graph record requires validity, identity, and watermark refs"
             )
+        return self
+
+
+class TemporalKGEntityIdentity(TimestampedModel):
+    id: str
+    run_ref: Ref
+    entity_key: str
+    entity_type: TemporalKGEntityType
+    canonical_label: str
+    alias_refs: list[Ref] = Field(default_factory=list)
+    identity_evidence_refs: list[Ref] = Field(default_factory=list)
+    source_verified_fact_refs: list[Ref] = Field(default_factory=list)
+    source_published_output_refs: list[Ref] = Field(default_factory=list)
+    source_event_refs: list[Ref] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+    valid_from_ref: Ref
+    valid_to_ref: Ref | None = None
+    transaction_time_ref: Ref
+    status: TemporalKGStatus
+    provisional_graph_identity_refs: list[Ref] = Field(default_factory=list)
+    conflict_record_refs: list[Ref] = Field(default_factory=list)
+    adjudication_record_refs: list[Ref] = Field(default_factory=list)
+    supersedes_identity_ref: Ref | None = None
+    superseded_by_identity_ref: Ref | None = None
+    invalidation_ref: Ref | None = None
+
+    @model_validator(mode="after")
+    def validate_temporal_kg_identity(self) -> TemporalKGEntityIdentity:
+        if not self.entity_key or not self.canonical_label:
+            raise ValueError("temporal KG identity requires key and label")
+        if not self.identity_evidence_refs:
+            raise ValueError("temporal KG identity requires identity evidence refs")
+        if not (
+            self.source_verified_fact_refs
+            or self.source_published_output_refs
+            or self.source_event_refs
+        ):
+            raise ValueError("temporal KG identity requires canonical source refs")
+        if not self.valid_from_ref or not self.transaction_time_ref:
+            raise ValueError("temporal KG identity requires validity and transaction refs")
+        if self.status == TemporalKGStatus.CURRENT and self.provisional_graph_identity_refs:
+            raise ValueError("current temporal KG identity cannot be provisional")
+        if self.status == TemporalKGStatus.INVALIDATED and not (
+            self.invalidation_ref and self.adjudication_record_refs
+        ):
+            raise ValueError("invalidated temporal KG identity requires adjudication refs")
+        if self.status == TemporalKGStatus.SUPERSEDED and not (
+            self.superseded_by_identity_ref or self.supersedes_identity_ref
+        ):
+            raise ValueError("superseded temporal KG identity requires supersession refs")
+        return self
+
+
+class TemporalKGProjectionRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    projection_version: str
+    entity_identity_ref: Ref
+    subject_entity_key: str
+    predicate: str
+    object_value_ref: Ref
+    object_entity_key: str | None = None
+    value_type: str
+    valid_from_ref: Ref
+    valid_to_ref: Ref | None = None
+    observed_at_ref: Ref
+    projected_at_ref: Ref
+    superseded_at_ref: Ref | None = None
+    source_verified_fact_refs: list[Ref] = Field(default_factory=list)
+    source_published_output_refs: list[Ref] = Field(default_factory=list)
+    source_event_refs: list[Ref] = Field(default_factory=list)
+    evidence_packet_refs: list[Ref] = Field(default_factory=list)
+    conflict_record_refs: list[Ref] = Field(default_factory=list)
+    supersedes_projection_record_ref: Ref | None = None
+    status: TemporalKGStatus
+    projection_watermark_ref: Ref
+    evidence_ref_allowed: bool = False
+
+    @model_validator(mode="after")
+    def validate_temporal_kg_projection(self) -> TemporalKGProjectionRecord:
+        if not self.projection_version:
+            raise ValueError("temporal KG projection requires projection version")
+        required_refs = [
+            self.entity_identity_ref,
+            self.object_value_ref,
+            self.valid_from_ref,
+            self.observed_at_ref,
+            self.projected_at_ref,
+            self.projection_watermark_ref,
+        ]
+        if not all(required_refs):
+            raise ValueError("temporal KG projection requires identity and bitemporal refs")
+        if not self.subject_entity_key or not self.predicate or not self.value_type:
+            raise ValueError("temporal KG projection requires subject, predicate, and type")
+        if not (self.source_verified_fact_refs or self.source_published_output_refs):
+            raise ValueError("temporal KG projection requires verified or published refs")
+        if not self.source_event_refs:
+            raise ValueError("temporal KG projection requires canonical event refs")
+        if not self.evidence_packet_refs:
+            raise ValueError("temporal KG projection requires evidence packet refs")
+        if self.evidence_ref_allowed:
+            raise ValueError("temporal KG projections cannot satisfy source evidence")
+        if self.status == TemporalKGStatus.SUPERSEDED and not (
+            self.superseded_at_ref or self.supersedes_projection_record_ref
+        ):
+            raise ValueError("superseded temporal KG projection requires supersession refs")
+        return self
+
+
+class TemporalKGIdentityAdjudicationRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    conflict_type: TemporalKGConflictType
+    decision_type: TemporalKGAdjudicationDecisionType
+    identity_refs: list[Ref] = Field(default_factory=list)
+    projection_record_refs: list[Ref] = Field(default_factory=list)
+    conflict_record_refs: list[Ref] = Field(default_factory=list)
+    adjudication_authority_ref: Ref
+    evidence_input_refs: list[Ref] = Field(default_factory=list)
+    source_event_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    resulting_identity_refs: list[Ref] = Field(default_factory=list)
+    resulting_projection_record_refs: list[Ref] = Field(default_factory=list)
+    invalidated_identity_refs: list[Ref] = Field(default_factory=list)
+    superseded_identity_refs: list[Ref] = Field(default_factory=list)
+    superseded_projection_record_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_temporal_kg_adjudication(self) -> TemporalKGIdentityAdjudicationRecord:
+        required = {
+            "identity_refs": self.identity_refs,
+            "conflict_record_refs": self.conflict_record_refs,
+            "adjudication_authority_ref": self.adjudication_authority_ref,
+            "evidence_input_refs": self.evidence_input_refs,
+            "source_event_refs": self.source_event_refs,
+            "policy_decision_refs": self.policy_decision_refs,
+            "command_record_refs": self.command_record_refs,
+            "event_cursor_refs": self.event_cursor_refs,
+            "outbox_refs": self.outbox_refs,
+            "replay_bundle_ref": self.replay_bundle_ref,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"temporal KG adjudication missing refs: {missing}")
+        if self.conflict_type == TemporalKGConflictType.FALSE_MERGE and not (
+            self.invalidated_identity_refs or self.superseded_identity_refs
+        ):
+            raise ValueError("false-merge adjudication requires invalidation or supersession")
+        if self.conflict_type == TemporalKGConflictType.FALSE_SPLIT and not (
+            self.resulting_identity_refs and self.superseded_identity_refs
+        ):
+            raise ValueError("false-split adjudication requires resulting and superseded refs")
+        return self
+
+
+class TemporalKGRuntimeReport(TimestampedModel):
+    id: str
+    run_ref: Ref
+    identity_refs: list[Ref] = Field(default_factory=list)
+    projection_record_refs: list[Ref] = Field(default_factory=list)
+    adjudication_record_refs: list[Ref] = Field(default_factory=list)
+    conflict_record_refs: list[Ref] = Field(default_factory=list)
+    supersession_refs: list[Ref] = Field(default_factory=list)
+    invalidation_refs: list[Ref] = Field(default_factory=list)
+    source_verified_fact_refs: list[Ref] = Field(default_factory=list)
+    source_published_output_refs: list[Ref] = Field(default_factory=list)
+    source_event_refs: list[Ref] = Field(default_factory=list)
+    evidence_packet_refs: list[Ref] = Field(default_factory=list)
+    projection_watermark_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    contract_only_refs: list[Ref] = Field(default_factory=list)
+    missing_runtime_refs: list[Ref] = Field(default_factory=list)
+    failure_type: TemporalKGFailureType | None = None
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    temporal_kg_as_evidence_refs: list[Ref] = Field(default_factory=list)
+    provisional_identity_refs: list[Ref] = Field(default_factory=list)
+    missing_identity_evidence_refs: list[Ref] = Field(default_factory=list)
+    missing_canonical_source_refs: list[Ref] = Field(default_factory=list)
+    missing_bitemporal_refs: list[Ref] = Field(default_factory=list)
+    false_merge_without_adjudication_refs: list[Ref] = Field(default_factory=list)
+    false_split_without_supersession_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    operator_status: str
+    completion_result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_temporal_kg_report(self) -> TemporalKGRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "identity_refs": self.identity_refs,
+                "projection_record_refs": self.projection_record_refs,
+                "source_verified_fact_refs": self.source_verified_fact_refs,
+                "source_published_output_refs": self.source_published_output_refs,
+                "source_event_refs": self.source_event_refs,
+                "evidence_packet_refs": self.evidence_packet_refs,
+                "projection_watermark_refs": self.projection_watermark_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            failure_refs = [
+                self.contract_only_refs,
+                self.missing_runtime_refs,
+                self.failure_report_refs,
+                self.temporal_kg_as_evidence_refs,
+                self.provisional_identity_refs,
+                self.missing_identity_evidence_refs,
+                self.missing_canonical_source_refs,
+                self.missing_bitemporal_refs,
+                self.false_merge_without_adjudication_refs,
+                self.false_split_without_supersession_refs,
+                self.missing_ref_fields,
+            ]
+            if missing or any(failure_refs) or self.failure_type is not None:
+                raise ValueError(f"passing temporal KG report missing refs: {missing}")
+        elif self.completion_result == CompletenessResult.NEEDS_REVIEW:
+            if not (self.contract_only_refs or self.missing_runtime_refs):
+                raise ValueError("needs-review temporal KG report requires review refs")
+        elif not (
+            self.failure_type
+            and (
+                self.failure_report_refs
+                or self.temporal_kg_as_evidence_refs
+                or self.provisional_identity_refs
+                or self.missing_identity_evidence_refs
+                or self.missing_canonical_source_refs
+                or self.missing_bitemporal_refs
+                or self.false_merge_without_adjudication_refs
+                or self.false_split_without_supersession_refs
+                or self.missing_ref_fields
+            )
+        ):
+            raise ValueError("failed temporal KG report requires typed failure details")
+        return self
+
+
+class TemporalKGFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: TemporalKGFailureType | None = None
+    negative_case: bool = False
+
+    @model_validator(mode="after")
+    def validate_temporal_kg_fixture(self) -> TemporalKGFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("temporal KG fixture must support target profile")
+        if self.negative_case and self.expected_completion_result != CompletenessResult.FAIL:
+            raise ValueError("negative temporal KG fixture must expect fail")
+        if self.expected_failure_type is not None and not self.negative_case:
+            raise ValueError("expected failure type requires negative case")
         return self
 
 

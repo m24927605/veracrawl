@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"temporal_kg_false_split_without_supersession","required_repair_refs":["conflict","adjudication","resulting_identity","supersession"]}

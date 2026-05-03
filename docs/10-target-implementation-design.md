@@ -807,6 +807,46 @@ Temporal KG requirements:
 - temporal KG reads are forbidden as publication evidence unless separately represented by accepted evidence packets.
 - rebuilds must reproduce projection records or emit a projection mismatch report.
 
+### Temporal KG Identity Projection Gate Slice
+
+The temporal KG gate turns verified facts, published outputs, canonical events,
+evidence packets, and projection watermarks into replayable authoritative
+identity and bitemporal projection records.
+
+Required implementation:
+
+- `TemporalKGEntityIdentity` records identity evidence, canonical source refs,
+  valid-time refs, transaction-time refs, identity status, and explicit
+  invalidation or supersession refs.
+- `TemporalKGProjectionRecord` records bitemporal subject/predicate/value
+  projections with evidence packet refs, canonical event refs, verified/published
+  source refs, status, and projection watermark refs.
+- `TemporalKGIdentityAdjudicationRecord` records false-merge and false-split
+  repair decisions with conflict, authority, evidence, source event, policy,
+  command, event cursor, outbox, and replay refs.
+- `TemporalKGRuntimeReport` can claim `pass` only when identity, projection,
+  canonical source, evidence, watermark, policy, command, event/outbox, and
+  replay refs are complete.
+- `veracrawl.graph.temporal_kg` is core-owned and imports only VeraCrawl
+  contracts.
+- `veracrawl-temporal-kg` runs success, no-runtime, false-merge, false-split,
+  and negative fixtures without static dependencies on graph stores, queue
+  clients, storage clients, browser libraries, model SDKs, agent frameworks, or
+  HTTP clients.
+
+Rules:
+
+- provisional graph clustering cannot become authoritative temporal KG identity.
+- temporal KG projections must not satisfy source evidence, verification,
+  publication, or output manifest requirements.
+- missing live temporal KG runtime refs return `needs_review`.
+- projection-as-evidence, missing canonical source, missing bitemporal refs,
+  false merge without adjudication, false split without supersession, and missing
+  replay refs are deterministic failures.
+- this slice proves temporal KG identity/projection semantics. It does not
+  implement production graph stores, graph query APIs, graph explorer UI, vector
+  search, export delivery, memory stores, or production scale graph operations.
+
 ## Memory Architecture
 
 Memory is a planning and adaptation layer, not source evidence.

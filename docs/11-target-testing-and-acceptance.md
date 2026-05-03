@@ -602,6 +602,44 @@ not prove production graph stores, production queue backends, review UI, memory,
 export delivery, distributed storage, distributed queueing, or production scale
 readiness.
 
+Temporal KG identity projection fixture contract:
+
+```text
+veracrawl-temporal-kg run tests/fixtures/<temporal_kg_fixture_id> --profile target --out .veracrawl-test-runs/<temporal_kg_fixture_id>
+```
+
+Required temporal KG fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| temporal-kg-projection-success | authoritative identity and bitemporal projection derive from verified fact, published output, canonical event, evidence packet, watermark, policy, command, event/outbox, and replay refs |
+| temporal-kg-false-merge-adjudicated | false merge produces conflict, adjudication, invalidation, source event, policy, command, event/outbox, and replay refs |
+| temporal-kg-false-split-superseded | false split produces adjudication, resulting identity, superseded identity/projection, source event, policy, command, event/outbox, and replay refs |
+| temporal-kg-runtime-unavailable | missing live temporal KG runtime refs return `needs_review` with contract-only and missing-runtime refs |
+| temporal-kg-provisional-identity | provisional graph cluster cannot become authoritative temporal KG identity |
+| temporal-kg-projection-as-evidence | temporal KG projection used as source evidence fails |
+| temporal-kg-missing-canonical-source | missing verified fact, published output, canonical event, or evidence packet lineage fails |
+| temporal-kg-missing-bitemporal-refs | missing valid-time or transaction-time refs fail |
+| temporal-kg-false-merge-without-adjudication | false merge without adjudication/invalidation/supersession refs fails |
+| temporal-kg-false-split-without-supersession | false split without resulting/supersession refs fails |
+| temporal-kg-missing-replay | missing command/event/outbox/replay refs fail |
+
+Temporal KG acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_temporal_kg_contract_registry.py`
+- `pytest tests/contract/test_temporal_kg_contracts.py`
+- `pytest tests/contract/test_temporal_kg_import_boundaries.py`
+- `pytest tests/unit/test_temporal_kg_gate.py`
+- `pytest tests/integration/test_temporal_kg_fixtures.py`
+
+This acceptance proves executable temporal KG identity/projection semantics,
+false-merge and false-split repair refs, bitemporal required refs, core import
+boundaries, and temporal-KG-as-evidence rejection. It does not prove production
+graph stores, graph query APIs, graph explorer UI, vector search, memory stores,
+export delivery, distributed storage, distributed queueing, or production scale
+readiness.
+
 Memory kernel fixture contract:
 
 ```text
@@ -1278,8 +1316,8 @@ Acceptance gates:
 - graph signals can influence frontier and review routing with explanations through `GraphFrontierReviewRuntimeReport`
 - graph signals cannot satisfy publication evidence requirements
 - `EvidencePacket.graph_signal_refs` cannot satisfy required evidence coverage; only source artifacts and source anchors in `source_evidence_refs` can do so
-- temporal KG records preserve valid time, transaction time, identity evidence, supersession, conflict, invalidation, and projection watermark fields
-- temporal KG projection fixtures prove records derive only from verified outputs and canonical events
+- temporal KG records preserve valid time, transaction time, identity evidence, supersession, conflict, invalidation, and projection watermark fields through `TemporalKGRuntimeReport`
+- temporal KG projection fixtures prove records derive only from verified facts, published outputs, canonical events, evidence packet refs, and projection watermarks
 - false-merge and false-split entity identity fixtures produce conflict, adjudication, supersession, or invalidation records
 
 ### Memory Intelligence Profile

@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"temporal_kg_missing_canonical_sources","required_sources":["verified_fact","published_output","canonical_event","evidence_packet"]}

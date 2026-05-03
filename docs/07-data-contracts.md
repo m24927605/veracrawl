@@ -37,7 +37,7 @@ Target contract manifest:
 | ExtractionStrategy, ExtractionCandidate, EvidencePacket | required | schema-bound and approved exploratory extraction preserve anchors and source refs |
 | VerificationRecommendation, VerificationDecision, ConflictRecord, AdjudicationDecision | required | evidence, contradictions, freshness, and review/adjudication are explicit |
 | PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact | required | immutable publication and fact projection preserve evidence and verification lineage |
-| GraphBuildManifest, GraphNode, GraphEdge, GraphSignal, TemporalKGProjectionRecord, TemporalKGEntityIdentity | required | graph projections have input refs, watermarks, quality metrics, graph-driven frontier/review decisions, and evidence-derived temporal semantics |
+| GraphBuildManifest, GraphNode, GraphEdge, GraphSignal, TemporalKGProjectionRecord, TemporalKGEntityIdentity, TemporalKGRuntimeReport | required | graph projections have input refs, watermarks, quality metrics, graph-driven frontier/review decisions, and evidence-derived temporal semantics |
 | MemoryEvent, CrossScopeMemoryTunnel, OperationalTemporalMemoryRecord | required | memory has scope, trust, taint, promotion policy, freshness, invalidation, cross-scope authorization, operational temporal records, evidence refs, and prompt-use restrictions |
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
@@ -1155,6 +1155,11 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_graph_review_route_decision | review_replay | GraphReviewRouteDecisionRecord | BaseCommandPayload | graph signal use policy allows review routing with explanation refs | expected_version | graph_review_route_decision_recorded | missing review item or route refs fail |
 | record_graph_frontier_review_report | graph | GraphFrontierReviewRuntimeReport | BaseCommandPayload | frontier and review route graph decisions or review/failure refs are present | expected_version | graph_frontier_review_reported | missing graph/scheduler/review runtime refs return needs_review |
 | record_graph_frontier_review_fixture_manifest | tests | GraphFrontierReviewFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | graph_frontier_review_fixture_manifest_recorded | invalid negative/pass pairing rejected |
+| project_temporal_kg_identity | graph | TemporalKGEntityIdentity | BaseCommandPayload | identity evidence plus verified fact, published output, or canonical event refs present | expected_version | temporal_kg_identity_projected | provisional graph identity rejected |
+| project_temporal_kg_record | graph | TemporalKGProjectionRecord | BaseCommandPayload | entity identity, evidence, canonical source, valid-time, transaction-time, and watermark refs present | expected_version | temporal_kg_record_projected | temporal KG refs cannot satisfy source evidence |
+| adjudicate_temporal_kg_identity | review_replay | TemporalKGIdentityAdjudicationRecord | BaseCommandPayload | conflict, authority, evidence, source event, policy, and repair refs present | expected_version | temporal_kg_identity_adjudicated | false merge/split without adjudication or supersession fails |
+| record_temporal_kg_report | graph | TemporalKGRuntimeReport | BaseCommandPayload | identity/projection/adjudication or review/failure refs are present | expected_version | temporal_kg_reported | missing runtime refs return needs_review; missing replay fails |
+| record_temporal_kg_fixture_manifest | tests | TemporalKGFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | temporal_kg_fixture_manifest_recorded | invalid negative/pass pairing rejected |
 | propose_strategy | extract | ExtractionStrategy | ExtractionStrategyPayload | schema snapshot exists | expected_version | processing_transitioned | incompatible schema routes to review |
 | approve_strategy | extract | ExtractionStrategy | ApprovalPayload | approval authority or policy allow | expected_version | approval_decided, processing_transitioned | rejected strategy cannot extract |
 | create_candidate | extract | ExtractionCandidate | CandidatePayload | approved strategy and normalized input refs | expected_version | candidate_created | validator failures mark candidate rejected |
@@ -2543,6 +2548,153 @@ Rules:
 - valid-time, identity, and projection watermark refs are required.
 - temporal graph projection records can inform planning, review, contradiction detection, and repair.
 - temporal graph projection records must not satisfy publication evidence requirements.
+
+## TemporalKGEntityIdentity Executable Gate
+
+`TemporalKGEntityIdentity` is the executable target gate contract for
+authoritative entity identity projection. It is stricter than exploratory entity
+graph clustering and cannot be created from provisional graph clusters alone.
+
+```yaml
+TemporalKGEntityIdentity:
+  id: string
+  run_ref: string
+  entity_key: string
+  entity_type: person | organization | product | article | event | location | document | claim | other
+  canonical_label: string
+  alias_refs: list
+  identity_evidence_refs: list
+  source_verified_fact_refs: list
+  source_published_output_refs: list
+  source_event_refs: list
+  confidence: number
+  valid_from_ref: string
+  valid_to_ref: string
+  transaction_time_ref: string
+  status: current | superseded | expired | disputed | invalidated
+  provisional_graph_identity_refs: list
+  conflict_record_refs: list
+  adjudication_record_refs: list
+  supersedes_identity_ref: string
+  superseded_by_identity_ref: string
+  invalidation_ref: string
+```
+
+Rules:
+
+- identity evidence refs are required.
+- at least one canonical source family is required: verified facts, published outputs, or canonical events.
+- current authoritative identities cannot include provisional graph identity refs.
+- invalidated or superseded identities require adjudication, invalidation, or supersession refs.
+
+## TemporalKGProjectionRecord Executable Gate
+
+`TemporalKGProjectionRecord` is the executable target gate contract for
+bitemporal fact projection.
+
+```yaml
+TemporalKGProjectionRecord:
+  id: string
+  run_ref: string
+  projection_version: string
+  entity_identity_ref: string
+  subject_entity_key: string
+  predicate: string
+  object_value_ref: string
+  object_entity_key: string
+  value_type: string
+  valid_from_ref: string
+  valid_to_ref: string
+  observed_at_ref: string
+  projected_at_ref: string
+  superseded_at_ref: string
+  source_verified_fact_refs: list
+  source_published_output_refs: list
+  source_event_refs: list
+  evidence_packet_refs: list
+  conflict_record_refs: list
+  supersedes_projection_record_ref: string
+  status: current | superseded | expired | disputed | invalidated
+  projection_watermark_ref: string
+  evidence_ref_allowed: boolean
+```
+
+Rules:
+
+- entity identity, subject, predicate, value, valid time, transaction time, source refs, evidence packet refs, and projection watermark refs are required.
+- temporal KG projection refs cannot satisfy source evidence, verification, publication, or output manifest evidence requirements.
+- projection records derive only from verified facts, published outputs, canonical events, evidence packets, and projection watermarks.
+
+## TemporalKGIdentityAdjudicationRecord
+
+```yaml
+TemporalKGIdentityAdjudicationRecord:
+  id: string
+  run_ref: string
+  conflict_type: false_merge | false_split | contradiction | identity_drift
+  decision_type: confirm_identity | split_identity | merge_identity | invalidate_identity | supersede_projection | dispute_projection
+  identity_refs: list
+  projection_record_refs: list
+  conflict_record_refs: list
+  adjudication_authority_ref: string
+  evidence_input_refs: list
+  source_event_refs: list
+  policy_decision_refs: list
+  resulting_identity_refs: list
+  resulting_projection_record_refs: list
+  invalidated_identity_refs: list
+  superseded_identity_refs: list
+  superseded_projection_record_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  result: pass | fail | needs_review
+```
+
+Rules:
+
+- false-merge adjudication requires invalidation or supersession refs.
+- false-split adjudication requires resulting identity refs and supersession refs.
+- identity repair must be replayable through command, event cursor, outbox, policy, evidence, source event, and replay refs.
+
+## TemporalKGRuntimeReport
+
+```yaml
+TemporalKGRuntimeReport:
+  id: string
+  run_ref: string
+  identity_refs: list
+  projection_record_refs: list
+  adjudication_record_refs: list
+  conflict_record_refs: list
+  supersession_refs: list
+  invalidation_refs: list
+  source_verified_fact_refs: list
+  source_published_output_refs: list
+  source_event_refs: list
+  evidence_packet_refs: list
+  projection_watermark_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  contract_only_refs: list
+  missing_runtime_refs: list
+  failure_type: string
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+```
+
+Pass requires identity refs, projection refs, canonical source refs, evidence
+packet refs, projection watermark refs, policy refs, command refs, event cursor
+refs, outbox refs, and replay refs. No-runtime fixtures remain `needs_review`.
+Typed negative fixtures cover provisional identity, projection-as-evidence,
+missing canonical source, missing bitemporal refs, false-merge without
+adjudication, false-split without supersession, and missing replay refs.
 
 ## AdvancedGraphProjectionReport
 

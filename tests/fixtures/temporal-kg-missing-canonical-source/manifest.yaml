@@ -1,0 +1,1 @@
+{"id":"temporal-kg-missing-canonical-source","scenario":"temporal-kg-missing-canonical-source","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"temporal_kg_missing_canonical_sources","expected_failure_type":"temporal_kg_missing_canonical_sources","negative_case":true}

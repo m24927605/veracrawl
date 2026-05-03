@@ -99,6 +99,11 @@ from veracrawl.contracts.graph import (
     ProjectionSpec,
     ProjectionWatermark,
     TemporalGraphProjectionRecord,
+    TemporalKGEntityIdentity,
+    TemporalKGFixtureManifest,
+    TemporalKGIdentityAdjudicationRecord,
+    TemporalKGProjectionRecord,
+    TemporalKGRuntimeReport,
 )
 from veracrawl.contracts.infrastructure import (
     RuntimeInfrastructureFixtureManifest,
@@ -417,6 +422,11 @@ __all__ = [
     "ThresholdSpec",
     "QualityReport",
     "TemporalGraphProjectionRecord",
+    "TemporalKGEntityIdentity",
+    "TemporalKGFixtureManifest",
+    "TemporalKGIdentityAdjudicationRecord",
+    "TemporalKGProjectionRecord",
+    "TemporalKGRuntimeReport",
     "TextAnchor",
     "ToolCallTrace",
     "TraceSpan",

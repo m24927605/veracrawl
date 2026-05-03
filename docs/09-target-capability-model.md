@@ -132,7 +132,7 @@ Target support for authenticated sources means customer-authorized, scoped crede
 | Evidence | Build source-backed evidence packets for records, tables, document metadata, files, datasets, and facts | evidence coverage map, raw-to-normalized replay, source anchors |
 | Verification | Accept, reject, review, conflict, supersede, or expire outputs by policy, evidence, schema constraints, freshness, and contradiction checks | verification decision, conflict record, output verification aggregate |
 | Publication | Publish only verified outputs with immutable manifests and evidence refs | output manifest, publication event, review decision, result receipt |
-| Graph intelligence | Maintain URL, hyperlink, canonical, redirect, page-structure, entity, citation/source, evidence, task, and temporal graph projections | graph build manifest, projection watermark, graph quality report, `GraphFrontierReviewRuntimeReport` |
+| Graph intelligence | Maintain URL, hyperlink, canonical, redirect, page-structure, entity, citation/source, evidence, task, and temporal graph projections | graph build manifest, projection watermark, graph quality report, `GraphFrontierReviewRuntimeReport`, `TemporalKGRuntimeReport` |
 | Memory intelligence | Store scoped memories for site behavior, page types, extraction repairs, failures, task context, and agent diaries with freshness and evidence refs | memory event, retrieval trace, invalidation test, evidence backrefs |
 | Multi-agent orchestration | Coordinate Planner, Site Understanding, Frontier, Fetch Analysis, Extractor, Verifier, Drift, Memory, and Ops agents through tools and policy gates | tool call trace, permission tests, command/result events |
 | Drift and repair | Detect template, selector, schema, content, graph, and source behavior drift; propose repairs without silent data corruption | drift event, repair proposal, before/after verification |
@@ -294,6 +294,10 @@ Required acceptance:
 - `GraphFrontierReviewRuntimeReport` pass requires graph signals to produce frontier priority, retry, retire, expand, and review route decision records with source graph refs, explanations, policy, command, event/outbox, and replay refs
 - graph signals can influence frontier and review routing, but cannot satisfy source evidence, verification, publication, or output manifest requirements
 - missing live graph/scheduler/review runtime refs return `needs_review`; graph-signal-as-evidence, missing source graph refs, missing explanations, unauthorized frontier mutation, missing review route, missing replay, or unsupported signals fail deterministically
+- `TemporalKGRuntimeReport` pass requires authoritative `TemporalKGEntityIdentity` and `TemporalKGProjectionRecord` refs derived from verified facts, published outputs, canonical events, evidence packet refs, projection watermark refs, policy refs, command refs, event/outbox refs, and replay refs
+- false-merge and false-split temporal KG repairs require `TemporalKGIdentityAdjudicationRecord` plus conflict, invalidation, supersession, authority, source event, policy, and replay refs
+- temporal KG projections can inform planning, review, contradiction detection, and repair, but cannot satisfy source evidence, verification, publication, or output manifest requirements
+- missing live temporal KG runtime refs return `needs_review`; provisional identity, projection-as-evidence, missing canonical source, missing bitemporal refs, false merge without adjudication, false split without supersession, or missing replay fail deterministically
 
 ### Export And Correction Profile
 

@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"temporal_kg_missing_bitemporal_refs","required_refs":["valid_time","transaction_time"]}

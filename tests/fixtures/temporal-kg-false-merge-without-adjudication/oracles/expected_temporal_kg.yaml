@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"temporal_kg_false_merge_without_adjudication","required_repair_refs":["conflict","adjudication","invalidation_or_supersession"]}
