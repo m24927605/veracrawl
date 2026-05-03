@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/037-processing-evidence-target-runtime/plan.md`.
-Use it with `specs/037-processing-evidence-target-runtime/spec.md`,
-`specs/037-processing-evidence-target-runtime/research.md`,
-`specs/037-processing-evidence-target-runtime/data-model.md`,
-`specs/037-processing-evidence-target-runtime/contracts/`, and
-`specs/037-processing-evidence-target-runtime/quickstart.md` for VeraCrawl Processing/Evidence Target Runtime Gate work.
+Current active Spec Kit control spec: `specs/038-production-runtime-closure/spec.md`.
+Use it with `docs/08-build-roadmap.md` before opening or activating any
+post-037 production runtime work. Specs `039` through `054` are predeclared as
+planned implementation specs; do not invent additional production specs unless
+`specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`
+are amended first.
 <!-- SPECKIT END -->

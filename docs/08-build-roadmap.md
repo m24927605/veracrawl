@@ -62,6 +62,38 @@ Each pack states owner service, storage target, API exposure, event dependencies
 | Quickstart result | publication service | local file + Result API | result API + CLI materialize | result_materialized event | evidence/publication pack complete | local JSON result, receipt, replay report created |
 | Later graph/memory/export | graph/memory/export workers | graph/search/vector/export stores | later APIs | later event subsets | V1 spine verified | required for target architecture, not required for V1 acceptance |
 
+## Post-037 Spec Roadmap
+
+Specs 001-037 establish the executable target-architecture foundation and target
+runtime gates. Production work after 037 must follow this fixed roadmap. Do not
+create additional production implementation specs unless this section and
+`specs/038-production-runtime-closure/spec.md` are amended first.
+
+| Spec | Name | Purpose | Blocking dependencies | Completion gate |
+| --- | --- | --- | --- | --- |
+| 038 | Production Runtime Spec Roadmap | Control the remaining production spec set and prevent ad hoc spec expansion. | 037 | Specs 039-054 are defined with purpose, dependency, and completion gate. |
+| 039 | Production Run Control API | Make objectives, projects/sites, plans, approvals, run lifecycle, budgets, and policy snapshots executable beyond fixtures. | 038 | A real run can be created, approved, blocked, resumed, cancelled, and replayed through canonical commands/events. |
+| 040 | Production Persistence Runtime Wiring | Wire target runtime through production Postgres/object/queue ports without coupling core to clients. | 039 | Canonical state, artifacts, events, outbox, idempotency, and queue leases survive restart and replay. |
+| 041 | Live HTTP Acquisition Runtime | Implement policy-gated live HTTP acquisition with redirects, canonical URLs, headers, content hashes, snapshots, and replay refs. | 039, 040 | Authorized HTTP crawl writes source observations and artifacts without direct-source bypass. |
+| 042 | Structured Source Adapters Runtime | Add sitemap, RSS/feed, API-like, document, and file-import source adapters behind source ports. | 041 | Each structured adapter produces adapter result refs, artifacts, policy refs, evidence seeds, and negative fixtures. |
+| 043 | Browser Snapshot Runtime | Add policy-gated browser snapshot adapter with rendering budget, sandboxing, network trace, DOM/screenshot artifacts, and replay. | 041, 042 | Browser-required fixtures pass only with browser artifacts and fail on unsafe/cost/prompt-taint cases. |
+| 044 | Credentialed Session Runtime | Add authorized session and credential-use runtime without leaking secrets or bypassing scope. | 039, 041, 043 | Credentialed fixtures prove vault boundary, credential audit, redacted replay, and out-of-scope denial. |
+| 045 | Live Normalization And Site Understanding | Convert acquired artifacts into normalized documents, anchor maps, page classifications, site models, and link provenance. | 041, 042, 043 | Real artifacts produce replayable normalization manifests and site models across target website patterns. |
+| 046 | Schema Extraction Candidate Runtime | Generate schema-bound extraction strategies and candidates while keeping candidates separate from published outputs. | 045 | Candidates carry strategy, schema validation, model/tool trace, source anchor, rejection, and replay refs. |
+| 047 | Live Evidence And Verification Runtime | Build evidence packets, evidence anchors, verification decisions, conflict records, and review refs from live candidates. | 046 | Outputs cannot publish without source-backed evidence, verification, policy, replay, and negative conflict coverage. |
+| 048 | Result Publication And Export Runtime | Materialize results, Result API, export receipts, output manifests, withdrawal/correction refs, and local production exports. | 047 | Published outputs and exports are replayable, withdrawable, evidence-backed, and blocked when publication gates fail. |
+| 049 | Real Agent And Model Adapter Runtime | Connect model providers and agent frameworks through adapters while preserving framework-neutral core state. | 039, 045, 046 | Planning/extraction/repair can use real adapters while core remains framework-neutral. |
+| 050 | Multi-Agent Orchestration And Repair Runtime | Add planner/frontier/extractor/verifier/drift/memory/ops agent coordination through controlled tools and commands. | 049, 047 | Multi-agent workflows repair crawl/extraction failures without bypassing policy, evidence, owner, or replay gates. |
+| 051 | Graph And Memory Production Runtime | Wire advanced graph projections and memory retrieval/write paths into live crawl decisions without treating them as source evidence. | 045, 047, 050 | Graph/memory improve planning and repair while source-backed evidence remains mandatory for publication. |
+| 052 | Worker Orchestration And Scale Runtime | Run production worker pools, queues, leases, retries, dead-letter, sharding, backpressure, and autoscaling. | 040, 041, 045, 047 | Long-running crawls tolerate worker failure, retries, and load without state corruption or silent item loss. |
+| 053 | Ops Console, Replay, And Observability Runtime | Expose operator workflows for run review, evidence review, replay, graph/debug views, alerts, cost, and recovery. | 048, 052 | Operators can inspect, pause/resume, replay, recover, and explain outputs through canonical refs. |
+| 054 | Production Benchmark And Release Gate | Define and run the final authorized benchmark suite proving target production readiness. | 039-053 | Live benchmark passes with all source, processing, evidence, publication, replay, ops, scale, and safety gates. |
+
+Activation rule: when a planned spec is activated, preserve its number and
+directory, run the Spec Kit clarify/plan/tasks/analyze/implement workflow, record
+real validation in `tasks.md`, and merge it before moving to the next blocking
+spec.
+
 ## Phase 0: Contracts And Boundaries
 
 Deliverables:
