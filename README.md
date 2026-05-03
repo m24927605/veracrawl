@@ -1057,6 +1057,36 @@ reports include model call, agent action, tool call, context bundle, source
 anchor, candidate, evidence/verification gate, command/event/outbox, and replay
 refs. Model or agent output is never accepted as source evidence.
 
+Run the Taiwan/United States top ecommerce live corpus:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-real-benchmark run \
+  tests/fixtures/top-ecommerce-public-corpus \
+  --profile target \
+  --out .veracrawl-real-runs/top-ecommerce-public-corpus
+```
+
+Run the same ecommerce corpus through the AI agent benchmark with a hosted
+OpenAI model:
+
+```sh
+set -a; source ~/.env; set +a
+uv run --python python3.12 --extra dev veracrawl-real-ai-benchmark run \
+  tests/fixtures/top-ecommerce-ai-agent-corpus \
+  --profile target \
+  --model-provider openai \
+  --openai-model gpt-5.4-mini \
+  --out .veracrawl-real-runs/top-ecommerce-ai-agent-corpus-openai
+```
+
+This ecommerce benchmark covers public homepage entry points for Shopee Taiwan,
+momo Shopping, PChome 24h, Amazon US, Walmart US, and eBay US. The Taiwan
+selection is a documented local ecommerce corpus; traffic-only ranking sources
+may place Coupang or Taobao as a third domain depending on methodology. Passing
+results prove policy-gated live acquisition plus real AI/model/agent trace
+participation for those public entry points, not full category/product deep
+crawl production readiness across the complete sites.
+
 Run the expanded real-world public quality corpus:
 
 ```sh

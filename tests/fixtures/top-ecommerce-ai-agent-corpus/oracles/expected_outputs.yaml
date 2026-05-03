@@ -1,0 +1,7 @@
+{
+  "fixture_id": "top-ecommerce-ai-agent-corpus",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "real_world_ai_agent_benchmark_completed",
+  "minimum_sites": 6,
+  "minimum_decision_traces": 24
+}

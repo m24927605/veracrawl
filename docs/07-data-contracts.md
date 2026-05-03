@@ -5812,6 +5812,10 @@ Executable real-world benchmark corpus rules:
 - raw external response bodies remain artifact-backed and must not be copied into command/event payloads.
 - target fixtures cover the public corpus shape and deterministic fake-adapter execution; live public runs supplement deterministic tests and are recorded in `tasks.md` validation results.
 - this gate does not implement site-specific scraper logic, browser execution, credentialed sessions, published extraction outputs, export delivery, or long-running distributed load tests.
+- `top-ecommerce-public-corpus` is a row 065 public homepage corpus that reuses
+  this contract for Shopee Taiwan, momo Shopping, PChome 24h, Amazon US,
+  Walmart US, and eBay US. It is a selected market validation corpus, not a
+  canonical official ecommerce ranking.
 
 ## Real-World AI Agent Benchmark Contracts
 
@@ -5876,6 +5880,10 @@ Executable real-world AI agent benchmark rules:
 - extraction candidates must bind field anchors to source anchors, artifacts, and content hashes from live crawl observations.
 - model/agent outputs are recommendation or candidate payload refs only; `llm_output_evidence_refs` and direct publication refs are forbidden in passing reports.
 - core state must remain framework-neutral; OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, model SDKs, and framework-native state belong behind adapters only.
+- `top-ecommerce-ai-agent-corpus` is a row 065 AI benchmark fixture that composes
+  `top-ecommerce-public-corpus` and requires six passing public site
+  observations, 24 AI decision traces, six extraction candidates, and hosted
+  OpenAI trace validation when the CLI is run with `--model-provider openai`.
 
 ## Target Crawl Runtime Contracts
 

@@ -2059,6 +2059,7 @@ Required real-world corpus fixtures:
 | Fixture | Required acceptance |
 | --- | --- |
 | real-world-public-corpus | authorized public targets for static, listing/detail, pagination, and API-like pages pass with live HTTP, robots, observation, artifact, command/event/outbox, and replay refs |
+| top-ecommerce-public-corpus | row 065 selected Taiwan and United States ecommerce public homepage targets pass with live HTTP, robots, coarse observation, artifact, command/event/outbox, and replay refs |
 
 Real-world benchmark acceptance requires:
 
@@ -2087,6 +2088,7 @@ Required real-world AI agent fixtures:
 | Fixture | Required acceptance |
 | --- | --- |
 | real-world-ai-agent-public-corpus | row 055 public corpus plus AI crawl planning, site understanding, extraction candidate, verification/repair, model call, agent action, tool call, context bundle, source anchor, evidence/verification gate, command/event/outbox, and replay refs pass |
+| top-ecommerce-ai-agent-corpus | row 065 ecommerce public corpus plus six-site AI crawl planning, site understanding, extraction candidate, verification/repair, hosted OpenAI model call, agent action, tool call, context bundle, source anchor, evidence/verification gate, command/event/outbox, and replay refs pass |
 | real-world-ai-agent-missing-model-trace | missing model call trace fails |
 | real-world-ai-agent-candidate-missing-source-anchor | candidate without source anchors/artifact/content hash refs fails |
 | real-world-ai-agent-llm-output-as-evidence | model/agent output as source evidence fails |
@@ -2112,6 +2114,20 @@ This acceptance proves VeraCrawl can combine a real public crawl with
 framework-neutral AI planning and extraction candidate generation. It does not
 permit LLM output to replace source evidence, does not publish real-site outputs
 directly, and does not couple core to any concrete agent framework.
+
+Top ecommerce live AI benchmark acceptance additionally requires:
+
+- one recorded live CLI run against `tests/fixtures/top-ecommerce-public-corpus`
+- one recorded hosted OpenAI CLI run against
+  `tests/fixtures/top-ecommerce-ai-agent-corpus`
+- six passing public homepage observations or exact typed failures recorded in
+  `specs/065-top-ecommerce-live-ai-benchmark/tasks.md`
+- trace files proving at least 24 model call, agent action, tool call, and
+  context bundle traces plus six source-bound extraction candidates when the six
+  public observations pass
+- explicit documentation that the benchmark covers selected public ecommerce
+  homepage entry points and does not claim full category/product deep crawl
+  production readiness
 
 Expanded real-world public quality corpus acceptance:
 

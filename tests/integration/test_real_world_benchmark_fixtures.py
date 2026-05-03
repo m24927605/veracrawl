@@ -88,9 +88,18 @@ def _materialize_regex(pattern: str, minimum: int) -> str:
     return " ".join([pattern] * minimum)
 
 
+@pytest.mark.parametrize(
+    ("fixture_path", "expected_site_count"),
+    [
+        (Path("tests/fixtures/real-world-public-corpus"), 4),
+        (Path("tests/fixtures/top-ecommerce-public-corpus"), 6),
+    ],
+)
 def test_real_world_benchmark_cli_fixture_contracts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    fixture_path: Path,
+    expected_site_count: int,
 ) -> None:
     monkeypatch.setattr(
         real_benchmark,
@@ -107,12 +116,12 @@ def test_real_world_benchmark_cli_fixture_contracts(
     )
 
     result = real_benchmark.run_fixture(
-        Path("tests/fixtures/real-world-public-corpus"),
+        fixture_path,
         profile="target",
         out=tmp_path,
     )
 
     assert result.report.completion_result == CompletenessResult.PASS
-    assert len(result.observations) == 4
+    assert len(result.observations) == expected_site_count
     assert (tmp_path / "run_report.json").exists()
     assert (tmp_path / "site_observations.json").exists()

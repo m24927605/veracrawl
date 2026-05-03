@@ -34,10 +34,11 @@ def test_real_world_benchmark_commands_events_and_fixture_registered() -> None:
         assert event_type in COMMAND_TYPES[command_type].emitted_event_types
         assert event_type in EVENT_TYPES
 
-    fixture = FIXTURE_ORACLES["real-world-public-corpus"]
-    assert fixture.expected_real_world_benchmark_ref
-    assert fixture.expected_replay_ref
-    assert not fixture.negative_case
+    for fixture_id in {"real-world-public-corpus", "top-ecommerce-public-corpus"}:
+        fixture = FIXTURE_ORACLES[fixture_id]
+        assert fixture.expected_real_world_benchmark_ref
+        assert fixture.expected_replay_ref
+        assert not fixture.negative_case
 
 
 def test_real_world_benchmark_target_area_materialized() -> None:

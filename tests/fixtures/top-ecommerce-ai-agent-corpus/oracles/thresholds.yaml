@@ -1,0 +1,5 @@
+{
+  "minimum_site_count": 6,
+  "minimum_decision_trace_count": 24,
+  "minimum_candidate_count": 6
+}

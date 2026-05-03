@@ -1,0 +1,7 @@
+{
+  "required_event_types": [
+    "real_world_ai_agent_decision_recorded",
+    "real_world_ai_agent_extraction_candidate_recorded",
+    "real_world_ai_agent_benchmark_reported"
+  ]
+}

@@ -13,12 +13,15 @@ from veracrawl.contracts.real_world_benchmark import (
 )
 
 
-def _real_world_result(site_count: int = 4) -> RealWorldBenchmarkResult:
+def _real_world_result(
+    fixture_id: str = "real-world-public-corpus",
+    site_count: int = 4,
+) -> RealWorldBenchmarkResult:
     observations = [_observation(index) for index in range(site_count)]
     report = RealWorldBenchmarkRunReport(
-        id="real-world-benchmark-run-report:fixture",
-        fixture_id="real-world-public-corpus",
-        run_ref="run:real-world-public-corpus",
+        id=f"real-world-benchmark-run-report:{fixture_id}",
+        fixture_id=fixture_id,
+        run_ref=f"run:{fixture_id}",
         benchmark_corpus_ref="real-world-benchmark-corpus:fixture",
         benchmark_run_refs=[f"benchmark-run:site-{index}" for index in range(site_count)],
         site_observation_refs=[item.id for item in observations],
@@ -74,24 +77,48 @@ def _observation(index: int) -> RealWorldBenchmarkSiteObservation:
     )
 
 
+@pytest.mark.parametrize(
+    ("fixture_path", "corpus_fixture_id", "site_count", "expected_traces"),
+    [
+        (
+            Path("tests/fixtures/real-world-ai-agent-public-corpus"),
+            "real-world-public-corpus",
+            4,
+            16,
+        ),
+        (
+            Path("tests/fixtures/top-ecommerce-ai-agent-corpus"),
+            "top-ecommerce-public-corpus",
+            6,
+            24,
+        ),
+    ],
+)
 def test_real_world_ai_agent_cli_success_fixture(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    fixture_path: Path,
+    corpus_fixture_id: str,
+    site_count: int,
+    expected_traces: int,
 ) -> None:
     monkeypatch.setattr(
         real_ai_benchmark,
         "_run_real_world_corpus",
-        lambda _manifest, profile, out: _real_world_result(),
+        lambda _manifest, profile, out: _real_world_result(
+            corpus_fixture_id,
+            site_count,
+        ),
     )
 
     result = real_ai_benchmark.run_fixture(
-        Path("tests/fixtures/real-world-ai-agent-public-corpus"),
+        fixture_path,
         profile="target",
         out=tmp_path,
     )
 
     assert result.report.completion_result == CompletenessResult.PASS
-    assert len(result.report.model_call_trace_refs) == 16
+    assert len(result.report.model_call_trace_refs) == expected_traces
     assert (tmp_path / "run_report.json").exists()
     assert (tmp_path / "decision_traces.json").exists()
     assert (tmp_path / "model_call_traces.json").exists()

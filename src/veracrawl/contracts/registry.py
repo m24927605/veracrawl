@@ -4947,6 +4947,7 @@ for _production_release_fixture, _negative in {
 
 for _real_world_fixture, _negative in {
     "real-world-public-corpus": False,
+    "top-ecommerce-public-corpus": False,
 }.items():
     _base = f"tests/fixtures/{_real_world_fixture}"
     FIXTURE_ORACLES[_real_world_fixture] = FixtureOracleRegistration(
@@ -4982,6 +4983,7 @@ for _real_world_quality_fixture, _negative in {
 
 for _real_world_ai_fixture, _negative in {
     "real-world-ai-agent-public-corpus": False,
+    "top-ecommerce-ai-agent-corpus": False,
     "real-world-ai-agent-missing-model-trace": True,
     "real-world-ai-agent-candidate-missing-source-anchor": True,
     "real-world-ai-agent-llm-output-as-evidence": True,

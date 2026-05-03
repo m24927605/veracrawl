@@ -37,9 +37,13 @@ def test_real_world_ai_agent_commands_events_and_fixtures_registered() -> None:
         command = COMMAND_TYPES[command_type]
         assert event_type in command.emitted_event_types
 
-    fixture = FIXTURE_ORACLES["real-world-ai-agent-public-corpus"]
-    assert fixture.expected_real_world_ai_agent_benchmark_ref
-    assert not fixture.negative_case
+    for fixture_id in {
+        "real-world-ai-agent-public-corpus",
+        "top-ecommerce-ai-agent-corpus",
+    }:
+        fixture = FIXTURE_ORACLES[fixture_id]
+        assert fixture.expected_real_world_ai_agent_benchmark_ref
+        assert not fixture.negative_case
     assert FIXTURE_ORACLES["real-world-ai-agent-publication-bypass"].negative_case
 
 

@@ -1718,6 +1718,12 @@ Real-world AI agent benchmark gate:
   bypass, framework-native canonical state, core import coupling, adapter
   unavailability, and replay gaps fail with
   `RealWorldAIAgentBenchmarkFailureType`.
+- row 065 adds `top-ecommerce-public-corpus` and
+  `top-ecommerce-ai-agent-corpus` as market validation fixtures for selected
+  Taiwan and United States ecommerce public homepage entry points. They reuse
+  this implementation path without adding site-specific scraper modules,
+  selectors, hidden endpoints, credential flows, browser bypass, or core
+  framework coupling.
 
 Expanded real-world public quality corpus gate:
 

@@ -119,16 +119,18 @@ For all Spec Kit plans and implementation tasks:
 
 <!-- SPECKIT START -->
 Current active Spec Kit plan:
-`specs/064-quality-release-gate/plan.md`.
-Use it with `specs/064-quality-release-gate/spec.md`,
-`specs/064-quality-release-gate/research.md`,
-`specs/064-quality-release-gate/data-model.md`,
-`specs/064-quality-release-gate/contracts/`, and
-`specs/064-quality-release-gate/quickstart.md` for
-cost, latency, stability quality release gate work. Production quality specs remain governed by
+`specs/065-top-ecommerce-live-ai-benchmark/plan.md`.
+Use it with `specs/065-top-ecommerce-live-ai-benchmark/spec.md`,
+`specs/065-top-ecommerce-live-ai-benchmark/research.md`,
+`specs/065-top-ecommerce-live-ai-benchmark/data-model.md`,
+`specs/065-top-ecommerce-live-ai-benchmark/contracts/`, and
+`specs/065-top-ecommerce-live-ai-benchmark/quickstart.md` for the Taiwan and
+United States top ecommerce live AI benchmark. This benchmark is a targeted
+market validation corpus composed through rows 055 and 056; it must not become
+a single-site scraper, must not bypass robots/policy gates, and must not claim
+deep category/product production readiness beyond the recorded homepage/public
+entry experiment. Production quality specs remain governed by
 `specs/057-production-quality-benchmark-roadmap/spec.md`,
 `specs/038-production-runtime-closure/spec.md`, and
-`docs/08-build-roadmap.md`; do not invent additional production or
-production-quality specs unless the roadmap specs and build roadmap are amended
-first.
+`docs/08-build-roadmap.md`.
 <!-- SPECKIT END -->
