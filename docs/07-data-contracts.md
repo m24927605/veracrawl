@@ -5819,6 +5819,15 @@ Executable target runtime rules:
   imports require file artifact refs. Policy denial, malformed structured
   source, unsupported adapter, missing artifact, or replay mismatch fail with
   typed `StructuredSourceAdapterFailureType` diagnostics.
+- Browser snapshot runtime reports can claim `pass` only when row 041 live HTTP
+  report refs, row 042 structured source report refs, sandbox policy refs,
+  browser step refs, DOM/screenshot/network trace/console/timing artifact refs,
+  browser budget refs, prompt-taint boundary refs, policy refs,
+  command/event/outbox refs, and replay refs are present. Egress denial, unsafe
+  interaction, budget exhaustion, prompt-tainted rendered content, missing
+  artifacts, or replay mismatch fail with typed
+  `BrowserSnapshotFailureType` diagnostics. Browser-native engine state must
+  remain adapter-owned and must not become canonical VeraCrawl state.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

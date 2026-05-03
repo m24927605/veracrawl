@@ -80,6 +80,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_model_provider_ref: str | None = None
     expected_source_coverage_ref: str | None = None
     expected_dynamic_source_runtime_ref: str | None = None
+    expected_browser_snapshot_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -1596,6 +1597,20 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         privacy=True,
         tests=["tests/unit/test_browser_sandbox_gates.py"],
     ),
+    "BrowserSnapshotRuntimeReport": _contract(
+        "BrowserSnapshotRuntimeReport",
+        OwnerService.BROWSER,
+        "browser",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_browser_snapshot_contracts.py"],
+    ),
+    "BrowserSnapshotFixtureManifest": _contract(
+        "BrowserSnapshotFixtureManifest",
+        OwnerService.TESTS,
+        "browser",
+        tests=["tests/contract/test_browser_snapshot_contracts.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -2135,6 +2150,21 @@ COMMAND_TYPES.update(
             required_policy_decision_types=["browser_interaction"],
             lease_required=True,
             emitted_event_types=["browser_step_executed", "snapshot_written"],
+        ),
+        "record_browser_snapshot_runtime_report": CommandTypeRegistration(
+            command_type="record_browser_snapshot_runtime_report",
+            owner_service=OwnerService.BROWSER,
+            target_aggregate_type="BrowserSnapshotRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["browser_interaction"],
+            emitted_event_types=["browser_snapshot_runtime_reported"],
+        ),
+        "record_browser_snapshot_fixture_manifest": CommandTypeRegistration(
+            command_type="record_browser_snapshot_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="BrowserSnapshotFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["browser_snapshot_fixture_manifest_recorded"],
         ),
         "record_normalization_manifest": CommandTypeRegistration(
             command_type="record_normalization_manifest",
@@ -3000,12 +3030,14 @@ EVENT_TYPES.update(
             "source_acquisition_reported",
             "source_failure_reported",
             "network_request_recorded",
-            "network_response_recorded",
-            "network_acquisition_reported",
-            "live_http_acquisition_reported",
-            "live_http_fixture_manifest_recorded",
-            "browser_step_executed",
-            "snapshot_written",
+        "network_response_recorded",
+        "network_acquisition_reported",
+        "live_http_acquisition_reported",
+        "live_http_fixture_manifest_recorded",
+        "browser_step_executed",
+        "browser_snapshot_runtime_reported",
+        "browser_snapshot_fixture_manifest_recorded",
+        "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
             "link_provenance_recorded",
@@ -4179,6 +4211,27 @@ for _structured_source_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _browser_snapshot_fixture, _negative in {
+    "browser-snapshot-success": False,
+    "browser-snapshot-egress-denied": True,
+    "browser-snapshot-unsafe-interaction": True,
+    "browser-snapshot-budget-exceeded": True,
+    "browser-snapshot-prompt-tainted-content": True,
+    "browser-snapshot-missing-artifact": True,
+    "browser-snapshot-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_browser_snapshot_fixture}"
+    FIXTURE_ORACLES[_browser_snapshot_fixture] = FixtureOracleRegistration(
+        fixture_id=_browser_snapshot_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_browser_snapshot_ref=f"{_base}/oracles/expected_browser_snapshot.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -4349,6 +4402,28 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "EventCursorRecord",
             "OutboxRecord",
             "PolicyDecision",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "browser_snapshot_runtime": _target_area(
+        "browser_snapshot_runtime",
+        OwnerService.BROWSER,
+        "materialized",
+        materialized=[
+            "BrowserSnapshotRuntimeReport",
+            "BrowserSnapshotFixtureManifest",
+            "BrowserSandboxPolicy",
+            "BrowserInteractionStep",
+            "LiveHttpAcquisitionReport",
+            "StructuredSourceAdaptersRuntimeReport",
+            "NetworkAcquisitionReport",
+            "SourceAcquisitionReport",
+            "SourceAdapterResult",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "PromptTaintBoundary",
             "ReplayBundleManifest",
         ],
     ),

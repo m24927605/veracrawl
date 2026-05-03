@@ -76,7 +76,8 @@ framework-neutral adapter boundaries, command/event/replay primitives, policy ga
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
 the local network/browser acquisition runtime, the live HTTP acquisition runtime,
-the structured source adapters runtime, the normalize/extract plane, the
+the structured source adapters runtime, the browser snapshot runtime, the
+normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
 agent runtime adapter operational gate, the model provider adapter operational
@@ -105,6 +106,14 @@ document, and file-import source family support behind source adapter ports.
 adapter result refs, natural output refs, artifacts, evidence seed refs, content
 hash refs, family-specific refs, policy refs, command/event/outbox refs, and
 replay refs without making core parse fixture files directly.
+The browser snapshot runtime adds a policy-gated browser aggregate for
+JavaScript-required pages. `veracrawl-browser-snapshot` proves browser snapshots
+must preserve live HTTP and structured source prerequisite refs, sandbox policy
+refs, browser interaction refs, DOM/screenshot/network trace/console/timing
+artifacts, browser budget refs, prompt-taint boundary refs, command/event/outbox
+refs, and replay refs. Egress denial, unsafe interaction, budget exhaustion,
+prompt-tainted content, missing artifacts, and replay mismatch fail with typed
+diagnostics while concrete browser engines remain behind replaceable adapters.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
@@ -485,6 +494,25 @@ for fixture in \
   structured-source-adapters-replay-mismatch
 do
   uv run --python python3.12 --extra dev veracrawl-structured-source run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run browser snapshot fixtures:
+
+```sh
+for fixture in \
+  browser-snapshot-success \
+  browser-snapshot-egress-denied \
+  browser-snapshot-unsafe-interaction \
+  browser-snapshot-budget-exceeded \
+  browser-snapshot-prompt-tainted-content \
+  browser-snapshot-missing-artifact \
+  browser-snapshot-replay-mismatch
+do
+  uv run --python python3.12 --extra dev veracrawl-browser-snapshot run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

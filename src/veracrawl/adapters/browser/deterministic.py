@@ -46,6 +46,8 @@ class DeterministicBrowserObservationAdapter:
         dom_ref = f"artifact:{self.fixture_id}:dom:{digest[:12]}"
         screenshot_ref = f"artifact:{self.fixture_id}:screenshot:{digest[:12]}"
         network_ref = f"artifact:{self.fixture_id}:browser-network:{digest[:12]}"
+        console_ref = f"artifact:{self.fixture_id}:console:{digest[:12]}"
+        timing_ref = f"artifact:{self.fixture_id}:timing:{digest[:12]}"
         step = BrowserInteractionStep(
             id=f"browser-step:{self.fixture_id}:1",
             run_ref=run_ref,
@@ -63,7 +65,7 @@ class DeterministicBrowserObservationAdapter:
         )
         return BrowserObservationResult(
             step=step,
-            artifact_refs=[dom_ref, screenshot_ref, network_ref],
+            artifact_refs=[dom_ref, screenshot_ref, network_ref, console_ref, timing_ref],
         )
 
     def execute(self, command: SourceAdapterCommand) -> SourceAdapterResult:

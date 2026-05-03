@@ -347,6 +347,36 @@ This acceptance proves structured source adapter runtime semantics. It does not
 replace browser snapshot, credentialed session, normalization/extraction,
 evidence, publication, worker scale, external benchmark, or release gates.
 
+Browser snapshot fixture contract:
+
+```text
+veracrawl-browser-snapshot run tests/fixtures/<browser_snapshot_fixture_id> --profile target --out .veracrawl-test-runs/<browser_snapshot_fixture_id>
+```
+
+Required browser snapshot fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| browser-snapshot-success | live HTTP and structured source prerequisite refs plus sandbox, browser step, DOM, screenshot, network trace, console, timing, browser budget, prompt-taint boundary, policy, command/event/outbox, and replay refs pass |
+| browser-snapshot-egress-denied | blocked browser target origin fails with `browser_snapshot_egress_denied` |
+| browser-snapshot-unsafe-interaction | unsafe browser side effect fails with `browser_snapshot_unsafe_interaction` before adapter execution |
+| browser-snapshot-budget-exceeded | exhausted browser runtime budget fails with `browser_snapshot_budget_exceeded` |
+| browser-snapshot-prompt-tainted-content | rendered prompt-tainted content fails with `browser_snapshot_prompt_tainted_content` before downstream model context |
+| browser-snapshot-missing-artifact | missing browser artifact refs fail with `browser_snapshot_missing_artifact` |
+| browser-snapshot-replay-mismatch | missing or inconsistent replay refs fail with `browser_snapshot_replay_mismatch` |
+
+Browser snapshot acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_browser_snapshot_contracts.py`
+- `pytest tests/unit/test_browser_snapshot_runtime.py`
+- `pytest tests/integration/test_browser_snapshot_fixtures.py`
+- `veracrawl-browser-snapshot` CLI loop over all browser snapshot fixtures
+
+This acceptance proves browser snapshot runtime semantics. It does not replace
+credentialed session, normalization/extraction, evidence, publication, worker
+scale, external benchmark, or release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

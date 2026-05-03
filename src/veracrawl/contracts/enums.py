@@ -1047,6 +1047,17 @@ class LiveHttpAcquisitionFailureType(StrEnum):
     NETWORK_FAILURE = "live_http_network_failure"
 
 
+class BrowserSnapshotFailureType(StrEnum):
+    POLICY_DENIED = "browser_snapshot_policy_denied"
+    EGRESS_DENIED = "browser_snapshot_egress_denied"
+    UNSAFE_INTERACTION = "browser_snapshot_unsafe_interaction"
+    BUDGET_EXCEEDED = "browser_snapshot_budget_exceeded"
+    PROMPT_TAINTED_CONTENT = "browser_snapshot_prompt_tainted_content"
+    MISSING_ARTIFACT = "browser_snapshot_missing_artifact"
+    REPLAY_MISMATCH = "browser_snapshot_replay_mismatch"
+    ADAPTER_UNAVAILABLE = "browser_snapshot_adapter_unavailable"
+
+
 class BrowserStepStatus(StrEnum):
     PLANNED = "planned"
     EXECUTED = "executed"

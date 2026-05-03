@@ -1,0 +1,1 @@
+{"fixture_id":"browser-snapshot-success","required_refs":["dom","screenshot","network_trace","console","timing","browser_budget","prompt_taint_boundary","replay"]}

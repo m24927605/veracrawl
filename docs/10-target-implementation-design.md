@@ -302,6 +302,35 @@ This slice proves structured source adapter semantics and lineage. It does not
 normalize, extract, publish, render browser pages, handle credentials, run
 external website benchmarks, or claim production worker fleet readiness.
 
+## Browser Snapshot Runtime Slice
+
+The browser snapshot runtime proves JavaScript-required page observation behind
+browser ports while preserving upstream acquisition and replay boundaries:
+
+- `veracrawl.contracts.browser`: `BrowserSnapshotRuntimeReport` and
+  `BrowserSnapshotFixtureManifest` require live HTTP prerequisite refs,
+  structured source prerequisite refs, sandbox policy refs, browser step refs,
+  DOM/screenshot/network trace/console/timing artifact refs, browser budget
+  refs, prompt-taint boundary refs, policy refs, command/event/outbox refs, and
+  replay refs before pass.
+- `veracrawl.browser.snapshot_runtime`: core aggregate runtime depends on
+  browser contracts, `BrowserSourceAdapterPort`, and existing browser
+  observation functions. It does not import concrete browser engines, concrete
+  adapters, storage clients, model SDKs, or agent frameworks.
+- `veracrawl.adapters.browser.deterministic`: fixture adapter materializes
+  deterministic DOM, screenshot, network trace, console, and timing artifact
+  refs without persisting browser-native state as canonical VeraCrawl state.
+- `veracrawl.cli.browser_snapshot`: `veracrawl-browser-snapshot` dynamically
+  loads the deterministic browser adapter and local benchmark server at the CLI
+  edge, runs row 041 and row 042 prerequisite paths, and validates success plus
+  egress, unsafe-interaction, budget, prompt-taint, missing-artifact, and replay
+  negative fixtures.
+
+This slice proves browser snapshot semantics and lineage. It does not solve
+CAPTCHA, bypass paywalls, evade WAFs, automate unauthorized login walls, handle
+credentials, normalize/extract rendered content, run an external browser fleet,
+or claim final production benchmark readiness.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable

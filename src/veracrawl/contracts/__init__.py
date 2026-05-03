@@ -33,7 +33,12 @@ from veracrawl.contracts.artifact import (
     ObjectStoreOperationRecord,
     RuntimeArtifactRef,
 )
-from veracrawl.contracts.browser import BrowserInteractionStep, BrowserSandboxPolicy
+from veracrawl.contracts.browser import (
+    BrowserInteractionStep,
+    BrowserSandboxPolicy,
+    BrowserSnapshotFixtureManifest,
+    BrowserSnapshotRuntimeReport,
+)
 from veracrawl.contracts.command import (
     BaseCommandPayload,
     CommandEnvelope,
@@ -302,6 +307,8 @@ __all__ = [
     "BlockedActionReport",
     "BrowserInteractionStep",
     "BrowserSandboxPolicy",
+    "BrowserSnapshotFixtureManifest",
+    "BrowserSnapshotRuntimeReport",
     "CommandEnvelope",
     "CommandResult",
     "CommandTypeSpec",
