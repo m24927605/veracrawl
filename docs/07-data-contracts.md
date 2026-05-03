@@ -48,6 +48,7 @@ Target contract manifest:
 | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
 | RuntimeInfrastructureSpec, RuntimeInfrastructureReport, RuntimeInfrastructureFixtureManifest | required | integrated operational Postgres, Redis/Valkey, and S3-compatible infrastructure gate semantics, no-runtime, negative, idempotency, policy, and replay behavior are contracted |
 | DRRestorePlan, DRRestoreRun, DRRestoreReport, DRRestoreFixtureManifest | required | operational disaster recovery gate semantics, ordered restore phases, live infrastructure restore refs, no-runtime, negative, policy, recovery, and replay behavior are contracted |
+| DynamicSourceRuntimeAdapterRecord, DynamicSourceRuntimeReport, DynamicSourceRuntimeFixtureManifest | required | dynamic source runtime records, target source family aggregation, no-runtime, negative, policy, observability, security/privacy, event/outbox, and replay behavior are contracted |
 | FailureRecord, RecoveryAction, DriftEvent, QualityReport | required | failure, repair, drift, recovery, and operations are evented and reviewable |
 
 Target adapter types:
@@ -1143,6 +1144,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_source_coverage_adapter_execution | ports | SourceCoverageAdapterExecutionRecord | BaseCommandPayload | adapter mapping includes canonical source, natural output, policy, observability, security/privacy, and replay refs | expected_version | source_coverage_adapter_execution_recorded | missing adapter-specific refs fail source coverage |
 | record_source_coverage_adapter_report | fetch | SourceCoverageAdapterReport | BaseCommandPayload | all required source adapter executions or review/failure refs are present | expected_version | source_coverage_adapter_reported | missing live runtime refs return needs_review; unsafe mappings fail |
 | record_source_coverage_adapter_fixture_manifest | tests | SourceCoverageAdapterFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | source_coverage_adapter_fixture_manifest_recorded | invalid negative/pass pairing rejected |
+| record_dynamic_source_runtime_adapter | ports | DynamicSourceRuntimeAdapterRecord | BaseCommandPayload | adapter runtime includes canonical source, natural output, adapter-specific, policy, observability, security/privacy, event/outbox, runtime, and replay refs | expected_version | dynamic_source_runtime_adapter_recorded | missing adapter-specific runtime refs fail dynamic source runtime |
+| record_dynamic_source_runtime_report | fetch | DynamicSourceRuntimeReport | BaseCommandPayload | all required source runtime adapter records or review/failure refs are present | expected_version | dynamic_source_runtime_reported | missing live runtime refs return needs_review; unsafe runtime mappings fail |
+| record_dynamic_source_runtime_fixture_manifest | tests | DynamicSourceRuntimeFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | dynamic_source_runtime_fixture_manifest_recorded | invalid negative/pass pairing rejected |
 | start_task | owning service | ProcessingTask | ProcessingTaskCommandPayload | queue lease or owner command; policy gates satisfied | expected_version, lease_required when queued | processing_transitioned | failed precondition nacks queue item |
 | complete_task | owning service | ProcessingTask | ProcessingTaskResultPayload | output refs validate | expected_version, lease_required when queued | processing_transitioned | invalid output creates FailureRecord |
 | fail_task | owning service | ProcessingTask | ProcessingTaskFailurePayload | failure type and retry class recorded | expected_version, lease_required when queued | processing_transitioned, error_recorded | retry or dead-letter policy applied |
@@ -3096,6 +3100,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | agent_adapter_execution_recorded, agent_runtime_adapter_reported, agent_runtime_adapter_fixture_manifest_recorded | agents/tests | AgentAdapterExecutionRecord/AgentRuntimeAdapterReport/AgentRuntimeAdapterFixtureManifest | run | yes | replay, policy, observability, security |
 | model_provider_adapter_execution_recorded, model_provider_adapter_reported, model_provider_adapter_fixture_manifest_recorded | agents/tests | ModelProviderAdapterExecutionRecord/ModelProviderAdapterReport/ModelProviderAdapterFixtureManifest | run | yes | replay, policy, observability, security |
 | source_coverage_adapter_execution_recorded, source_coverage_adapter_reported, source_coverage_adapter_fixture_manifest_recorded | ports/fetch/tests | SourceCoverageAdapterExecutionRecord/SourceCoverageAdapterReport/SourceCoverageAdapterFixtureManifest | run | yes | replay, source policy, observability, security |
+| dynamic_source_runtime_adapter_recorded, dynamic_source_runtime_reported, dynamic_source_runtime_fixture_manifest_recorded | ports/fetch/tests | DynamicSourceRuntimeAdapterRecord/DynamicSourceRuntimeReport/DynamicSourceRuntimeFixtureManifest | run | yes | replay, source policy, observability, security |
 | frontier_transitioned | scheduler | FrontierItem | frontier_item | yes | fetch, graph, replay |
 | queue_topology_recorded, queue_item_recorded, queue_item_enqueued, queue_item_leased, queue_item_acked, queue_item_dead_lettered, shard_lease_recorded, shard_lease_acquired, shard_lease_released, retry_dead_letter_recorded | scheduler | QueueTopologySpec/QueueItem/ShardLease/RetryDeadLetterRecord | frontier_item, processing_task, export_job, graph_projection | yes | workers, ops, replay |
 | source_adapter_result_recorded | natural adapter owner | SourceAdapterResult | source_adapter | yes | scheduler, normalize, evidence, replay |
@@ -3146,6 +3151,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | agent runtime adapter events | AgentAdapterEventPayload | AgentAdapterExecutionRecord, AgentRuntimeAdapterReport, AgentRuntimeAdapterFixtureManifest | framework mapping, runtime availability, model/tool trace completeness, policy/security/observability/replay status | raw prompts/responses and framework-native state are never canonical |
 | model provider adapter events | ModelProviderAdapterEventPayload | ModelProviderAdapterExecutionRecord, ModelProviderAdapterReport, ModelProviderAdapterFixtureManifest | provider mapping, runtime availability, request/response/trace completeness, policy/security/observability/replay status | raw prompts/responses, raw credentials, and provider-native transcripts are never canonical |
 | source coverage adapter events | SourceCoverageAdapterEventPayload | SourceCoverageAdapterExecutionRecord, SourceCoverageAdapterReport, SourceCoverageAdapterFixtureManifest | source mapping, runtime availability, adapter-specific refs, policy/security/observability/replay status | raw secrets, unsafe browser side effects, and adapter-native state are never canonical |
+| dynamic source runtime events | DynamicSourceRuntimeEventPayload | DynamicSourceRuntimeAdapterRecord, DynamicSourceRuntimeReport, DynamicSourceRuntimeFixtureManifest | source runtime availability, adapter-specific runtime refs, policy/security/observability/replay status | raw secrets, unsafe browser side effects, and adapter-native runtime state are never canonical |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
 | queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |
@@ -4631,6 +4637,105 @@ Executable source coverage adapter rules:
 - Missing live source, browser, parser, credential/session, or API runtime refs return `needs_review`; contract-only descriptors cannot claim an operational pass.
 - Raw secrets, adapter-native state, untrusted browser side effects, unsupported adapters, and missing adapter-specific refs fail deterministically.
 - Core source coverage contracts and validation do not import or require browser libraries, HTTP clients, document parsers, credential vault SDKs, API clients, storage clients, queue clients, model providers, agent frameworks, or site-specific scraper modules.
+
+## DynamicSourceRuntimeAdapterRecord
+
+```yaml
+DynamicSourceRuntimeAdapterRecord:
+  id: string
+  adapter_type: http | sitemap | rss | browser_snapshot | authorized_session | api_source | document_source | file_import | manual_seed | prior_snapshot
+  source_adapter_result_ref: ref
+  natural_result_refs: list[ref]
+  fetch_attempt_refs: list[ref]
+  page_snapshot_refs: list[ref]
+  browser_interaction_refs: list[ref]
+  credential_audit_refs: list[ref]
+  document_artifact_refs: list[ref]
+  api_payload_refs: list[ref]
+  file_artifact_refs: list[ref]
+  seed_plan_refs: list[ref]
+  prior_snapshot_refs: list[ref]
+  command_result_refs: list[ref]
+  policy_decision_refs: list[ref]
+  observability_report_refs: list[ref]
+  security_privacy_report_refs: list[ref]
+  event_cursor_refs: list[ref]
+  outbox_refs: list[ref]
+  replay_bundle_ref: ref
+  live_runtime_refs: list[ref]
+  contract_adapter_refs: list[ref]
+  diagnostic_adapter_state_refs: list[ref]
+  raw_secret_persisted: boolean
+  adapter_native_state_canonical: boolean
+  unsafe_browser_side_effect_refs: list[ref]
+  missing_ref_fields: list[string]
+  result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## DynamicSourceRuntimeReport
+
+```yaml
+DynamicSourceRuntimeReport:
+  id: string
+  run_ref: ref
+  adapter_record_refs: list[ref]
+  required_adapter_types: list[string]
+  verified_adapter_types: list[string]
+  source_adapter_result_refs: list[ref]
+  natural_result_refs: list[ref]
+  fetch_attempt_refs: list[ref]
+  page_snapshot_refs: list[ref]
+  browser_interaction_refs: list[ref]
+  credential_audit_refs: list[ref]
+  document_artifact_refs: list[ref]
+  api_payload_refs: list[ref]
+  file_artifact_refs: list[ref]
+  seed_plan_refs: list[ref]
+  prior_snapshot_refs: list[ref]
+  command_record_refs: list[ref]
+  policy_decision_refs: list[ref]
+  observability_report_refs: list[ref]
+  security_privacy_report_refs: list[ref]
+  event_cursor_refs: list[ref]
+  outbox_refs: list[ref]
+  runtime_adapter_refs: list[ref]
+  replay_bundle_ref: ref
+  contract_only_refs: list[ref]
+  missing_runtime_refs: list[ref]
+  raw_secret_leak_refs: list[ref]
+  adapter_native_state_canonical_refs: list[ref]
+  unsafe_browser_side_effect_refs: list[ref]
+  unsupported_adapter_refs: list[ref]
+  missing_ref_fields: list[string]
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## DynamicSourceRuntimeFixtureManifest
+
+```yaml
+DynamicSourceRuntimeFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: dynamic_source_runtime_missing_runtime_refs | dynamic_source_runtime_adapter_state_canonical | dynamic_source_runtime_raw_secret_leak | dynamic_source_runtime_missing_credential_audit | dynamic_source_runtime_missing_document_artifact | dynamic_source_runtime_missing_api_payload | dynamic_source_runtime_missing_replay_refs | dynamic_source_runtime_unsafe_browser_side_effect | dynamic_source_runtime_unsupported_adapter
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Executable dynamic source runtime rules:
+
+- A passing `DynamicSourceRuntimeAdapterRecord` requires `SourceAdapterResult`, natural output, command result, policy, observability, security/privacy, event cursor, outbox, replay, and runtime or contract-adapter refs.
+- Adapter-specific pass requirements are explicit: HTTP requires fetch and page snapshot refs; browser snapshot requires browser interaction and page snapshot refs; authorized session requires `CredentialUseAudit`; API-like source requires API payload refs; document source requires document artifact refs; file import requires file artifact refs; manual seed requires seed plan refs; prior snapshot requires prior snapshot refs.
+- Authorized session, file import, manual seed, and prior snapshot records must not fake fetch or page snapshot refs.
+- A passing `DynamicSourceRuntimeReport` requires all target source runtime families and aggregated source result, natural result, fetch, page snapshot, browser, credential, document, API, file, seed, prior, policy, observability, security/privacy, command, event cursor, outbox, runtime, and replay refs.
+- Missing live source, browser, parser, credential/session, or API runtime refs return `needs_review`; contract-only descriptors cannot claim runtime pass.
+- Raw secrets, adapter-native state, untrusted browser side effects, unsupported adapters, and missing adapter-specific runtime refs fail deterministically.
+- Core dynamic source runtime validation does not import or require browser libraries, HTTP clients, document parsers, credential vault SDKs, API clients, storage clients, queue clients, model providers, agent frameworks, or site-specific scraper modules.
 
 ## QualityReport
 

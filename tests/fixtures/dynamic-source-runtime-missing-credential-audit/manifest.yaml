@@ -1,0 +1,1 @@
+{"id":"dynamic-source-runtime-missing-credential-audit","scenario":"dynamic-source-runtime-missing-credential-audit","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"dynamic_source_runtime_missing_credential_audit","expected_failure_type":"dynamic_source_runtime_missing_credential_audit","negative_case":true}

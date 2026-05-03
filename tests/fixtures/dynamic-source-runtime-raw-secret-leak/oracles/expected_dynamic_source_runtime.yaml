@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"dynamic_source_runtime_raw_secret_leak","missing_ref_fields":["raw_secret_leak_refs"]}

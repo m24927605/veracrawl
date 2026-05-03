@@ -213,6 +213,9 @@ from veracrawl.contracts.source_coverage import (
     SourceCoverageAdapterReport,
 )
 from veracrawl.contracts.source_runtime import (
+    DynamicSourceRuntimeAdapterRecord,
+    DynamicSourceRuntimeFixtureManifest,
+    DynamicSourceRuntimeReport,
     RateLimitDecision,
     SourceAcquisitionReport,
     SourceFailureReport,
@@ -263,6 +266,9 @@ __all__ = [
     "DRRestoreRun",
     "DocumentArtifact",
     "DriftRepairSignal",
+    "DynamicSourceRuntimeAdapterRecord",
+    "DynamicSourceRuntimeFixtureManifest",
+    "DynamicSourceRuntimeReport",
     "DurableCommandRecord",
     "DurableFixtureManifest",
     "DurableReplayRecoveryReport",

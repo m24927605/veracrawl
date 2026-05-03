@@ -79,6 +79,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_agent_adapter_ref: str | None = None
     expected_model_provider_ref: str | None = None
     expected_source_coverage_ref: str | None = None
+    expected_dynamic_source_runtime_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -1147,6 +1148,28 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "source_runtime",
         tests=["tests/integration/test_source_acquisition_runtime.py"],
     ),
+    "DynamicSourceRuntimeAdapterRecord": _contract(
+        "DynamicSourceRuntimeAdapterRecord",
+        OwnerService.PORTS,
+        "source_runtime",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_dynamic_source_runtime_contracts.py"],
+    ),
+    "DynamicSourceRuntimeReport": _contract(
+        "DynamicSourceRuntimeReport",
+        OwnerService.FETCH,
+        "source_runtime",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_dynamic_source_runtime_contracts.py"],
+    ),
+    "DynamicSourceRuntimeFixtureManifest": _contract(
+        "DynamicSourceRuntimeFixtureManifest",
+        OwnerService.TESTS,
+        "source_runtime",
+        tests=["tests/integration/test_dynamic_source_runtime_fixtures.py"],
+    ),
     "NormalizationManifest": _contract(
         "NormalizationManifest",
         OwnerService.NORMALIZE,
@@ -1356,6 +1379,29 @@ COMMAND_TYPES: dict[str, CommandTypeRegistration] = {
         target_aggregate_type="SourceCoverageAdapterFixtureManifest",
         payload_schema_ref="BaseCommandPayload",
         emitted_event_types=["source_coverage_adapter_fixture_manifest_recorded"],
+    ),
+    "record_dynamic_source_runtime_adapter": CommandTypeRegistration(
+        command_type="record_dynamic_source_runtime_adapter",
+        owner_service=OwnerService.PORTS,
+        target_aggregate_type="DynamicSourceRuntimeAdapterRecord",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["source_adapter"],
+        emitted_event_types=["dynamic_source_runtime_adapter_recorded"],
+    ),
+    "record_dynamic_source_runtime_report": CommandTypeRegistration(
+        command_type="record_dynamic_source_runtime_report",
+        owner_service=OwnerService.FETCH,
+        target_aggregate_type="DynamicSourceRuntimeReport",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["source_adapter"],
+        emitted_event_types=["dynamic_source_runtime_reported"],
+    ),
+    "record_dynamic_source_runtime_fixture_manifest": CommandTypeRegistration(
+        command_type="record_dynamic_source_runtime_fixture_manifest",
+        owner_service=OwnerService.TESTS,
+        target_aggregate_type="DynamicSourceRuntimeFixtureManifest",
+        payload_schema_ref="BaseCommandPayload",
+        emitted_event_types=["dynamic_source_runtime_fixture_manifest_recorded"],
     ),
     "execute_agent_tool": CommandTypeRegistration(
         command_type="execute_agent_tool",
@@ -2180,6 +2226,9 @@ EVENT_TYPES: dict[str, EventTypeRegistration] = {
         "source_coverage_adapter_execution_recorded",
         "source_coverage_adapter_reported",
         "source_coverage_adapter_fixture_manifest_recorded",
+        "dynamic_source_runtime_adapter_recorded",
+        "dynamic_source_runtime_reported",
+        "dynamic_source_runtime_fixture_manifest_recorded",
         "source_adapter_result_recorded",
         "review_created",
         "error_recorded",
@@ -3048,6 +3097,33 @@ for _source_coverage_fixture, _negative in {
     )
 
 
+for _dynamic_source_fixture, _negative in {
+    "dynamic-source-runtime-success": False,
+    "dynamic-source-runtime-runtime-unavailable": False,
+    "dynamic-source-runtime-raw-secret-leak": True,
+    "dynamic-source-runtime-adapter-state-canonical": True,
+    "dynamic-source-runtime-missing-credential-audit": True,
+    "dynamic-source-runtime-missing-document-artifact": True,
+    "dynamic-source-runtime-missing-api-payload": True,
+    "dynamic-source-runtime-missing-replay": True,
+    "dynamic-source-runtime-unsafe-browser-side-effect": True,
+    "dynamic-source-runtime-unsupported-adapter": True,
+}.items():
+    _base = f"tests/fixtures/{_dynamic_source_fixture}"
+    FIXTURE_ORACLES[_dynamic_source_fixture] = FixtureOracleRegistration(
+        fixture_id=_dynamic_source_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_dynamic_source_runtime_ref=(
+            f"{_base}/oracles/expected_dynamic_source_runtime.yaml"
+        ),
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+
 def _target_area(
     area: str,
     owner: OwnerService,
@@ -3161,6 +3237,27 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "SourceCoverageAdapterExecutionRecord",
             "SourceCoverageAdapterReport",
             "SourceCoverageAdapterFixtureManifest",
+            "ObservabilityReport",
+            "SecurityPrivacyReport",
+        ],
+    ),
+    "dynamic_source_adapter_runtime_foundation": _target_area(
+        "dynamic_source_adapter_runtime_foundation",
+        OwnerService.FETCH,
+        "materialized",
+        materialized=[
+            "SourceAdapterResult",
+            "FetchAttempt",
+            "PageSnapshot",
+            "BrowserInteractionStep",
+            "CredentialUseAudit",
+            "DocumentArtifact",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "DynamicSourceRuntimeAdapterRecord",
+            "DynamicSourceRuntimeReport",
+            "DynamicSourceRuntimeFixtureManifest",
             "ObservabilityReport",
             "SecurityPrivacyReport",
         ],

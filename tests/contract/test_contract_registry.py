@@ -49,6 +49,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "agent_runtime_adapter_operational_gate",
         "model_provider_adapter_operational_gate",
         "source_coverage_adapter_operational_gate",
+        "dynamic_source_adapter_runtime_foundation",
         "scheduler",
         "source_acquisition",
         "network_browser_acquisition",

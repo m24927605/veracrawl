@@ -674,6 +674,52 @@ Rules:
   production parser farms, external API crawling, distributed persistence,
   review UI, export delivery, or production scale readiness.
 
+### Dynamic Source Adapter Runtime Foundation Slice
+
+The dynamic source runtime foundation proves that target source adapter families
+can produce executable runtime records through ports/adapters without coupling
+core to concrete browser, parser, credential vault, API, HTTP, storage, queue,
+model provider, agent framework, or site-specific scraper packages.
+
+Required implementation:
+
+- `DynamicSourceRuntimeAdapterRecord` records one adapter runtime with adapter
+  type, `SourceAdapterResult`, natural output refs, adapter-specific
+  fetch/browser/session/document/API/file/seed/prior refs, command result,
+  policy, observability, security/privacy, event cursor, outbox, runtime or
+  contract adapter refs, diagnostic state refs, and replay bundle ref.
+- `DynamicSourceRuntimeReport` aggregates HTTP, sitemap, RSS/feed, browser
+  snapshot, authorized session, API-like source, document source, file import,
+  manual seed, and prior snapshot runtime records and can claim `pass` only
+  when every required target family is verified.
+- `DynamicSourceRuntimeFixtureManifest` defines success, no-runtime, and
+  negative fixtures with expected completion result and failure type.
+- `veracrawl.fetch.dynamic_source_runtime` is core-owned and imports only
+  VeraCrawl contracts.
+- `veracrawl.adapters.sources.dynamic_runtime` is adapter-owned and provides
+  deterministic/local runtime records for target source families.
+- `veracrawl-source-runtime` dynamically loads adapter modules so fixture
+  execution does not create static dependencies from core/CLI into concrete
+  source runtime packages.
+
+Rules:
+
+- missing live source, browser, parser, credential/session, or API runtime refs
+  return `needs_review`; contract-only descriptors cannot claim runtime pass.
+- raw secrets must never be persisted as canonical state.
+- adapter-native state can be stored only as diagnostic refs and cannot satisfy
+  canonical replay or completion requirements.
+- non-fetch adapters such as authorized session, file import, manual seed, and
+  prior snapshot must emit native refs and must not fake `FetchAttempt` or
+  `PageSnapshot` refs.
+- missing browser/session/document/API/file/seed/prior/replay refs, unsafe
+  browser side effects, unsupported adapters, or source-specific hacks are
+  deterministic failures.
+- this slice proves target source runtime shape and boundary enforcement. It
+  does not claim production JavaScript rendering, managed credential vaults,
+  production parser farms, external API crawling, export delivery, distributed
+  storage, distributed queueing, or production scale readiness.
+
 ## Browser Execution Design
 
 Browser capability is target architecture, not a shortcut around safety.

@@ -1,0 +1,1 @@
+{"expected_result":"fail","expected_failure_type":"dynamic_source_runtime_missing_document_artifact","missing_ref_fields":["document_artifact_refs"]}

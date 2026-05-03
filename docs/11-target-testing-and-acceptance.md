@@ -716,6 +716,44 @@ credential vaults, production parser farms, external API crawling, export
 delivery, distributed storage, distributed queueing, or production scale
 readiness.
 
+Dynamic source adapter runtime foundation fixture contract:
+
+```text
+veracrawl-source-runtime run tests/fixtures/<dynamic_source_runtime_fixture_id> --profile target --out .veracrawl-test-runs/<dynamic_source_runtime_fixture_id>
+```
+
+Required dynamic source runtime fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| dynamic-source-runtime-success | HTTP, sitemap, RSS/feed, browser snapshot, authorized session, API-like source, document source, file import, manual seed, and prior snapshot produce canonical source result, natural output, adapter-specific runtime, command, policy, observability, security/privacy, event/outbox, runtime, and replay refs |
+| dynamic-source-runtime-runtime-unavailable | missing live source/browser/parser/session/API runtime refs return `needs_review` with contract-only and missing-runtime refs |
+| dynamic-source-runtime-raw-secret-leak | raw secret persistence fails |
+| dynamic-source-runtime-adapter-state-canonical | adapter-native canonical state fails |
+| dynamic-source-runtime-missing-credential-audit | missing credential audit refs fail |
+| dynamic-source-runtime-missing-document-artifact | missing document artifact refs fail |
+| dynamic-source-runtime-missing-api-payload | missing API payload refs fail |
+| dynamic-source-runtime-missing-replay | missing replay refs fail |
+| dynamic-source-runtime-unsafe-browser-side-effect | unsafe browser side effects fail |
+| dynamic-source-runtime-unsupported-adapter | unsupported source adapter fails |
+
+Dynamic source runtime acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_dynamic_source_runtime_contract_registry.py`
+- `pytest tests/contract/test_dynamic_source_runtime_contracts.py`
+- `pytest tests/contract/test_dynamic_source_runtime_import_boundaries.py`
+- `pytest tests/unit/test_dynamic_source_runtime_gate.py`
+- `pytest tests/integration/test_dynamic_source_runtime_fixtures.py`
+
+This acceptance proves target source runtime records, dynamic adapter loading,
+core import boundaries, raw secret blocking, adapter-native state boundary,
+non-fetch native refs, and canonical browser/session/document/API/file/seed/
+prior/security/replay completeness. It does not prove production JavaScript
+rendering, managed credential vaults, production parser farms, external API
+crawling, export delivery, distributed storage, distributed queueing, or
+production scale readiness.
+
 Agent runtime adapter operational gate fixture contract:
 
 ```text

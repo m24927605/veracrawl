@@ -622,6 +622,18 @@ class SourceCoverageFailureType(StrEnum):
     UNSUPPORTED_ADAPTER = "source_coverage_unsupported_adapter"
 
 
+class DynamicSourceRuntimeFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "dynamic_source_runtime_missing_runtime_refs"
+    ADAPTER_NATIVE_STATE_CANONICAL = "dynamic_source_runtime_adapter_state_canonical"
+    RAW_SECRET_LEAK = "dynamic_source_runtime_raw_secret_leak"
+    MISSING_CREDENTIAL_AUDIT = "dynamic_source_runtime_missing_credential_audit"
+    MISSING_DOCUMENT_ARTIFACT = "dynamic_source_runtime_missing_document_artifact"
+    MISSING_API_PAYLOAD = "dynamic_source_runtime_missing_api_payload"
+    MISSING_REPLAY_REFS = "dynamic_source_runtime_missing_replay_refs"
+    UNSAFE_BROWSER_SIDE_EFFECT = "dynamic_source_runtime_unsafe_browser_side_effect"
+    UNSUPPORTED_ADAPTER = "dynamic_source_runtime_unsupported_adapter"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"

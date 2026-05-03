@@ -123,7 +123,7 @@ Target support for authenticated sources means customer-authorized, scoped crede
 | --- | --- | --- |
 | Objective understanding | Convert high-level user goals into explicit crawl objectives, schema needs, policy constraints, and success criteria | objective trace, approved plan, ambiguity log, replay event |
 | Crawl planning | Generate crawl plans with adapters, seeds, expected page types, frontier strategy, evidence requirements, budget, and risk notes | plan approval, policy checks, run plan snapshot |
-| Source adapters | Support HTTP, sitemap, RSS, API, file/document, browser snapshot, manual seed, prior snapshot, and authorized session adapters | adapter contract tests, `SourceAdapterResult` records, `SourceCoverageAdapterReport`, policy decisions, `source_adapter_result_recorded` events, adapter-native output refs |
+| Source adapters | Support HTTP, sitemap, RSS, API, file/document, browser snapshot, manual seed, prior snapshot, and authorized session adapters | adapter contract tests, `SourceAdapterResult` records, `SourceCoverageAdapterReport`, `DynamicSourceRuntimeReport`, policy decisions, `source_adapter_result_recorded` and `dynamic_source_runtime_reported` events, adapter-native output refs |
 | Browser observation | Observe JavaScript-rendered pages, DOM state, screenshots, network metadata, and controlled interactions within policy | browser sandbox tests, budget tests, screenshot/DOM artifact refs |
 | Authorized sessions | Use scoped customer credentials for approved sites and actions | vault access log, credential policy decision, redacted prompt/context tests |
 | Site understanding | Infer navigation, page types, templates, duplicate zones, low-value zones, API-like endpoints, forms, and search paths | site model, graph projection, classifier metrics, review report |
@@ -288,6 +288,9 @@ Required acceptance:
 - `SourceCoverageAdapterReport` pass requires HTTP, sitemap, RSS/feed, browser snapshot, authorized session, API-like source, document source, file import, manual seed, and prior snapshot adapters to produce canonical source result, natural output, command, policy, observability, security/privacy, and replay refs through one adapter-owned coverage contract
 - missing live source/browser/parser/session/API runtime refs return `needs_review`; contract-only source descriptors cannot claim operational source coverage pass
 - raw secret persistence, adapter-native canonical state, unsafe browser side effects, unsupported adapters, or missing browser/session/document/API/replay refs fail deterministically
+- `DynamicSourceRuntimeReport` pass requires the same target source adapter families to produce runtime adapter records with `SourceAdapterResult`, natural output, adapter-specific browser/session/document/API/file/seed/prior refs, command, policy, observability, security/privacy, event/outbox, runtime, and replay refs
+- dynamic source runtime core must stay dependency-neutral; concrete browser, parser, credential vault, API, HTTP, storage, queue, model/provider, and agent framework SDKs belong behind adapters loaded by CLI/runtime composition
+- missing live dynamic source runtime refs return `needs_review`; raw secret persistence, adapter-native canonical state, unsafe browser side effects, unsupported adapters, or missing adapter-specific runtime refs fail deterministically
 
 ### Export And Correction Profile
 

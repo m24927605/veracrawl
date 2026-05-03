@@ -1,0 +1,1 @@
+{"id":"dynamic-source-runtime-adapter-state-canonical","scenario":"dynamic-source-runtime-adapter-state-canonical","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"dynamic_source_runtime_adapter_state_canonical","expected_failure_type":"dynamic_source_runtime_adapter_state_canonical","negative_case":true}
