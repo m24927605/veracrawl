@@ -2104,6 +2104,8 @@ Real-world AI agent benchmark acceptance requires:
 - `pytest tests/unit/test_real_world_ai_agent_replay.py`
 - `pytest tests/integration/test_real_world_ai_agent_fixtures.py`
 - one recorded live CLI run against `tests/fixtures/real-world-ai-agent-public-corpus`
+- one recorded hosted OpenAI CLI run using `--model-provider openai` and an
+  `OPENAI_API_KEY` loaded from the operator environment or `~/.env`
 - `run_report.json` and trace JSON files proving non-empty model call, agent action, tool call, and context bundle traces
 
 This acceptance proves VeraCrawl can combine a real public crawl with

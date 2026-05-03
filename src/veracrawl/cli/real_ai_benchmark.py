@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -36,10 +37,33 @@ def _load_module(module_name: str) -> ModuleType:
     return importlib.import_module(module_name)
 
 
-def _model_binding(manifest: RealWorldAIAgentBenchmarkManifest) -> RealWorldAIModelBinding:
-    module = _load_module("veracrawl.adapters.model_providers.local_runtime")
-    builder = cast(Callable[[], object], module.__dict__["build_model_provider"])
-    provider = cast(ModelProviderPort, builder())
+def _load_dotenv(path: Path | None = None) -> None:
+    path = path or (Path.home() / ".env")
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", maxsplit=1)
+        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
+def _model_binding(
+    manifest: RealWorldAIAgentBenchmarkManifest,
+    *,
+    provider_kind: str,
+    openai_model: str | None,
+) -> RealWorldAIModelBinding:
+    if provider_kind == "openai":
+        _load_dotenv()
+        module = _load_module("veracrawl.adapters.model_providers.openai_responses")
+        builder = cast(Callable[..., object], module.__dict__["build_model_provider"])
+        provider = cast(ModelProviderPort, builder(model_id=openai_model))
+    else:
+        module = _load_module("veracrawl.adapters.model_providers.local_runtime")
+        builder = cast(Callable[[], object], module.__dict__["build_model_provider"])
+        provider = cast(ModelProviderPort, builder())
     provider_name = cast(str, getattr(provider, "provider_name", manifest.provider_names[0]))
     model_id = cast(str, getattr(provider, "model_id", "veracrawl-local-deterministic"))
     model_version = cast(str, getattr(provider, "model_version", "1"))
@@ -83,6 +107,8 @@ def run_fixture(
     *,
     profile: str,
     out: Path,
+    model_provider: str = "local",
+    openai_model: str | None = None,
 ) -> RealWorldAIAgentBenchmarkResult:
     manifest = RealWorldAIAgentBenchmarkManifest.model_validate(
         _load_json_like(fixture_dir / "manifest.yaml")
@@ -96,11 +122,20 @@ def run_fixture(
         if manifest.scenario == "real-world-ai-agent-missing-real-world-corpus"
         else _run_real_world_corpus(manifest, profile=profile, out=out / "real_world")
     )
+    model_binding = _model_binding(
+        manifest,
+        provider_kind=model_provider,
+        openai_model=openai_model,
+    )
+    if model_provider == "openai":
+        manifest = manifest.model_copy(
+            update={"provider_names": [model_binding.provider_name]}
+        )
     result = run_real_world_ai_agent_benchmark(
         manifest=manifest,
         profile=profile,
         real_world_result=real_world_result,
-        model_binding=_model_binding(manifest),
+        model_binding=model_binding,
         agent_binding=_agent_binding(manifest),
     )
     report = result.report
@@ -168,6 +203,17 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("fixture_dir")
     run.add_argument("--profile", default="target")
     run.add_argument("--out", required=True)
+    run.add_argument(
+        "--model-provider",
+        choices=["local", "openai"],
+        default="local",
+        help="Model provider adapter to use for framework-neutral model calls.",
+    )
+    run.add_argument(
+        "--openai-model",
+        default=None,
+        help="OpenAI model id when --model-provider openai is used.",
+    )
     return parser
 
 
@@ -176,7 +222,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "run":
         try:
-            result = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
+            result = run_fixture(
+                Path(args.fixture_dir),
+                profile=args.profile,
+                out=Path(args.out),
+                model_provider=args.model_provider,
+                openai_model=args.openai_model,
+            )
         except (OSError, ValueError, RuntimeError) as exc:
             print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
             return 1
@@ -192,6 +244,8 @@ def _summary(result: RealWorldAIAgentBenchmarkResult) -> dict[str, object]:
         "fixture_id": report.fixture_id,
         "completion_result": report.completion_result.value,
         "operator_status": report.operator_status,
+        "verified_provider_names": report.verified_provider_names,
+        "verified_framework_names": report.verified_framework_names,
         "site_count": len(report.site_observation_refs),
         "decision_trace_count": len(report.decision_trace_refs),
         "model_call_trace_count": len(report.model_call_trace_refs),

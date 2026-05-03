@@ -67,7 +67,7 @@
 - Initial full `mypy src tests` exposed 11 pre-existing test typing gaps outside
   the 056 runtime; fixed the affected tests without changing production
   behavior.
-- `uv run --python python3.12 --extra dev mypy src tests`: success across 598
+- `uv run --python python3.12 --extra dev mypy src tests`: success across 599
   source/test files.
 - `uv run --python python3.12 --extra dev python -m veracrawl.cli.contracts
   validate --format json`: registry validation returned `ok: true`, no errors,
@@ -90,7 +90,24 @@
   `decision_trace_count=16`, `model_call_trace_count=16`,
   `agent_action_trace_count=16`, `tool_call_trace_count=16`,
   `context_bundle_trace_count=16`, and `extraction_candidate_count=4`.
-- Full non-Docker pytest gate: 1058 passed, 5 skipped in 55.55s.
+- Hosted OpenAI public AI benchmark CLI gate after loading `OPENAI_API_KEY` from
+  `~/.env`:
+  `uv run --python python3.12 --extra dev veracrawl-real-ai-benchmark run
+  tests/fixtures/real-world-ai-agent-public-corpus --profile target
+  --model-provider openai --openai-model gpt-5.4-mini --out
+  .veracrawl-real-runs/real-world-ai-agent-openai-public-corpus` returned
+  `completion_result=pass`,
+  `operator_status=real_world_ai_agent_benchmark_completed`, `site_count=4`,
+  `decision_trace_count=16`, `model_call_trace_count=16`,
+  `agent_action_trace_count=16`, `tool_call_trace_count=16`,
+  `context_bundle_trace_count=16`, `extraction_candidate_count=4`,
+  `verified_provider_names=["OpenAI Responses API"]`,
+  `verified_framework_names=["VeraCrawl Native Runtime"]`; recorded model trace
+  provider/model proof: `provider_name=OpenAI Responses API`,
+  `model_id=gpt-5.4-mini`, `trace_count=16`, sample token usage
+  `input_tokens=438`, `output_tokens=187`, `total_tokens=625`.
+- Full non-Docker pytest gate after hosted OpenAI adapter addition: 1058 passed,
+  5 skipped in 56.42s.
 - Docker-backed pytest gate with Postgres, Redis, S3, and infrastructure extras:
-  1063 passed in 84.99s.
+  1063 passed in 84.81s.
 - `git diff --check`: passed.

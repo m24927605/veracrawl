@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from veracrawl.benchmarks.real_world import RealWorldBenchmarkResult
@@ -32,6 +32,9 @@ from veracrawl.contracts.real_world_ai_agent import (
 )
 from veracrawl.contracts.real_world_benchmark import RealWorldBenchmarkSiteObservation
 from veracrawl.ports.agent_runtime import AgentRuntimePort, ModelProviderPort
+
+_ContextPayloadSetter = Callable[[str, str], None]
+_TokenUsageGetter = Callable[[str], dict[str, int]]
 
 
 @dataclass(frozen=True)
@@ -336,6 +339,12 @@ def _build_decision_bundle(
         ),
         evidence_refs=observation.artifact_refs,
     )
+    context_payload = _context_payload(
+        manifest=manifest,
+        observation=observation,
+        source_anchor_ref=source_anchor_ref,
+        decision_type=decision_type,
+    )
     agent_request = AgentRunRequest(
         id=f"agent-run-request:{manifest.id}:{site_slug}:{decision_slug}",
         run_id=run_id,
@@ -363,8 +372,17 @@ def _build_decision_bundle(
         response_schema_ref=agent_request.required_output_schema_ref,
         redaction_policy_ref=f"redaction-policy:{manifest.id}:raw-model-redacted",
     )
+    context_setter = getattr(model_port, "set_context_payload", None)
+    if callable(context_setter):
+        context_payload_setter: _ContextPayloadSetter = context_setter
+        context_payload_setter(model_request.id, context_payload)
     model_response = model_port.complete(model_request)
     agent_result = agent_port.run(agent_request)
+    token_usage = {"prompt_ref_tokens": 1, "completion_ref_tokens": 1}
+    token_usage_getter_attr = getattr(model_port, "token_usage_for", None)
+    if callable(token_usage_getter_attr):
+        token_usage_getter: _TokenUsageGetter = token_usage_getter_attr
+        token_usage = token_usage_getter(model_request.id) or token_usage
     model_call_trace = ModelCallTrace(
         id=(
             f"model-call-trace:{manifest.id}:{site_slug}:{decision_slug}:"
@@ -380,7 +398,7 @@ def _build_decision_bundle(
         context_bundle_trace_id=context_trace.id,
         request_ref=model_request.id,
         response_ref=model_response.id,
-        token_usage={"prompt_ref_tokens": 1, "completion_ref_tokens": 1},
+        token_usage=token_usage,
         latency_ms=1,
         safety_filter_result_ref=model_response.safety_filter_result_ref,
         redaction_policy_ref=model_request.redaction_policy_ref,
@@ -502,6 +520,36 @@ def _candidate_from_decisions(
         replay_bundle_ref=f"replay-bundle:{manifest.id}:{site_slug}:candidate",
         completion_result=CompletenessResult.PASS,
     )
+
+
+def _context_payload(
+    *,
+    manifest: RealWorldAIAgentBenchmarkManifest,
+    observation: RealWorldBenchmarkSiteObservation,
+    source_anchor_ref: Ref,
+    decision_type: RealWorldAIAgentDecisionType,
+) -> str:
+    payload = {
+        "benchmark_fixture_id": manifest.id,
+        "decision_type": decision_type.value,
+        "target_url": observation.target_url,
+        "site_observation_ref": observation.id,
+        "status_code": observation.status_code,
+        "content_type": observation.content_type,
+        "body_size_bytes": observation.body_size_bytes,
+        "matched_observation_refs": observation.matched_observation_refs,
+        "source_observation_refs": observation.source_observation_refs,
+        "artifact_refs": observation.artifact_refs,
+        "content_hash_refs": observation.content_hash_refs,
+        "source_anchor_refs": [source_anchor_ref],
+        "instruction": (
+            "Provide crawl planning, site understanding, extraction candidate, or "
+            "verification/repair guidance only as an AI recommendation. Do not cite "
+            "your own output as evidence. Evidence must bind to source anchors, "
+            "artifacts, and content hashes."
+        ),
+    }
+    return str(payload)
 
 
 def _failed_candidate_from_candidate(

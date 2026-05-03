@@ -1692,10 +1692,16 @@ Real-world AI agent benchmark gate:
   adapter bindings through ports and never imports concrete model SDKs or agent
   frameworks.
 - `veracrawl.cli.real_ai_benchmark` exposes `veracrawl-real-ai-benchmark run`.
-  The CLI runs the referenced public corpus, dynamically loads the default local
-  model provider and VeraCrawl native agent adapter, writes aggregate reports,
-  decision traces, candidates, model/agent/tool/context traces, and summary JSON
-  under the selected output directory.
+  The CLI runs the referenced public corpus, dynamically loads either the
+  default local model provider or the OpenAI Responses API model provider behind
+  `ModelProviderPort`, dynamically loads the VeraCrawl native agent adapter, and
+  writes aggregate reports, decision traces, candidates, model/agent/tool/context
+  traces, and summary JSON under the selected output directory.
+- `veracrawl.adapters.model_providers.openai_responses` calls the OpenAI
+  Responses API through Python standard-library HTTP, not the OpenAI SDK. It
+  records provider response ids and token usage in framework-neutral
+  `ModelResponse` and `ModelCallTrace` refs without persisting raw prompt or raw
+  response text as source evidence.
 - every passing public site observation requires four AI decision types: crawl
   planning, site understanding, extraction candidate generation, and
   verification/repair. Each decision has model request/response, model call

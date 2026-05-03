@@ -21,6 +21,18 @@ uv run --python python3.12 --extra dev veracrawl-real-ai-benchmark run \
   --out .veracrawl-real-runs/real-world-ai-agent-public-corpus
 ```
 
+Run the live public AI benchmark with hosted OpenAI model calls:
+
+```bash
+set -a; source ~/.env; set +a
+uv run --python python3.12 --extra dev veracrawl-real-ai-benchmark run \
+  tests/fixtures/real-world-ai-agent-public-corpus \
+  --profile target \
+  --model-provider openai \
+  --openai-model gpt-5.4-mini \
+  --out .veracrawl-real-runs/real-world-ai-agent-openai-public-corpus
+```
+
 Expected success summary:
 
 ```json

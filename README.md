@@ -1037,6 +1037,19 @@ uv run --python python3.12 --extra dev veracrawl-real-ai-benchmark run \
   --out .veracrawl-real-runs/real-world-ai-agent-public-corpus
 ```
 
+Run the same benchmark with a hosted OpenAI model through the framework-neutral
+model provider port:
+
+```sh
+set -a; source ~/.env; set +a
+uv run --python python3.12 --extra dev veracrawl-real-ai-benchmark run \
+  tests/fixtures/real-world-ai-agent-public-corpus \
+  --profile target \
+  --model-provider openai \
+  --openai-model gpt-5.4-mini \
+  --out .veracrawl-real-runs/real-world-ai-agent-openai-public-corpus
+```
+
 The AI benchmark first runs the public corpus, then invokes VeraCrawl's
 framework-neutral model and agent ports for crawl planning, site understanding,
 extraction candidate generation, and verification/repair decisions. Passing
