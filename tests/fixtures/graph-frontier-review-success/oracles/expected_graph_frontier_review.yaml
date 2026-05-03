@@ -1,0 +1,1 @@
+{"expected_result":"pass","required_decisions":["prioritize","retry","retire","expand","route_to_review"],"required_refs":["graph_signal_refs","frontier_decision_refs","review_route_decision_refs","frontier_item_refs","review_item_refs","source_graph_refs","explanation_refs","policy_decision_refs","command_record_refs","event_cursor_refs","outbox_refs","replay_bundle_ref"]}

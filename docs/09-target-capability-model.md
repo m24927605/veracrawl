@@ -132,7 +132,7 @@ Target support for authenticated sources means customer-authorized, scoped crede
 | Evidence | Build source-backed evidence packets for records, tables, document metadata, files, datasets, and facts | evidence coverage map, raw-to-normalized replay, source anchors |
 | Verification | Accept, reject, review, conflict, supersede, or expire outputs by policy, evidence, schema constraints, freshness, and contradiction checks | verification decision, conflict record, output verification aggregate |
 | Publication | Publish only verified outputs with immutable manifests and evidence refs | output manifest, publication event, review decision, result receipt |
-| Graph intelligence | Maintain URL, hyperlink, canonical, redirect, page-structure, entity, citation/source, evidence, task, and temporal graph projections | graph build manifest, projection watermark, graph quality report |
+| Graph intelligence | Maintain URL, hyperlink, canonical, redirect, page-structure, entity, citation/source, evidence, task, and temporal graph projections | graph build manifest, projection watermark, graph quality report, `GraphFrontierReviewRuntimeReport` |
 | Memory intelligence | Store scoped memories for site behavior, page types, extraction repairs, failures, task context, and agent diaries with freshness and evidence refs | memory event, retrieval trace, invalidation test, evidence backrefs |
 | Multi-agent orchestration | Coordinate Planner, Site Understanding, Frontier, Fetch Analysis, Extractor, Verifier, Drift, Memory, and Ops agents through tools and policy gates | tool call trace, permission tests, command/result events |
 | Drift and repair | Detect template, selector, schema, content, graph, and source behavior drift; propose repairs without silent data corruption | drift event, repair proposal, before/after verification |
@@ -291,6 +291,9 @@ Required acceptance:
 - `DynamicSourceRuntimeReport` pass requires the same target source adapter families to produce runtime adapter records with `SourceAdapterResult`, natural output, adapter-specific browser/session/document/API/file/seed/prior refs, command, policy, observability, security/privacy, event/outbox, runtime, and replay refs
 - dynamic source runtime core must stay dependency-neutral; concrete browser, parser, credential vault, API, HTTP, storage, queue, model/provider, and agent framework SDKs belong behind adapters loaded by CLI/runtime composition
 - missing live dynamic source runtime refs return `needs_review`; raw secret persistence, adapter-native canonical state, unsafe browser side effects, unsupported adapters, or missing adapter-specific runtime refs fail deterministically
+- `GraphFrontierReviewRuntimeReport` pass requires graph signals to produce frontier priority, retry, retire, expand, and review route decision records with source graph refs, explanations, policy, command, event/outbox, and replay refs
+- graph signals can influence frontier and review routing, but cannot satisfy source evidence, verification, publication, or output manifest requirements
+- missing live graph/scheduler/review runtime refs return `needs_review`; graph-signal-as-evidence, missing source graph refs, missing explanations, unauthorized frontier mutation, missing review route, missing replay, or unsupported signals fail deterministically
 
 ### Export And Correction Profile
 

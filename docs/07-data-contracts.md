@@ -37,7 +37,7 @@ Target contract manifest:
 | ExtractionStrategy, ExtractionCandidate, EvidencePacket | required | schema-bound and approved exploratory extraction preserve anchors and source refs |
 | VerificationRecommendation, VerificationDecision, ConflictRecord, AdjudicationDecision | required | evidence, contradictions, freshness, and review/adjudication are explicit |
 | PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact | required | immutable publication and fact projection preserve evidence and verification lineage |
-| GraphBuildManifest, GraphNode, GraphEdge, GraphSignal, TemporalKGProjectionRecord, TemporalKGEntityIdentity | required | graph projections have input refs, watermarks, quality metrics, and evidence-derived temporal semantics |
+| GraphBuildManifest, GraphNode, GraphEdge, GraphSignal, TemporalKGProjectionRecord, TemporalKGEntityIdentity | required | graph projections have input refs, watermarks, quality metrics, graph-driven frontier/review decisions, and evidence-derived temporal semantics |
 | MemoryEvent, CrossScopeMemoryTunnel, OperationalTemporalMemoryRecord | required | memory has scope, trust, taint, promotion policy, freshness, invalidation, cross-scope authorization, operational temporal records, evidence refs, and prompt-use restrictions |
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
@@ -1130,6 +1130,7 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | commit_fetch | scheduler | FrontierItem | FrontierTransitionPayload | SourceAdapterResult succeeded or partial | expected_version | frontier_transitioned | missing adapter result rejected |
 | fail_fetch | scheduler | FrontierItem | FrontierFailurePayload | SourceAdapterResult failed or blocked | expected_version | frontier_transitioned, error_recorded | retry/dead-letter policy applied |
 | retire_frontier | scheduler | FrontierItem | FrontierTransitionPayload | objective, duplicate, policy, or budget reason recorded | expected_version | frontier_transitioned | retired item cannot be leased |
+| record_graph_frontier_decision | scheduler | GraphFrontierDecisionRecord | BaseCommandPayload | graph signal use policy allows frontier priority/retry/retire/expand decision | expected_version | graph_frontier_decision_recorded | graph signal cannot be evidence; unauthorized mutation fails |
 | execute_http_fetch | fetch | SourceAdapterResult, FetchAttempt | SourceAdapterCommandPayload | source_adapter and fetch policy allow | lease_required | source_adapter_result_recorded, fetch_attempted, snapshot_written | blocked source emits blocked result, not bypass |
 | read_sitemap | fetch | SourceAdapterResult | SourceAdapterCommandPayload | sitemap URL in scope; rate policy allow | lease_required | source_adapter_result_recorded, fetch_attempted | parser failure records partial/failed result |
 | read_rss | fetch | SourceAdapterResult | SourceAdapterCommandPayload | feed URL in scope; freshness policy loaded | lease_required | source_adapter_result_recorded, fetch_attempted | malformed feed creates FailureRecord |
@@ -1151,6 +1152,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | complete_task | owning service | ProcessingTask | ProcessingTaskResultPayload | output refs validate | expected_version, lease_required when queued | processing_transitioned | invalid output creates FailureRecord |
 | fail_task | owning service | ProcessingTask | ProcessingTaskFailurePayload | failure type and retry class recorded | expected_version, lease_required when queued | processing_transitioned, error_recorded | retry or dead-letter policy applied |
 | request_review | owning service | ReviewItem | ReviewRequestPayload | review subject and evidence refs present | expected_version | review_created | missing evidence rejected |
+| record_graph_review_route_decision | review_replay | GraphReviewRouteDecisionRecord | BaseCommandPayload | graph signal use policy allows review routing with explanation refs | expected_version | graph_review_route_decision_recorded | missing review item or route refs fail |
+| record_graph_frontier_review_report | graph | GraphFrontierReviewRuntimeReport | BaseCommandPayload | frontier and review route graph decisions or review/failure refs are present | expected_version | graph_frontier_review_reported | missing graph/scheduler/review runtime refs return needs_review |
+| record_graph_frontier_review_fixture_manifest | tests | GraphFrontierReviewFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | graph_frontier_review_fixture_manifest_recorded | invalid negative/pass pairing rejected |
 | propose_strategy | extract | ExtractionStrategy | ExtractionStrategyPayload | schema snapshot exists | expected_version | processing_transitioned | incompatible schema routes to review |
 | approve_strategy | extract | ExtractionStrategy | ApprovalPayload | approval authority or policy allow | expected_version | approval_decided, processing_transitioned | rejected strategy cannot extract |
 | create_candidate | extract | ExtractionCandidate | CandidatePayload | approved strategy and normalized input refs | expected_version | candidate_created | validator failures mark candidate rejected |
@@ -2306,6 +2310,115 @@ GraphSignal:
 
 Graph signals can guide planning, prioritization, and review. They are never source evidence and cannot satisfy required evidence coverage. Only underlying source artifacts and source anchors referenced through `source_evidence_refs` can support publication.
 
+## GraphFrontierDecisionRecord
+
+```yaml
+GraphFrontierDecisionRecord:
+  id: string
+  run_ref: ref
+  graph_signal_ref: ref
+  signal_type: frontier_priority | dedup_hint | drift_risk
+  decision_type: prioritize | retry | retire | expand
+  frontier_item_ref: ref
+  before_priority: integer
+  after_priority: integer
+  generated_frontier_item_refs: list[ref]
+  retry_frontier_item_refs: list[ref]
+  retired_frontier_item_refs: list[ref]
+  source_graph_refs: list[ref]
+  explanation_ref: ref
+  policy_decision_refs: list[ref]
+  command_record_refs: list[ref]
+  event_cursor_refs: list[ref]
+  outbox_refs: list[ref]
+  replay_bundle_ref: ref
+  evidence_ref_allowed: boolean
+  unauthorized_mutation_refs: list[ref]
+  missing_ref_fields: list[string]
+  result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## GraphReviewRouteDecisionRecord
+
+```yaml
+GraphReviewRouteDecisionRecord:
+  id: string
+  run_ref: ref
+  graph_signal_ref: ref
+  signal_type: review_route | drift_risk | quality_warning
+  route_type: route_to_review | escalate | require_more_evidence
+  review_item_ref: ref
+  review_priority: low | normal | high | urgent
+  source_graph_refs: list[ref]
+  explanation_ref: ref
+  policy_decision_refs: list[ref]
+  command_record_refs: list[ref]
+  event_cursor_refs: list[ref]
+  outbox_refs: list[ref]
+  replay_bundle_ref: ref
+  evidence_ref_allowed: boolean
+  missing_ref_fields: list[string]
+  result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## GraphFrontierReviewRuntimeReport
+
+```yaml
+GraphFrontierReviewRuntimeReport:
+  id: string
+  run_ref: ref
+  graph_signal_refs: list[ref]
+  frontier_decision_refs: list[ref]
+  review_route_decision_refs: list[ref]
+  frontier_item_refs: list[ref]
+  review_item_refs: list[ref]
+  source_graph_refs: list[ref]
+  explanation_refs: list[ref]
+  policy_decision_refs: list[ref]
+  command_record_refs: list[ref]
+  event_cursor_refs: list[ref]
+  outbox_refs: list[ref]
+  replay_bundle_ref: ref
+  contract_only_refs: list[ref]
+  missing_runtime_refs: list[ref]
+  graph_signal_as_evidence_refs: list[ref]
+  missing_source_graph_refs: list[ref]
+  missing_explanation_refs: list[ref]
+  unauthorized_frontier_mutation_refs: list[ref]
+  missing_review_route_refs: list[ref]
+  unsupported_signal_refs: list[ref]
+  missing_ref_fields: list[string]
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## GraphFrontierReviewFixtureManifest
+
+```yaml
+GraphFrontierReviewFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: graph_frontier_review_missing_runtime_refs | graph_frontier_review_signal_as_evidence | graph_frontier_review_missing_source_graph_refs | graph_frontier_review_missing_explanation_ref | graph_frontier_review_unauthorized_frontier_mutation | graph_frontier_review_missing_review_route | graph_frontier_review_missing_replay_refs | graph_frontier_review_unsupported_signal
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Executable graph frontier/review rules:
+
+- A passing `GraphFrontierDecisionRecord` requires graph signal, frontier item, source graph, explanation, policy, command, event cursor, outbox, and replay refs.
+- Frontier decision pass requirements are explicit: prioritize must change priority; retry requires retry frontier refs; retire requires retired frontier refs; expand requires generated frontier refs.
+- A passing `GraphReviewRouteDecisionRecord` requires graph signal, review item, review priority, source graph, explanation, policy, command, event cursor, outbox, and replay refs.
+- A passing `GraphFrontierReviewRuntimeReport` requires graph signals, frontier decisions, review route decisions, frontier items, review items, source graph refs, explanation refs, policy, command, event cursor, outbox, and replay refs.
+- Missing live graph, scheduler, or review runtime refs return `needs_review`.
+- Graph signal as evidence, missing source graph refs, missing explanations, unauthorized frontier mutations, missing review routes, missing replay refs, and unsupported graph signals fail deterministically.
+- Graph frontier/review validation does not import or require graph stores, queue clients, storage clients, browser libraries, model providers, agent frameworks, or concrete HTTP clients.
+
 ## GraphDeltaReport
 
 ```yaml
@@ -3101,6 +3214,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | model_provider_adapter_execution_recorded, model_provider_adapter_reported, model_provider_adapter_fixture_manifest_recorded | agents/tests | ModelProviderAdapterExecutionRecord/ModelProviderAdapterReport/ModelProviderAdapterFixtureManifest | run | yes | replay, policy, observability, security |
 | source_coverage_adapter_execution_recorded, source_coverage_adapter_reported, source_coverage_adapter_fixture_manifest_recorded | ports/fetch/tests | SourceCoverageAdapterExecutionRecord/SourceCoverageAdapterReport/SourceCoverageAdapterFixtureManifest | run | yes | replay, source policy, observability, security |
 | dynamic_source_runtime_adapter_recorded, dynamic_source_runtime_reported, dynamic_source_runtime_fixture_manifest_recorded | ports/fetch/tests | DynamicSourceRuntimeAdapterRecord/DynamicSourceRuntimeReport/DynamicSourceRuntimeFixtureManifest | run | yes | replay, source policy, observability, security |
+| graph_frontier_decision_recorded, graph_review_route_decision_recorded, graph_frontier_review_reported, graph_frontier_review_fixture_manifest_recorded | scheduler/review_replay/graph/tests | GraphFrontierDecisionRecord/GraphReviewRouteDecisionRecord/GraphFrontierReviewRuntimeReport/GraphFrontierReviewFixtureManifest | run, frontier_item, review_item | yes | replay, graph policy, source evidence boundary |
 | frontier_transitioned | scheduler | FrontierItem | frontier_item | yes | fetch, graph, replay |
 | queue_topology_recorded, queue_item_recorded, queue_item_enqueued, queue_item_leased, queue_item_acked, queue_item_dead_lettered, shard_lease_recorded, shard_lease_acquired, shard_lease_released, retry_dead_letter_recorded | scheduler | QueueTopologySpec/QueueItem/ShardLease/RetryDeadLetterRecord | frontier_item, processing_task, export_job, graph_projection | yes | workers, ops, replay |
 | source_adapter_result_recorded | natural adapter owner | SourceAdapterResult | source_adapter | yes | scheduler, normalize, evidence, replay |
@@ -3152,6 +3266,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | model provider adapter events | ModelProviderAdapterEventPayload | ModelProviderAdapterExecutionRecord, ModelProviderAdapterReport, ModelProviderAdapterFixtureManifest | provider mapping, runtime availability, request/response/trace completeness, policy/security/observability/replay status | raw prompts/responses, raw credentials, and provider-native transcripts are never canonical |
 | source coverage adapter events | SourceCoverageAdapterEventPayload | SourceCoverageAdapterExecutionRecord, SourceCoverageAdapterReport, SourceCoverageAdapterFixtureManifest | source mapping, runtime availability, adapter-specific refs, policy/security/observability/replay status | raw secrets, unsafe browser side effects, and adapter-native state are never canonical |
 | dynamic source runtime events | DynamicSourceRuntimeEventPayload | DynamicSourceRuntimeAdapterRecord, DynamicSourceRuntimeReport, DynamicSourceRuntimeFixtureManifest | source runtime availability, adapter-specific runtime refs, policy/security/observability/replay status | raw secrets, unsafe browser side effects, and adapter-native runtime state are never canonical |
+| graph frontier/review events | GraphFrontierReviewEventPayload | GraphFrontierDecisionRecord, GraphReviewRouteDecisionRecord, GraphFrontierReviewRuntimeReport, GraphFrontierReviewFixtureManifest | graph signal use, frontier decision, review route, runtime availability, policy, command/event/outbox, and replay status | graph signals are never source evidence or publication truth |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
 | queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |

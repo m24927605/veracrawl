@@ -460,6 +460,27 @@ do
 done
 ```
 
+Run graph-driven frontier/review runtime gate fixtures:
+
+```sh
+for fixture in \
+  graph-frontier-review-success \
+  graph-frontier-review-runtime-unavailable \
+  graph-frontier-review-signal-as-evidence \
+  graph-frontier-review-missing-source-graph \
+  graph-frontier-review-missing-explanation \
+  graph-frontier-review-unauthorized-frontier-mutation \
+  graph-frontier-review-missing-review-route \
+  graph-frontier-review-missing-replay \
+  graph-frontier-review-unsupported-signal
+do
+  uv run --python python3.12 --extra dev veracrawl-graph-frontier-review run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
 Run memory kernel fixtures:
 
 ```sh

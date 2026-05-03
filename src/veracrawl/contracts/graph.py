@@ -8,9 +8,13 @@ from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import (
     CompletenessResult,
     GraphEdgeType,
+    GraphFrontierDecisionType,
+    GraphFrontierReviewFailureType,
     GraphNodeType,
+    GraphReviewRouteType,
     GraphSignalType,
     ProjectionJobStatus,
+    ReviewPriority,
 )
 
 
@@ -174,6 +178,225 @@ class GraphSignal(TimestampedModel):
             raise ValueError("graph signal requires policy refs")
         if self.evidence_ref_allowed:
             raise ValueError("graph signals cannot satisfy source evidence requirements")
+        return self
+
+
+_SUPPORTED_FRONTIER_SIGNAL_TYPES = {
+    GraphSignalType.FRONTIER_PRIORITY,
+    GraphSignalType.DEDUP_HINT,
+    GraphSignalType.DRIFT_RISK,
+}
+
+_SUPPORTED_REVIEW_SIGNAL_TYPES = {
+    GraphSignalType.REVIEW_ROUTE,
+    GraphSignalType.DRIFT_RISK,
+    GraphSignalType.QUALITY_WARNING,
+}
+
+
+class GraphFrontierDecisionRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    graph_signal_ref: Ref
+    signal_type: GraphSignalType
+    decision_type: GraphFrontierDecisionType
+    frontier_item_ref: Ref
+    before_priority: int
+    after_priority: int
+    generated_frontier_item_refs: list[Ref] = Field(default_factory=list)
+    retry_frontier_item_refs: list[Ref] = Field(default_factory=list)
+    retired_frontier_item_refs: list[Ref] = Field(default_factory=list)
+    source_graph_refs: list[Ref] = Field(default_factory=list)
+    explanation_ref: Ref
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    evidence_ref_allowed: bool = False
+    unauthorized_mutation_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_frontier_decision(self) -> GraphFrontierDecisionRecord:
+        if self.evidence_ref_allowed:
+            raise ValueError("graph frontier decision cannot satisfy evidence")
+        if self.result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "graph_signal_ref": self.graph_signal_ref,
+                "frontier_item_ref": self.frontier_item_ref,
+                "source_graph_refs": self.source_graph_refs,
+                "explanation_ref": self.explanation_ref,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            if self.signal_type not in _SUPPORTED_FRONTIER_SIGNAL_TYPES:
+                raise ValueError("unsupported graph signal for frontier decision")
+            if self.decision_type == GraphFrontierDecisionType.PRIORITIZE:
+                if self.after_priority == self.before_priority:
+                    raise ValueError("prioritize decision must change priority")
+            if self.decision_type == GraphFrontierDecisionType.EXPAND:
+                required["generated_frontier_item_refs"] = self.generated_frontier_item_refs
+            if self.decision_type == GraphFrontierDecisionType.RETRY:
+                required["retry_frontier_item_refs"] = self.retry_frontier_item_refs
+            if self.decision_type == GraphFrontierDecisionType.RETIRE:
+                required["retired_frontier_item_refs"] = self.retired_frontier_item_refs
+            missing = [name for name, value in required.items() if not value]
+            if missing or self.missing_ref_fields:
+                raise ValueError(f"passing graph frontier decision missing refs: {missing}")
+            if self.unauthorized_mutation_refs:
+                raise ValueError("passing graph frontier decision has unauthorized mutation refs")
+        elif self.result == CompletenessResult.NEEDS_REVIEW:
+            if not self.missing_ref_fields:
+                raise ValueError("needs-review graph frontier decision requires missing refs")
+        elif not (self.unauthorized_mutation_refs or self.missing_ref_fields):
+            raise ValueError("failed graph frontier decision requires failure details")
+        return self
+
+
+class GraphReviewRouteDecisionRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    graph_signal_ref: Ref
+    signal_type: GraphSignalType
+    route_type: GraphReviewRouteType
+    review_item_ref: Ref
+    review_priority: ReviewPriority
+    source_graph_refs: list[Ref] = Field(default_factory=list)
+    explanation_ref: Ref
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    evidence_ref_allowed: bool = False
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_review_route_decision(self) -> GraphReviewRouteDecisionRecord:
+        if self.evidence_ref_allowed:
+            raise ValueError("graph review route decision cannot satisfy evidence")
+        if self.result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "graph_signal_ref": self.graph_signal_ref,
+                "review_item_ref": self.review_item_ref,
+                "source_graph_refs": self.source_graph_refs,
+                "explanation_ref": self.explanation_ref,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            if self.signal_type not in _SUPPORTED_REVIEW_SIGNAL_TYPES:
+                raise ValueError("unsupported graph signal for review route decision")
+            missing = [name for name, value in required.items() if not value]
+            if missing or self.missing_ref_fields:
+                raise ValueError(f"passing graph review route missing refs: {missing}")
+        elif self.result == CompletenessResult.NEEDS_REVIEW:
+            if not self.missing_ref_fields:
+                raise ValueError("needs-review graph review route requires missing refs")
+        elif not self.missing_ref_fields:
+            raise ValueError("failed graph review route requires failure details")
+        return self
+
+
+class GraphFrontierReviewRuntimeReport(TimestampedModel):
+    id: str
+    run_ref: Ref
+    graph_signal_refs: list[Ref] = Field(default_factory=list)
+    frontier_decision_refs: list[Ref] = Field(default_factory=list)
+    review_route_decision_refs: list[Ref] = Field(default_factory=list)
+    frontier_item_refs: list[Ref] = Field(default_factory=list)
+    review_item_refs: list[Ref] = Field(default_factory=list)
+    source_graph_refs: list[Ref] = Field(default_factory=list)
+    explanation_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    contract_only_refs: list[Ref] = Field(default_factory=list)
+    missing_runtime_refs: list[Ref] = Field(default_factory=list)
+    graph_signal_as_evidence_refs: list[Ref] = Field(default_factory=list)
+    missing_source_graph_refs: list[Ref] = Field(default_factory=list)
+    missing_explanation_refs: list[Ref] = Field(default_factory=list)
+    unauthorized_frontier_mutation_refs: list[Ref] = Field(default_factory=list)
+    missing_review_route_refs: list[Ref] = Field(default_factory=list)
+    unsupported_signal_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    operator_status: str
+    completion_result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_frontier_review_report(self) -> GraphFrontierReviewRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "graph_signal_refs": self.graph_signal_refs,
+                "frontier_decision_refs": self.frontier_decision_refs,
+                "review_route_decision_refs": self.review_route_decision_refs,
+                "frontier_item_refs": self.frontier_item_refs,
+                "review_item_refs": self.review_item_refs,
+                "source_graph_refs": self.source_graph_refs,
+                "explanation_refs": self.explanation_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.contract_only_refs
+                or self.missing_runtime_refs
+                or self.graph_signal_as_evidence_refs
+                or self.missing_source_graph_refs
+                or self.missing_explanation_refs
+                or self.unauthorized_frontier_mutation_refs
+                or self.missing_review_route_refs
+                or self.unsupported_signal_refs
+                or self.missing_ref_fields
+            ):
+                raise ValueError(f"passing graph frontier/review report missing refs: {missing}")
+        elif self.completion_result == CompletenessResult.NEEDS_REVIEW:
+            if not (self.contract_only_refs or self.missing_runtime_refs):
+                raise ValueError("needs-review graph frontier/review report requires review refs")
+        elif not (
+            self.graph_signal_as_evidence_refs
+            or self.missing_source_graph_refs
+            or self.missing_explanation_refs
+            or self.unauthorized_frontier_mutation_refs
+            or self.missing_review_route_refs
+            or self.unsupported_signal_refs
+            or self.missing_ref_fields
+        ):
+            raise ValueError("failed graph frontier/review report requires failure details")
+        return self
+
+
+class GraphFrontierReviewFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: GraphFrontierReviewFailureType | None = None
+    negative_case: bool = False
+
+    @model_validator(mode="after")
+    def validate_frontier_review_fixture(self) -> GraphFrontierReviewFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("graph frontier/review fixture must support target profile")
+        if self.negative_case and self.expected_completion_result != CompletenessResult.FAIL:
+            raise ValueError("negative graph frontier/review fixture must expect fail")
+        if self.expected_failure_type is not None and not self.negative_case:
+            raise ValueError("expected failure type requires negative case")
         return self
 
 

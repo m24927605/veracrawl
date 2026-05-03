@@ -761,6 +761,41 @@ Graph requirements:
 - graph projections can be rebuilt from canonical events and artifacts
 - graph deltas can trigger drift and review workflows
 
+### Graph-Driven Frontier And Review Runtime Gate Slice
+
+The graph frontier/review gate turns graph signals into replayable scheduler and
+review decisions without making graph signals evidence or publication truth.
+
+Required implementation:
+
+- `GraphFrontierDecisionRecord` records priority, retry, retire, and expand
+  decisions with `GraphSignal`, `FrontierItem`, source graph, explanation,
+  policy, command, event cursor, outbox, and replay refs.
+- `GraphReviewRouteDecisionRecord` records review routing decisions with
+  `GraphSignal`, `ReviewItem`, source graph, explanation, policy, command,
+  event cursor, outbox, and replay refs.
+- `GraphFrontierReviewRuntimeReport` can claim `pass` only when frontier
+  priority/retry/retire/expand and review route decisions are all present.
+- `veracrawl.graph.frontier_review` is core-owned and imports only VeraCrawl
+  contracts.
+- `veracrawl-graph-frontier-review` runs success, no-runtime, and negative
+  fixtures without static dependencies on graph stores, queue clients, storage
+  clients, browser libraries, model SDKs, agent frameworks, or HTTP clients.
+
+Rules:
+
+- graph signals may influence frontier/review decisions only through typed
+  decision records.
+- graph signals must not satisfy `source_evidence_refs`, evidence coverage,
+  verification decisions, publication pass, or output manifest evidence.
+- missing live graph, scheduler, or review runtime refs return `needs_review`.
+- graph-signal-as-evidence, missing source graph refs, missing explanations,
+  unauthorized frontier mutations, missing review route refs, missing replay
+  refs, and unsupported signals are deterministic failures.
+- this slice proves graph-driven frontier/review runtime shape. It does not
+  implement production graph stores, production queue backends, review UI,
+  memory stores, export delivery, or production scale graph operations.
+
 Temporal KG requirements:
 
 - temporal KG projections derive only from `VerifiedFact`, accepted `PublishedOutput` records, and canonical events that record verification, publication, supersession, conflict, expiration, or invalidation.

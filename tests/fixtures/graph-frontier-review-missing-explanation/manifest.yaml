@@ -1,0 +1,1 @@
+{"id":"graph-frontier-review-missing-explanation","scenario":"graph-frontier-review-missing-explanation","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"graph_frontier_review_missing_explanation_ref","expected_failure_type":"graph_frontier_review_missing_explanation_ref","negative_case":true}

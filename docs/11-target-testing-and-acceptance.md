@@ -566,6 +566,42 @@ graph-driven scheduling, memory, export delivery, distributed storage,
 distributed queueing, production browser rendering, graph explorer UI, or
 production scale readiness.
 
+Graph-driven frontier/review runtime fixture contract:
+
+```text
+veracrawl-graph-frontier-review run tests/fixtures/<graph_frontier_review_fixture_id> --profile target --out .veracrawl-test-runs/<graph_frontier_review_fixture_id>
+```
+
+Required graph frontier/review fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| graph-frontier-review-success | graph signals produce frontier priority, retry, retire, expand, and review route decisions with source graph, explanation, policy, command, event/outbox, and replay refs |
+| graph-frontier-review-runtime-unavailable | missing live graph/scheduler/review runtime refs return `needs_review` with contract-only and missing-runtime refs |
+| graph-frontier-review-signal-as-evidence | graph signal used as source evidence fails |
+| graph-frontier-review-missing-source-graph | missing source graph refs fail |
+| graph-frontier-review-missing-explanation | missing explanation refs fail |
+| graph-frontier-review-unauthorized-frontier-mutation | unauthorized frontier mutation fails |
+| graph-frontier-review-missing-review-route | missing review route decision refs fail |
+| graph-frontier-review-missing-replay | missing replay refs fail |
+| graph-frontier-review-unsupported-signal | unsupported graph signal type fails |
+
+Graph frontier/review acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_graph_frontier_review_contract_registry.py`
+- `pytest tests/contract/test_graph_frontier_review_contracts.py`
+- `pytest tests/contract/test_graph_frontier_review_import_boundaries.py`
+- `pytest tests/unit/test_graph_frontier_review_gate.py`
+- `pytest tests/integration/test_graph_frontier_review_fixtures.py`
+
+This acceptance proves graph-driven frontier/review decision records, dynamic
+fixture execution, core import boundaries, source graph/explanation completeness,
+unauthorized mutation blocking, and graph-signal-as-evidence rejection. It does
+not prove production graph stores, production queue backends, review UI, memory,
+export delivery, distributed storage, distributed queueing, or production scale
+readiness.
+
 Memory kernel fixture contract:
 
 ```text
@@ -1239,7 +1275,7 @@ Acceptance gates:
 
 - URL, page-structure, entity, source/evidence, task, and temporal graph projections build from canonical events/artifacts
 - projection watermarks and rebuild tests pass
-- graph signals can influence frontier and review routing with explanations
+- graph signals can influence frontier and review routing with explanations through `GraphFrontierReviewRuntimeReport`
 - graph signals cannot satisfy publication evidence requirements
 - `EvidencePacket.graph_signal_refs` cannot satisfy required evidence coverage; only source artifacts and source anchors in `source_evidence_refs` can do so
 - temporal KG records preserve valid time, transaction time, identity evidence, supersession, conflict, invalidation, and projection watermark fields

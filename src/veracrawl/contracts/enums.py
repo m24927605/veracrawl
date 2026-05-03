@@ -1074,6 +1074,19 @@ class GraphSignalType(StrEnum):
     QUALITY_WARNING = "quality_warning"
 
 
+class GraphFrontierDecisionType(StrEnum):
+    PRIORITIZE = "prioritize"
+    RETRY = "retry"
+    RETIRE = "retire"
+    EXPAND = "expand"
+
+
+class GraphReviewRouteType(StrEnum):
+    ROUTE_TO_REVIEW = "route_to_review"
+    ESCALATE = "escalate"
+    REQUIRE_MORE_EVIDENCE = "require_more_evidence"
+
+
 class ProjectionJobStatus(StrEnum):
     PLANNED = "planned"
     REBUILT = "rebuilt"
@@ -1088,6 +1101,17 @@ class GraphFailureType(StrEnum):
     MISSING_PROJECTION_WATERMARK = "missing_projection_watermark"
     PROJECTION_MISMATCH = "projection_mismatch"
     GRAPH_SIGNAL_AS_EVIDENCE = "graph_signal_as_evidence"
+
+
+class GraphFrontierReviewFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "graph_frontier_review_missing_runtime_refs"
+    GRAPH_SIGNAL_AS_EVIDENCE = "graph_frontier_review_signal_as_evidence"
+    MISSING_SOURCE_GRAPH_REFS = "graph_frontier_review_missing_source_graph_refs"
+    MISSING_EXPLANATION_REF = "graph_frontier_review_missing_explanation_ref"
+    UNAUTHORIZED_FRONTIER_MUTATION = "graph_frontier_review_unauthorized_frontier_mutation"
+    MISSING_REVIEW_ROUTE = "graph_frontier_review_missing_review_route"
+    MISSING_REPLAY_REFS = "graph_frontier_review_missing_replay_refs"
+    UNSUPPORTED_SIGNAL = "graph_frontier_review_unsupported_signal"
 
 
 class MemoryType(StrEnum):

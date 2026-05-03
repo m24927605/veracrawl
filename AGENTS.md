@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/027-dynamic-source-adapter-runtime-foundation/plan.md`.
-Use it with `specs/027-dynamic-source-adapter-runtime-foundation/spec.md`,
-`specs/027-dynamic-source-adapter-runtime-foundation/research.md`,
-`specs/027-dynamic-source-adapter-runtime-foundation/data-model.md`,
-`specs/027-dynamic-source-adapter-runtime-foundation/contracts/`, and
-`specs/027-dynamic-source-adapter-runtime-foundation/quickstart.md` for VeraCrawl Dynamic Source Adapter Runtime Foundation work.
+Current active Spec Kit plan: `specs/028-graph-frontier-review-runtime-gate/plan.md`.
+Use it with `specs/028-graph-frontier-review-runtime-gate/spec.md`,
+`specs/028-graph-frontier-review-runtime-gate/research.md`,
+`specs/028-graph-frontier-review-runtime-gate/data-model.md`,
+`specs/028-graph-frontier-review-runtime-gate/contracts/`, and
+`specs/028-graph-frontier-review-runtime-gate/quickstart.md` for VeraCrawl Graph-Driven Frontier And Review Runtime Gate work.
 <!-- SPECKIT END -->
