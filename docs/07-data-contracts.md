@@ -5368,3 +5368,86 @@ Executable review/replay/ops console rules:
 - `OpsConsoleReport` pass requires review, replay audit, quality, dashboard, DR restore, policy, command, event cursor, and outbox refs.
 - Negative ops fixtures must fail explicitly for missing review evidence, unresolved failure without recovery, stale dashboard projection, and unsafe recovery without review or approval.
 - These contracts provide a replayable target ops data surface. Operational observability is now validated separately by `ObservabilityReport` and related signal contracts. This data surface still does not claim production UI, managed telemetry storage, alert delivery, export delivery, distributed persistence, production browser rendering, or production scale readiness.
+
+## Target Crawl Runtime Contracts
+
+```yaml
+TargetCrawlPatternRecord:
+  id: string
+  run_ref: string
+  website_pattern: static | sitemap_rss_feed | listing_detail | api_like_endpoints | documents | drifted_sites | javascript_pages | ...
+  frontier_item_refs: list
+  source_observation_refs: list
+  source_adapter_result_refs: list
+  extraction_result_refs: list
+  accepted_output_refs: list
+  evidence_refs: list
+  verification_refs: list
+  graph_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  artifact_refs: list
+  replay_refs: list
+  operator_visible_refs: list
+  pattern_specific_refs: map
+  result: pass | fail | needs_review
+```
+
+```yaml
+TargetAIRecommendationRecord:
+  id: string
+  run_ref: string
+  subject: crawl_plan | extraction_strategy | evidence_anchor | verification | repair
+  recommendation_ref: string
+  accepted: boolean
+  policy_decision_refs: list
+  tool_call_refs: list
+  trace_refs: list
+  blocked_action_refs: list
+  repair_frontier_refs: list
+  framework_native_state_refs: list
+  result: pass | fail | needs_review
+```
+
+```yaml
+TargetRuntimeReport:
+  id: string
+  fixture_id: string
+  run_ref: string
+  objective_ref: string
+  plan_ref: string
+  status: complete | needs_review | blocked | failed
+  completion_result: pass | fail | needs_review
+  covered_patterns: list
+  pattern_record_refs: list
+  accepted_output_refs: list
+  evidence_refs: list
+  verification_refs: list
+  graph_refs: list
+  export_receipt_refs: list
+  output_manifest_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  artifact_refs: list
+  ai_recommendation_refs: list
+  repair_action_refs: list
+  review_item_refs: list
+  recovery_action_refs: list
+  privacy_lifecycle_refs: list
+  replay_bundle_ref: string
+  operator_status: string
+  failure_type: string
+  failure_report_refs: list
+  missing_ref_fields: list
+```
+
+Executable target runtime rules:
+
+- `TargetRuntimeReport` can claim `complete` only when at least seven website patterns have pattern records and accepted outputs, evidence, verification, graph, export, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay refs exist.
+- `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
+- Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
+- `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

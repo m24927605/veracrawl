@@ -1147,6 +1147,24 @@ class ProductAcceptanceFailureType(StrEnum):
     )
 
 
+class TargetRuntimeStatus(StrEnum):
+    COMPLETE = "complete"
+    NEEDS_REVIEW = "needs_review"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+
+
+class TargetRuntimeFailureType(StrEnum):
+    POLICY_DENIED = "target_runtime_policy_denied"
+    PROMPT_INJECTION = "target_runtime_prompt_injection"
+    MISSING_EVIDENCE = "target_runtime_missing_evidence"
+    REPLAY_MISMATCH = "target_runtime_replay_mismatch"
+    PARTIAL_EXPORT = "target_runtime_partial_export"
+    FALSE_COMPLETE = "target_runtime_false_complete"
+    DRIFT_REPAIR_REQUIRED = "target_runtime_drift_repair_required"
+    ORACLE_MISMATCH = "target_runtime_oracle_mismatch"
+
+
 class GraphNodeType(StrEnum):
     URL = "url"
     PAGE_TYPE = "page_type"

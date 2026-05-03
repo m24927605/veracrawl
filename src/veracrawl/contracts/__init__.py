@@ -242,6 +242,12 @@ from veracrawl.contracts.source_runtime import (
     SourceFailureReport,
     SourceFixtureManifest,
 )
+from veracrawl.contracts.target_runtime import (
+    TargetAIRecommendationRecord,
+    TargetCrawlPatternRecord,
+    TargetRuntimeFixtureManifest,
+    TargetRuntimeReport,
+)
 from veracrawl.contracts.verification import ReviewDecision, VerificationDecision
 from veracrawl.contracts.website_pattern import (
     WebsitePatternCoverageFixtureManifest,
@@ -450,6 +456,10 @@ __all__ = [
     "TemporalKGIdentityAdjudicationRecord",
     "TemporalKGProjectionRecord",
     "TemporalKGRuntimeReport",
+    "TargetAIRecommendationRecord",
+    "TargetCrawlPatternRecord",
+    "TargetRuntimeFixtureManifest",
+    "TargetRuntimeReport",
     "TextAnchor",
     "ToolCallTrace",
     "TraceSpan",

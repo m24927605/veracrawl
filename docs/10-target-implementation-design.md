@@ -1243,6 +1243,15 @@ Security/privacy lifecycle gate slice:
 - policy-only security/privacy returns `needs_review`; unsafe network access, prompt-injection/tool misuse, credential leakage, missing lifecycle propagation, legal-hold delete, missing projection cleanup, missing redacted replay, and missing observability refs are deterministic failures.
 - this slice does not implement CAPTCHA solving, paywall bypass, login wall circumvention, WAF evasion, stealth automation, credential theft, raw secret form-fill bypass, production browser rendering, managed DLP, external SIEM/SOAR integrations, or production compliance workflows. Those are outside VeraCrawl's authorized crawler boundary or require separate approved adapter specs.
 
+Target crawl runtime slice:
+
+- `veracrawl.target_runtime.runner` is core-owned and imports only VeraCrawl contracts plus standard library helpers. It composes target runtime fixture results from objective, plan, pattern, AI, evidence, graph, export, privacy, and replay refs without importing concrete adapters or SDKs.
+- `TargetCrawlPatternRecord` is the per-pattern proof surface for frontier, source observation, source adapter, extraction, accepted output, evidence, verification, graph, policy, command, event cursor, outbox, artifact, replay, and operator-visible refs.
+- `TargetAIRecommendationRecord` records framework-neutral planning and repair recommendations. It blocks framework-native canonical state and requires policy/tool/trace refs for accepted recommendations.
+- `TargetRuntimeReport` can claim `complete` only when at least seven website patterns are covered in one run and all output, evidence, graph, export, policy, command/event/outbox, artifact, AI, privacy, and replay refs are present.
+- `veracrawl-target-runtime` executes success, drift-repair, needs-review, policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures and writes `run_report.json`.
+- this slice is an executable target architecture runtime path over deterministic fixtures. It is not a claim that live Internet crawling, production browser fleets, production credential vaults, concrete agent frameworks, managed model providers, production export destinations, or production worker fleets are operational.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

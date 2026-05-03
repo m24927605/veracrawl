@@ -348,6 +348,27 @@ Required acceptance:
 - negative fixtures for unsafe network access, prompt-injection/tool misuse, credential leakage, missing lifecycle propagation, legal-hold delete, missing projection cleanup, missing redacted replay, and missing observability refs fail deterministically
 - security/privacy gates pass before target capability can be claimed
 
+### Target Crawl Runtime Profile
+
+Required capabilities:
+
+- objective ingestion and approved crawl plan refs
+- policy-gated frontier scheduling across multiple website patterns
+- source observations, source adapter results, and raw artifact refs
+- framework-neutral AI planning and drift repair recommendations
+- evidence-backed extraction, verification, and accepted output refs
+- graph refs, export receipt refs, privacy lifecycle refs, and replay bundle closure
+- operator-visible reports for success, review, blocked, and failed outcomes
+
+Required acceptance:
+
+- `target-runtime-success` must complete with at least seven website patterns in one run
+- every accepted output must carry evidence, verification, policy, command/event/outbox, artifact, graph, export, privacy, and replay refs
+- `target-runtime-drift-repair` must record accepted framework-neutral AI repair recommendations and reprocessed frontier refs
+- `target-runtime-needs-review` must not claim complete and must expose review/recovery refs
+- policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically
+- no target runtime core module may import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
+
 ### Scale And Reliability Profile
 
 Required capabilities:

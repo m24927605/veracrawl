@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/033-target-area-readiness-closure/plan.md`.
-Use it with `specs/033-target-area-readiness-closure/spec.md`,
-`specs/033-target-area-readiness-closure/research.md`,
-`specs/033-target-area-readiness-closure/data-model.md`,
-`specs/033-target-area-readiness-closure/contracts/`, and
-`specs/033-target-area-readiness-closure/quickstart.md` for VeraCrawl Target Area Readiness Impact Closure work.
+Current active Spec Kit plan: `specs/034-target-crawl-runtime/plan.md`.
+Use it with `specs/034-target-crawl-runtime/spec.md`,
+`specs/034-target-crawl-runtime/research.md`,
+`specs/034-target-crawl-runtime/data-model.md`,
+`specs/034-target-crawl-runtime/contracts/`, and
+`specs/034-target-crawl-runtime/quickstart.md` for VeraCrawl Target Crawl Runtime work.
 <!-- SPECKIT END -->

@@ -1,0 +1,1 @@
+{"id":"target-runtime-drift-repair","scenario":"target-runtime-drift-repair","profile_refs":["target"],"expected_status":"complete","expected_completion_result":"pass","expected_operator_status":"target_runtime_drift_repaired","expected_pattern_count":7,"negative_case":false}

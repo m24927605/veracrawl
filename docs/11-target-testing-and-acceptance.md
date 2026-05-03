@@ -1521,6 +1521,19 @@ Acceptance gates:
 - no-runtime observability and data-surface-only observability fixtures must remain `needs_review` and contract-only; an ops console report alone cannot be labeled operational observability pass
 - negative observability fixtures for missing metrics, missing traces, missing alerts, missing runbook actions, stale dashboard watermarks, missing DR refs, missing redaction refs, missing replay refs, secret leakage, and unsafe runbook without approval must fail deterministically
 
+### Target Crawl Runtime Profile
+
+Acceptance gates:
+
+- `veracrawl-target-runtime run tests/fixtures/target-runtime-success --profile target --out <dir>` completes with status `complete` and `pass`
+- success report covers at least seven website patterns in one run and includes accepted output, evidence, verification, graph, export receipt, output manifest, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay bundle refs
+- `target-runtime-drift-repair` completes only when framework-neutral AI recommendation, policy, tool-call, trace, repair action, and reprocessed frontier refs exist
+- `target-runtime-needs-review` returns `needs_review`, includes review/recovery/missing-ref diagnostics, and cannot publish a false complete claim
+- `target-runtime-policy-denied` and `target-runtime-prompt-injection` return `blocked` with typed failure refs
+- `target-runtime-missing-evidence`, `target-runtime-replay-mismatch`, `target-runtime-partial-export`, and `target-runtime-false-complete` return `failed` with typed failure refs
+- import-boundary tests prove target runtime core does not import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
+- registry validation includes target runtime contracts, commands, events, fixtures, and target area coverage
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

@@ -1,0 +1,1 @@
+{"id":"target-runtime-false-complete","scenario":"target-runtime-false-complete","profile_refs":["target"],"expected_status":"failed","expected_completion_result":"fail","expected_operator_status":"target_runtime_false_complete","expected_failure_type":"target_runtime_false_complete","expected_pattern_count":0,"negative_case":true}

@@ -159,6 +159,15 @@ evidence review, conflict resolution, drift repair, memory reuse,
 export/withdrawal, replay/audit, and operator recovery. It cannot claim `pass`
 from technical contract-only reports, mock UI screenshots, scaffold manifests,
 degraded runs, or false `complete`/`verified`/`operational` labels.
+The target crawl runtime turns the target contracts into an executable
+objective-to-report path. `veracrawl-target-runtime` runs deterministic
+multi-pattern crawl fixtures through policy-gated frontier refs, source
+observations, framework-neutral AI recommendations, evidence/verification,
+graph refs, export receipts, privacy refs, and replay bundle closure. The
+success fixture covers at least seven website patterns in one run; drift repair,
+needs-review, policy-denied, prompt-injection, missing-evidence,
+replay-mismatch, partial-export, and false-complete fixtures prove unsafe or
+deceptive completion claims cannot pass.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
