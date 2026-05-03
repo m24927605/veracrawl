@@ -119,13 +119,13 @@ For all Spec Kit plans and implementation tasks:
 
 <!-- SPECKIT START -->
 Current active Spec Kit plan:
-`specs/058-expanded-real-world-corpus-benchmark/plan.md`.
-Use it with `specs/058-expanded-real-world-corpus-benchmark/spec.md`,
-`specs/058-expanded-real-world-corpus-benchmark/research.md`,
-`specs/058-expanded-real-world-corpus-benchmark/data-model.md`,
-`specs/058-expanded-real-world-corpus-benchmark/contracts/`, and
-`specs/058-expanded-real-world-corpus-benchmark/quickstart.md` for expanded
-real-world quality corpus work. Production quality specs remain governed by
+`specs/059-js-browser-crawl-quality-benchmark/plan.md`.
+Use it with `specs/059-js-browser-crawl-quality-benchmark/spec.md`,
+`specs/059-js-browser-crawl-quality-benchmark/research.md`,
+`specs/059-js-browser-crawl-quality-benchmark/data-model.md`,
+`specs/059-js-browser-crawl-quality-benchmark/contracts/`, and
+`specs/059-js-browser-crawl-quality-benchmark/quickstart.md` for JavaScript
+browser crawl quality benchmark work. Production quality specs remain governed by
 `specs/057-production-quality-benchmark-roadmap/spec.md`,
 `specs/038-production-runtime-closure/spec.md`, and
 `docs/08-build-roadmap.md`; do not invent additional production or

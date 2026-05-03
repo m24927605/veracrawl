@@ -1171,6 +1171,23 @@ class BrowserSnapshotFailureType(StrEnum):
     ADAPTER_UNAVAILABLE = "browser_snapshot_adapter_unavailable"
 
 
+class BrowserQualityFailureType(StrEnum):
+    HTTP_ORACLE_NOT_MISSING = "browser_quality_http_oracle_not_missing"
+    BROWSER_ORACLE_NOT_RECOVERED = "browser_quality_browser_oracle_not_recovered"
+    POLICY_DENIED = "browser_quality_policy_denied"
+    EGRESS_DENIED = "browser_quality_egress_denied"
+    UNSAFE_ACTION = "browser_quality_unsafe_action"
+    PROMPT_TAINT_BYPASS = "browser_quality_prompt_taint_bypass"
+    MISSING_ARTIFACT = "browser_quality_missing_artifact"
+    MISSING_ANCHOR = "browser_quality_missing_anchor"
+    BUDGET_EXCEEDED = "browser_quality_budget_exceeded"
+    REPLAY_MISMATCH = "browser_quality_replay_mismatch"
+    ADAPTER_UNAVAILABLE = "browser_quality_adapter_unavailable"
+    INSUFFICIENT_BROWSER_REQUIRED_TARGETS = (
+        "browser_quality_insufficient_browser_required_targets"
+    )
+
+
 class CredentialedSessionFailureType(StrEnum):
     POLICY_DENIED = "credentialed_session_policy_denied"
     MISSING_AUTHORIZATION = "credentialed_session_missing_authorization"

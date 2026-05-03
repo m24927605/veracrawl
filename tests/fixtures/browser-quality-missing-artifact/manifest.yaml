@@ -1,0 +1,210 @@
+{
+  "expected_completion_result": "fail",
+  "expected_failure_type": "browser_quality_missing_artifact",
+  "expected_operator_status": "browser_quality_missing_artifact",
+  "id": "browser-quality-missing-artifact",
+  "minimum_browser_required_count": 8,
+  "negative_case": true,
+  "profile_refs": [
+    "quality"
+  ],
+  "required_ref_types": [
+    "live_http",
+    "http_artifact",
+    "http_hash",
+    "browser_step",
+    "dom",
+    "screenshot",
+    "network_trace",
+    "console",
+    "timing",
+    "rendered_hash",
+    "source_anchor",
+    "policy",
+    "command",
+    "event_cursor",
+    "outbox",
+    "replay",
+    "budget",
+    "prompt_taint_boundary"
+  ],
+  "scenario": "browser-quality-missing-artifact",
+  "target_specs": [
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-01",
+      "browser_required_fragments": [
+        "The world as we have created it"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "The world as we have created it"
+      ],
+      "id": "browser-quote-01",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-01",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=1"
+    },
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-02",
+      "browser_required_fragments": [
+        "It is our choices"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "It is our choices"
+      ],
+      "id": "browser-quote-02",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-02",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=2"
+    },
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-03",
+      "browser_required_fragments": [
+        "There are only two ways"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "There are only two ways"
+      ],
+      "id": "browser-quote-03",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-03",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=3"
+    },
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-04",
+      "browser_required_fragments": [
+        "The person, be it gentleman or lady"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "The person, be it gentleman or lady"
+      ],
+      "id": "browser-quote-04",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-04",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=4"
+    },
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-05",
+      "browser_required_fragments": [
+        "Imperfection is beauty"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "Imperfection is beauty"
+      ],
+      "id": "browser-quote-05",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-05",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=5"
+    },
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-06",
+      "browser_required_fragments": [
+        "Try not to become a man of success"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "Try not to become a man of success"
+      ],
+      "id": "browser-quote-06",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-06",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=6"
+    },
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-07",
+      "browser_required_fragments": [
+        "It is better to be hated"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "It is better to be hated"
+      ],
+      "id": "browser-quote-07",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-07",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=7"
+    },
+    {
+      "allowed_origin": "https://quotes.toscrape.com",
+      "browser_budget_ref": "budget:browser-quality-missing-artifact:browser-quote-08",
+      "browser_required_fragments": [
+        "I have not failed"
+      ],
+      "expected_quality_result": "fail",
+      "http_absent_fragments": [
+        "I have not failed"
+      ],
+      "id": "browser-quote-08",
+      "max_network_request_count": 40,
+      "max_runtime_ms": 10000,
+      "pattern_refs": [
+        "pattern:javascript-rendered",
+        "pattern:infinite-scroll"
+      ],
+      "robots_url": "https://quotes.toscrape.com/robots.txt",
+      "sandbox_policy_ref": "browser-sandbox:browser-quality-missing-artifact:browser-quote-08",
+      "side_effect_class": "read_only",
+      "target_url": "https://quotes.toscrape.com/scroll?vc_target=8"
+    }
+  ]
+}

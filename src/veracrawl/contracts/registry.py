@@ -86,6 +86,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_source_coverage_ref: str | None = None
     expected_dynamic_source_runtime_ref: str | None = None
     expected_browser_snapshot_ref: str | None = None
+    expected_browser_quality_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -1856,6 +1857,42 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "browser",
         tests=["tests/contract/test_browser_snapshot_contracts.py"],
     ),
+    "BrowserQualityTargetSpec": _contract(
+        "BrowserQualityTargetSpec",
+        OwnerService.BROWSER,
+        "browser_quality",
+        tests=["tests/contract/test_browser_quality_contracts.py"],
+    ),
+    "BrowserQualityObservation": _contract(
+        "BrowserQualityObservation",
+        OwnerService.BROWSER,
+        "browser_quality",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_browser_quality_contracts.py"],
+    ),
+    "BrowserQualityDeltaRecord": _contract(
+        "BrowserQualityDeltaRecord",
+        OwnerService.BROWSER,
+        "browser_quality",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_browser_quality_contracts.py"],
+    ),
+    "BrowserQualityReport": _contract(
+        "BrowserQualityReport",
+        OwnerService.BROWSER,
+        "browser_quality",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_browser_quality_contracts.py"],
+    ),
+    "BrowserQualityCorpusManifest": _contract(
+        "BrowserQualityCorpusManifest",
+        OwnerService.TESTS,
+        "browser_quality",
+        tests=["tests/integration/test_browser_quality_fixtures.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -2440,6 +2477,37 @@ COMMAND_TYPES.update(
             target_aggregate_type="BrowserSnapshotFixtureManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["browser_snapshot_fixture_manifest_recorded"],
+        ),
+        "record_browser_quality_observation": CommandTypeRegistration(
+            command_type="record_browser_quality_observation",
+            owner_service=OwnerService.BROWSER,
+            target_aggregate_type="BrowserQualityObservation",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["browser_interaction"],
+            emitted_event_types=["browser_quality_observed"],
+        ),
+        "record_browser_quality_delta": CommandTypeRegistration(
+            command_type="record_browser_quality_delta",
+            owner_service=OwnerService.BROWSER,
+            target_aggregate_type="BrowserQualityDeltaRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["browser_interaction"],
+            emitted_event_types=["browser_quality_delta_recorded"],
+        ),
+        "record_browser_quality_report": CommandTypeRegistration(
+            command_type="record_browser_quality_report",
+            owner_service=OwnerService.BROWSER,
+            target_aggregate_type="BrowserQualityReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["browser_interaction"],
+            emitted_event_types=["browser_quality_reported"],
+        ),
+        "record_browser_quality_manifest": CommandTypeRegistration(
+            command_type="record_browser_quality_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="BrowserQualityCorpusManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["browser_quality_manifest_recorded"],
         ),
         "record_normalization_manifest": CommandTypeRegistration(
             command_type="record_normalization_manifest",
@@ -3569,6 +3637,10 @@ EVENT_TYPES.update(
         "browser_step_executed",
         "browser_snapshot_runtime_reported",
         "browser_snapshot_fixture_manifest_recorded",
+        "browser_quality_observed",
+        "browser_quality_delta_recorded",
+        "browser_quality_reported",
+        "browser_quality_manifest_recorded",
         "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
@@ -4964,6 +5036,26 @@ for _browser_snapshot_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _browser_quality_fixture, _negative in {
+    "browser-quality-corpus": False,
+    "browser-quality-unsafe-action": True,
+    "browser-quality-prompt-taint": True,
+    "browser-quality-missing-artifact": True,
+    "browser-quality-budget-exceeded": True,
+    "browser-quality-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_browser_quality_fixture}"
+    FIXTURE_ORACLES[_browser_quality_fixture] = FixtureOracleRegistration(
+        fixture_id=_browser_quality_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_browser_quality_ref=f"{_base}/oracles/expected_browser_quality.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _credentialed_session_fixture, _negative in {
     "credentialed-session-success": False,
     "credentialed-session-missing-authorization": True,
@@ -5298,6 +5390,30 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "BrowserInteractionStep",
             "LiveHttpAcquisitionReport",
             "StructuredSourceAdaptersRuntimeReport",
+            "NetworkAcquisitionReport",
+            "SourceAcquisitionReport",
+            "SourceAdapterResult",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "PromptTaintBoundary",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "browser_quality_benchmark": _target_area(
+        "browser_quality_benchmark",
+        OwnerService.BROWSER,
+        "materialized",
+        materialized=[
+            "BrowserQualityCorpusManifest",
+            "BrowserQualityTargetSpec",
+            "BrowserQualityObservation",
+            "BrowserQualityDeltaRecord",
+            "BrowserQualityReport",
+            "BrowserSandboxPolicy",
+            "BrowserInteractionStep",
+            "LiveHttpAcquisitionReport",
             "NetworkAcquisitionReport",
             "SourceAcquisitionReport",
             "SourceAdapterResult",

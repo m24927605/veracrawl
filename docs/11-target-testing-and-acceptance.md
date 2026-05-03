@@ -2146,6 +2146,47 @@ prove JavaScript/browser rendering quality, bounded deep crawl quality,
 field-level oracle extraction, precision/recall, repair success, or
 cost/latency/stability release readiness.
 
+JavaScript browser quality benchmark acceptance:
+
+```text
+veracrawl-browser-quality-benchmark run tests/fixtures/<browser_quality_fixture_id> --profile quality --browser-adapter deterministic --out .veracrawl-test-runs/<browser_quality_fixture_id>
+```
+
+Live public validation uses:
+
+```text
+veracrawl-browser-quality-benchmark run tests/fixtures/browser-quality-corpus --profile quality --browser-adapter playwright --out .veracrawl-real-runs/browser-quality-corpus
+```
+
+Required browser quality fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| browser-quality-corpus | at least 8 JS-required targets recover browser-only oracle fragments with DOM/screenshot/network/console/timing artifacts, source anchors, hashes, policy, command/event/outbox, and replay refs |
+| browser-quality-unsafe-action | unsafe action fails with typed diagnostics |
+| browser-quality-prompt-taint | prompt-taint bypass fails with typed diagnostics |
+| browser-quality-missing-artifact | missing browser artifact fails |
+| browser-quality-budget-exceeded | browser budget exhaustion fails |
+| browser-quality-replay-mismatch | replay mismatch fails |
+
+Browser quality acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_browser_quality_contracts.py`
+- `pytest tests/contract/test_browser_quality_contract_registry.py`
+- `pytest tests/contract/test_browser_quality_import_boundaries.py`
+- `pytest tests/unit/test_browser_quality_runtime.py`
+- `pytest tests/unit/test_browser_quality_replay.py`
+- `pytest tests/integration/test_browser_quality_fixtures.py`
+- one recorded deterministic CLI run against `tests/fixtures/browser-quality-corpus`
+- one recorded live public CLI run against `tests/fixtures/browser-quality-corpus`
+  with the Playwright adapter
+
+This acceptance proves only JS/browser rendering quality for declared targets.
+It does not prove bounded deep crawl quality, credentialed browsing, CAPTCHA
+solving, stealth automation, field-level oracle extraction, precision/recall,
+repair success, or cost/latency/stability release readiness.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

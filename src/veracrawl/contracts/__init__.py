@@ -43,6 +43,21 @@ from veracrawl.contracts.browser import (
     BrowserSnapshotFixtureManifest,
     BrowserSnapshotRuntimeReport,
 )
+from veracrawl.contracts.browser_quality import (
+    BrowserQualityCorpusManifest as BrowserQualityCorpusManifest,
+)
+from veracrawl.contracts.browser_quality import (
+    BrowserQualityDeltaRecord as BrowserQualityDeltaRecord,
+)
+from veracrawl.contracts.browser_quality import (
+    BrowserQualityObservation as BrowserQualityObservation,
+)
+from veracrawl.contracts.browser_quality import (
+    BrowserQualityReport as BrowserQualityReport,
+)
+from veracrawl.contracts.browser_quality import (
+    BrowserQualityTargetSpec as BrowserQualityTargetSpec,
+)
 from veracrawl.contracts.command import (
     BaseCommandPayload,
     CommandEnvelope,

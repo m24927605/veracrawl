@@ -23,11 +23,13 @@ class DeterministicBrowserObservationAdapter:
         target_url: str,
         sandbox_policy: BrowserSandboxPolicy,
         side_effect_class: BrowserSideEffectClass = BrowserSideEffectClass.READ_ONLY,
+        rendered_text: str | None = None,
     ) -> None:
         self.fixture_id = fixture_id
         self.target_url = target_url
         self.sandbox_policy = sandbox_policy
         self.side_effect_class = side_effect_class
+        self.rendered_text = rendered_text
         self._last_result: BrowserObservationResult | None = None
 
     @property
@@ -48,6 +50,11 @@ class DeterministicBrowserObservationAdapter:
         network_ref = f"artifact:{self.fixture_id}:browser-network:{digest[:12]}"
         console_ref = f"artifact:{self.fixture_id}:console:{digest[:12]}"
         timing_ref = f"artifact:{self.fixture_id}:timing:{digest[:12]}"
+        dom_text = self.rendered_text or (
+            "Browser observation fixture Rendered Ready JavaScript content "
+            f"{self.fixture_id}"
+        )
+        dom_content_hash = stable_hash({"fixture": self.fixture_id, "dom_text": dom_text})
         step = BrowserInteractionStep(
             id=f"browser-step:{self.fixture_id}:1",
             run_ref=run_ref,
@@ -66,6 +73,13 @@ class DeterministicBrowserObservationAdapter:
         return BrowserObservationResult(
             step=step,
             artifact_refs=[dom_ref, screenshot_ref, network_ref, console_ref, timing_ref],
+            dom_text=dom_text,
+            dom_content_hash=dom_content_hash,
+            screenshot_byte_count=128,
+            network_request_count=1,
+            blocked_request_count=0,
+            console_log_count=1,
+            wall_time_ms=1,
         )
 
     def execute(self, command: SourceAdapterCommand) -> SourceAdapterResult:

@@ -62,6 +62,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "dynamic_source_adapter_runtime_foundation",
         "structured_source_adapters_runtime",
         "browser_snapshot_runtime",
+        "browser_quality_benchmark",
         "credentialed_session_runtime",
         "live_normalization_site_understanding",
         "schema_extraction_candidate_runtime",

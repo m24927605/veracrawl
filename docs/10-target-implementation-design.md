@@ -1742,6 +1742,31 @@ Expanded real-world public quality corpus gate:
   quality, multi-page deep crawl quality, field-level oracles, precision/recall,
   repair success, and cost/latency/stability release remain specs 059-064.
 
+JavaScript browser quality benchmark:
+
+- `veracrawl.contracts.browser_quality` owns
+  `BrowserQualityCorpusManifest`, `BrowserQualityTargetSpec`,
+  `BrowserQualityObservation`, `BrowserQualityDeltaRecord`, and
+  `BrowserQualityReport`.
+- `veracrawl.benchmarks.browser_quality` compares HTTP-only evidence with
+  browser-rendered evidence for each manifest target. Passing observations
+  require browser-only recovered oracle fragments, DOM/screenshot/network/
+  console/timing artifacts, rendered content hashes, source anchors, browser
+  budget refs, prompt-taint boundary refs, command/event/outbox refs, and replay
+  refs.
+- `veracrawl.adapters.browser.playwright` is the optional live browser adapter.
+  It is dynamically loaded by `veracrawl.cli.browser_quality`; core benchmark
+  runtime and contracts do not import Playwright or persist browser-native
+  state.
+- unsafe action, prompt-taint bypass, egress/policy denial, missing
+  artifacts/anchors, budget exhaustion, replay mismatch, adapter unavailability,
+  and insufficient browser-required target coverage fail with
+  `BrowserQualityFailureType`.
+- this gate proves JS/browser rendering quality for declared targets only.
+  Multi-page deep crawl, credentialed browsing, CAPTCHA solving, stealth
+  automation, field-level oracles, precision/recall, repair success, and
+  cost/latency/stability release remain separate specs.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

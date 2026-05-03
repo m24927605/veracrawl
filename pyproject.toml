@@ -27,6 +27,9 @@ queue-redis = [
 object-s3 = [
   "boto3>=1.34,<2",
 ]
+browser-playwright = [
+  "playwright>=1.45,<2",
+]
 
 [project.scripts]
 veracrawl-contracts = "veracrawl.cli.contracts:main"
@@ -80,6 +83,7 @@ veracrawl-release-gate = "veracrawl.cli.release_gate:main"
 veracrawl-real-benchmark = "veracrawl.cli.real_benchmark:main"
 veracrawl-real-ai-benchmark = "veracrawl.cli.real_ai_benchmark:main"
 veracrawl-real-quality-corpus = "veracrawl.cli.real_quality_corpus:main"
+veracrawl-browser-quality-benchmark = "veracrawl.cli.browser_quality:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

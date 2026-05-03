@@ -1074,6 +1074,28 @@ refs. This gate does not claim JS/browser quality, deep crawl quality,
 field-level oracle quality, precision/recall, repair success, or final
 production-quality release readiness; those remain specs 059-064.
 
+Run the JavaScript browser quality benchmark:
+
+```sh
+uv run --python python3.12 --extra dev --extra browser-playwright \
+  veracrawl-browser-quality-benchmark run \
+  tests/fixtures/browser-quality-corpus \
+  --profile quality \
+  --browser-adapter playwright \
+  --out .veracrawl-real-runs/browser-quality-corpus
+```
+
+The browser quality gate compares HTTP-only evidence with browser-rendered DOM
+evidence for JS-required targets. Passing reports require at least 8
+browser-required targets with browser-only recovered oracle fragments,
+DOM/screenshot/network/console/timing artifacts, rendered content hashes,
+source anchors, browser budget refs, prompt-taint boundary refs,
+command/event/outbox refs, and replay refs. Playwright is optional and
+adapter-owned; core benchmark code depends on VeraCrawl ports/contracts, not a
+browser engine. This gate does not claim deep crawl, credentialed browsing,
+CAPTCHA solving, stealth automation, field-level oracle quality,
+precision/recall, repair success, or final production-quality release readiness.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

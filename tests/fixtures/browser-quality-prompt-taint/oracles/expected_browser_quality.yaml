@@ -1,0 +1,1 @@
+{"expected_failure_type": "browser_quality_prompt_taint_bypass", "fixture_id": "browser-quality-prompt-taint", "required_refs": ["live_http", "http_artifact", "http_hash", "browser_step", "dom", "screenshot", "network_trace", "console", "timing", "rendered_hash", "source_anchor", "policy", "command", "event_cursor", "outbox", "replay", "budget", "prompt_taint_boundary"]}
