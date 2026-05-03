@@ -250,6 +250,43 @@ This acceptance proves production-facing adapter semantics through a reference
 filesystem adapter. It does not prove concrete database, broker, cloud, metrics,
 tracing, deployment, or production worker readiness.
 
+Production run-control persistence wiring fixture contract:
+
+```text
+veracrawl-production-persistence run tests/fixtures/<production_persistence_fixture_id> --profile target --out .veracrawl-test-runs/<production_persistence_fixture_id>
+```
+
+Required production persistence wiring fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| production-persistence-wiring-success | approved row 039 run-control canonical state, transaction, command, event cursor, outbox, artifact, idempotency, queue, lease, policy, and replay refs survive adapter reopen with `pass` |
+| production-persistence-idempotent-replay | reopened adapter dedupes duplicate production persistence command with 0 duplicate events and 0 duplicate outbox records |
+| production-persistence-queue-recovery | persisted queue lease heartbeat, nack, dead-letter, failure, recovery, and replay refs complete with `pass` |
+| production-persistence-non-atomic-commit | missing atomic transaction refs fail |
+| production-persistence-canonical-state-missing | missing canonical run-control state refs fail |
+| production-persistence-idempotency-missing | missing idempotency refs fail duplicate-safe replay |
+| production-persistence-event-gap | missing event cursor refs fail replay |
+| production-persistence-outbox-missing | missing outbox refs fail |
+| production-persistence-artifact-index-missing | missing artifact index refs fail replay and lineage |
+| production-persistence-lease-heartbeat-missing | missing lease heartbeat or queue operation refs fail |
+| production-persistence-replay-missing | missing replay bundle refs fail |
+
+Production run-control persistence wiring acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_production_persistence_runtime_contracts.py`
+- `pytest tests/unit/test_production_persistence_runtime.py`
+- `pytest tests/integration/test_production_persistence_runtime_fixtures.py`
+- `veracrawl-production-persistence` CLI loop over all production persistence
+  wiring fixtures
+
+This acceptance proves the run-control-to-persistence wiring layer. It does not
+replace concrete Postgres, Redis/Valkey, or S3-compatible adapter gates and does
+not prove live crawling, production worker fleets, managed cloud operations,
+deployment, observability backends, browser execution, model SDK integration, or
+agent framework integration.
+
 Concrete persistence adapter fixture contract:
 
 ```text

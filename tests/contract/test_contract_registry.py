@@ -34,6 +34,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "product_acceptance_gate",
         "target_crawl_runtime",
         "production_run_control_api",
+        "production_persistence_runtime_wiring",
         "source_backed_target_runtime",
         "adapter_backed_target_runtime",
         "processing_evidence_target_runtime",

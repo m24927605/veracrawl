@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 from veracrawl.contracts.command import CommandResult
@@ -43,6 +44,22 @@ RunControlScenario = Literal[
     "invalid-transition",
     "missing-replay",
 ]
+
+
+@dataclass(frozen=True)
+class ProductionRunControlFixtureExecution:
+    project: ProductionProject
+    site_scope: ProductionSiteScope
+    objective: CrawlObjective
+    plan: CrawlPlan
+    run_plan_snapshot: RunPlanSnapshot
+    run: CrawlRun
+    budget: RunBudget | None
+    policy_snapshot: RunPolicySnapshot | None
+    approval: RunApprovalRecord | None
+    policies: list[PolicyDecision]
+    lifecycle_records: list[RunLifecycleRecord]
+    report: ProductionRunControlReport
 
 
 def _suffix(fixture_id: str) -> str:
@@ -381,12 +398,12 @@ def _scenario_from_fixture(fixture_id: str, scenario: str | None) -> RunControlS
     return _suffix(fixture_id)  # type: ignore[return-value]
 
 
-def run_production_run_control_fixture(
+def execute_production_run_control_fixture(
     *,
     fixture_id: str,
     scenario: str | None,
     profile: str,
-) -> ProductionRunControlReport:
+) -> ProductionRunControlFixtureExecution:
     runtime_scenario = _scenario_from_fixture(fixture_id, scenario)
     allow_policy = runtime_scenario != "policy-denied"
     approved = runtime_scenario != "missing-approval"
@@ -396,7 +413,7 @@ def run_production_run_control_fixture(
         site_scope,
         objective,
         plan,
-        _snapshot,
+        snapshot,
         run,
         budget,
         policy_snapshot,
@@ -411,9 +428,26 @@ def run_production_run_control_fixture(
     event_store = InMemoryEventStore()
     command_refs: list[Ref] = []
     event_refs: list[Ref] = []
+    lifecycle_records: list[RunLifecycleRecord] = []
     lifecycle_refs: list[Ref] = []
     replay_refs: list[Ref] = []
     policy_refs = [policy.id for policy in policies]
+
+    def _execution(report: ProductionRunControlReport) -> ProductionRunControlFixtureExecution:
+        return ProductionRunControlFixtureExecution(
+            project=project,
+            site_scope=site_scope,
+            objective=objective,
+            plan=plan,
+            run_plan_snapshot=snapshot,
+            run=run,
+            budget=budget,
+            policy_snapshot=policy_snapshot,
+            approval=approval,
+            policies=policies,
+            lifecycle_records=list(lifecycle_records),
+            report=report,
+        )
 
     for command_type, target_type, target_ref, event_type in [
         (
@@ -445,7 +479,7 @@ def run_production_run_control_fixture(
         event_refs.append(event_ref)
 
     if not allow_policy:
-        return _failure_report(
+        return _execution(_failure_report(
             fixture_id=fixture_id,
             run=run,
             project=project,
@@ -462,9 +496,9 @@ def run_production_run_control_fixture(
             policy_snapshot_ref=policy_snapshot.id if policy_snapshot else None,
             lifecycle_refs=lifecycle_refs,
             replay_refs=replay_refs,
-        )
+        ))
     if approval is None:
-        return _failure_report(
+        return _execution(_failure_report(
             fixture_id=fixture_id,
             run=run,
             project=project,
@@ -481,9 +515,9 @@ def run_production_run_control_fixture(
             policy_snapshot_ref=policy_snapshot.id if policy_snapshot else None,
             lifecycle_refs=lifecycle_refs,
             replay_refs=replay_refs,
-        )
+        ))
     if budget is None or policy_snapshot is None:
-        return _failure_report(
+        return _execution(_failure_report(
             fixture_id=fixture_id,
             run=run,
             project=project,
@@ -500,7 +534,7 @@ def run_production_run_control_fixture(
             policy_snapshot_ref=None,
             lifecycle_refs=lifecycle_refs,
             replay_refs=replay_refs,
-        )
+        ))
 
     for command_type, target_type, target_ref, event_type, output_refs, policy_decisions in [
         (
@@ -545,7 +579,7 @@ def run_production_run_control_fixture(
         event_refs.append(event_ref)
 
     if runtime_scenario == "invalid-transition":
-        return _failure_report(
+        return _execution(_failure_report(
             fixture_id=fixture_id,
             run=run,
             project=project,
@@ -562,7 +596,7 @@ def run_production_run_control_fixture(
             policy_snapshot_ref=policy_snapshot.id,
             lifecycle_refs=lifecycle_refs,
             replay_refs=replay_refs,
-        )
+        ))
 
     if runtime_scenario == "missing-replay":
         result, event_ref = _record_command(
@@ -581,7 +615,7 @@ def run_production_run_control_fixture(
         command_refs.append(result.id)
         event_refs.append(event_ref)
         run = run.model_copy(update={"status": RunStatus.RUNNING})
-        return _failure_report(
+        return _execution(_failure_report(
             fixture_id=fixture_id,
             run=run,
             project=project,
@@ -599,7 +633,7 @@ def run_production_run_control_fixture(
             lifecycle_refs=[],
             replay_refs=[],
             status=RunStatus.FAILED,
-        )
+        ))
 
     lifecycle, result, event_ref, run = _lifecycle(
         fixture_id=fixture_id,
@@ -615,6 +649,7 @@ def run_production_run_control_fixture(
     )
     command_refs.append(result.id)
     event_refs.append(event_ref)
+    lifecycle_records.append(lifecycle)
     lifecycle_refs.append(lifecycle.id)
     replay_refs.extend(lifecycle.replay_refs)
 
@@ -637,6 +672,7 @@ def run_production_run_control_fixture(
             )
             command_refs.append(result.id)
             event_refs.append(event_ref)
+            lifecycle_records.append(lifecycle)
             lifecycle_refs.append(lifecycle.id)
             replay_refs.extend(lifecycle.replay_refs)
 
@@ -655,6 +691,7 @@ def run_production_run_control_fixture(
         )
         command_refs.append(result.id)
         event_refs.append(event_ref)
+        lifecycle_records.append(lifecycle)
         lifecycle_refs.append(lifecycle.id)
         replay_refs.extend(lifecycle.replay_refs)
     else:
@@ -672,10 +709,11 @@ def run_production_run_control_fixture(
         )
         command_refs.append(result.id)
         event_refs.append(event_ref)
+        lifecycle_records.append(lifecycle)
         lifecycle_refs.append(lifecycle.id)
         replay_refs.extend(lifecycle.replay_refs)
 
-    return ProductionRunControlReport(
+    return _execution(ProductionRunControlReport(
         id=f"production-run-control-report:{fixture_id}",
         fixture_id=fixture_id,
         project_ref=project.id,
@@ -694,4 +732,17 @@ def run_production_run_control_fixture(
         policy_snapshot_ref=policy_snapshot.id,
         lifecycle_record_refs=lifecycle_refs,
         replay_refs=replay_refs,
-    )
+    ))
+
+
+def run_production_run_control_fixture(
+    *,
+    fixture_id: str,
+    scenario: str | None,
+    profile: str,
+) -> ProductionRunControlReport:
+    return execute_production_run_control_fixture(
+        fixture_id=fixture_id,
+        scenario=scenario,
+        profile=profile,
+    ).report

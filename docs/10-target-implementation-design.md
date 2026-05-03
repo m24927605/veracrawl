@@ -151,6 +151,36 @@ without importing Postgres, Redis, Kafka, object storage, browser libraries, mod
 SDKs, or agent frameworks into core. Production adapters and migrations remain
 future specs.
 
+## Production Run-Control Persistence Wiring Slice
+
+The production persistence wiring slice connects the row 039 run-control API to
+production-shaped persistence surfaces while preserving adapter ownership:
+
+- `veracrawl.contracts`: `ProductionPersistenceRuntimeReport` and
+  `ProductionPersistenceFixtureManifest` prove canonical run-control state,
+  transaction, command, idempotency, event cursor, outbox, artifact index, queue,
+  lease, policy, failure/recovery, and replay refs.
+- `veracrawl.ports.persistence`: canonical document save/load methods expose
+  typed metadata persistence without leaking adapter internals into core.
+- `veracrawl.control.run_control`: detailed run-control execution exposes the
+  actual project, site scope, objective, plan, run, budget, policy snapshot,
+  approval, policy decision, lifecycle, and report contracts created by the
+  run-control path.
+- `veracrawl.control.production_persistence`: owner-service wiring commits those
+  contracts through port-shaped persistence, appends run-control events, creates
+  persistence command/outbox/idempotency records, records queue lease and
+  recovery operations, reopens the adapter, and validates replay-visible refs.
+- `veracrawl.runtime_support.persistence_store` and JSON-document persistence
+  adapters implement the canonical document methods behind ports.
+- `veracrawl.cli.production_persistence`: `veracrawl-production-persistence`
+  runs success, duplicate replay, queue recovery, and missing-ref fixtures.
+
+This slice proves that canonical run-control state and persistence side effects
+survive adapter reopen and replay without importing psycopg, Redis, boto3,
+browser libraries, model SDKs, or agent frameworks into core. It does not prove
+live HTTP acquisition, browser execution, managed cloud operations, deployment,
+worker autoscaling, metrics/tracing backends, or disaster recovery.
+
 ## Source Adapter And Fetch Runtime Slice
 
 The source adapter slice adds deterministic source acquisition on top of the

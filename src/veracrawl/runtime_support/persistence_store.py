@@ -75,6 +75,17 @@ class ReferencePersistenceStore:
     def _list_models(self, name: str, model_type: type[ModelT]) -> list[ModelT]:
         return [model_type.model_validate(value) for value in self._load_mapping(name).values()]
 
+    def save_canonical_model(self, collection: str, key: Ref, model: BaseModel) -> Ref:
+        return self._put_model(f"canonical_{collection}", key, model)
+
+    def load_canonical_model(
+        self,
+        collection: str,
+        key: Ref,
+        model_type: type[ModelT],
+    ) -> ModelT | None:
+        return self._get_model(f"canonical_{collection}", key, model_type)
+
     def begin_transaction(
         self,
         *,

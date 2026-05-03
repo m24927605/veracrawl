@@ -9,6 +9,7 @@ from veracrawl.contracts.enums import (
     CompletenessResult,
     ObjectiveStatus,
     PlanStatus,
+    ProductionPersistenceFailureType,
     ProductionRunControlFailureType,
     RunLifecycleAction,
     RunStatus,
@@ -359,4 +360,93 @@ class ProductionRunControlFixtureManifest(TimestampedModel):
             raise ValueError("production run-control fixture must support target profile")
         if self.negative_case and self.expected_failure_type is None:
             raise ValueError("negative production run-control fixture requires failure type")
+        return self
+
+
+class ProductionPersistenceRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    project_ref: Ref
+    site_scope_ref: Ref
+    objective_ref: Ref
+    plan_ref: Ref
+    run_control_report_ref: Ref | None = None
+    status: RunStatus
+    completion_result: CompletenessResult
+    operator_status: str
+    adapter_ref: Ref | None = None
+    transaction_ref: Ref | None = None
+    canonical_state_refs: list[Ref] = Field(default_factory=list)
+    run_control_command_result_refs: list[Ref] = Field(default_factory=list)
+    persistence_command_record_refs: list[Ref] = Field(default_factory=list)
+    idempotency_record_refs: list[Ref] = Field(default_factory=list)
+    event_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_ref: Ref | None = None
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    queue_operation_refs: list[Ref] = Field(default_factory=list)
+    lease_refs: list[Ref] = Field(default_factory=list)
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    recovery_action_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: ProductionPersistenceFailureType | None = None
+    duplicate_deduped: bool = False
+    reloaded: bool = False
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_production_persistence_report(self) -> ProductionPersistenceRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "adapter_ref": self.adapter_ref,
+                "transaction_ref": self.transaction_ref,
+                "run_control_report_ref": self.run_control_report_ref,
+                "canonical_state_refs": self.canonical_state_refs,
+                "run_control_command_result_refs": self.run_control_command_result_refs,
+                "persistence_command_record_refs": self.persistence_command_record_refs,
+                "idempotency_record_refs": self.idempotency_record_refs,
+                "event_refs": self.event_refs,
+                "event_cursor_ref": self.event_cursor_ref,
+                "outbox_refs": self.outbox_refs,
+                "artifact_refs": self.artifact_refs,
+                "queue_operation_refs": self.queue_operation_refs,
+                "lease_refs": self.lease_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [field for field, value in required.items() if not value]
+            if missing or self.missing_ref_fields or self.failure_type:
+                raise ValueError(
+                    f"passing production persistence report missing refs: {missing}"
+                )
+            if not self.reloaded:
+                raise ValueError("passing production persistence report requires adapter reopen")
+        elif not (self.failure_type and self.failure_record_refs and self.missing_ref_fields):
+            raise ValueError("non-pass production persistence report requires typed failures")
+        return self
+
+
+class ProductionPersistenceFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: ProductionPersistenceFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_production_persistence_fixture(
+        self,
+    ) -> ProductionPersistenceFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("production persistence fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("production persistence fixture requires ref expectations")
+        if self.negative_case and self.expected_failure_type is None:
+            raise ValueError("negative production persistence fixture requires failure type")
         return self

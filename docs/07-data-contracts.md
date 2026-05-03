@@ -5736,6 +5736,54 @@ ProductionRunControlFixtureManifest:
   negative_case: boolean
 ```
 
+```yaml
+ProductionPersistenceRuntimeReport:
+  id: string
+  fixture_id: string
+  run_ref: string
+  project_ref: string
+  site_scope_ref: string
+  objective_ref: string
+  plan_ref: string
+  run_control_report_ref: string | null
+  status: queued | running | paused | completed | failed | cancelled
+  completion_result: pass | fail | needs_review
+  operator_status: string
+  adapter_ref: string | null
+  transaction_ref: string | null
+  canonical_state_refs: list
+  run_control_command_result_refs: list
+  persistence_command_record_refs: list
+  idempotency_record_refs: list
+  event_refs: list
+  event_cursor_ref: string | null
+  outbox_refs: list
+  artifact_refs: list
+  queue_operation_refs: list
+  lease_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  policy_decision_refs: list
+  replay_bundle_ref: string | null
+  missing_ref_fields: list
+  failure_type: string | null
+  duplicate_deduped: boolean
+  reloaded: boolean
+  diagnostics: list
+```
+
+```yaml
+ProductionPersistenceFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: string | null
+  negative_case: boolean
+  required_ref_types: list
+```
+
 Executable target runtime rules:
 
 - `TargetRuntimeReport` can claim `complete` only when at least seven website patterns have pattern records and accepted outputs, evidence, verification, graph, export, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay refs exist.
@@ -5744,6 +5792,15 @@ Executable target runtime rules:
   event, lifecycle, and replay refs exist. Policy denial, missing approval,
   missing budget, invalid lifecycle transition, or missing replay refs fail with
   typed production run-control failure refs before live acquisition can start.
+- Production persistence runtime reports can claim `pass` only when row 039
+  canonical run-control documents, transaction refs, durable command refs,
+  idempotency refs, run-control event refs, event cursor refs, outbox refs,
+  artifact index refs, queue operation refs, lease refs, policy refs, and replay
+  bundle refs survive adapter reopen. Duplicate replay must dedupe by
+  idempotency key with zero duplicate event/outbox side effects. Missing
+  transaction, canonical state, idempotency, event cursor, outbox, artifact
+  index, lease heartbeat, policy, or replay refs fail with typed production
+  persistence failure refs.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

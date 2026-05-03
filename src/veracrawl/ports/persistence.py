@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, TypeVar
+
+from pydantic import BaseModel
 
 from veracrawl.contracts.command import CommandEnvelope, CommandResult
 from veracrawl.contracts.common import Ref
@@ -15,6 +17,19 @@ from veracrawl.contracts.persistence import (
     PersistentQueueOperationRecord,
 )
 from veracrawl.contracts.scale import QueueItem, RetryDeadLetterRecord, ShardLease
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
+class CanonicalMetadataDocumentPort(Protocol):
+    def save_canonical_model(self, collection: str, key: Ref, model: BaseModel) -> Ref: ...
+
+    def load_canonical_model(
+        self,
+        collection: str,
+        key: Ref,
+        model_type: type[ModelT],
+    ) -> ModelT | None: ...
 
 
 class MetadataPersistencePort(Protocol):

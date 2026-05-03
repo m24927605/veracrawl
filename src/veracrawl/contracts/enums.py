@@ -196,6 +196,18 @@ class ProductionRunControlFailureType(StrEnum):
     MISSING_REPLAY = "production_run_control_missing_replay"
 
 
+class ProductionPersistenceFailureType(StrEnum):
+    NON_ATOMIC_COMMIT = "production_persistence_non_atomic_commit"
+    CANONICAL_STATE_MISSING = "production_persistence_canonical_state_missing"
+    IDEMPOTENCY_MISSING = "production_persistence_idempotency_missing"
+    EVENT_GAP = "production_persistence_event_gap"
+    OUTBOX_MISSING = "production_persistence_outbox_missing"
+    ARTIFACT_INDEX_MISSING = "production_persistence_artifact_index_missing"
+    LEASE_HEARTBEAT_MISSING = "production_persistence_lease_heartbeat_missing"
+    POLICY_MISSING = "production_persistence_policy_missing"
+    REPLAY_MISSING = "production_persistence_replay_missing"
+
+
 class RuntimeCompletionGateType(StrEnum):
     OBJECTIVE = "objective"
     PLAN = "plan"

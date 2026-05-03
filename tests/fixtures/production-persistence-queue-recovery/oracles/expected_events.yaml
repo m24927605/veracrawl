@@ -1,0 +1,1 @@
+{"required_event_refs":["production_run_control_event_persisted","production_persistence_runtime_reported"],"requires_dead_letter":true}

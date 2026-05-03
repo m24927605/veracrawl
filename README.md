@@ -82,6 +82,14 @@ agent runtime adapter operational gate, the model provider adapter operational
 gate, the review/replay/ops console spine, the export connector spine, the scale
 hardening spine, and the production
 persistence/queue runtime spine.
+The production persistence runtime wiring gate connects the production run-control
+API to port-shaped canonical metadata, event, outbox, idempotency, artifact
+index, and queue lease persistence. `veracrawl-production-persistence` proves
+approved run-control state survives adapter reopen, duplicate replay creates no
+duplicate event/outbox side effects, and queue recovery preserves heartbeat,
+dead-letter, failure, recovery, policy, and replay refs without importing
+concrete database, broker, object-store, browser, model, or agent framework
+clients into core.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
