@@ -1132,6 +1132,23 @@ candidate generation but cannot satisfy evidence. This gate emits field-level
 JSON for later precision/recall, but it does not claim precision/recall, repair
 success, or final production-quality release readiness.
 
+Run the precision/recall quality metrics benchmark:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-quality-metrics run \
+  tests/fixtures/precision-recall-quality \
+  --profile quality \
+  --out .veracrawl-real-runs/precision-recall-quality
+```
+
+The quality metrics gate computes corpus and slice precision, recall, F1,
+false-positive, false-negative, abstention, unsupported-field, and needs-review
+rates from field confusion records. Passing reports enforce precision >= 0.98,
+recall >= 0.90, F1 >= 0.94, and critical-field precision >= 0.99, with evidence,
+publication gate, policy, command/event/outbox, and replay refs for every metric
+component. This gate does not run repair or claim final production-quality
+release readiness.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

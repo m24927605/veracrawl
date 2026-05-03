@@ -1266,6 +1266,40 @@ class FieldOracleValueType(StrEnum):
     UNIT = "unit"
 
 
+class QualityMetricFailureType(StrEnum):
+    PRECISION_BELOW_THRESHOLD = "quality_metrics_precision_below_threshold"
+    RECALL_BELOW_THRESHOLD = "quality_metrics_recall_below_threshold"
+    F1_BELOW_THRESHOLD = "quality_metrics_f1_below_threshold"
+    CRITICAL_PRECISION_BELOW_THRESHOLD = (
+        "quality_metrics_critical_precision_below_threshold"
+    )
+    HIDDEN_FALSE_POSITIVE = "quality_metrics_hidden_false_positive"
+    LLM_AS_TRUE_POSITIVE = "quality_metrics_llm_as_true_positive"
+    PUBLICATION_BYPASS_TRUE_POSITIVE = "quality_metrics_publication_bypass_true_positive"
+    MISSING_EVIDENCE_TRUE_POSITIVE = "quality_metrics_missing_evidence_true_positive"
+    MISSING_REPLAY_REFS = "quality_metrics_missing_replay_refs"
+    INSUFFICIENT_METRIC_COMPONENTS = "quality_metrics_insufficient_components"
+
+
+class QualityMetricConfusionClass(StrEnum):
+    TRUE_POSITIVE = "true_positive"
+    FALSE_POSITIVE = "false_positive"
+    FALSE_NEGATIVE = "false_negative"
+    TRUE_NEGATIVE = "true_negative"
+    ABSTAIN = "abstain"
+    UNSUPPORTED = "unsupported"
+    NEEDS_REVIEW = "needs_review"
+
+
+class QualityMetricSliceDimension(StrEnum):
+    CORPUS = "corpus"
+    SCHEMA = "schema"
+    WEBSITE_PATTERN = "website_pattern"
+    SOURCE_TYPE = "source_type"
+    RENDERING_MODE = "rendering_mode"
+    CONFIDENCE_BUCKET = "confidence_bucket"
+
+
 class CredentialedSessionFailureType(StrEnum):
     POLICY_DENIED = "credentialed_session_policy_denied"
     MISSING_AUTHORIZATION = "credentialed_session_missing_authorization"

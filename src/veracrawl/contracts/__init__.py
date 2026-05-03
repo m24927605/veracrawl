@@ -264,6 +264,13 @@ from veracrawl.contracts.publication import (
     ResultPublicationExportFixtureManifest,
     ResultPublicationExportRuntimeReport,
 )
+from veracrawl.contracts.quality_metrics import (
+    FieldConfusionRecord,
+    PrecisionRecallQualityReport,
+    PrecisionRecallSliceMetric,
+    QualityMetricManifest,
+    QualityMetricThresholds,
+)
 from veracrawl.contracts.real_world_ai_agent import (
     RealWorldAIAgentBenchmarkManifest,
     RealWorldAIAgentBenchmarkRunReport,
@@ -452,6 +459,7 @@ __all__ = [
     "FetchAttempt",
     "FetchResult",
     "FieldEvaluationRecord",
+    "FieldConfusionRecord",
     "FieldOracleBenchmarkManifest",
     "FieldOracleBenchmarkReport",
     "FieldOracleFieldSpec",
@@ -531,6 +539,8 @@ __all__ = [
     "PersistenceTransactionRecord",
     "PersistentQueueOperationRecord",
     "PolicyDecision",
+    "PrecisionRecallQualityReport",
+    "PrecisionRecallSliceMetric",
     "ProductAcceptanceFixtureManifest",
     "ProductAcceptanceGateReport",
     "ProductWorkflowReadinessRecord",
@@ -619,6 +629,8 @@ __all__ = [
     "StructuredSourceAdaptersRuntimeReport",
     "ThresholdSpec",
     "QualityReport",
+    "QualityMetricManifest",
+    "QualityMetricThresholds",
     "TemporalGraphProjectionRecord",
     "TemporalKGEntityIdentity",
     "TemporalKGFixtureManifest",

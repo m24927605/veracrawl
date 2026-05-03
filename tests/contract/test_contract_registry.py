@@ -65,6 +65,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "browser_quality_benchmark",
         "deep_crawl_frontier_benchmark",
         "field_oracle_extraction_benchmark",
+        "precision_recall_quality_benchmark",
         "credentialed_session_runtime",
         "live_normalization_site_understanding",
         "schema_extraction_candidate_runtime",

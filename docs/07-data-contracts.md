@@ -6455,3 +6455,14 @@ Executable target runtime rules:
   stale evidence, direct publication, LLM-as-evidence, missing evidence,
   missing verification, missing replay, and insufficient schema/field coverage
   fail with typed `FieldOracleFailureType` diagnostics.
+- Precision/recall quality metric contracts are `QualityMetricManifest`,
+  `QualityMetricThresholds`, `FieldConfusionRecord`,
+  `PrecisionRecallSliceMetric`, and `PrecisionRecallQualityReport`. Passing
+  metric reports require corpus and slice precision, recall, F1, false-positive,
+  false-negative, abstention, unsupported-field, and needs-review metrics with
+  field evaluation refs, evidence packet refs, publication gate refs, artifact
+  refs, content hash refs, policy refs, command/event/outbox refs, and replay
+  refs. Hidden false positives, LLM-only evidence counted as true positive,
+  publication bypass counted as true positive, missing evidence, missing replay,
+  low precision, low recall, low F1, and low critical-field precision fail with
+  typed `QualityMetricFailureType` diagnostics.

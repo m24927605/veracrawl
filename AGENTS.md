@@ -119,13 +119,13 @@ For all Spec Kit plans and implementation tasks:
 
 <!-- SPECKIT START -->
 Current active Spec Kit plan:
-`specs/061-field-level-oracle-extraction-benchmark/plan.md`.
-Use it with `specs/061-field-level-oracle-extraction-benchmark/spec.md`,
-`specs/061-field-level-oracle-extraction-benchmark/research.md`,
-`specs/061-field-level-oracle-extraction-benchmark/data-model.md`,
-`specs/061-field-level-oracle-extraction-benchmark/contracts/`, and
-`specs/061-field-level-oracle-extraction-benchmark/quickstart.md` for
-field-level oracle extraction benchmark work. Production quality specs remain governed by
+`specs/062-precision-recall-quality-benchmark/plan.md`.
+Use it with `specs/062-precision-recall-quality-benchmark/spec.md`,
+`specs/062-precision-recall-quality-benchmark/research.md`,
+`specs/062-precision-recall-quality-benchmark/data-model.md`,
+`specs/062-precision-recall-quality-benchmark/contracts/`, and
+`specs/062-precision-recall-quality-benchmark/quickstart.md` for
+precision/recall quality benchmark work. Production quality specs remain governed by
 `specs/057-production-quality-benchmark-roadmap/spec.md`,
 `specs/038-production-runtime-closure/spec.md`, and
 `docs/08-build-roadmap.md`; do not invent additional production or

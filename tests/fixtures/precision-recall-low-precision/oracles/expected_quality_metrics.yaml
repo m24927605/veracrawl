@@ -1,0 +1,1 @@
+{"expected_failure_type": "quality_metrics_precision_below_threshold", "fixture_id": "precision-recall-low-precision"}

@@ -89,6 +89,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_browser_quality_ref: str | None = None
     expected_deep_crawl_ref: str | None = None
     expected_field_oracle_ref: str | None = None
+    expected_quality_metrics_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -1985,6 +1986,40 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "field_oracle",
         tests=["tests/integration/test_field_oracle_fixtures.py"],
     ),
+    "QualityMetricThresholds": _contract(
+        "QualityMetricThresholds",
+        OwnerService.VERIFY,
+        "quality_metrics",
+        tests=["tests/contract/test_quality_metrics_contracts.py"],
+    ),
+    "FieldConfusionRecord": _contract(
+        "FieldConfusionRecord",
+        OwnerService.VERIFY,
+        "quality_metrics",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_quality_metrics_contracts.py"],
+    ),
+    "PrecisionRecallSliceMetric": _contract(
+        "PrecisionRecallSliceMetric",
+        OwnerService.VERIFY,
+        "quality_metrics",
+        tests=["tests/contract/test_quality_metrics_contracts.py"],
+    ),
+    "PrecisionRecallQualityReport": _contract(
+        "PrecisionRecallQualityReport",
+        OwnerService.VERIFY,
+        "quality_metrics",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_quality_metrics_contracts.py"],
+    ),
+    "QualityMetricManifest": _contract(
+        "QualityMetricManifest",
+        OwnerService.TESTS,
+        "quality_metrics",
+        tests=["tests/integration/test_quality_metrics_fixtures.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -2662,6 +2697,29 @@ COMMAND_TYPES.update(
             target_aggregate_type="FieldOracleBenchmarkManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["field_oracle_manifest_recorded"],
+        ),
+        "record_quality_metric_confusion": CommandTypeRegistration(
+            command_type="record_quality_metric_confusion",
+            owner_service=OwnerService.VERIFY,
+            target_aggregate_type="FieldConfusionRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["quality_metric_confusion_recorded"],
+        ),
+        "record_quality_metric_report": CommandTypeRegistration(
+            command_type="record_quality_metric_report",
+            owner_service=OwnerService.VERIFY,
+            target_aggregate_type="PrecisionRecallQualityReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["quality_metric_reported"],
+        ),
+        "record_quality_metric_manifest": CommandTypeRegistration(
+            command_type="record_quality_metric_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="QualityMetricManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["quality_metric_manifest_recorded"],
         ),
         "record_normalization_manifest": CommandTypeRegistration(
             command_type="record_normalization_manifest",
@@ -3803,6 +3861,9 @@ EVENT_TYPES.update(
         "field_oracle_evaluation_recorded",
         "field_oracle_reported",
         "field_oracle_manifest_recorded",
+        "quality_metric_confusion_recorded",
+        "quality_metric_reported",
+        "quality_metric_manifest_recorded",
         "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
@@ -5260,6 +5321,27 @@ for _field_oracle_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _quality_metric_fixture, _negative in {
+    "precision-recall-quality": False,
+    "precision-recall-low-precision": True,
+    "precision-recall-low-recall": True,
+    "precision-recall-low-f1": True,
+    "precision-recall-hidden-false-positive": True,
+    "precision-recall-llm-true-positive": True,
+    "precision-recall-replay-missing": True,
+}.items():
+    _base = f"tests/fixtures/{_quality_metric_fixture}"
+    FIXTURE_ORACLES[_quality_metric_fixture] = FixtureOracleRegistration(
+        fixture_id=_quality_metric_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_quality_metrics_ref=f"{_base}/oracles/expected_quality_metrics.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _credentialed_session_fixture, _negative in {
     "credentialed-session-success": False,
     "credentialed-session-missing-authorization": True,
@@ -5673,6 +5755,27 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "AgentActionTrace",
             "ToolCallTrace",
             "ContextBundleTrace",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "precision_recall_quality_benchmark": _target_area(
+        "precision_recall_quality_benchmark",
+        OwnerService.VERIFY,
+        "materialized",
+        materialized=[
+            "QualityMetricManifest",
+            "QualityMetricThresholds",
+            "FieldConfusionRecord",
+            "PrecisionRecallSliceMetric",
+            "PrecisionRecallQualityReport",
+            "FieldEvaluationRecord",
+            "EvidencePacket",
+            "PublicationReport",
+            "VerificationDecision",
             "CommandResult",
             "EventCursorRecord",
             "OutboxRecord",

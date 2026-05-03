@@ -1818,6 +1818,25 @@ Field-level oracle extraction benchmark:
   repair success, and cost/latency/stability release remain later
   production-quality specs.
 
+Precision/recall quality metrics benchmark:
+
+- `veracrawl.contracts.quality_metrics` owns `QualityMetricManifest`,
+  `QualityMetricThresholds`, `FieldConfusionRecord`,
+  `PrecisionRecallSliceMetric`, and `PrecisionRecallQualityReport`.
+- `veracrawl.benchmarks.quality_metrics` computes corpus and slice precision,
+  recall, F1, false-positive, false-negative, abstention, unsupported-field, and
+  needs-review rates from field confusion records.
+- default thresholds are precision >= 0.98, recall >= 0.90, F1 >= 0.94, and
+  critical-field precision >= 0.99.
+- every metric component must link to field evaluation refs, evidence packet
+  refs, publication gate refs, artifacts, content hashes, policy refs,
+  command/event/outbox refs, and replay refs.
+- hidden false positives, LLM-as-true-positive, publication bypass,
+  missing-evidence true positives, missing replay, and threshold failures fail
+  with `QualityMetricFailureType`.
+- this gate proves precision/recall quality metrics only. Repair success and
+  cost/latency/stability release remain later production-quality specs.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

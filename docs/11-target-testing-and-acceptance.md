@@ -2255,6 +2255,39 @@ This acceptance proves only field-level oracle extraction quality. It does not
 prove precision/recall thresholds, repair success, or cost/latency/stability
 release readiness.
 
+Precision/recall quality metrics benchmark acceptance:
+
+```text
+veracrawl-quality-metrics run tests/fixtures/<quality_metric_fixture_id> --profile quality --out .veracrawl-test-runs/<quality_metric_fixture_id>
+```
+
+Required quality metric fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| precision-recall-quality | corpus and slice precision/recall/F1 plus false-positive, false-negative, abstention, unsupported, and needs-review rates pass threshold gates with evidence/publication/command/event/outbox/replay refs |
+| precision-recall-low-precision | precision threshold failure is typed |
+| precision-recall-low-recall | recall threshold failure is typed |
+| precision-recall-low-f1 | F1 threshold failure is typed |
+| precision-recall-hidden-false-positive | hidden false positive fails |
+| precision-recall-llm-true-positive | LLM-as-true-positive fails |
+| precision-recall-replay-missing | missing replay fails |
+
+Quality metrics acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_quality_metrics_contracts.py`
+- `pytest tests/contract/test_quality_metrics_contract_registry.py`
+- `pytest tests/contract/test_quality_metrics_import_boundaries.py`
+- `pytest tests/unit/test_quality_metrics_runtime.py`
+- `pytest tests/unit/test_quality_metrics_replay.py`
+- `pytest tests/integration/test_quality_metrics_fixtures.py`
+- one recorded deterministic CLI run against
+  `tests/fixtures/precision-recall-quality`
+
+This acceptance proves only precision/recall metric quality. It does not prove
+repair success or cost/latency/stability release readiness.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:
