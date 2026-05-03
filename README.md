@@ -183,6 +183,14 @@ result refs, adapter output refs, source observations, content hashes, evidence,
 graph, export, policy, command/event/outbox, and replay refs. Missing adapter
 results, adapter output mismatches, adapter policy denials, replay mismatches,
 and direct source bypass attempts fail or block deterministically.
+The processing/evidence target runtime extends adapter-backed proof through
+canonical processing, evidence, and publication lineage. Processing fixtures
+materialize normalized document refs, extraction candidate refs, candidate
+anchors, evidence packet refs, evidence anchors, publication report refs,
+policy decisions, and replay refs outside core, then pass canonical records to
+the runner. A complete report cannot bypass this chain, use graph-only derived
+context as source evidence, publish without a publication report, or claim
+success when normalization, candidate anchors, or evidence packets are missing.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation

@@ -35,6 +35,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "target_crawl_runtime",
         "source_backed_target_runtime",
         "adapter_backed_target_runtime",
+        "processing_evidence_target_runtime",
         "evidence_publication",
         "projection",
         "graph",

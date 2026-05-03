@@ -132,6 +132,12 @@ class TargetRuntimeReport(TimestampedModel):
     adapter_backed_source_refs: list[Ref] = Field(default_factory=list)
     source_adapter_result_refs: list[Ref] = Field(default_factory=list)
     adapter_output_refs: list[Ref] = Field(default_factory=list)
+    processing_evidence_refs: list[Ref] = Field(default_factory=list)
+    normalized_document_refs: list[Ref] = Field(default_factory=list)
+    extraction_candidate_refs: list[Ref] = Field(default_factory=list)
+    evidence_packet_refs: list[Ref] = Field(default_factory=list)
+    evidence_anchor_refs: list[Ref] = Field(default_factory=list)
+    publication_report_refs: list[Ref] = Field(default_factory=list)
     accepted_output_refs: list[Ref] = Field(default_factory=list)
     evidence_refs: list[Ref] = Field(default_factory=list)
     verification_refs: list[Ref] = Field(default_factory=list)
@@ -204,6 +210,7 @@ class TargetRuntimeFixtureManifest(TimestampedModel):
     profile_refs: list[str] = Field(default_factory=list)
     source_corpus_ref: Ref | None = None
     adapter_backed_source_ref: Ref | None = None
+    processing_evidence_ref: Ref | None = None
     expected_status: TargetRuntimeStatus
     expected_completion_result: CompletenessResult
     expected_operator_status: str
@@ -211,6 +218,7 @@ class TargetRuntimeFixtureManifest(TimestampedModel):
     expected_pattern_count: int = 0
     expected_source_observation_count: int = 0
     expected_adapter_result_count: int = 0
+    expected_processing_evidence_count: int = 0
     negative_case: bool = False
 
     @model_validator(mode="after")
@@ -431,4 +439,103 @@ class TargetAdapterBackedSourceRecord(TimestampedModel):
                 raise ValueError(f"passing adapter-backed source missing refs: {missing}")
         elif not diagnostics:
             raise ValueError("failed adapter-backed source requires typed diagnostics")
+        return self
+
+
+class TargetProcessingEvidenceEntry(TimestampedModel):
+    id: str
+    corpus_entry_ref: Ref
+    adapter_backed_source_ref: Ref
+    required_field_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_ref: Ref
+    simulate_missing_normalization: bool = False
+    simulate_missing_candidate_anchor: bool = False
+    simulate_missing_evidence_packet: bool = False
+    simulate_graph_only_evidence: bool = False
+    simulate_publication_bypass: bool = False
+
+    @model_validator(mode="after")
+    def validate_processing_entry(self) -> TargetProcessingEvidenceEntry:
+        if not self.adapter_backed_source_ref:
+            raise ValueError("processing evidence entry requires adapter-backed source ref")
+        if not self.required_field_refs:
+            raise ValueError("processing evidence entry requires field refs")
+        if not self.policy_decision_ref:
+            raise ValueError("processing evidence entry requires policy ref")
+        return self
+
+
+class TargetProcessingEvidenceManifest(TimestampedModel):
+    id: str
+    fixture_id: str
+    entries: list[TargetProcessingEvidenceEntry] = Field(default_factory=list)
+    expected_processing_evidence_count: int
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_oracle_ref: Ref
+
+    @model_validator(mode="after")
+    def validate_processing_manifest(self) -> TargetProcessingEvidenceManifest:
+        corpus_refs = [entry.corpus_entry_ref for entry in self.entries]
+        if self.expected_processing_evidence_count < 0:
+            raise ValueError("processing evidence count cannot be negative")
+        if len(corpus_refs) != len(set(corpus_refs)):
+            raise ValueError("processing evidence corpus refs must be unique")
+        if self.expected_processing_evidence_count > 0 and not self.entries:
+            raise ValueError("processing evidence manifest requires entries")
+        if self.expected_processing_evidence_count > len(self.entries):
+            raise ValueError("processing evidence count cannot exceed entries")
+        if not self.policy_decision_refs:
+            raise ValueError("processing evidence manifest requires policy refs")
+        return self
+
+
+class TargetProcessingEvidenceRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    corpus_entry_ref: Ref
+    adapter_backed_source_ref: Ref
+    source_observation_ref: Ref | None = None
+    adapter_output_refs: list[Ref] = Field(default_factory=list)
+    normalized_document_ref: Ref | None = None
+    extraction_candidate_ref: Ref | None = None
+    candidate_anchor_refs: list[Ref] = Field(default_factory=list)
+    evidence_packet_ref: Ref | None = None
+    evidence_anchor_refs: list[Ref] = Field(default_factory=list)
+    publication_report_ref: Ref | None = None
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_refs: list[Ref] = Field(default_factory=list)
+    graph_only_evidence_refs: list[Ref] = Field(default_factory=list)
+    missing_normalization_refs: list[Ref] = Field(default_factory=list)
+    missing_candidate_anchor_refs: list[Ref] = Field(default_factory=list)
+    missing_evidence_packet_refs: list[Ref] = Field(default_factory=list)
+    publication_bypass_refs: list[Ref] = Field(default_factory=list)
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_processing_record(self) -> TargetProcessingEvidenceRecord:
+        diagnostics = (
+            self.graph_only_evidence_refs
+            or self.missing_normalization_refs
+            or self.missing_candidate_anchor_refs
+            or self.missing_evidence_packet_refs
+            or self.publication_bypass_refs
+        )
+        if self.result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "source_observation_ref": self.source_observation_ref,
+                "adapter_output_refs": self.adapter_output_refs,
+                "normalized_document_ref": self.normalized_document_ref,
+                "extraction_candidate_ref": self.extraction_candidate_ref,
+                "candidate_anchor_refs": self.candidate_anchor_refs,
+                "evidence_packet_ref": self.evidence_packet_ref,
+                "evidence_anchor_refs": self.evidence_anchor_refs,
+                "publication_report_ref": self.publication_report_ref,
+                "policy_decision_refs": self.policy_decision_refs,
+                "replay_refs": self.replay_refs,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing or diagnostics:
+                raise ValueError(f"passing processing evidence missing refs: {missing}")
+        elif not diagnostics:
+            raise ValueError("failed processing evidence requires typed diagnostics")
         return self

@@ -5438,6 +5438,12 @@ TargetRuntimeReport:
   adapter_backed_source_refs: list
   source_adapter_result_refs: list
   adapter_output_refs: list
+  processing_evidence_refs: list
+  normalized_document_refs: list
+  extraction_candidate_refs: list
+  evidence_packet_refs: list
+  evidence_anchor_refs: list
+  publication_report_refs: list
   ai_recommendation_refs: list
   repair_action_refs: list
   review_item_refs: list
@@ -5457,6 +5463,7 @@ TargetRuntimeFixtureManifest:
   profile_refs: list
   source_corpus_ref: string | null
   adapter_backed_source_ref: string | null
+  processing_evidence_ref: string | null
   expected_status: complete | needs_review | blocked | failed
   expected_completion_result: pass | fail | needs_review
   expected_operator_status: string
@@ -5464,6 +5471,7 @@ TargetRuntimeFixtureManifest:
   expected_pattern_count: integer
   expected_source_observation_count: integer
   expected_adapter_result_count: integer
+  expected_processing_evidence_count: integer
   negative_case: boolean
 ```
 
@@ -5564,6 +5572,54 @@ TargetAdapterBackedSourceRecord:
   result: pass | fail | needs_review
 ```
 
+```yaml
+TargetProcessingEvidenceEntry:
+  id: string
+  corpus_entry_ref: string
+  adapter_backed_source_ref: string
+  required_field_refs: list
+  policy_decision_ref: string
+  simulate_missing_normalization: boolean
+  simulate_missing_candidate_anchor: boolean
+  simulate_missing_evidence_packet: boolean
+  simulate_graph_only_evidence: boolean
+  simulate_publication_bypass: boolean
+```
+
+```yaml
+TargetProcessingEvidenceManifest:
+  id: string
+  fixture_id: string
+  entries: list[TargetProcessingEvidenceEntry]
+  expected_processing_evidence_count: integer
+  policy_decision_refs: list
+  replay_oracle_ref: string
+```
+
+```yaml
+TargetProcessingEvidenceRecord:
+  id: string
+  run_ref: string
+  corpus_entry_ref: string
+  adapter_backed_source_ref: string
+  source_observation_ref: string | null
+  adapter_output_refs: list
+  normalized_document_ref: string | null
+  extraction_candidate_ref: string | null
+  candidate_anchor_refs: list
+  evidence_packet_ref: string | null
+  evidence_anchor_refs: list
+  publication_report_ref: string | null
+  policy_decision_refs: list
+  replay_refs: list
+  graph_only_evidence_refs: list
+  missing_normalization_refs: list
+  missing_candidate_anchor_refs: list
+  missing_evidence_packet_refs: list
+  publication_bypass_refs: list
+  result: pass | fail | needs_review
+```
+
 Executable target runtime rules:
 
 - `TargetRuntimeReport` can claim `complete` only when at least seven website patterns have pattern records and accepted outputs, evidence, verification, graph, export, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay refs exist.
@@ -5581,3 +5637,12 @@ Executable target runtime rules:
   replay, source observation, and content hash refs. Missing adapter results,
   adapter output mismatches, policy-denied adapter output, replay mismatch, or
   direct source bypass block target completion.
+- Processing/evidence target runtime fixtures require
+  `TargetProcessingEvidenceManifest` and processing/evidence records for
+  declared adapter-backed corpus entries. Passing records require source
+  observation refs, adapter output refs, normalized document refs, extraction
+  candidate refs, candidate anchors, evidence packet refs, evidence anchors,
+  publication report refs, policy refs, and replay refs. Missing normalization,
+  candidate anchors, evidence packets, publication report refs, mismatched
+  adapter/source lineage, or graph-only derived context as evidence fail target
+  completion with typed failure refs.

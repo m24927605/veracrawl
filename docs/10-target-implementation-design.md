@@ -1271,6 +1271,18 @@ Target crawl runtime slice:
   graph, export, policy, command/event/outbox, privacy, and replay refs. Missing
   adapter result refs, adapter output mismatch, policy-denied adapter output,
   replay mismatch, and direct source bypass fail or block deterministically.
+- processing/evidence target runtime fixtures add `TargetProcessingEvidenceEntry`,
+  `TargetProcessingEvidenceManifest`, and `TargetProcessingEvidenceRecord`.
+  Adapter-owned materialization may build deterministic processing/evidence
+  records, but the core runner receives only canonical records and does not
+  import processing adapters, parser implementations, agent frameworks, or model
+  SDKs.
+- processing/evidence completion requires normalized document refs, extraction
+  candidate refs, candidate anchors, evidence packet refs, evidence anchor refs,
+  publication report refs, source observations, adapter output refs, policy refs,
+  and replay refs. Missing normalization, missing candidate anchors, missing
+  evidence packets, graph-only derived context used as evidence, publication
+  bypass, or mismatched adapter/source lineage fail deterministically.
 - this slice is an executable target architecture runtime path over deterministic fixtures. It is not a claim that live Internet crawling, production browser fleets, production credential vaults, concrete agent frameworks, managed model providers, production export destinations, or production worker fleets are operational.
 
 Disaster recovery:

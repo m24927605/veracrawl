@@ -1553,6 +1553,18 @@ Acceptance gates:
   `adapter-backed-target-replay-mismatch`, and
   `adapter-backed-target-direct-source-bypass` fail or block deterministically
   with typed target runtime failure refs and no false complete report
+- `processing-evidence-target-success` materializes deterministic
+  processing/evidence records outside target runtime core and completes only
+  when normalized document refs, extraction candidate refs, candidate anchors,
+  evidence packet refs, evidence anchors, publication report refs, source
+  observations, adapter output refs, policy, and replay refs are present for the
+  adapter-backed corpus
+- `processing-evidence-target-missing-normalization`,
+  `processing-evidence-target-missing-candidate-anchor`,
+  `processing-evidence-target-missing-evidence-packet`,
+  `processing-evidence-target-graph-only-evidence`, and
+  `processing-evidence-target-publication-bypass` fail deterministically with
+  typed target runtime failure refs and no false complete report
 - import-boundary tests prove target runtime core does not import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
 - registry validation includes target runtime contracts, commands, events, fixtures, and target area coverage
 

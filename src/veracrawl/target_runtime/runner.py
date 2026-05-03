@@ -20,6 +20,8 @@ from veracrawl.contracts.target_runtime import (
     TargetAdapterBackedSourceRecord,
     TargetAIRecommendationRecord,
     TargetCrawlPatternRecord,
+    TargetProcessingEvidenceManifest,
+    TargetProcessingEvidenceRecord,
     TargetRuntimeReport,
     TargetSourceCorpusEntry,
     TargetSourceCorpusManifest,
@@ -34,6 +36,9 @@ class TargetRuntimeResult:
     report: TargetRuntimeReport
     source_observations: list[TargetSourceObservationRecord]
     adapter_backed_records: list[TargetAdapterBackedSourceRecord] = field(default_factory=list)
+    processing_evidence_records: list[TargetProcessingEvidenceRecord] = field(
+        default_factory=list
+    )
 
 
 _TARGET_PATTERNS: tuple[TargetWebsitePattern, ...] = (
@@ -89,6 +94,8 @@ def run_target_runtime_fixture(
     source_corpus_ref: Ref | None = None,
     adapter_manifest: TargetAdapterBackedSourceManifest | None = None,
     adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
+    processing_manifest: TargetProcessingEvidenceManifest | None = None,
+    processing_records: list[TargetProcessingEvidenceRecord] | None = None,
 ) -> TargetRuntimeResult:
     if profile != "target":
         raise ValueError(f"unsupported target runtime profile: {profile}")
@@ -102,6 +109,8 @@ def run_target_runtime_fixture(
             source_corpus_ref=source_corpus_ref,
             adapter_manifest=adapter_manifest,
             adapter_records=adapter_records,
+            processing_manifest=processing_manifest,
+            processing_records=processing_records,
         )
     if scenario == "target-runtime-needs-review":
         return _needs_review_result(fixture_id)
@@ -258,6 +267,8 @@ def _source_backed_result(
     source_corpus_ref: Ref,
     adapter_manifest: TargetAdapterBackedSourceManifest | None = None,
     adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
+    processing_manifest: TargetProcessingEvidenceManifest | None = None,
+    processing_records: list[TargetProcessingEvidenceRecord] | None = None,
 ) -> TargetRuntimeResult:
     corpus = TargetSourceCorpusManifest.model_validate(
         json.loads((fixture_dir / source_corpus_ref).read_text(encoding="utf-8"))
@@ -298,6 +309,7 @@ def _source_backed_result(
             extra_policy_refs=corpus.policy_decision_refs + policy_denials,
             observations=observations,
             adapter_records=adapter_records or [],
+            processing_records=processing_records or [],
         )
     if prompt_injections:
         return _source_backed_failure(
@@ -309,6 +321,7 @@ def _source_backed_result(
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
             adapter_records=adapter_records or [],
+            processing_records=processing_records or [],
         )
     if missing_fields:
         return _source_backed_failure(
@@ -320,6 +333,7 @@ def _source_backed_result(
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
             adapter_records=adapter_records or [],
+            processing_records=processing_records or [],
         )
     adapter_failure = _adapter_backed_failure(
         adapter_manifest=adapter_manifest,
@@ -341,6 +355,34 @@ def _source_backed_result(
             ),
             observations=observations,
             adapter_records=adapter_records or [],
+            processing_records=processing_records or [],
+        )
+    processing_failure = _processing_evidence_failure(
+        processing_manifest=processing_manifest,
+        processing_records=processing_records or [],
+        adapter_records=adapter_records or [],
+        observations=observations,
+    )
+    if processing_failure is not None:
+        failure, status, missing_ref_fields, diagnostics = processing_failure
+        return _source_backed_failure(
+            fixture_id=fixture_id,
+            failure=failure,
+            status=status,
+            diagnostics=diagnostics,
+            missing_ref_fields=missing_ref_fields,
+            extra_policy_refs=_processing_policy_refs(
+                _adapter_policy_refs(
+                    corpus.policy_decision_refs,
+                    adapter_records or [],
+                    adapter_manifest,
+                ),
+                processing_records or [],
+                processing_manifest,
+            ),
+            observations=observations,
+            adapter_records=adapter_records or [],
+            processing_records=processing_records or [],
         )
     if replay_mismatches or scenario == "source-backed-target-replay-mismatch":
         return _source_backed_failure(
@@ -352,6 +394,7 @@ def _source_backed_result(
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
             adapter_records=adapter_records or [],
+            processing_records=processing_records or [],
         )
     if not corpus.export_complete or scenario == "source-backed-target-partial-export":
         return _source_backed_failure(
@@ -363,6 +406,7 @@ def _source_backed_result(
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
             adapter_records=adapter_records or [],
+            processing_records=processing_records or [],
         )
 
     return _source_backed_success(
@@ -375,6 +419,7 @@ def _source_backed_result(
             adapter_manifest,
         ),
         adapter_records=adapter_records or [],
+        processing_records=processing_records or [],
     )
 
 
@@ -484,6 +529,111 @@ def _adapter_policy_refs(
     return sorted(set(refs))
 
 
+def _processing_evidence_failure(
+    *,
+    processing_manifest: TargetProcessingEvidenceManifest | None,
+    processing_records: list[TargetProcessingEvidenceRecord],
+    adapter_records: list[TargetAdapterBackedSourceRecord],
+    observations: list[TargetSourceObservationRecord],
+) -> tuple[TargetRuntimeFailureType, TargetRuntimeStatus, list[str], list[str]] | None:
+    if processing_manifest is None:
+        return None
+    record_by_entry = {record.corpus_entry_ref: record for record in processing_records}
+    adapter_by_entry = {record.corpus_entry_ref: record for record in adapter_records}
+    observation_by_entry = {record.corpus_entry_ref: record for record in observations}
+    missing_entries = [
+        entry.corpus_entry_ref
+        for entry in processing_manifest.entries
+        if entry.corpus_entry_ref not in record_by_entry
+    ]
+    for record in processing_records:
+        adapter_record = adapter_by_entry.get(record.corpus_entry_ref)
+        observation = observation_by_entry.get(record.corpus_entry_ref)
+        if record.graph_only_evidence_refs:
+            return (
+                TargetRuntimeFailureType.DERIVED_CONTEXT_AS_EVIDENCE,
+                TargetRuntimeStatus.FAILED,
+                ["source_evidence_refs"],
+                ["processing evidence cannot use graph-only derived context as evidence"],
+            )
+        if record.missing_normalization_refs:
+            return (
+                TargetRuntimeFailureType.PROCESSING_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["normalized_document_refs"],
+                ["processing evidence target runtime missing normalization refs"],
+            )
+        if record.missing_candidate_anchor_refs:
+            return (
+                TargetRuntimeFailureType.EVIDENCE_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["candidate_anchor_refs"],
+                ["processing evidence target runtime missing candidate anchors"],
+            )
+        if record.missing_evidence_packet_refs:
+            return (
+                TargetRuntimeFailureType.EVIDENCE_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["evidence_packet_refs"],
+                ["processing evidence target runtime missing evidence packet refs"],
+            )
+        if record.publication_bypass_refs:
+            return (
+                TargetRuntimeFailureType.PUBLICATION_BYPASS,
+                TargetRuntimeStatus.FAILED,
+                ["publication_report_refs"],
+                ["processing evidence target runtime detected publication bypass"],
+            )
+        if adapter_record is None or observation is None:
+            return (
+                TargetRuntimeFailureType.PROCESSING_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["adapter_backed_source_refs"],
+                ["processing evidence record has no matching adapter/source observation"],
+            )
+        if record.adapter_backed_source_ref != adapter_record.id:
+            return (
+                TargetRuntimeFailureType.PROCESSING_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["adapter_backed_source_refs"],
+                ["processing evidence record has mismatched adapter-backed source ref"],
+            )
+        if record.source_observation_ref != observation.source_observation_ref:
+            return (
+                TargetRuntimeFailureType.PROCESSING_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["source_observation_refs"],
+                ["processing evidence record has mismatched source observation ref"],
+            )
+    passing_records = [
+        record for record in processing_records if record.result == CompletenessResult.PASS
+    ]
+    if (
+        missing_entries
+        or len(passing_records) < processing_manifest.expected_processing_evidence_count
+    ):
+        return (
+            TargetRuntimeFailureType.PROCESSING_MISSING,
+            TargetRuntimeStatus.FAILED,
+            ["processing_evidence_refs"],
+            ["processing evidence target runtime missing required records"],
+        )
+    return None
+
+
+def _processing_policy_refs(
+    policy_refs: list[Ref],
+    processing_records: list[TargetProcessingEvidenceRecord],
+    processing_manifest: TargetProcessingEvidenceManifest | None,
+) -> list[Ref]:
+    refs = list(policy_refs)
+    if processing_manifest is not None:
+        refs.extend(processing_manifest.policy_decision_refs)
+    for record in processing_records:
+        refs.extend(record.policy_decision_refs)
+    return sorted(set(refs))
+
+
 def _observe_source_entry(
     *,
     fixture_id: str,
@@ -540,6 +690,7 @@ def _source_backed_success(
     repaired_fields: list[Ref],
     policy_refs: list[Ref],
     adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
+    processing_records: list[TargetProcessingEvidenceRecord] | None = None,
 ) -> TargetRuntimeResult:
     command_refs = _command_refs(fixture_id)
     event_refs = _event_refs(fixture_id) + [f"event-cursor:{fixture_id}:source-backed"]
@@ -569,6 +720,11 @@ def _source_backed_success(
         ),
         repair_refs=repaired_fields,
     )
+    operator_status = "source_backed_target_runtime_completed"
+    if adapter_records:
+        operator_status = "adapter_backed_target_runtime_completed"
+    if processing_records:
+        operator_status = "processing_evidence_target_runtime_completed"
     report = TargetRuntimeReport(
         id=f"target-runtime-report:{fixture_id}",
         fixture_id=fixture_id,
@@ -599,6 +755,32 @@ def _source_backed_success(
             for record in adapter_records or []
             for output_ref in record.adapter_output_refs
         ],
+        processing_evidence_refs=[record.id for record in processing_records or []],
+        normalized_document_refs=[
+            record.normalized_document_ref
+            for record in processing_records or []
+            if record.normalized_document_ref is not None
+        ],
+        extraction_candidate_refs=[
+            record.extraction_candidate_ref
+            for record in processing_records or []
+            if record.extraction_candidate_ref is not None
+        ],
+        evidence_packet_refs=[
+            record.evidence_packet_ref
+            for record in processing_records or []
+            if record.evidence_packet_ref is not None
+        ],
+        evidence_anchor_refs=[
+            anchor_ref
+            for record in processing_records or []
+            for anchor_ref in record.evidence_anchor_refs
+        ],
+        publication_report_refs=[
+            record.publication_report_ref
+            for record in processing_records or []
+            if record.publication_report_ref is not None
+        ],
         accepted_output_refs=_collect(pattern_records, "accepted_output_refs"),
         evidence_refs=_collect(pattern_records, "evidence_refs"),
         verification_refs=_collect(pattern_records, "verification_refs"),
@@ -615,13 +797,16 @@ def _source_backed_success(
         recovery_action_refs=[f"recovery-action:{fixture_id}:source-backed"],
         privacy_lifecycle_refs=[f"privacy:{fixture_id}:source-backed"],
         replay_bundle_ref=replay_ref,
-        operator_status=(
-            "adapter_backed_target_runtime_completed"
-            if adapter_records
-            else "source_backed_target_runtime_completed"
-        ),
+        operator_status=operator_status,
     )
-    return TargetRuntimeResult(pattern_records, [ai], report, observations, adapter_records or [])
+    return TargetRuntimeResult(
+        pattern_records,
+        [ai],
+        report,
+        observations,
+        adapter_records or [],
+        processing_records or [],
+    )
 
 
 def _source_backed_failure(
@@ -634,6 +819,7 @@ def _source_backed_failure(
     extra_policy_refs: list[Ref],
     observations: list[TargetSourceObservationRecord],
     adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
+    processing_records: list[TargetProcessingEvidenceRecord] | None = None,
 ) -> TargetRuntimeResult:
     ai = _blocked_ai_recommendation(
         fixture_id=fixture_id,
@@ -671,6 +857,32 @@ def _source_backed_failure(
             for record in adapter_records or []
             for output_ref in record.adapter_output_refs
         ],
+        processing_evidence_refs=[record.id for record in processing_records or []],
+        normalized_document_refs=[
+            record.normalized_document_ref
+            for record in processing_records or []
+            if record.normalized_document_ref is not None
+        ],
+        extraction_candidate_refs=[
+            record.extraction_candidate_ref
+            for record in processing_records or []
+            if record.extraction_candidate_ref is not None
+        ],
+        evidence_packet_refs=[
+            record.evidence_packet_ref
+            for record in processing_records or []
+            if record.evidence_packet_ref is not None
+        ],
+        evidence_anchor_refs=[
+            anchor_ref
+            for record in processing_records or []
+            for anchor_ref in record.evidence_anchor_refs
+        ],
+        publication_report_refs=[
+            record.publication_report_ref
+            for record in processing_records or []
+            if record.publication_report_ref is not None
+        ],
         policy_decision_refs=extra_policy_refs,
         command_record_refs=_command_refs(fixture_id),
         event_cursor_refs=_event_refs(fixture_id),
@@ -682,7 +894,14 @@ def _source_backed_failure(
         diagnostics=diagnostics,
         operator_status=failure.value,
     )
-    return TargetRuntimeResult([], [ai], report, observations, adapter_records or [])
+    return TargetRuntimeResult(
+        [],
+        [ai],
+        report,
+        observations,
+        adapter_records or [],
+        processing_records or [],
+    )
 
 
 def _pattern_record_from_observation(
@@ -854,6 +1073,10 @@ def _missing_fields_for(failure: TargetRuntimeFailureType) -> list[str]:
         TargetRuntimeFailureType.ADAPTER_RESULT_MISSING: ["source_adapter_result_refs"],
         TargetRuntimeFailureType.ADAPTER_OUTPUT_MISMATCH: ["adapter_output_refs"],
         TargetRuntimeFailureType.DIRECT_SOURCE_BYPASS: ["source_adapter_result_refs"],
+        TargetRuntimeFailureType.PROCESSING_MISSING: ["processing_evidence_refs"],
+        TargetRuntimeFailureType.EVIDENCE_MISSING: ["evidence_packet_refs"],
+        TargetRuntimeFailureType.PUBLICATION_BYPASS: ["publication_report_refs"],
+        TargetRuntimeFailureType.DERIVED_CONTEXT_AS_EVIDENCE: ["source_evidence_refs"],
     }[failure]
 
 

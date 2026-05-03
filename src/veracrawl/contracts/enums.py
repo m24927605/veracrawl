@@ -1166,6 +1166,10 @@ class TargetRuntimeFailureType(StrEnum):
     ADAPTER_RESULT_MISSING = "target_runtime_adapter_result_missing"
     ADAPTER_OUTPUT_MISMATCH = "target_runtime_adapter_output_mismatch"
     DIRECT_SOURCE_BYPASS = "target_runtime_direct_source_bypass"
+    PROCESSING_MISSING = "target_runtime_processing_missing"
+    EVIDENCE_MISSING = "target_runtime_evidence_missing"
+    PUBLICATION_BYPASS = "target_runtime_publication_bypass"
+    DERIVED_CONTEXT_AS_EVIDENCE = "target_runtime_derived_context_as_evidence"
 
 
 class GraphNodeType(StrEnum):

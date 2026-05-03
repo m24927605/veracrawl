@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/036-adapter-backed-target-runtime/plan.md`.
-Use it with `specs/036-adapter-backed-target-runtime/spec.md`,
-`specs/036-adapter-backed-target-runtime/research.md`,
-`specs/036-adapter-backed-target-runtime/data-model.md`,
-`specs/036-adapter-backed-target-runtime/contracts/`, and
-`specs/036-adapter-backed-target-runtime/quickstart.md` for VeraCrawl Adapter-Backed Target Runtime work.
+Current active Spec Kit plan: `specs/037-processing-evidence-target-runtime/plan.md`.
+Use it with `specs/037-processing-evidence-target-runtime/spec.md`,
+`specs/037-processing-evidence-target-runtime/research.md`,
+`specs/037-processing-evidence-target-runtime/data-model.md`,
+`specs/037-processing-evidence-target-runtime/contracts/`, and
+`specs/037-processing-evidence-target-runtime/quickstart.md` for VeraCrawl Processing/Evidence Target Runtime Gate work.
 <!-- SPECKIT END -->

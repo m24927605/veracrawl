@@ -16,6 +16,8 @@ from pydantic import ValidationError
 from veracrawl.contracts.target_runtime import (
     TargetAdapterBackedSourceManifest,
     TargetAdapterBackedSourceRecord,
+    TargetProcessingEvidenceManifest,
+    TargetProcessingEvidenceRecord,
     TargetRuntimeFixtureManifest,
     TargetRuntimeReport,
     TargetSourceCorpusManifest,
@@ -61,6 +63,28 @@ def _adapter_records_for(
     )
 
 
+def _processing_records_for(
+    fixture_dir: Path,
+    *,
+    processing_evidence_ref: str,
+    adapter_records: list[TargetAdapterBackedSourceRecord] | None,
+) -> tuple[TargetProcessingEvidenceManifest, list[TargetProcessingEvidenceRecord]]:
+    if not adapter_records:
+        raise ValueError("processing/evidence target runtime requires adapter records")
+    processing_manifest = TargetProcessingEvidenceManifest.model_validate(
+        _load_json_like(fixture_dir / processing_evidence_ref)
+    )
+    module = _load_module("veracrawl.adapters.sources.target_processing")
+    builder = cast(
+        Callable[..., list[TargetProcessingEvidenceRecord]],
+        module.__dict__["build_processing_evidence_records"],
+    )
+    return processing_manifest, builder(
+        processing_manifest=processing_manifest,
+        adapter_records=adapter_records,
+    )
+
+
 def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeReport:
     manifest = TargetRuntimeFixtureManifest.model_validate(
         _load_json_like(fixture_dir / "manifest.yaml")
@@ -69,11 +93,19 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeR
         raise ValueError(f"fixture {manifest.id} does not support profile {profile}")
     adapter_manifest: TargetAdapterBackedSourceManifest | None = None
     adapter_records: list[TargetAdapterBackedSourceRecord] | None = None
+    processing_manifest: TargetProcessingEvidenceManifest | None = None
+    processing_records: list[TargetProcessingEvidenceRecord] | None = None
     if manifest.adapter_backed_source_ref is not None:
         adapter_manifest, adapter_records = _adapter_records_for(
             fixture_dir,
             adapter_backed_source_ref=manifest.adapter_backed_source_ref,
             source_corpus_ref=manifest.source_corpus_ref,
+        )
+    if manifest.processing_evidence_ref is not None:
+        processing_manifest, processing_records = _processing_records_for(
+            fixture_dir,
+            processing_evidence_ref=manifest.processing_evidence_ref,
+            adapter_records=adapter_records,
         )
     result = run_target_runtime_fixture(
         fixture_id=manifest.id,
@@ -83,6 +115,8 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeR
         source_corpus_ref=manifest.source_corpus_ref,
         adapter_manifest=adapter_manifest,
         adapter_records=adapter_records,
+        processing_manifest=processing_manifest,
+        processing_records=processing_records,
     )
     report = result.report
     if report.status != manifest.expected_status:
@@ -115,6 +149,11 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeR
         raise ValueError(
             f"expected {manifest.expected_adapter_result_count} source adapter results, "
             f"got {len(report.source_adapter_result_refs)}"
+        )
+    if len(report.processing_evidence_refs) < manifest.expected_processing_evidence_count:
+        raise ValueError(
+            f"expected {manifest.expected_processing_evidence_count} processing records, "
+            f"got {len(report.processing_evidence_refs)}"
         )
     out.mkdir(parents=True, exist_ok=True)
     (out / "run_report.json").write_text(

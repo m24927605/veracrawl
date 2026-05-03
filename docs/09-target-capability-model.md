@@ -235,6 +235,11 @@ Required acceptance:
   observations can be tied to source adapter result refs, adapter output refs,
   adapter policy refs, and adapter replay refs without importing concrete
   adapters into target runtime core
+- processing/evidence target runtime fixtures must prove that adapter-backed
+  observations can be tied to normalized documents, extraction candidates,
+  candidate anchors, evidence packets, evidence anchors, publication reports,
+  policy refs, and replay refs without allowing graph-only context or direct
+  publication bypass to satisfy evidence
 - target product acceptance workflows pass through `ProductAcceptanceGateReport`
 - every output type has evidence coverage and publication acceptance checks
 - no adapter, pattern, or output type can be labeled target-complete while scaffolded, untested, or manually simulated
