@@ -1,0 +1,1 @@
+{"required_event_types":["production_project_recorded","production_site_scope_recorded","run_budget_recorded","run_policy_snapshot_recorded","run_approval_recorded","run_started","run_completed"]}

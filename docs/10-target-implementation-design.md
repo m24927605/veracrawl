@@ -1245,6 +1245,17 @@ Security/privacy lifecycle gate slice:
 
 Target crawl runtime slice:
 
+- production run-control fixtures add `ProductionProject`,
+  `ProductionSiteScope`, `RunBudget`, `RunPolicySnapshot`,
+  `RunApprovalRecord`, `RunLifecycleRecord`,
+  `ProductionRunControlReport`, and `ProductionRunControlFixtureManifest`.
+  `veracrawl-run-control` proves the control plane can create, approve, start,
+  pause, resume, cancel, complete, block, and replay runs through canonical
+  commands/events before live source acquisition is connected.
+- production run-control completion requires project, site scope, objective,
+  plan, approval, budget, policy snapshot, command result, event, lifecycle,
+  policy, and replay refs. Policy denial, missing approval, missing budget,
+  invalid lifecycle transitions, and missing replay refs fail deterministically.
 - `veracrawl.target_runtime.runner` is core-owned and imports only VeraCrawl contracts plus standard library helpers. It composes target runtime fixture results from objective, plan, pattern, AI, evidence, graph, export, privacy, and replay refs without importing concrete adapters or SDKs.
 - `TargetCrawlPatternRecord` is the per-pattern proof surface for frontier, source observation, source adapter, extraction, accepted output, evidence, verification, graph, policy, command, event cursor, outbox, artifact, replay, and operator-visible refs.
 - `TargetAIRecommendationRecord` records framework-neutral planning and repair recommendations. It blocks framework-native canonical state and requires policy/tool/trace refs for accepted recommendations.

@@ -177,6 +177,25 @@ class RunStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class RunLifecycleAction(StrEnum):
+    CREATE_OBJECTIVE = "create_objective"
+    APPROVE_PLAN = "approve_plan"
+    START_RUN = "start_run"
+    PAUSE_RUN = "pause_run"
+    RESUME_RUN = "resume_run"
+    CANCEL_RUN = "cancel_run"
+    FAIL_RUN = "fail_run"
+    COMPLETE_RUN = "complete_run"
+
+
+class ProductionRunControlFailureType(StrEnum):
+    POLICY_DENIED = "production_run_control_policy_denied"
+    MISSING_APPROVAL = "production_run_control_missing_approval"
+    MISSING_BUDGET = "production_run_control_missing_budget"
+    INVALID_TRANSITION = "production_run_control_invalid_transition"
+    MISSING_REPLAY = "production_run_control_missing_replay"
+
+
 class RuntimeCompletionGateType(StrEnum):
     OBJECTIVE = "objective"
     PLAN = "plan"

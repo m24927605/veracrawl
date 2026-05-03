@@ -1525,6 +1525,19 @@ Acceptance gates:
 
 Acceptance gates:
 
+- `veracrawl-run-control run tests/fixtures/production-run-control-success
+  --profile target --out <dir>` completes with status `completed` and `pass`
+  only when project, site scope, objective, plan, approval, budget, policy
+  snapshot, command result, event, lifecycle, and replay refs are present
+- `production-run-control-paused-resumed` and
+  `production-run-control-cancelled` complete as controlled lifecycle paths with
+  command/event/lifecycle/replay refs
+- `production-run-control-policy-denied`,
+  `production-run-control-missing-approval`,
+  `production-run-control-missing-budget`,
+  `production-run-control-invalid-transition`, and
+  `production-run-control-missing-replay` fail deterministically with typed
+  production run-control failure refs and no false pass report
 - `veracrawl-target-runtime run tests/fixtures/target-runtime-success --profile target --out <dir>` completes with status `complete` and `pass`
 - success report covers at least seven website patterns in one run and includes accepted output, evidence, verification, graph, export receipt, output manifest, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay bundle refs
 - `target-runtime-drift-repair` completes only when framework-neutral AI recommendation, policy, tool-call, trace, repair action, and reprocessed frontier refs exist

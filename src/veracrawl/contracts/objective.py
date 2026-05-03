@@ -6,8 +6,11 @@ from pydantic import Field, model_validator
 
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import (
+    CompletenessResult,
     ObjectiveStatus,
     PlanStatus,
+    ProductionRunControlFailureType,
+    RunLifecycleAction,
     RunStatus,
     RuntimeCompletionGateType,
     RuntimeGateStatus,
@@ -123,4 +126,237 @@ class RunPlanSnapshot(TimestampedModel):
             raise ValueError("run plan snapshot requires plan_hash")
         if not self.policy_refs or not self.schema_refs or not self.adapter_spec_refs:
             raise ValueError("run plan snapshot requires policy, schema, and adapter refs")
+        return self
+
+
+class ProductionProject(TimestampedModel):
+    id: str
+    owner_ref: Ref
+    project_policy_refs: list[Ref] = Field(default_factory=list)
+    default_budget_ref: Ref
+    status: str = "active"
+
+    @model_validator(mode="after")
+    def validate_project(self) -> ProductionProject:
+        if self.status != "active":
+            raise ValueError("production project must be active for run control")
+        if not (self.owner_ref and self.project_policy_refs and self.default_budget_ref):
+            raise ValueError("production project requires owner, policy, and budget refs")
+        return self
+
+
+class ProductionSiteScope(TimestampedModel):
+    id: str
+    project_ref: Ref
+    allowed_scope_refs: list[Ref] = Field(default_factory=list)
+    source_policy_refs: list[Ref] = Field(default_factory=list)
+    robots_policy_ref: Ref
+    egress_policy_ref: Ref
+    credential_policy_ref: Ref | None = None
+    status: str = "active"
+
+    @model_validator(mode="after")
+    def validate_site_scope(self) -> ProductionSiteScope:
+        if self.status != "active":
+            raise ValueError("production site scope must be active")
+        if not self.allowed_scope_refs:
+            raise ValueError("production site scope requires allowed scope refs")
+        if not (self.source_policy_refs and self.robots_policy_ref and self.egress_policy_ref):
+            raise ValueError(
+                "production site scope requires source, robots, and egress policy refs"
+            )
+        return self
+
+
+class RunBudget(TimestampedModel):
+    id: str
+    project_ref: Ref
+    crawl_limit_refs: list[Ref] = Field(default_factory=list)
+    max_pages: int
+    max_depth: int
+    max_runtime_seconds: int
+    max_browser_minutes: int = 0
+    max_model_tokens: int = 0
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_budget(self) -> RunBudget:
+        numeric_fields = {
+            "max_pages": self.max_pages,
+            "max_depth": self.max_depth,
+            "max_runtime_seconds": self.max_runtime_seconds,
+        }
+        invalid = [field for field, value in numeric_fields.items() if value <= 0]
+        if invalid:
+            raise ValueError(f"run budget requires positive limits: {invalid}")
+        if self.max_browser_minutes < 0 or self.max_model_tokens < 0:
+            raise ValueError("run budget optional limits cannot be negative")
+        if not (self.crawl_limit_refs and self.policy_decision_refs):
+            raise ValueError("run budget requires limit and policy decision refs")
+        return self
+
+
+class RunPolicySnapshot(TimestampedModel):
+    id: str
+    run_ref: Ref
+    project_ref: Ref
+    site_scope_ref: Ref
+    source_policy_refs: list[Ref] = Field(default_factory=list)
+    publication_policy_refs: list[Ref] = Field(default_factory=list)
+    privacy_policy_ref: Ref
+    egress_policy_ref: Ref
+    credential_policy_ref: Ref | None = None
+    prompt_taint_policy_ref: Ref
+    budget_ref: Ref
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_policy_snapshot(self) -> RunPolicySnapshot:
+        required: dict[str, object] = {
+            "source_policy_refs": self.source_policy_refs,
+            "publication_policy_refs": self.publication_policy_refs,
+            "privacy_policy_ref": self.privacy_policy_ref,
+            "egress_policy_ref": self.egress_policy_ref,
+            "prompt_taint_policy_ref": self.prompt_taint_policy_ref,
+            "budget_ref": self.budget_ref,
+            "policy_decision_refs": self.policy_decision_refs,
+        }
+        missing = [field for field, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"run policy snapshot missing refs: {missing}")
+        return self
+
+
+class RunApprovalRecord(TimestampedModel):
+    id: str
+    objective_ref: Ref
+    plan_ref: Ref
+    actor_ref: Ref
+    approved: bool
+    approval_decision_ref: Ref | None = None
+    rejection_reason_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_approval_record(self) -> RunApprovalRecord:
+        if self.approved:
+            if not (self.approval_decision_ref and self.policy_decision_refs):
+                raise ValueError("approved run approval requires decision and policy refs")
+            if self.rejection_reason_refs:
+                raise ValueError("approved run approval cannot carry rejection refs")
+        elif not self.rejection_reason_refs:
+            raise ValueError("rejected run approval requires rejection refs")
+        return self
+
+
+class RunLifecycleRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    action: RunLifecycleAction
+    status_before: RunStatus
+    status_after: RunStatus
+    command_result_ref: Ref
+    event_ref: Ref
+    actor_ref: Ref
+    policy_snapshot_ref: Ref
+    budget_ref: Ref
+    approval_record_ref: Ref | None = None
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    replay_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_lifecycle_record(self) -> RunLifecycleRecord:
+        allowed: dict[RunLifecycleAction, set[tuple[RunStatus, RunStatus]]] = {
+            RunLifecycleAction.START_RUN: {
+                (RunStatus.QUEUED, RunStatus.RUNNING),
+                (RunStatus.RUNNING, RunStatus.RUNNING),
+            },
+            RunLifecycleAction.PAUSE_RUN: {(RunStatus.RUNNING, RunStatus.PAUSED)},
+            RunLifecycleAction.RESUME_RUN: {(RunStatus.PAUSED, RunStatus.RUNNING)},
+            RunLifecycleAction.CANCEL_RUN: {
+                (RunStatus.QUEUED, RunStatus.CANCELLED),
+                (RunStatus.RUNNING, RunStatus.CANCELLED),
+                (RunStatus.PAUSED, RunStatus.CANCELLED),
+            },
+            RunLifecycleAction.FAIL_RUN: {
+                (RunStatus.QUEUED, RunStatus.FAILED),
+                (RunStatus.RUNNING, RunStatus.FAILED),
+                (RunStatus.PAUSED, RunStatus.FAILED),
+            },
+            RunLifecycleAction.COMPLETE_RUN: {(RunStatus.RUNNING, RunStatus.COMPLETED)},
+            RunLifecycleAction.CREATE_OBJECTIVE: set(),
+            RunLifecycleAction.APPROVE_PLAN: set(),
+        }
+        if (self.status_before, self.status_after) not in allowed[self.action]:
+            raise ValueError(
+                "invalid run lifecycle transition "
+                f"{self.action.value}: {self.status_before.value}->{self.status_after.value}"
+            )
+        if self.action == RunLifecycleAction.FAIL_RUN and not self.failure_record_refs:
+            raise ValueError("failed run lifecycle requires failure refs")
+        if not self.replay_refs:
+            raise ValueError("run lifecycle record requires replay refs")
+        return self
+
+
+class ProductionRunControlReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    project_ref: Ref
+    site_scope_ref: Ref
+    objective_ref: Ref
+    plan_ref: Ref
+    run_ref: Ref
+    status: RunStatus
+    completion_result: CompletenessResult
+    operator_status: str
+    command_result_refs: list[Ref] = Field(default_factory=list)
+    event_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    approval_refs: list[Ref] = Field(default_factory=list)
+    budget_ref: Ref | None = None
+    policy_snapshot_ref: Ref | None = None
+    lifecycle_record_refs: list[Ref] = Field(default_factory=list)
+    replay_refs: list[Ref] = Field(default_factory=list)
+    failure_type: ProductionRunControlFailureType | None = None
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_run_control_report(self) -> ProductionRunControlReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "command_result_refs": self.command_result_refs,
+                "event_refs": self.event_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "approval_refs": self.approval_refs,
+                "budget_ref": self.budget_ref,
+                "policy_snapshot_ref": self.policy_snapshot_ref,
+                "lifecycle_record_refs": self.lifecycle_record_refs,
+                "replay_refs": self.replay_refs,
+            }
+            missing = [field for field, value in required.items() if not value]
+            if missing or self.failure_type or self.failure_report_refs:
+                raise ValueError(f"passing run-control report missing refs: {missing}")
+        elif not (self.failure_type and self.failure_report_refs and self.diagnostics):
+            raise ValueError("failing run-control report requires typed diagnostics")
+        return self
+
+
+class ProductionRunControlFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_status: RunStatus
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: ProductionRunControlFailureType | None = None
+    negative_case: bool = False
+
+    @model_validator(mode="after")
+    def validate_run_control_fixture(self) -> ProductionRunControlFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("production run-control fixture must support target profile")
+        if self.negative_case and self.expected_failure_type is None:
+            raise ValueError("negative production run-control fixture requires failure type")
         return self

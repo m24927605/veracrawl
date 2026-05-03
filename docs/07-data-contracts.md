@@ -5620,9 +5620,130 @@ TargetProcessingEvidenceRecord:
   result: pass | fail | needs_review
 ```
 
+```yaml
+ProductionProject:
+  id: string
+  owner_ref: string
+  project_policy_refs: list
+  default_budget_ref: string
+  status: active
+```
+
+```yaml
+ProductionSiteScope:
+  id: string
+  project_ref: string
+  allowed_scope_refs: list
+  source_policy_refs: list
+  robots_policy_ref: string
+  egress_policy_ref: string
+  credential_policy_ref: string | null
+  status: active
+```
+
+```yaml
+RunBudget:
+  id: string
+  project_ref: string
+  crawl_limit_refs: list
+  max_pages: integer
+  max_depth: integer
+  max_runtime_seconds: integer
+  max_browser_minutes: integer
+  max_model_tokens: integer
+  policy_decision_refs: list
+```
+
+```yaml
+RunPolicySnapshot:
+  id: string
+  run_ref: string
+  project_ref: string
+  site_scope_ref: string
+  source_policy_refs: list
+  publication_policy_refs: list
+  privacy_policy_ref: string
+  egress_policy_ref: string
+  credential_policy_ref: string | null
+  prompt_taint_policy_ref: string
+  budget_ref: string
+  policy_decision_refs: list
+```
+
+```yaml
+RunApprovalRecord:
+  id: string
+  objective_ref: string
+  plan_ref: string
+  actor_ref: string
+  approved: boolean
+  approval_decision_ref: string | null
+  rejection_reason_refs: list
+  policy_decision_refs: list
+```
+
+```yaml
+RunLifecycleRecord:
+  id: string
+  run_ref: string
+  action: start_run | pause_run | resume_run | cancel_run | fail_run | complete_run
+  status_before: queued | running | paused | completed | failed | cancelled
+  status_after: queued | running | paused | completed | failed | cancelled
+  command_result_ref: string
+  event_ref: string
+  actor_ref: string
+  policy_snapshot_ref: string
+  budget_ref: string
+  approval_record_ref: string | null
+  failure_record_refs: list
+  replay_refs: list
+```
+
+```yaml
+ProductionRunControlReport:
+  id: string
+  fixture_id: string
+  project_ref: string
+  site_scope_ref: string
+  objective_ref: string
+  plan_ref: string
+  run_ref: string
+  status: queued | running | paused | completed | failed | cancelled
+  completion_result: pass | fail | needs_review
+  operator_status: string
+  command_result_refs: list
+  event_refs: list
+  policy_decision_refs: list
+  approval_refs: list
+  budget_ref: string | null
+  policy_snapshot_ref: string | null
+  lifecycle_record_refs: list
+  replay_refs: list
+  failure_type: string | null
+  failure_report_refs: list
+  diagnostics: list
+```
+
+```yaml
+ProductionRunControlFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_status: queued | running | paused | completed | failed | cancelled
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: string | null
+  negative_case: boolean
+```
+
 Executable target runtime rules:
 
 - `TargetRuntimeReport` can claim `complete` only when at least seven website patterns have pattern records and accepted outputs, evidence, verification, graph, export, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay refs exist.
+- Production run-control reports can claim `pass` only when project, site scope,
+  objective, plan, run, approval, budget, policy snapshot, command result,
+  event, lifecycle, and replay refs exist. Policy denial, missing approval,
+  missing budget, invalid lifecycle transition, or missing replay refs fail with
+  typed production run-control failure refs before live acquisition can start.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

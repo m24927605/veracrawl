@@ -118,10 +118,13 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit control spec: `specs/038-production-runtime-closure/spec.md`.
-Use it with `docs/08-build-roadmap.md` before opening or activating any
-post-037 production runtime work. Specs `039` through `054` are predeclared as
-planned implementation specs; do not invent additional production specs unless
-`specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`
-are amended first.
+Current active Spec Kit plan: `specs/039-production-run-control-api/plan.md`.
+Use it with `specs/039-production-run-control-api/spec.md`,
+`specs/039-production-run-control-api/research.md`,
+`specs/039-production-run-control-api/data-model.md`,
+`specs/039-production-run-control-api/contracts/`, and
+`specs/039-production-run-control-api/quickstart.md` for Production Run Control
+API work. The post-037 roadmap remains governed by
+`specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
+do not invent additional production specs unless both are amended first.
 <!-- SPECKIT END -->

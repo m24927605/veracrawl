@@ -191,6 +191,12 @@ policy decisions, and replay refs outside core, then pass canonical records to
 the runner. A complete report cannot bypass this chain, use graph-only derived
 context as source evidence, publish without a publication report, or claim
 success when normalization, candidate anchors, or evidence packets are missing.
+The production run-control gate turns the post-037 roadmap into an executable
+control-plane slice. `veracrawl-run-control` proves that projects, site scopes,
+objectives, plans, approvals, budgets, policy snapshots, run lifecycle actions,
+command results, events, and replay refs exist before downstream live
+acquisition can start. Missing approval, policy denial, missing budget, invalid
+transitions, and missing replay fail with typed operator-visible diagnostics.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
