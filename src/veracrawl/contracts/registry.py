@@ -81,6 +81,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_source_coverage_ref: str | None = None
     expected_dynamic_source_runtime_ref: str | None = None
     expected_browser_snapshot_ref: str | None = None
+    expected_credentialed_session_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -441,6 +442,20 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         privacy=True,
         tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    "CredentialedSessionRuntimeReport": _contract(
+        "CredentialedSessionRuntimeReport",
+        OwnerService.FETCH,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_credentialed_session_contracts.py"],
+    ),
+    "CredentialedSessionFixtureManifest": _contract(
+        "CredentialedSessionFixtureManifest",
+        OwnerService.TESTS,
+        "security_privacy",
+        tests=["tests/contract/test_credentialed_session_contracts.py"],
     ),
     "PromptTaintBoundary": _contract(
         "PromptTaintBoundary",
@@ -2613,6 +2628,21 @@ COMMAND_TYPES.update(
             approval_required=True,
             emitted_event_types=["credential_use_audited"],
         ),
+        "record_credentialed_session_runtime_report": CommandTypeRegistration(
+            command_type="record_credentialed_session_runtime_report",
+            owner_service=OwnerService.FETCH,
+            target_aggregate_type="CredentialedSessionRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["credential_use", "authorized_session"],
+            emitted_event_types=["credentialed_session_runtime_reported"],
+        ),
+        "record_credentialed_session_fixture_manifest": CommandTypeRegistration(
+            command_type="record_credentialed_session_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="CredentialedSessionFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["credentialed_session_fixture_manifest_recorded"],
+        ),
         "record_prompt_taint_boundary": CommandTypeRegistration(
             command_type="record_prompt_taint_boundary",
             owner_service=OwnerService.POLICY,
@@ -3119,6 +3149,8 @@ EVENT_TYPES.update(
             "observability_fixture_manifest_recorded",
             "security_policy_check_recorded",
             "credential_use_audited",
+            "credentialed_session_runtime_reported",
+            "credentialed_session_fixture_manifest_recorded",
             "prompt_taint_boundary_recorded",
             "artifact_lifecycle_action_recorded",
             "projection_cleanup_recorded",
@@ -4232,6 +4264,28 @@ for _browser_snapshot_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _credentialed_session_fixture, _negative in {
+    "credentialed-session-success": False,
+    "credentialed-session-missing-authorization": True,
+    "credentialed-session-out-of-scope": True,
+    "credentialed-session-raw-secret-leak": True,
+    "credentialed-session-unsafe-use": True,
+    "credentialed-session-missing-audit": True,
+    "credentialed-session-missing-redacted-replay": True,
+    "credentialed-session-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_credentialed_session_fixture}"
+    FIXTURE_ORACLES[_credentialed_session_fixture] = FixtureOracleRegistration(
+        fixture_id=_credentialed_session_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_credentialed_session_ref=f"{_base}/oracles/expected_credentialed_session.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -4424,6 +4478,25 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "OutboxRecord",
             "PolicyDecision",
             "PromptTaintBoundary",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "credentialed_session_runtime": _target_area(
+        "credentialed_session_runtime",
+        OwnerService.FETCH,
+        "materialized",
+        materialized=[
+            "CredentialedSessionRuntimeReport",
+            "CredentialedSessionFixtureManifest",
+            "CredentialUseAudit",
+            "LiveHttpAcquisitionReport",
+            "BrowserSnapshotRuntimeReport",
+            "SourceAdapterResult",
+            "SecurityPolicyCheck",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
             "ReplayBundleManifest",
         ],
     ),

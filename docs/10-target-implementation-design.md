@@ -331,6 +331,38 @@ CAPTCHA, bypass paywalls, evade WAFs, automate unauthorized login walls, handle
 credentials, normalize/extract rendered content, run an external browser fleet,
 or claim final production benchmark readiness.
 
+## Credentialed Session Runtime Slice
+
+The credentialed session runtime proves authorized session use without allowing
+secrets or adapter-native session state to become canonical VeraCrawl state:
+
+- `veracrawl.contracts.security_privacy`:
+  `CredentialedSessionRuntimeReport`,
+  `CredentialedSessionFixtureManifest`, and existing `CredentialUseAudit`
+  require live HTTP prerequisite refs, browser snapshot prerequisite refs,
+  credential scope/origin/approval refs, redaction map refs, redacted session
+  artifacts, redacted replay refs, policy refs, command/event/outbox refs, and
+  replay refs before pass.
+- `veracrawl.ports.session`: session capability is exposed through
+  `CredentialedSessionAdapterPort`; core receives redacted session refs rather
+  than raw credentials, cookies, or vault-native state.
+- `veracrawl.fetch.credentialed_session`: core aggregate runtime builds
+  credential audit refs, enforces scope/authorization/redaction gates, and does
+  not import concrete session, browser, network, model, or agent adapters.
+- `veracrawl.adapters.session.deterministic`: fixture adapter materializes
+  deterministic redacted session state, redacted artifacts, and redacted replay
+  refs without exposing raw secrets.
+- `veracrawl.cli.credentialed_session`: `veracrawl-credentialed-session`
+  dynamically loads deterministic adapters and runs row 041 and row 043
+  prerequisite paths before validating success plus missing-authorization,
+  out-of-scope, raw-secret-leak, unsafe-use, missing-audit,
+  missing-redacted-replay, and replay-mismatch fixtures.
+
+This slice proves credentialed session semantics and lineage. It does not steal
+credentials, bypass login walls, automate unauthorized access, implement a real
+external vault, normalize/extract authenticated content, or claim final
+production benchmark readiness.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable

@@ -5828,6 +5828,16 @@ Executable target runtime rules:
   artifacts, or replay mismatch fail with typed
   `BrowserSnapshotFailureType` diagnostics. Browser-native engine state must
   remain adapter-owned and must not become canonical VeraCrawl state.
+- Credentialed session runtime reports can claim `pass` only when row 041 live
+  HTTP report refs, row 043 browser snapshot report refs, credential
+  scope/origin/approval refs, credential use audit refs, session adapter result
+  refs, redacted session artifact refs, redaction map refs, redacted replay
+  refs, policy refs, command/event/outbox refs, and replay refs are present.
+  Missing authorization, out-of-scope use, raw secret leakage, unsafe credential
+  use, missing audit, missing redacted replay, or replay mismatch fail with
+  typed `CredentialedSessionFailureType` diagnostics. Raw secrets, cookies,
+  vault-native handles, and adapter-native session state must remain
+  adapter-owned and must not become canonical VeraCrawl state.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

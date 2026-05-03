@@ -1058,6 +1058,18 @@ class BrowserSnapshotFailureType(StrEnum):
     ADAPTER_UNAVAILABLE = "browser_snapshot_adapter_unavailable"
 
 
+class CredentialedSessionFailureType(StrEnum):
+    POLICY_DENIED = "credentialed_session_policy_denied"
+    MISSING_AUTHORIZATION = "credentialed_session_missing_authorization"
+    OUT_OF_SCOPE = "credentialed_session_out_of_scope"
+    RAW_SECRET_LEAK = "credentialed_session_raw_secret_leak"
+    UNSAFE_CREDENTIAL_USE = "credentialed_session_unsafe_credential_use"
+    MISSING_AUDIT = "credentialed_session_missing_audit"
+    MISSING_REDACTED_REPLAY = "credentialed_session_missing_redacted_replay"
+    REPLAY_MISMATCH = "credentialed_session_replay_mismatch"
+    ADAPTER_UNAVAILABLE = "credentialed_session_adapter_unavailable"
+
+
 class BrowserStepStatus(StrEnum):
     PLANNED = "planned"
     EXECUTED = "executed"

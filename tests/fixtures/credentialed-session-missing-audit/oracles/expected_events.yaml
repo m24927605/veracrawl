@@ -1,0 +1,1 @@
+{"fixture_id":"credentialed-session-missing-audit","expected_events":["credentialed_session_runtime_reported"]}

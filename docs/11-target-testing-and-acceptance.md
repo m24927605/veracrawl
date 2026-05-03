@@ -377,6 +377,37 @@ This acceptance proves browser snapshot runtime semantics. It does not replace
 credentialed session, normalization/extraction, evidence, publication, worker
 scale, external benchmark, or release gates.
 
+Credentialed session fixture contract:
+
+```text
+veracrawl-credentialed-session run tests/fixtures/<credentialed_session_fixture_id> --profile target --out .veracrawl-test-runs/<credentialed_session_fixture_id>
+```
+
+Required credentialed session fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| credentialed-session-success | live HTTP and browser snapshot prerequisite refs plus credential scope/origin/approval, credential audit, session adapter result, redacted session state/artifact, redaction map, redacted replay, policy, command/event/outbox, and replay refs pass |
+| credentialed-session-missing-authorization | missing approval fails with `credentialed_session_missing_authorization` |
+| credentialed-session-out-of-scope | credential use outside authorized origin fails with `credentialed_session_out_of_scope` |
+| credentialed-session-raw-secret-leak | raw secret leakage fails with `credentialed_session_raw_secret_leak` |
+| credentialed-session-unsafe-use | unsafe credential delivery/use fails with `credentialed_session_unsafe_credential_use` |
+| credentialed-session-missing-audit | missing credential audit fails with `credentialed_session_missing_audit` |
+| credentialed-session-missing-redacted-replay | missing redacted replay fails with `credentialed_session_missing_redacted_replay` |
+| credentialed-session-replay-mismatch | missing or inconsistent replay refs fail with `credentialed_session_replay_mismatch` |
+
+Credentialed session acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_credentialed_session_contracts.py`
+- `pytest tests/unit/test_credentialed_session_runtime.py`
+- `pytest tests/integration/test_credentialed_session_fixtures.py`
+- `veracrawl-credentialed-session` CLI loop over all credentialed session fixtures
+
+This acceptance proves credentialed session runtime semantics. It does not
+replace normalization/extraction, evidence, publication, worker scale, external
+benchmark, or release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

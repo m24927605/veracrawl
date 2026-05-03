@@ -114,6 +114,15 @@ artifacts, browser budget refs, prompt-taint boundary refs, command/event/outbox
 refs, and replay refs. Egress denial, unsafe interaction, budget exhaustion,
 prompt-tainted content, missing artifacts, and replay mismatch fail with typed
 diagnostics while concrete browser engines remain behind replaceable adapters.
+The credentialed session runtime adds an authorized session aggregate behind a
+session adapter port. `veracrawl-credentialed-session` proves credentialed
+paths must preserve live HTTP and browser snapshot prerequisite refs, credential
+scope/origin/approval refs, credential use audit refs, redacted session artifact
+refs, redaction map refs, redacted replay refs, command/event/outbox refs, and
+replay refs without persisting raw secrets or adapter-native session state.
+Missing authorization, out-of-scope use, raw secret leakage, unsafe credential
+use, missing audit, missing redacted replay, and replay mismatch fail with typed
+diagnostics.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
@@ -513,6 +522,26 @@ for fixture in \
   browser-snapshot-replay-mismatch
 do
   uv run --python python3.12 --extra dev veracrawl-browser-snapshot run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run credentialed session fixtures:
+
+```sh
+for fixture in \
+  credentialed-session-success \
+  credentialed-session-missing-authorization \
+  credentialed-session-out-of-scope \
+  credentialed-session-raw-secret-leak \
+  credentialed-session-unsafe-use \
+  credentialed-session-missing-audit \
+  credentialed-session-missing-redacted-replay \
+  credentialed-session-replay-mismatch
+do
+  uv run --python python3.12 --extra dev veracrawl-credentialed-session run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

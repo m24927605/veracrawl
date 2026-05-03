@@ -233,6 +233,8 @@ from veracrawl.contracts.scale import (
 from veracrawl.contracts.scheduler import FrontierItem, QueueLease, SchedulerRecoveryReport
 from veracrawl.contracts.security_privacy import (
     ArtifactLifecycleAction,
+    CredentialedSessionFixtureManifest,
+    CredentialedSessionRuntimeReport,
     CredentialUseAudit,
     ProjectionCleanupRecord,
     PromptTaintBoundary,
@@ -317,6 +319,8 @@ __all__ = [
     "ContextBundleTrace",
     "ContextRef",
     "CredentialUseAudit",
+    "CredentialedSessionFixtureManifest",
+    "CredentialedSessionRuntimeReport",
     "CrossScopeMemoryTunnel",
     "CrawlObjective",
     "CrawlPlan",

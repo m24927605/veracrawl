@@ -9,6 +9,7 @@ from veracrawl.contracts.enums import (
     ArtifactLifecycleOperation,
     CompletenessResult,
     CredentialDeliveryMode,
+    CredentialedSessionFailureType,
     SecurityActionSurface,
     SecurityCheckResult,
     SecurityPrivacyFailureType,
@@ -92,6 +93,106 @@ class CredentialUseAudit(TimestampedModel):
         _ensure_no_sensitive_values(self.prompt_context_refs, "credential prompt context refs")
         if not self.command_refs or not self.event_refs:
             raise ValueError("credential use audit requires command and event refs")
+        return self
+
+
+class CredentialedSessionRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    live_http_acquisition_report_ref: Ref | None = None
+    browser_snapshot_runtime_report_ref: Ref | None = None
+    credential_scope_refs: list[Ref] = Field(default_factory=list)
+    authorized_origin_refs: list[Ref] = Field(default_factory=list)
+    approval_decision_refs: list[Ref] = Field(default_factory=list)
+    credential_use_audit_refs: list[Ref] = Field(default_factory=list)
+    session_adapter_result_refs: list[Ref] = Field(default_factory=list)
+    session_state_refs: list[Ref] = Field(default_factory=list)
+    redaction_map_refs: list[Ref] = Field(default_factory=list)
+    redacted_artifact_refs: list[Ref] = Field(default_factory=list)
+    redacted_replay_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    raw_secret_leak_refs: list[Ref] = Field(default_factory=list)
+    adapter_native_state_canonical_refs: list[Ref] = Field(default_factory=list)
+    failure_type: CredentialedSessionFailureType | None = None
+    operator_status: str
+    completion_result: CompletenessResult
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_credentialed_session_report(self) -> CredentialedSessionRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "live_http_acquisition_report_ref": self.live_http_acquisition_report_ref,
+                "browser_snapshot_runtime_report_ref": self.browser_snapshot_runtime_report_ref,
+                "credential_scope_refs": self.credential_scope_refs,
+                "authorized_origin_refs": self.authorized_origin_refs,
+                "approval_decision_refs": self.approval_decision_refs,
+                "credential_use_audit_refs": self.credential_use_audit_refs,
+                "session_adapter_result_refs": self.session_adapter_result_refs,
+                "session_state_refs": self.session_state_refs,
+                "redaction_map_refs": self.redaction_map_refs,
+                "redacted_artifact_refs": self.redacted_artifact_refs,
+                "redacted_replay_refs": self.redacted_replay_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+                or self.raw_secret_leak_refs
+                or self.adapter_native_state_canonical_refs
+            ):
+                raise ValueError(
+                    f"passing credentialed session report missing refs: {missing}"
+                )
+        elif not (
+            self.failure_type
+            and (
+                self.failure_report_refs
+                or self.missing_ref_fields
+                or self.raw_secret_leak_refs
+                or self.adapter_native_state_canonical_refs
+            )
+        ):
+            raise ValueError("failed credentialed session report requires typed diagnostics")
+        return self
+
+
+class CredentialedSessionFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    path: str = "/browser"
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: CredentialedSessionFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_credentialed_session_fixture(self) -> CredentialedSessionFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("credentialed session fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("credentialed session fixture must declare required ref types")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative credentialed session fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError("negative credentialed session fixture requires failure type")
         return self
 
 

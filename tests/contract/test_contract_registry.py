@@ -62,6 +62,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "dynamic_source_adapter_runtime_foundation",
         "structured_source_adapters_runtime",
         "browser_snapshot_runtime",
+        "credentialed_session_runtime",
         "graph_frontier_review_runtime_gate",
         "temporal_kg_identity_projection_gate",
         "scheduler",
