@@ -439,6 +439,39 @@ This acceptance proves live normalization and site-understanding runtime
 semantics. It does not replace schema extraction candidates, evidence,
 publication, worker scale, external benchmark, or release gates.
 
+Schema extraction candidate fixture contract:
+
+```text
+veracrawl-schema-extraction run tests/fixtures/<schema_extraction_fixture_id> --profile target --out .veracrawl-test-runs/<schema_extraction_fixture_id>
+```
+
+Required schema extraction fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| schema-extraction-record-success | live normalization refs plus normalized document, source anchor, strategy, candidate, field anchor, schema validation, framework-neutral model/tool trace, confidence, policy, command/event/outbox, and replay refs pass |
+| schema-extraction-exploratory-success | approved exploratory schema refs produce the same candidate, anchor, trace, policy, and replay refs without publication refs |
+| schema-extraction-browser-success | browser-shaped normalized content produces anchored candidates without requiring browser-native state in core |
+| schema-extraction-drift-repair-required | schema drift emits candidate rejection, drift signal, repair recommendation, policy, and replay refs with `needs_review` |
+| schema-extraction-missing-normalization | missing live normalization refs fail with `schema_extraction_missing_live_normalization` |
+| schema-extraction-schema-validation-failed | schema validation failure fails with `schema_extraction_schema_validation_failed` |
+| schema-extraction-missing-field-anchor | missing candidate field anchors fail with `schema_extraction_missing_field_anchor` |
+| schema-extraction-missing-model-tool-trace | missing framework-neutral model/tool trace refs fail with `schema_extraction_missing_model_tool_trace` |
+| schema-extraction-candidate-direct-publication | direct publication attempts fail with `schema_extraction_candidate_direct_publication` |
+| schema-extraction-replay-mismatch | missing or inconsistent replay refs fail with `schema_extraction_replay_mismatch` |
+
+Schema extraction acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_schema_extraction_contracts.py`
+- `pytest tests/unit/test_schema_extraction_runtime.py`
+- `pytest tests/integration/test_schema_extraction_fixtures.py`
+- `veracrawl-schema-extraction` CLI loop over all schema extraction fixtures
+
+This acceptance proves schema extraction candidate runtime semantics. It does
+not replace evidence, verification, publication, worker scale, external
+benchmark, or release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

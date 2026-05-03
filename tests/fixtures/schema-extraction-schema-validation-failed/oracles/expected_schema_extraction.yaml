@@ -1,0 +1,1 @@
+{"fixture_id":"schema-extraction-schema-validation-failed","expected_failure_type":"schema_extraction_schema_validation_failed","required_refs":["live_normalization","typed_failure","missing_ref_fields"]}

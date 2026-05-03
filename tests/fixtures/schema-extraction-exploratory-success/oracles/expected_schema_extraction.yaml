@@ -1,0 +1,1 @@
+{"fixture_id":"schema-extraction-exploratory-success","required_refs":["approved_exploratory_schema","candidate","field_anchor","schema_validation","model_trace","tool_trace","replay"],"forbidden_refs":["published_output","output_manifest","export"]}

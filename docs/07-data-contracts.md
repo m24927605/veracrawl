@@ -5849,6 +5849,18 @@ Executable target runtime rules:
   empty content, missing anchor maps, missing site models, or replay mismatch
   fail with typed `LiveNormalizationFailureType` diagnostics. Page type and site
   model refs are planning context, not source evidence or published output.
+- Schema extraction runtime reports can claim `pass` only when row 045 live
+  normalization refs are present with normalized document refs, source anchor
+  refs, extraction strategy refs, extraction candidate refs, candidate field
+  anchor refs, schema refs, schema validation refs, framework-neutral model/tool
+  trace refs, confidence refs, policy refs, command/event/outbox refs, and
+  replay refs. Candidate reports must not include published output, output
+  manifest, export, delivery, or publication refs. Missing live normalization,
+  schema validation failure, missing candidate field anchors, missing model/tool
+  trace refs, direct candidate publication, drift repair requirements, or replay
+  mismatch fail or enter needs-review with typed `SchemaExtractionFailureType`
+  diagnostics. Candidate refs remain intermediate records until later evidence
+  and verification gates pass.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

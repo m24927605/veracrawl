@@ -1,0 +1,1 @@
+{"fixture_id":"schema-extraction-drift-repair-required","expected_failure_type":"schema_extraction_drift_repair_required","required_refs":["candidate_rejection","drift_signal","repair_recommendation","typed_failure"]}

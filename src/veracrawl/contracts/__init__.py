@@ -199,6 +199,8 @@ from veracrawl.contracts.processing import (
     NormalizeExtractReport,
     PageTypeClassification,
     ProcessFixtureManifest,
+    SchemaExtractionFixtureManifest,
+    SchemaExtractionRuntimeReport,
     SiteModel,
     TextAnchor,
 )
@@ -480,6 +482,8 @@ __all__ = [
     "SchedulerRecoveryReport",
     "ScaleFixtureManifest",
     "ScaleRecoveryReport",
+    "SchemaExtractionFixtureManifest",
+    "SchemaExtractionRuntimeReport",
     "SecurityPolicyCheck",
     "SecurityPrivacyFixtureManifest",
     "SecurityPrivacyReport",

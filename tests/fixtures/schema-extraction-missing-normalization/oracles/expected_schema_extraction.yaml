@@ -1,0 +1,1 @@
+{"fixture_id":"schema-extraction-missing-normalization","expected_failure_type":"schema_extraction_missing_live_normalization","required_refs":["typed_failure","missing_ref_fields"]}

@@ -132,6 +132,16 @@ pages can be normalized from real local HTTP acquisitions while missing upstream
 refs, empty content, missing anchor maps, missing site models, and replay
 mismatch fail with typed diagnostics. Derived site understanding remains
 planning context and must not be treated as source evidence.
+The schema extraction candidate runtime turns live normalization results into
+schema-bound extraction strategies and anchored candidates with schema
+validation refs, framework-neutral model/tool trace refs, candidate field anchor
+refs, confidence refs, command/event/outbox refs, and replay refs.
+`veracrawl-schema-extraction` proves declared schemas, approved exploratory
+schemas, and browser-shaped normalized content can create intermediate
+candidates without producing published outputs. Missing normalization, schema
+validation failure, missing anchors, missing model/tool trace refs, direct
+candidate publication, drift repair, and replay mismatch produce typed failure
+or needs-review reports.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter

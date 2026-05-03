@@ -1,0 +1,1 @@
+{"fixture_id":"schema-extraction-browser-success","required_refs":["live_normalization","candidate","field_anchor","schema_validation","model_trace","tool_trace","replay"],"forbidden_refs":["published_output","output_manifest","export"]}

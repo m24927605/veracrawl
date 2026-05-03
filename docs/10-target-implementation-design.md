@@ -393,6 +393,36 @@ local live artifacts. It does not publish outputs, treat site models as source
 evidence, implement schema extraction candidates, or claim final production
 benchmark readiness.
 
+## Schema Extraction Candidate Runtime Slice
+
+The schema extraction runtime proves that live normalization results can produce
+intermediate, schema-bound candidates without bypassing evidence or publication
+gates:
+
+- `veracrawl.contracts.processing`: `SchemaExtractionRuntimeReport` and
+  `SchemaExtractionFixtureManifest` require live normalization refs, normalized
+  document refs, source anchors, extraction strategy refs, extraction candidate
+  refs, candidate field anchor refs, schema refs, schema validation refs,
+  framework-neutral model/tool trace refs, confidence refs, policy refs,
+  command/event/outbox refs, and replay refs before pass.
+- `ExtractionCandidate` carries schema validation refs, model trace refs, tool
+  trace refs, rejection refs, and replay refs while remaining an intermediate
+  record.
+- `veracrawl.extract.schema_runtime`: core aggregate runtime receives row 045
+  normalization objects and refs through explicit inputs, reuses generic
+  extraction helpers, enforces anchor/schema/trace/publication/replay gates, and
+  does not import concrete source, browser, model, agent framework, storage, or
+  site-specific scraper adapters.
+- `veracrawl.cli.schema_extraction`: `veracrawl-schema-extraction` composes the
+  local live HTTP, structured source, browser snapshot, and live normalization
+  prerequisites at the CLI edge before validating declared schema, approved
+  exploratory schema, browser-shaped content, drift repair, and negative
+  candidate fixtures.
+
+This slice proves candidate generation semantics and lineage. It does not build
+evidence packets, verify candidates, publish outputs, call real model providers,
+or claim final production benchmark readiness.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable

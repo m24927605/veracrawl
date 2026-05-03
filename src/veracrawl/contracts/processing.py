@@ -11,6 +11,7 @@ from veracrawl.contracts.enums import (
     LinkProvenanceStatus,
     LiveNormalizationFailureType,
     PageType,
+    SchemaExtractionFailureType,
 )
 
 
@@ -39,6 +40,11 @@ class ExtractionCandidate(TimestampedModel):
     field_values: dict[str, object] = Field(default_factory=dict)
     field_anchor_refs: dict[str, Ref] = Field(default_factory=dict)
     confidence_refs: list[Ref] = Field(default_factory=list)
+    schema_validation_refs: list[Ref] = Field(default_factory=list)
+    model_trace_refs: list[Ref] = Field(default_factory=list)
+    tool_trace_refs: list[Ref] = Field(default_factory=list)
+    rejection_refs: list[Ref] = Field(default_factory=list)
+    replay_refs: list[Ref] = Field(default_factory=list)
     strategy_ref: Ref
     agent_recommendation_ref: Ref | None = None
     status: ExtractionCandidateStatus = ExtractionCandidateStatus.CANDIDATE
@@ -323,6 +329,123 @@ class LiveNormalizationFixtureManifest(TimestampedModel):
                 raise ValueError("negative live normalization fixture must not expect pass")
             if self.expected_failure_type is None:
                 raise ValueError("negative live normalization fixture requires failure type")
+        return self
+
+
+class SchemaExtractionRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    live_normalization_runtime_report_ref: Ref | None = None
+    normalized_document_refs: list[Ref] = Field(default_factory=list)
+    source_anchor_refs: list[Ref] = Field(default_factory=list)
+    anchor_map_refs: list[Ref] = Field(default_factory=list)
+    extraction_strategy_refs: list[Ref] = Field(default_factory=list)
+    extraction_candidate_refs: list[Ref] = Field(default_factory=list)
+    candidate_field_anchor_refs: list[Ref] = Field(default_factory=list)
+    schema_refs: list[Ref] = Field(default_factory=list)
+    schema_validation_refs: list[Ref] = Field(default_factory=list)
+    approved_exploratory_schema_refs: list[Ref] = Field(default_factory=list)
+    model_trace_refs: list[Ref] = Field(default_factory=list)
+    tool_trace_refs: list[Ref] = Field(default_factory=list)
+    confidence_refs: list[Ref] = Field(default_factory=list)
+    candidate_rejection_refs: list[Ref] = Field(default_factory=list)
+    drift_signal_refs: list[Ref] = Field(default_factory=list)
+    repair_recommendation_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    publication_refs: list[Ref] = Field(default_factory=list)
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: SchemaExtractionFailureType | None = None
+    operator_status: str
+    completion_result: CompletenessResult
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_schema_extraction_report(self) -> SchemaExtractionRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "live_normalization_runtime_report_ref": (
+                    self.live_normalization_runtime_report_ref
+                ),
+                "normalized_document_refs": self.normalized_document_refs,
+                "source_anchor_refs": self.source_anchor_refs,
+                "anchor_map_refs": self.anchor_map_refs,
+                "extraction_strategy_refs": self.extraction_strategy_refs,
+                "extraction_candidate_refs": self.extraction_candidate_refs,
+                "candidate_field_anchor_refs": self.candidate_field_anchor_refs,
+                "schema_refs": self.schema_refs,
+                "schema_validation_refs": self.schema_validation_refs,
+                "model_trace_refs": self.model_trace_refs,
+                "tool_trace_refs": self.tool_trace_refs,
+                "confidence_refs": self.confidence_refs,
+                "artifact_refs": self.artifact_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+                or self.publication_refs
+            ):
+                raise ValueError(
+                    f"passing schema extraction report invalid refs: {missing}"
+                )
+        else:
+            if not self.failure_type:
+                raise ValueError("non-pass schema extraction report requires failure type")
+            if not (
+                self.failure_report_refs
+                or self.missing_ref_fields
+                or self.candidate_rejection_refs
+                or self.drift_signal_refs
+            ):
+                raise ValueError("non-pass schema extraction report requires diagnostics")
+            if (
+                self.failure_type == SchemaExtractionFailureType.DRIFT_REPAIR_REQUIRED
+                and not (self.drift_signal_refs and self.repair_recommendation_refs)
+            ):
+                raise ValueError("drift needs-review requires drift and repair refs")
+        return self
+
+
+class SchemaExtractionFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    path: str
+    profile_refs: list[str] = Field(default_factory=list)
+    schema_ref: Ref
+    approved_exploratory_schema: bool = False
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: SchemaExtractionFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_schema_extraction_fixture(self) -> SchemaExtractionFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("schema extraction fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("schema extraction fixture must declare required ref types")
+        if "exploratory" in self.schema_ref and not self.approved_exploratory_schema:
+            raise ValueError("exploratory schema fixture requires approval flag")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative schema extraction fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError("negative schema extraction fixture requires failure type")
         return self
 
 

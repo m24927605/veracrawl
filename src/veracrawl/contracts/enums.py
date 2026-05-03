@@ -1079,6 +1079,17 @@ class LiveNormalizationFailureType(StrEnum):
     NORMALIZATION_FAILED = "live_normalization_failed"
 
 
+class SchemaExtractionFailureType(StrEnum):
+    MISSING_LIVE_NORMALIZATION = "schema_extraction_missing_live_normalization"
+    SCHEMA_VALIDATION_FAILED = "schema_extraction_schema_validation_failed"
+    MISSING_FIELD_ANCHOR = "schema_extraction_missing_field_anchor"
+    MISSING_MODEL_TOOL_TRACE = "schema_extraction_missing_model_tool_trace"
+    CANDIDATE_DIRECT_PUBLICATION = "schema_extraction_candidate_direct_publication"
+    DRIFT_REPAIR_REQUIRED = "schema_extraction_drift_repair_required"
+    REPLAY_MISMATCH = "schema_extraction_replay_mismatch"
+    EXTRACTION_FAILED = "schema_extraction_failed"
+
+
 class BrowserStepStatus(StrEnum):
     PLANNED = "planned"
     EXECUTED = "executed"

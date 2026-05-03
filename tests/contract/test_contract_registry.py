@@ -64,6 +64,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "browser_snapshot_runtime",
         "credentialed_session_runtime",
         "live_normalization_site_understanding",
+        "schema_extraction_candidate_runtime",
         "graph_frontier_review_runtime_gate",
         "temporal_kg_identity_projection_gate",
         "scheduler",
