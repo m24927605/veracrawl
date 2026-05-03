@@ -35,6 +35,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "target_crawl_runtime",
         "production_run_control_api",
         "production_persistence_runtime_wiring",
+        "live_http_acquisition_runtime",
         "source_backed_target_runtime",
         "adapter_backed_target_runtime",
         "processing_evidence_target_runtime",
@@ -96,11 +97,11 @@ def test_command_and_event_schema_refs_resolve() -> None:
     schema_refs = set(FOUNDATION_CONTRACTS)
     for command in COMMAND_TYPES.values():
         assert command.payload_schema_ref in schema_refs
-        for event_type in command.emitted_event_types:
-            assert event_type in EVENT_TYPES
-    for event_type in EVENT_TYPES.values():
-        assert event_type.payload_schema_ref in schema_refs
-        assert event_type.replay_critical_refs
+        for emitted_event_type in command.emitted_event_types:
+            assert emitted_event_type in EVENT_TYPES
+    for event_registration in EVENT_TYPES.values():
+        assert event_registration.payload_schema_ref in schema_refs
+        assert event_registration.replay_critical_refs
 
 
 def test_cross_owner_mutation_is_represented_by_command_registry() -> None:

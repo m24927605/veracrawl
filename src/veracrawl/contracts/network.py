@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from pydantic import Field, model_validator
 
 from veracrawl.contracts.common import Ref, TimestampedModel
-from veracrawl.contracts.enums import CompletenessResult
+from veracrawl.contracts.enums import CompletenessResult, LiveHttpAcquisitionFailureType
 
 
 def _is_http_url(value: str) -> bool:
@@ -134,6 +134,97 @@ class NetworkAcquisitionReport(TimestampedModel):
             raise ValueError(
                 "non-pass network acquisition report requires failures or missing refs"
             )
+        return self
+
+
+class LiveHttpAcquisitionReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    run_control_report_ref: Ref | None = None
+    production_persistence_report_ref: Ref | None = None
+    network_request_ref: Ref | None = None
+    network_response_ref: Ref | None = None
+    redirect_hop_refs: list[Ref] = Field(default_factory=list)
+    source_acquisition_report_ref: Ref | None = None
+    source_adapter_result_refs: list[Ref] = Field(default_factory=list)
+    fetch_attempt_refs: list[Ref] = Field(default_factory=list)
+    fetch_result_refs: list[Ref] = Field(default_factory=list)
+    page_snapshot_refs: list[Ref] = Field(default_factory=list)
+    source_observation_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    content_hash_refs: list[Ref] = Field(default_factory=list)
+    canonical_url_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: LiveHttpAcquisitionFailureType | None = None
+    operator_status: str
+    completion_result: CompletenessResult
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_live_http_report(self) -> LiveHttpAcquisitionReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "run_control_report_ref": self.run_control_report_ref,
+                "production_persistence_report_ref": self.production_persistence_report_ref,
+                "network_request_ref": self.network_request_ref,
+                "network_response_ref": self.network_response_ref,
+                "source_acquisition_report_ref": self.source_acquisition_report_ref,
+                "source_adapter_result_refs": self.source_adapter_result_refs,
+                "fetch_attempt_refs": self.fetch_attempt_refs,
+                "fetch_result_refs": self.fetch_result_refs,
+                "page_snapshot_refs": self.page_snapshot_refs,
+                "source_observation_refs": self.source_observation_refs,
+                "artifact_refs": self.artifact_refs,
+                "content_hash_refs": self.content_hash_refs,
+                "canonical_url_refs": self.canonical_url_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+            ):
+                raise ValueError(f"passing live HTTP acquisition report missing refs: {missing}")
+        elif not (self.failure_type and (self.failure_report_refs or self.missing_ref_fields)):
+            raise ValueError("non-pass live HTTP acquisition report requires typed diagnostics")
+        return self
+
+
+class LiveHttpAcquisitionFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    path: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: LiveHttpAcquisitionFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_live_http_fixture(self) -> LiveHttpAcquisitionFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("live HTTP fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("live HTTP fixture must declare required ref types")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative live HTTP fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError("negative live HTTP fixture requires failure type")
         return self
 
 

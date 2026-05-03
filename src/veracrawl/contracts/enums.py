@@ -1028,6 +1028,17 @@ class NetworkFailureType(StrEnum):
     MISSING_NETWORK_ARTIFACT = "missing_network_artifact"
 
 
+class LiveHttpAcquisitionFailureType(StrEnum):
+    POLICY_DENIED = "live_http_policy_denied"
+    PRIVATE_NETWORK_DENIED = "live_http_private_network_denied"
+    MALFORMED_RESPONSE = "live_http_malformed_response"
+    MISSING_ARTIFACT = "live_http_missing_artifact"
+    REPLAY_MISMATCH = "live_http_replay_mismatch"
+    DIRECT_SOURCE_BYPASS = "live_http_direct_source_bypass"
+    ADAPTER_UNAVAILABLE = "live_http_adapter_unavailable"
+    NETWORK_FAILURE = "live_http_network_failure"
+
+
 class BrowserStepStatus(StrEnum):
     PLANNED = "planned"
     EXECUTED = "executed"

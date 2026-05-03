@@ -75,7 +75,8 @@ The current Python foundation implements the target architecture contracts, port
 framework-neutral adapter boundaries, command/event/replay primitives, policy gates,
 deterministic fixture/oracle checks, the first target runtime spine, the durable
 runtime/scheduler foundation, the deterministic source acquisition runtime, and
-the local network/browser acquisition runtime, the normalize/extract plane, the
+the local network/browser acquisition runtime, the live HTTP acquisition runtime,
+the normalize/extract plane, the
 evidence/publication spine, the basic site graph spine, the advanced graph
 projection spine, the memory kernel spine, the multi-agent repair spine, the
 agent runtime adapter operational gate, the model provider adapter operational
@@ -90,6 +91,14 @@ duplicate event/outbox side effects, and queue recovery preserves heartbeat,
 dead-letter, failure, recovery, policy, and replay refs without importing
 concrete database, broker, object-store, browser, model, or agent framework
 clients into core.
+The live HTTP acquisition runtime composes that production spine with
+adapter-owned HTTP acquisition. `veracrawl-live-http` proves an authorized local
+HTTP page can move through run control, production persistence, network/source
+adapter ports, source observation records, artifacts, content hashes, canonical
+URL refs, command/event/outbox refs, and replay refs. Scope denial,
+private-network denial, malformed responses, missing artifacts, replay mismatch,
+and direct-source bypass fail with typed diagnostics; core still does not import
+the concrete HTTP adapter.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
@@ -433,6 +442,26 @@ for fixture in \
   network-browser-unsafe-side-effect
 do
   uv run --python python3.12 --extra dev veracrawl-network run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run live HTTP acquisition fixtures:
+
+```sh
+for fixture in \
+  live-http-success \
+  live-http-redirect \
+  live-http-scope-denied \
+  live-http-private-denied \
+  live-http-malformed-response \
+  live-http-missing-artifact \
+  live-http-replay-mismatch \
+  live-http-direct-source-bypass
+do
+  uv run --python python3.12 --extra dev veracrawl-live-http run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

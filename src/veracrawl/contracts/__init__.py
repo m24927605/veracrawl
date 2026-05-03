@@ -124,6 +124,8 @@ from veracrawl.contracts.model_provider_adapter import (
     ModelProviderAdapterReport,
 )
 from veracrawl.contracts.network import (
+    LiveHttpAcquisitionFixtureManifest,
+    LiveHttpAcquisitionReport,
     NetworkAcquisitionReport,
     NetworkFixtureManifest,
     NetworkRequest,
@@ -366,6 +368,8 @@ __all__ = [
     "GraphSignal",
     "IdempotencyPersistenceRecord",
     "LinkProvenance",
+    "LiveHttpAcquisitionFixtureManifest",
+    "LiveHttpAcquisitionReport",
     "MemoryEvent",
     "MemoryFixtureManifest",
     "MemoryKernelReport",

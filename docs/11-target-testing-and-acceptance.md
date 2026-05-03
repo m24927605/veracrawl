@@ -287,6 +287,38 @@ not prove live crawling, production worker fleets, managed cloud operations,
 deployment, observability backends, browser execution, model SDK integration, or
 agent framework integration.
 
+Live HTTP acquisition fixture contract:
+
+```text
+veracrawl-live-http run tests/fixtures/<live_http_fixture_id> --profile target --out .veracrawl-test-runs/<live_http_fixture_id>
+```
+
+Required live HTTP acquisition fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| live-http-success | row 039/040 refs plus adapter-owned HTTP request/response, source acquisition, snapshot, source observation, artifact, content hash, canonical URL, policy, command/event/outbox, and replay refs pass |
+| live-http-redirect | passing local HTTP redirect records redirect hop refs and final canonical URL refs |
+| live-http-scope-denied | out-of-scope egress attempt fails with `live_http_policy_denied` |
+| live-http-private-denied | private-network target fails before socket acquisition with `live_http_private_network_denied` |
+| live-http-malformed-response | malformed response gap fails with `live_http_malformed_response` |
+| live-http-missing-artifact | missing raw artifact fails with `live_http_missing_artifact` |
+| live-http-replay-mismatch | missing or inconsistent replay refs fail with `live_http_replay_mismatch` |
+| live-http-direct-source-bypass | direct fixture/source bypass fails with `live_http_direct_source_bypass` |
+
+Live HTTP acquisition acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_live_http_acquisition_contracts.py`
+- `pytest tests/unit/test_live_http_acquisition_runtime.py`
+- `pytest tests/integration/test_live_http_acquisition_fixtures.py`
+- `veracrawl-live-http` CLI loop over all live HTTP acquisition fixtures
+
+This acceptance proves the first production-spine live HTTP acquisition path. It
+does not replace later structured source adapter, browser snapshot,
+credentialed session, normalization/evidence, worker scale, external benchmark,
+or release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

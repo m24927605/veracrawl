@@ -249,6 +249,35 @@ not prove full JavaScript rendering, production browser fleet execution,
 authenticated crawling, distributed persistence, graph/memory intelligence,
 export delivery, or production scale readiness.
 
+## Live HTTP Acquisition Runtime Slice
+
+The live HTTP acquisition runtime composes the row 039 control plane, row 040
+production persistence wiring, and adapter-owned local HTTP acquisition into one
+target-architecture proof:
+
+- `veracrawl.contracts.network`: `LiveHttpAcquisitionReport` and
+  `LiveHttpAcquisitionFixtureManifest` require run-control, production
+  persistence, network/source acquisition, snapshot, source observation,
+  artifact, content hash, canonical URL, policy, command/event/outbox, and
+  replay refs before a live HTTP pass can be claimed.
+- `veracrawl.fetch.live_http`: core runtime depends on contracts, production
+  persistence ports, `NetworkSourceAdapterPort`, and existing network/source
+  acquisition functions. It does not import concrete HTTP clients or read
+  fixture source files directly.
+- `veracrawl.cli.live_http`: fixture runner loads the standard-library HTTP
+  adapter and local benchmark server at the CLI edge, writes reference
+  persistence state, and validates success, redirect, unsafe network, malformed,
+  replay, missing artifact, and direct-bypass fixtures.
+- `TargetSourceObservationRecord`: passing HTTP acquisition creates a source
+  observation that later normalization, evidence, graph, and replay specs can
+  consume.
+
+This slice proves authorized local HTTP acquisition through production
+run-control/persistence and source adapter ports. It does not prove structured
+sitemap/RSS/API/document adapters, browser rendering, credentialed sessions,
+distributed worker fleets, external website benchmarking, or production network
+operations.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable

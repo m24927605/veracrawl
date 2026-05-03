@@ -5801,6 +5801,15 @@ Executable target runtime rules:
   transaction, canonical state, idempotency, event cursor, outbox, artifact
   index, lease heartbeat, policy, or replay refs fail with typed production
   persistence failure refs.
+- Live HTTP acquisition reports can claim `pass` only when row 039 run-control
+  refs and row 040 production persistence refs are present and the HTTP source
+  was acquired through `NetworkSourceAdapterPort`. Passing reports require
+  network request/response, redirect hop when applicable, source acquisition,
+  source adapter result, fetch attempt/result, page snapshot, target source
+  observation, artifact, content hash, canonical URL, policy, command, event
+  cursor, outbox, and replay refs. Scope denial, private-network denial,
+  malformed response, missing artifact, replay mismatch, and direct-source
+  bypass fail with typed `LiveHttpAcquisitionFailureType` diagnostics.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.
