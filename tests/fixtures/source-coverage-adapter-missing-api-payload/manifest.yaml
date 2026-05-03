@@ -1,0 +1,1 @@
+{"id":"source-coverage-adapter-missing-api-payload","scenario":"source-coverage-adapter-missing-api-payload","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"source_coverage_missing_api_payload","expected_failure_type":"source_coverage_missing_api_payload","negative_case":true}

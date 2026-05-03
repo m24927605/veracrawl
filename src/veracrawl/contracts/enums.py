@@ -609,6 +609,19 @@ class ModelProviderAdapterFailureType(StrEnum):
     UNSUPPORTED_PROVIDER = "model_provider_adapter_unsupported_provider"
 
 
+class SourceCoverageFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "source_coverage_missing_runtime_refs"
+    ADAPTER_NATIVE_STATE_CANONICAL = "source_coverage_adapter_native_state_canonical"
+    RAW_SECRET_LEAK = "source_coverage_raw_secret_leak"
+    MISSING_BROWSER_REFS = "source_coverage_missing_browser_refs"
+    MISSING_CREDENTIAL_AUDIT = "source_coverage_missing_credential_audit"
+    MISSING_DOCUMENT_ARTIFACT = "source_coverage_missing_document_artifact"
+    MISSING_API_PAYLOAD = "source_coverage_missing_api_payload"
+    MISSING_REPLAY_REFS = "source_coverage_missing_replay_refs"
+    UNSAFE_BROWSER_SIDE_EFFECT = "source_coverage_unsafe_browser_side_effect"
+    UNSUPPORTED_ADAPTER = "source_coverage_unsupported_adapter"
+
+
 class RecoveryActionType(StrEnum):
     RETRY_COMMAND = "retry_command"
     RETRY_QUEUE_ITEM = "retry_queue_item"

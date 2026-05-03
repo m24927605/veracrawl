@@ -54,6 +54,7 @@ veracrawl-observability = "veracrawl.cli.observability:main"
 veracrawl-security-privacy = "veracrawl.cli.security_privacy:main"
 veracrawl-agent-adapters = "veracrawl.cli.agent_adapters:main"
 veracrawl-model-providers = "veracrawl.cli.model_providers:main"
+veracrawl-source-coverage = "veracrawl.cli.source_coverage:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

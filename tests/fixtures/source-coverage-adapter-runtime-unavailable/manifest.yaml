@@ -1,0 +1,1 @@
+{"id":"source-coverage-adapter-runtime-unavailable","scenario":"source-coverage-adapter-runtime-unavailable","profile_refs":["target"],"expected_completion_result":"needs_review","expected_operator_status":"source_coverage_adapter_runtime_unavailable","negative_case":false}

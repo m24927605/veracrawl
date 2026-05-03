@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/025-model-provider-adapter-operational-gate/plan.md`.
-Use it with `specs/025-model-provider-adapter-operational-gate/spec.md`,
-`specs/025-model-provider-adapter-operational-gate/research.md`,
-`specs/025-model-provider-adapter-operational-gate/data-model.md`,
-`specs/025-model-provider-adapter-operational-gate/contracts/`, and
-`specs/025-model-provider-adapter-operational-gate/quickstart.md` for VeraCrawl Model Provider Adapter Operational Gate work.
+Current active Spec Kit plan: `specs/026-source-coverage-adapter-operational-gate/plan.md`.
+Use it with `specs/026-source-coverage-adapter-operational-gate/spec.md`,
+`specs/026-source-coverage-adapter-operational-gate/research.md`,
+`specs/026-source-coverage-adapter-operational-gate/data-model.md`,
+`specs/026-source-coverage-adapter-operational-gate/contracts/`, and
+`specs/026-source-coverage-adapter-operational-gate/quickstart.md` for VeraCrawl Source Coverage Adapter Operational Gate work.
 <!-- SPECKIT END -->

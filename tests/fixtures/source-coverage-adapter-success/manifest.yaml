@@ -1,0 +1,1 @@
+{"id":"source-coverage-adapter-success","scenario":"source-coverage-adapter-success","profile_refs":["target"],"expected_completion_result":"pass","expected_operator_status":"source_coverage_adapter_mapping_completed","negative_case":false}

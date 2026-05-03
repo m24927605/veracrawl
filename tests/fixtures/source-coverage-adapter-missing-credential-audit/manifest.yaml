@@ -1,0 +1,1 @@
+{"id":"source-coverage-adapter-missing-credential-audit","scenario":"source-coverage-adapter-missing-credential-audit","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"source_coverage_missing_credential_audit","expected_failure_type":"source_coverage_missing_credential_audit","negative_case":true}

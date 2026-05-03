@@ -1140,6 +1140,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | import_file | artifact_lifecycle | SourceAdapterResult, ArtifactLifecycleState | FileImportCommandPayload | file source authorized; retention/privacy classified | expected_version | source_adapter_result_recorded, artifact_lifecycle_changed | unsafe file rejected before normalization |
 | apply_manual_seed | control | SourceAdapterResult, CrawlPlan | ManualSeedCommandPayload | seed scope approved | expected_version | source_adapter_result_recorded, plan_proposed | out-of-scope seed rejected |
 | attach_prior_snapshot | control | SourceAdapterResult, RunPlanSnapshot | PriorSnapshotCommandPayload | snapshot artifact exists and lifecycle allows use | expected_version | source_adapter_result_recorded | tombstoned/deleted artifacts rejected |
+| record_source_coverage_adapter_execution | ports | SourceCoverageAdapterExecutionRecord | BaseCommandPayload | adapter mapping includes canonical source, natural output, policy, observability, security/privacy, and replay refs | expected_version | source_coverage_adapter_execution_recorded | missing adapter-specific refs fail source coverage |
+| record_source_coverage_adapter_report | fetch | SourceCoverageAdapterReport | BaseCommandPayload | all required source adapter executions or review/failure refs are present | expected_version | source_coverage_adapter_reported | missing live runtime refs return needs_review; unsafe mappings fail |
+| record_source_coverage_adapter_fixture_manifest | tests | SourceCoverageAdapterFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | source_coverage_adapter_fixture_manifest_recorded | invalid negative/pass pairing rejected |
 | start_task | owning service | ProcessingTask | ProcessingTaskCommandPayload | queue lease or owner command; policy gates satisfied | expected_version, lease_required when queued | processing_transitioned | failed precondition nacks queue item |
 | complete_task | owning service | ProcessingTask | ProcessingTaskResultPayload | output refs validate | expected_version, lease_required when queued | processing_transitioned | invalid output creates FailureRecord |
 | fail_task | owning service | ProcessingTask | ProcessingTaskFailurePayload | failure type and retry class recorded | expected_version, lease_required when queued | processing_transitioned, error_recorded | retry or dead-letter policy applied |
@@ -3002,7 +3005,7 @@ CrawlRunEvent:
   crawl_plan_id: string
   event_version: string
   sequence: integer
-  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | agent_adapter_execution_recorded | agent_runtime_adapter_reported | agent_runtime_adapter_fixture_manifest_recorded | model_provider_adapter_execution_recorded | model_provider_adapter_reported | model_provider_adapter_fixture_manifest_recorded | frontier_recommended | frontier_transitioned | queue_topology_recorded | queue_item_recorded | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_recorded | shard_lease_acquired | shard_lease_released | retry_dead_letter_recorded | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | scale_recovery_reported | persistence_adapter_recorded | persistence_transaction_recorded | persistence_migration_recorded | idempotency_persisted | persistent_queue_operation_recorded | persistence_runtime_reported | persistence_adapter_conformance_reported | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
+  event_type: command_received | command_committed | command_rejected | objective_created | plan_proposed | plan_approved | policy_evaluated | approval_decided | agent_action_recorded | model_called | tool_called | memory_retrieved | multi_agent_workflow_started | multi_agent_workflow_completed | multi_agent_workflow_escalated | multi_agent_workflow_failed | agent_handoff_proposed | agent_handoff_accepted | agent_handoff_rejected | agent_handoff_completed | coordination_decision_recorded | coordination_decision_applied | agent_adapter_execution_recorded | agent_runtime_adapter_reported | agent_runtime_adapter_fixture_manifest_recorded | model_provider_adapter_execution_recorded | model_provider_adapter_reported | model_provider_adapter_fixture_manifest_recorded | source_coverage_adapter_execution_recorded | source_coverage_adapter_reported | source_coverage_adapter_fixture_manifest_recorded | frontier_recommended | frontier_transitioned | queue_topology_recorded | queue_item_recorded | queue_item_enqueued | queue_item_leased | queue_item_acked | queue_item_dead_lettered | shard_lease_recorded | shard_lease_acquired | shard_lease_released | retry_dead_letter_recorded | source_adapter_result_recorded | fetch_attempted | browser_step_executed | credential_used | snapshot_written | processing_transitioned | candidate_created | evidence_built | verification_recommended | verification_decided | output_published | output_withdrawn | result_materialized | export_dispatched | export_delivered | export_withdrawal_attempted | export_withdrawal_completed | export_withdrawal_failed | delete_propagated | artifact_lifecycle_changed | graph_projected | projection_rebuilt | projection_mismatch_detected | migration_started | migration_completed | backfill_started | backfill_completed | run_diary_written | memory_written | drift_detected | review_created | review_decided | conflict_adjudicated | backpressure_signal_recorded | autoscaling_decided | scale_recovery_reported | persistence_adapter_recorded | persistence_transaction_recorded | persistence_migration_recorded | idempotency_persisted | persistent_queue_operation_recorded | persistence_runtime_reported | persistence_adapter_conformance_reported | dr_restore_reported | recovery_action_started | recovery_action_completed | error_recorded
   event_type_spec_id: string
   payload_ref: string
   actor: string
@@ -3092,6 +3095,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | coordination_decision_recorded, coordination_decision_applied | agents | CoordinationDecision | run | yes | replay, owner services |
 | agent_adapter_execution_recorded, agent_runtime_adapter_reported, agent_runtime_adapter_fixture_manifest_recorded | agents/tests | AgentAdapterExecutionRecord/AgentRuntimeAdapterReport/AgentRuntimeAdapterFixtureManifest | run | yes | replay, policy, observability, security |
 | model_provider_adapter_execution_recorded, model_provider_adapter_reported, model_provider_adapter_fixture_manifest_recorded | agents/tests | ModelProviderAdapterExecutionRecord/ModelProviderAdapterReport/ModelProviderAdapterFixtureManifest | run | yes | replay, policy, observability, security |
+| source_coverage_adapter_execution_recorded, source_coverage_adapter_reported, source_coverage_adapter_fixture_manifest_recorded | ports/fetch/tests | SourceCoverageAdapterExecutionRecord/SourceCoverageAdapterReport/SourceCoverageAdapterFixtureManifest | run | yes | replay, source policy, observability, security |
 | frontier_transitioned | scheduler | FrontierItem | frontier_item | yes | fetch, graph, replay |
 | queue_topology_recorded, queue_item_recorded, queue_item_enqueued, queue_item_leased, queue_item_acked, queue_item_dead_lettered, shard_lease_recorded, shard_lease_acquired, shard_lease_released, retry_dead_letter_recorded | scheduler | QueueTopologySpec/QueueItem/ShardLease/RetryDeadLetterRecord | frontier_item, processing_task, export_job, graph_projection | yes | workers, ops, replay |
 | source_adapter_result_recorded | natural adapter owner | SourceAdapterResult | source_adapter | yes | scheduler, normalize, evidence, replay |
@@ -3141,6 +3145,7 @@ Every `EventTypeSpec.payload_schema_ref` must resolve to a payload schema with r
 | memory events | MemoryEventPayload | MemoryEvent, MemoryRetrievalTrace, CrossScopeMemoryTunnel | memory/tunnel status | memory content may be summarized or redacted |
 | agent runtime adapter events | AgentAdapterEventPayload | AgentAdapterExecutionRecord, AgentRuntimeAdapterReport, AgentRuntimeAdapterFixtureManifest | framework mapping, runtime availability, model/tool trace completeness, policy/security/observability/replay status | raw prompts/responses and framework-native state are never canonical |
 | model provider adapter events | ModelProviderAdapterEventPayload | ModelProviderAdapterExecutionRecord, ModelProviderAdapterReport, ModelProviderAdapterFixtureManifest | provider mapping, runtime availability, request/response/trace completeness, policy/security/observability/replay status | raw prompts/responses, raw credentials, and provider-native transcripts are never canonical |
+| source coverage adapter events | SourceCoverageAdapterEventPayload | SourceCoverageAdapterExecutionRecord, SourceCoverageAdapterReport, SourceCoverageAdapterFixtureManifest | source mapping, runtime availability, adapter-specific refs, policy/security/observability/replay status | raw secrets, unsafe browser side effects, and adapter-native state are never canonical |
 | export events | ExportEventPayload | ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob | export status | destination auth refs redacted |
 | persistence runtime events | PersistenceEventPayload | PersistenceAdapterSpec, PersistenceTransactionRecord, PersistenceMigrationRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport, PersistenceAdapterConformanceReport | persistence transaction, migration, idempotency, queue, adapter conformance, and replay status | storage backend details are stable refs; credentials are redacted |
 | queue broker events | QueueBrokerEventPayload | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport | broker capability, operation, lease, fencing, heartbeat, dead-letter, no-runtime, failure, and replay status | broker URL and credentials are redacted |
@@ -4534,6 +4539,98 @@ Executable model provider adapter rules:
 - Missing live provider runtime/API credential refs return `needs_review`; contract-only adapter descriptors cannot claim operational pass.
 - Negative provider fixtures fail deterministically for raw prompt leak, raw response leak, provider-native canonical state, missing context trace, missing replay refs, missing security/privacy refs, unsafe tool suggestion, and unsupported provider.
 - Core model provider adapter contracts and validation do not import or require OpenAI, Anthropic, Google Gemini, OpenAI-compatible endpoint clients, local model runtime clients, browser libraries, storage clients, queue clients, or site-specific scraper modules.
+
+## SourceCoverageAdapterExecutionRecord
+
+```yaml
+SourceCoverageAdapterExecutionRecord:
+  id: string
+  adapter_type: http | sitemap | rss | browser_snapshot | authorized_session | api_source | document_source | file_import | manual_seed | prior_snapshot
+  natural_result_type: fetch_result | discovered_links | browser_snapshot | session_state | api_payload | document_artifact | file_artifact | seed_plan | prior_snapshot_ref
+  source_adapter_spec_ref: ref
+  source_adapter_result_ref: ref
+  natural_result_refs: list[ref]
+  fetch_attempt_refs: list[ref]
+  page_snapshot_refs: list[ref]
+  browser_interaction_refs: list[ref]
+  credential_audit_refs: list[ref]
+  document_artifact_refs: list[ref]
+  api_payload_refs: list[ref]
+  command_result_refs: list[ref]
+  policy_decision_refs: list[ref]
+  observability_report_refs: list[ref]
+  security_privacy_report_refs: list[ref]
+  replay_bundle_ref: ref
+  live_runtime_refs: list[ref]
+  contract_adapter_refs: list[ref]
+  diagnostic_adapter_state_refs: list[ref]
+  raw_secret_persisted: boolean
+  adapter_native_state_canonical: boolean
+  unsafe_browser_side_effect_refs: list[ref]
+  missing_ref_fields: list[string]
+  result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## SourceCoverageAdapterReport
+
+```yaml
+SourceCoverageAdapterReport:
+  id: string
+  run_ref: ref
+  adapter_execution_refs: list[ref]
+  required_adapter_types: list[string]
+  verified_adapter_types: list[string]
+  source_adapter_result_refs: list[ref]
+  natural_result_refs: list[ref]
+  fetch_attempt_refs: list[ref]
+  page_snapshot_refs: list[ref]
+  browser_interaction_refs: list[ref]
+  credential_audit_refs: list[ref]
+  document_artifact_refs: list[ref]
+  api_payload_refs: list[ref]
+  policy_decision_refs: list[ref]
+  observability_report_refs: list[ref]
+  security_privacy_report_refs: list[ref]
+  command_record_refs: list[ref]
+  event_cursor_refs: list[ref]
+  outbox_refs: list[ref]
+  replay_bundle_ref: ref
+  contract_only_refs: list[ref]
+  missing_runtime_refs: list[ref]
+  raw_secret_leak_refs: list[ref]
+  adapter_native_state_canonical_refs: list[ref]
+  unsafe_browser_side_effect_refs: list[ref]
+  unsupported_adapter_refs: list[ref]
+  missing_ref_fields: list[string]
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## SourceCoverageAdapterFixtureManifest
+
+```yaml
+SourceCoverageAdapterFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: source_coverage_missing_runtime_refs | source_coverage_adapter_native_state_canonical | source_coverage_raw_secret_leak | source_coverage_missing_browser_refs | source_coverage_missing_credential_audit | source_coverage_missing_document_artifact | source_coverage_missing_api_payload | source_coverage_missing_replay_refs | source_coverage_unsafe_browser_side_effect | source_coverage_unsupported_adapter
+  negative_case: boolean
+  created_at: timestamp
+```
+
+Executable source coverage adapter rules:
+
+- A passing `SourceCoverageAdapterExecutionRecord` requires `SourceAdapterSpec`, `SourceAdapterResult`, natural output, command result, policy, observability, security/privacy, replay, and runtime or contract-adapter refs.
+- Adapter-specific pass requirements are explicit: HTTP requires fetch and page snapshot refs; browser snapshot requires browser step and page snapshot refs; authorized session requires `CredentialUseAudit`; API-like source requires API payload refs; document source and file import require document artifact refs.
+- Sitemap, RSS/feed, manual seed, and prior snapshot adapters use natural result refs and must not fake fetch/page snapshot semantics when they do not produce fetch artifacts.
+- A passing `SourceCoverageAdapterReport` requires all target source adapter families and aggregated source result, natural result, fetch, page snapshot, browser, credential, document, API, policy, observability, security/privacy, command, event cursor, outbox, and replay refs.
+- Missing live source, browser, parser, credential/session, or API runtime refs return `needs_review`; contract-only descriptors cannot claim an operational pass.
+- Raw secrets, adapter-native state, untrusted browser side effects, unsupported adapters, and missing adapter-specific refs fail deterministically.
+- Core source coverage contracts and validation do not import or require browser libraries, HTTP clients, document parsers, credential vault SDKs, API clients, storage clients, queue clients, model providers, agent frameworks, or site-specific scraper modules.
 
 ## QualityReport
 

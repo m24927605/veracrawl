@@ -629,6 +629,51 @@ Adapter result mapping:
 | Manual seed | `control` -> CrawlObjective/CrawlPlan seed refs, SourceAdapterResult |
 | Prior snapshot | `control` + `artifact_lifecycle` -> PageSnapshot ref, RunPlanSnapshot ref, SourceAdapterResult |
 
+### Source Coverage Adapter Operational Gate Slice
+
+The source coverage gate proves that all target source adapter families map into
+VeraCrawl canonical source contracts before any concrete browser, parser,
+credential, API, or source runtime is trusted by core.
+
+Required implementation:
+
+- `SourceCoverageAdapterExecutionRecord` records one source adapter family with
+  adapter type, natural result type, `SourceAdapterSpec`, `SourceAdapterResult`,
+  natural output refs, adapter-specific fetch/browser/session/document/API refs,
+  command result, policy, observability, security/privacy, runtime/contract
+  adapter, diagnostic adapter state, and replay refs.
+- `SourceCoverageAdapterReport` aggregates HTTP, sitemap, RSS/feed, browser
+  snapshot, authorized session, API-like source, document source, file import,
+  manual seed, and prior snapshot families and can claim `pass` only when all
+  required canonical refs are present.
+- `SourceCoverageAdapterFixtureManifest` defines success, no-runtime, and
+  negative source coverage fixtures with expected operator status and failure
+  type.
+- `veracrawl.fetch.source_coverage_gate` is core-owned and imports only
+  VeraCrawl contracts.
+- `veracrawl.adapters.source_coverage.contract` is adapter-owned and provides
+  deterministic source coverage descriptors without importing real browser,
+  parser, vault, API, HTTP, storage, queue, model provider, or agent framework
+  SDKs.
+- `veracrawl-source-coverage` loads adapter modules dynamically so CLI fixture
+  execution does not create static dependencies on concrete source runtimes.
+
+Rules:
+
+- missing live source, browser, parser, credential/session, or API runtime refs
+  return `needs_review`; contract-only refs cannot claim operational pass.
+- raw secrets must never be persisted as canonical state.
+- adapter-native state can be stored only as diagnostic refs and cannot satisfy
+  canonical replay or completion requirements.
+- non-fetch adapters such as manual seed and prior snapshot must not fake
+  `FetchAttempt` or `PageSnapshot` semantics.
+- missing browser/session/document/API/replay refs, unsafe browser side effects,
+  unsupported adapters, or source-specific hacks are deterministic failures.
+- this slice proves broad target source mapping and boundary enforcement. It
+  does not prove production JavaScript rendering, managed credential vaults,
+  production parser farms, external API crawling, distributed persistence,
+  review UI, export delivery, or production scale readiness.
+
 ## Browser Execution Design
 
 Browser capability is target architecture, not a shortcut around safety.

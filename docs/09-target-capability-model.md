@@ -123,7 +123,7 @@ Target support for authenticated sources means customer-authorized, scoped crede
 | --- | --- | --- |
 | Objective understanding | Convert high-level user goals into explicit crawl objectives, schema needs, policy constraints, and success criteria | objective trace, approved plan, ambiguity log, replay event |
 | Crawl planning | Generate crawl plans with adapters, seeds, expected page types, frontier strategy, evidence requirements, budget, and risk notes | plan approval, policy checks, run plan snapshot |
-| Source adapters | Support HTTP, sitemap, RSS, API, file/document, browser snapshot, manual seed, prior snapshot, and authorized session adapters | adapter contract tests, `SourceAdapterResult` records, policy decisions, `source_adapter_result_recorded` events, adapter-native output refs |
+| Source adapters | Support HTTP, sitemap, RSS, API, file/document, browser snapshot, manual seed, prior snapshot, and authorized session adapters | adapter contract tests, `SourceAdapterResult` records, `SourceCoverageAdapterReport`, policy decisions, `source_adapter_result_recorded` events, adapter-native output refs |
 | Browser observation | Observe JavaScript-rendered pages, DOM state, screenshots, network metadata, and controlled interactions within policy | browser sandbox tests, budget tests, screenshot/DOM artifact refs |
 | Authorized sessions | Use scoped customer credentials for approved sites and actions | vault access log, credential policy decision, redacted prompt/context tests |
 | Site understanding | Infer navigation, page types, templates, duplicate zones, low-value zones, API-like endpoints, forms, and search paths | site model, graph projection, classifier metrics, review report |
@@ -285,6 +285,9 @@ Required acceptance:
 - `ModelProviderAdapterReport` pass requires every required provider family to produce canonical `ModelRequest`, `ModelResponse`, `ModelCallTrace`, context, policy, security/privacy, observability, command, and replay refs through the same provider adapter contract
 - missing live provider runtime/API credentials return `needs_review`; contract-only descriptors cannot claim operational provider pass
 - raw prompt/response/credential persistence, provider-native canonical transcript state, unsafe tool suggestions, missing context/security/privacy/replay refs, or unsupported providers fail deterministically
+- `SourceCoverageAdapterReport` pass requires HTTP, sitemap, RSS/feed, browser snapshot, authorized session, API-like source, document source, file import, manual seed, and prior snapshot adapters to produce canonical source result, natural output, command, policy, observability, security/privacy, and replay refs through one adapter-owned coverage contract
+- missing live source/browser/parser/session/API runtime refs return `needs_review`; contract-only source descriptors cannot claim operational source coverage pass
+- raw secret persistence, adapter-native canonical state, unsafe browser side effects, unsupported adapters, or missing browser/session/document/API/replay refs fail deterministically
 
 ### Export And Correction Profile
 

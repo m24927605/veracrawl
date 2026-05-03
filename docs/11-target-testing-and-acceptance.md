@@ -677,6 +677,45 @@ model selection optimization, review UI, export delivery, distributed storage,
 distributed queueing, production browser rendering, or production scale
 readiness.
 
+Source coverage adapter operational gate fixture contract:
+
+```text
+veracrawl-source-coverage run tests/fixtures/<source_coverage_fixture_id> --profile target --out .veracrawl-test-runs/<source_coverage_fixture_id>
+```
+
+Required source coverage adapter fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| source-coverage-adapter-success | HTTP, sitemap, RSS/feed, browser snapshot, authorized session, API-like source, document source, file import, manual seed, and prior snapshot produce canonical source result, natural output, adapter-specific, command, policy, observability, security/privacy, event/outbox, and replay refs through one adapter contract |
+| source-coverage-adapter-runtime-unavailable | missing live source/browser/parser/session/API runtime refs return `needs_review` with contract-only and missing-runtime refs |
+| source-coverage-adapter-native-state-canonical | adapter-native canonical state fails |
+| source-coverage-adapter-raw-secret-leak | raw secret persistence fails |
+| source-coverage-adapter-missing-browser-refs | missing browser interaction refs fail |
+| source-coverage-adapter-missing-credential-audit | missing credential audit refs fail |
+| source-coverage-adapter-missing-document-artifact | missing document artifact refs fail |
+| source-coverage-adapter-missing-api-payload | missing API payload refs fail |
+| source-coverage-adapter-missing-replay | missing replay refs fail |
+| source-coverage-adapter-unsafe-browser-side-effect | unsafe browser side effects fail |
+| source-coverage-adapter-unsupported-adapter | unsupported source adapter fails |
+
+Source coverage adapter acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_source_coverage_contract_registry.py`
+- `pytest tests/contract/test_source_coverage_contracts.py`
+- `pytest tests/contract/test_source_coverage_import_boundaries.py`
+- `pytest tests/unit/test_source_coverage_gate.py`
+- `pytest tests/integration/test_source_coverage_fixtures.py`
+
+This acceptance proves broad target source adapter mapping, dynamic adapter
+loading, core import boundaries, raw secret blocking, adapter-native state
+boundary, and canonical browser/session/document/API/security/replay
+completeness. It does not prove production JavaScript rendering, managed
+credential vaults, production parser farms, external API crawling, export
+delivery, distributed storage, distributed queueing, or production scale
+readiness.
+
 Agent runtime adapter operational gate fixture contract:
 
 ```text

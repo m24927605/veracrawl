@@ -143,6 +143,15 @@ observability, security/privacy, and replay refs. It cannot claim `pass` from
 raw prompts/responses, raw credentials, provider-native transcripts, unsafe tool
 suggestions, unsupported providers, or missing context/security/replay refs.
 Missing live provider runtime/API credentials remain `needs_review`.
+The source coverage adapter operational gate proves that HTTP, sitemap, RSS/feed,
+browser snapshot, authorized session, API-like source, document source, file
+import, manual seed, and prior snapshot adapters map into canonical
+`SourceAdapterSpec`, `SourceAdapterResult`, natural output, fetch/browser/session,
+document/API, command, policy, observability, security/privacy, event/outbox, and
+replay refs. It cannot claim `pass` from adapter-native state, raw secrets,
+unsafe browser side effects, unsupported adapters, or missing adapter-specific
+refs. Missing live source/browser/parser/session/API runtime refs remain
+`needs_review`.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -829,6 +838,29 @@ for fixture in \
   model-provider-adapter-unsupported-provider
 do
   uv run --python python3.12 --extra dev veracrawl-model-providers run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run source coverage adapter operational gate fixtures:
+
+```sh
+for fixture in \
+  source-coverage-adapter-success \
+  source-coverage-adapter-runtime-unavailable \
+  source-coverage-adapter-native-state-canonical \
+  source-coverage-adapter-raw-secret-leak \
+  source-coverage-adapter-missing-browser-refs \
+  source-coverage-adapter-missing-credential-audit \
+  source-coverage-adapter-missing-document-artifact \
+  source-coverage-adapter-missing-api-payload \
+  source-coverage-adapter-missing-replay \
+  source-coverage-adapter-unsafe-browser-side-effect \
+  source-coverage-adapter-unsupported-adapter
+do
+  uv run --python python3.12 --extra dev veracrawl-source-coverage run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

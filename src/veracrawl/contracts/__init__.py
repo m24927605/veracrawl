@@ -207,6 +207,11 @@ from veracrawl.contracts.source_adapter import (
     SourceAdapterResult,
     SourceAdapterSpec,
 )
+from veracrawl.contracts.source_coverage import (
+    SourceCoverageAdapterExecutionRecord,
+    SourceCoverageAdapterFixtureManifest,
+    SourceCoverageAdapterReport,
+)
 from veracrawl.contracts.source_runtime import (
     RateLimitDecision,
     SourceAcquisitionReport,
@@ -390,6 +395,9 @@ __all__ = [
     "SourceAdapterCommand",
     "SourceAdapterResult",
     "SourceAdapterSpec",
+    "SourceCoverageAdapterExecutionRecord",
+    "SourceCoverageAdapterFixtureManifest",
+    "SourceCoverageAdapterReport",
     "SourceFailureReport",
     "SourceFixtureManifest",
     "ThresholdSpec",
