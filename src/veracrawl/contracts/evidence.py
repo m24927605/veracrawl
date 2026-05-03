@@ -8,6 +8,7 @@ from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import (
     CompletenessResult,
     EvidencePacketStatus,
+    LiveEvidenceVerificationFailureType,
     PrivacyClassification,
 )
 
@@ -115,4 +116,110 @@ class EvidencePublicationFixtureManifest(TimestampedModel):
             raise ValueError("evidence fixture must support target profile")
         if self.negative_case and self.expected_completion_result == "pass":
             raise ValueError("negative evidence fixture must not expect pass")
+        return self
+
+
+class LiveEvidenceVerificationRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    schema_extraction_runtime_report_ref: Ref | None = None
+    extraction_candidate_refs: list[Ref] = Field(default_factory=list)
+    normalized_document_refs: list[Ref] = Field(default_factory=list)
+    source_anchor_refs: list[Ref] = Field(default_factory=list)
+    evidence_coverage_refs: list[Ref] = Field(default_factory=list)
+    evidence_packet_refs: list[Ref] = Field(default_factory=list)
+    evidence_anchor_refs: list[Ref] = Field(default_factory=list)
+    evidence_manifest_refs: list[Ref] = Field(default_factory=list)
+    verification_decision_refs: list[Ref] = Field(default_factory=list)
+    review_decision_refs: list[Ref] = Field(default_factory=list)
+    conflict_record_refs: list[Ref] = Field(default_factory=list)
+    contradiction_record_refs: list[Ref] = Field(default_factory=list)
+    freshness_refs: list[Ref] = Field(default_factory=list)
+    graph_signal_refs: list[Ref] = Field(default_factory=list)
+    memory_refs: list[Ref] = Field(default_factory=list)
+    agent_reasoning_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    privacy_lifecycle_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    publication_refs: list[Ref] = Field(default_factory=list)
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: LiveEvidenceVerificationFailureType | None = None
+    operator_status: str
+    completion_result: CompletenessResult
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_live_evidence_report(self) -> LiveEvidenceVerificationRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "schema_extraction_runtime_report_ref": (
+                    self.schema_extraction_runtime_report_ref
+                ),
+                "extraction_candidate_refs": self.extraction_candidate_refs,
+                "normalized_document_refs": self.normalized_document_refs,
+                "source_anchor_refs": self.source_anchor_refs,
+                "evidence_coverage_refs": self.evidence_coverage_refs,
+                "evidence_packet_refs": self.evidence_packet_refs,
+                "evidence_anchor_refs": self.evidence_anchor_refs,
+                "evidence_manifest_refs": self.evidence_manifest_refs,
+                "verification_decision_refs": self.verification_decision_refs,
+                "review_decision_refs": self.review_decision_refs,
+                "freshness_refs": self.freshness_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "privacy_lifecycle_refs": self.privacy_lifecycle_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+                or self.publication_refs
+            ):
+                raise ValueError(f"passing live evidence report invalid refs: {missing}")
+        else:
+            if not self.failure_type:
+                raise ValueError("non-pass live evidence report requires failure type")
+            if not (
+                self.failure_report_refs
+                or self.missing_ref_fields
+                or self.conflict_record_refs
+                or self.contradiction_record_refs
+            ):
+                raise ValueError("non-pass live evidence report requires diagnostics")
+        return self
+
+
+class LiveEvidenceVerificationFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    path: str
+    profile_refs: list[str] = Field(default_factory=list)
+    schema_ref: Ref
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: LiveEvidenceVerificationFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_live_evidence_fixture(self) -> LiveEvidenceVerificationFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("live evidence fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("live evidence fixture must declare required ref types")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative live evidence fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError("negative live evidence fixture requires failure type")
         return self

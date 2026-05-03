@@ -423,6 +423,34 @@ This slice proves candidate generation semantics and lineage. It does not build
 evidence packets, verify candidates, publish outputs, call real model providers,
 or claim final production benchmark readiness.
 
+## Live Evidence And Verification Runtime Slice
+
+The live evidence runtime proves that schema extraction candidates become
+publishable candidates only after source-backed evidence and verification pass:
+
+- `veracrawl.contracts.evidence`: `LiveEvidenceVerificationRuntimeReport` and
+  `LiveEvidenceVerificationFixtureManifest` require schema extraction refs,
+  candidate refs, normalized document refs, source anchor refs, evidence coverage
+  refs, evidence packet refs, evidence anchor refs, evidence manifest refs,
+  verification refs, review refs, freshness refs, policy/privacy refs,
+  command/event/outbox refs, and replay refs before pass.
+- `veracrawl.evidence.live_verification`: core aggregate runtime receives row
+  046 candidates and row 045 source refs through explicit inputs, builds field
+  evidence through the evidence owner helper, routes verification and review
+  decisions through the verification owner helper, and does not import concrete
+  source, browser, model, agent framework, storage, or site-specific scraper
+  adapters.
+- Graph signals, memory refs, and agent reasoning refs remain diagnostic only;
+  they cannot satisfy source evidence and fail when used as the only evidence.
+- `veracrawl.cli.live_evidence`: `veracrawl-live-evidence` composes local live
+  HTTP, structured source, browser snapshot, live normalization, and schema
+  extraction prerequisites at the CLI edge before validating evidence,
+  verification, conflict, freshness, replay, and publication-bypass fixtures.
+
+This slice proves source-backed evidence and verification semantics. It does
+not publish outputs, export results, call real model providers, orchestrate
+multi-agent repair, or claim final production benchmark readiness.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable

@@ -1090,6 +1090,19 @@ class SchemaExtractionFailureType(StrEnum):
     EXTRACTION_FAILED = "schema_extraction_failed"
 
 
+class LiveEvidenceVerificationFailureType(StrEnum):
+    MISSING_SCHEMA_EXTRACTION = "live_evidence_missing_schema_extraction"
+    MISSING_SOURCE_ANCHOR = "live_evidence_missing_source_anchor"
+    STALE_EVIDENCE = "live_evidence_stale_evidence"
+    CONTRADICTORY_EVIDENCE = "live_evidence_contradictory_evidence"
+    GRAPH_ONLY_EVIDENCE = "live_evidence_graph_only_evidence"
+    MEMORY_ONLY_EVIDENCE = "live_evidence_memory_only_evidence"
+    VERIFICATION_CONFLICT = "live_evidence_verification_conflict"
+    PUBLICATION_GATE_BYPASS = "live_evidence_publication_gate_bypass"
+    REPLAY_MISMATCH = "live_evidence_replay_mismatch"
+    EVIDENCE_BUILD_FAILED = "live_evidence_build_failed"
+
+
 class BrowserStepStatus(StrEnum):
     PLANNED = "planned"
     EXECUTED = "executed"

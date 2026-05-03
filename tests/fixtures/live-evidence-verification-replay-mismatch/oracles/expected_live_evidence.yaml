@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-replay-mismatch","required_failure":"live_evidence_replay_mismatch","required_missing_refs":["replay_bundle_ref"],"forbidden_refs":["published_output"]}

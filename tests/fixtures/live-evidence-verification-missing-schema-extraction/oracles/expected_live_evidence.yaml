@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-missing-schema-extraction","required_failure":"live_evidence_missing_schema_extraction","required_missing_refs":["schema_extraction_runtime_report_ref"],"forbidden_refs":["evidence_packet","verification","published_output"]}

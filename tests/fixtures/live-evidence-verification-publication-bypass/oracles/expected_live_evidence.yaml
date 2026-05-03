@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-publication-bypass","required_failure":"live_evidence_publication_gate_bypass","required_refs":["forbidden_publication_ref"],"forbidden_refs":["verified_output","export"]}

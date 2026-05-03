@@ -142,6 +142,15 @@ candidates without producing published outputs. Missing normalization, schema
 validation failure, missing anchors, missing model/tool trace refs, direct
 candidate publication, drift repair, and replay mismatch produce typed failure
 or needs-review reports.
+The live evidence and verification runtime turns schema extraction candidates
+into source-backed evidence packets, evidence anchors, evidence manifests,
+verification decisions, review refs, freshness refs, policy/privacy refs,
+command/event/outbox refs, and replay refs. `veracrawl-live-evidence` proves
+that passing candidates remain unpublishable until evidence and verification
+are present. Missing schema extraction, missing source anchors, stale evidence,
+contradictory evidence, graph-only evidence, memory-only evidence, verification
+conflict, publication bypass, and replay mismatch produce typed failure or
+needs-review reports without emitting published outputs.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter

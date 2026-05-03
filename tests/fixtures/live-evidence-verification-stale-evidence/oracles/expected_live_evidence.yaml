@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-stale-evidence","required_failure":"live_evidence_stale_evidence","required_missing_refs":["freshness_refs"],"forbidden_refs":["published_output"]}

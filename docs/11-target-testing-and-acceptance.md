@@ -472,6 +472,39 @@ This acceptance proves schema extraction candidate runtime semantics. It does
 not replace evidence, verification, publication, worker scale, external
 benchmark, or release gates.
 
+Live evidence verification fixture contract:
+
+```text
+veracrawl-live-evidence run tests/fixtures/<live_evidence_fixture_id> --profile target --out .veracrawl-test-runs/<live_evidence_fixture_id>
+```
+
+Required live evidence fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| live-evidence-verification-success | schema extraction refs plus candidate, normalized document, source anchor, evidence coverage, evidence packet, evidence anchor, evidence manifest, verification, review, freshness, policy/privacy, command/event/outbox, and replay refs pass with no publication refs |
+| live-evidence-verification-missing-schema-extraction | missing schema extraction refs fail with `live_evidence_missing_schema_extraction` |
+| live-evidence-verification-missing-source-anchor | partial evidence with missing source anchor refs enters `needs_review` with `live_evidence_missing_source_anchor` |
+| live-evidence-verification-stale-evidence | missing freshness refs fail with `live_evidence_stale_evidence` |
+| live-evidence-verification-contradiction | contradictory source evidence fails with `live_evidence_contradictory_evidence` and contradiction refs |
+| live-evidence-verification-graph-only | graph-only derived context fails with `live_evidence_graph_only_evidence` and no evidence anchors |
+| live-evidence-verification-memory-only | memory-only derived context fails with `live_evidence_memory_only_evidence` and no evidence anchors |
+| live-evidence-verification-conflict | verification conflict enters `needs_review` with conflict and review refs |
+| live-evidence-verification-publication-bypass | direct publication attempts fail with `live_evidence_publication_gate_bypass` |
+| live-evidence-verification-replay-mismatch | missing or inconsistent replay refs fail with `live_evidence_replay_mismatch` |
+
+Live evidence acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_live_evidence_verification_contracts.py`
+- `pytest tests/unit/test_live_evidence_verification_runtime.py`
+- `pytest tests/integration/test_live_evidence_verification_fixtures.py`
+- `veracrawl-live-evidence` CLI loop over all live evidence fixtures
+
+This acceptance proves source-backed evidence and verification semantics. It
+does not replace publication, export, worker scale, external benchmark, or
+release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

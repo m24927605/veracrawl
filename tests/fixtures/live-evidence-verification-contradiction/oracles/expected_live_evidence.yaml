@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-contradiction","required_failure":"live_evidence_contradictory_evidence","required_refs":["contradiction_record"],"forbidden_refs":["published_output"]}

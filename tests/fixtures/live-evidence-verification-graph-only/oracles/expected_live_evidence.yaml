@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-graph-only","required_failure":"live_evidence_graph_only_evidence","required_refs":["graph_signal"],"forbidden_refs":["evidence_anchor","published_output"],"graph_memory_reasoning_is_diagnostic_only":true}

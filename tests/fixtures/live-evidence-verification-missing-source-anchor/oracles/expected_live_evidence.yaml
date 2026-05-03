@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-missing-source-anchor","required_failure":"live_evidence_missing_source_anchor","required_refs":["schema_extraction","candidate","partial_evidence","review"],"expected_completion_result":"needs_review"}

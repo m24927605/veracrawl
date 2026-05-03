@@ -5861,6 +5861,19 @@ Executable target runtime rules:
   mismatch fail or enter needs-review with typed `SchemaExtractionFailureType`
   diagnostics. Candidate refs remain intermediate records until later evidence
   and verification gates pass.
+- Live evidence verification runtime reports can claim `pass` only when row 046
+  schema extraction refs are present with extraction candidate refs, normalized
+  document refs, source anchor refs, evidence coverage refs, evidence packet
+  refs, evidence anchor refs, evidence manifest refs, verification decision
+  refs, review decision refs, freshness refs, policy refs, privacy lifecycle
+  refs, command/event/outbox refs, and replay refs. Graph signals, memory refs,
+  and agent reasoning refs are diagnostic context only and cannot satisfy source
+  evidence requirements. Passing reports must not include published output,
+  output manifest, export, or publication refs. Missing schema extraction,
+  missing source anchors, stale evidence, contradictory evidence, graph-only
+  evidence, memory-only evidence, verification conflict, publication bypass, or
+  replay mismatch fail or enter needs-review with typed
+  `LiveEvidenceVerificationFailureType` diagnostics.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

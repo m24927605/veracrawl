@@ -1,0 +1,1 @@
+{"fixture_id":"live-evidence-verification-conflict","required_failure":"live_evidence_verification_conflict","required_refs":["evidence_packet","conflict_record","review"],"expected_completion_result":"needs_review"}

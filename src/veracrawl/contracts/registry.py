@@ -84,6 +84,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
+    expected_live_evidence_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -927,6 +928,20 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "evidence",
         tests=["tests/integration/test_evidence_publication_fixtures.py"],
+    ),
+    "LiveEvidenceVerificationRuntimeReport": _contract(
+        "LiveEvidenceVerificationRuntimeReport",
+        OwnerService.EVIDENCE,
+        "evidence",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_live_evidence_verification_contracts.py"],
+    ),
+    "LiveEvidenceVerificationFixtureManifest": _contract(
+        "LiveEvidenceVerificationFixtureManifest",
+        OwnerService.TESTS,
+        "evidence",
+        tests=["tests/contract/test_live_evidence_verification_contracts.py"],
     ),
     "VerificationDecision": _contract(
         "VerificationDecision",
@@ -2260,6 +2275,21 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["schema_extraction_fixture_manifest_recorded"],
         ),
+        "record_live_evidence_verification_runtime_report": CommandTypeRegistration(
+            command_type="record_live_evidence_verification_runtime_report",
+            owner_service=OwnerService.EVIDENCE,
+            target_aggregate_type="LiveEvidenceVerificationRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_evidence", "runtime_verification"],
+            emitted_event_types=["live_evidence_verification_runtime_reported"],
+        ),
+        "record_live_evidence_verification_fixture_manifest": CommandTypeRegistration(
+            command_type="record_live_evidence_verification_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="LiveEvidenceVerificationFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["live_evidence_verification_fixture_manifest_recorded"],
+        ),
         "record_process_report": CommandTypeRegistration(
             command_type="record_process_report",
             owner_service=OwnerService.REVIEW_REPLAY,
@@ -3136,6 +3166,8 @@ EVENT_TYPES.update(
             "extraction_strategy_recorded",
             "schema_extraction_runtime_reported",
             "schema_extraction_fixture_manifest_recorded",
+            "live_evidence_verification_runtime_reported",
+            "live_evidence_verification_fixture_manifest_recorded",
             "process_report_recorded",
             "evidence_anchor_recorded",
             "evidence_manifest_recorded",
@@ -4394,6 +4426,30 @@ for _schema_extraction_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _live_evidence_fixture, _negative in {
+    "live-evidence-verification-success": False,
+    "live-evidence-verification-missing-schema-extraction": True,
+    "live-evidence-verification-missing-source-anchor": True,
+    "live-evidence-verification-stale-evidence": True,
+    "live-evidence-verification-contradiction": True,
+    "live-evidence-verification-graph-only": True,
+    "live-evidence-verification-memory-only": True,
+    "live-evidence-verification-conflict": True,
+    "live-evidence-verification-publication-bypass": True,
+    "live-evidence-verification-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_live_evidence_fixture}"
+    FIXTURE_ORACLES[_live_evidence_fixture] = FixtureOracleRegistration(
+        fixture_id=_live_evidence_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_live_evidence_ref=f"{_base}/oracles/expected_live_evidence.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -4651,6 +4707,30 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "EventCursorRecord",
             "OutboxRecord",
             "PolicyDecision",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "live_evidence_verification_runtime": _target_area(
+        "live_evidence_verification_runtime",
+        OwnerService.EVIDENCE,
+        "materialized",
+        materialized=[
+            "LiveEvidenceVerificationRuntimeReport",
+            "LiveEvidenceVerificationFixtureManifest",
+            "SchemaExtractionRuntimeReport",
+            "ExtractionCandidate",
+            "NormalizedDocument",
+            "TextAnchor",
+            "EvidenceCoverageResult",
+            "EvidencePacket",
+            "EvidenceAnchor",
+            "EvidencePacketManifest",
+            "VerificationDecision",
+            "ReviewDecision",
+            "PolicyDecision",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
             "ReplayBundleManifest",
         ],
     ),

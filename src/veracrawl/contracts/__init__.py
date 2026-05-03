@@ -59,6 +59,8 @@ from veracrawl.contracts.evidence import (
     EvidencePacket,
     EvidencePacketManifest,
     EvidencePublicationFixtureManifest,
+    LiveEvidenceVerificationFixtureManifest,
+    LiveEvidenceVerificationRuntimeReport,
 )
 from veracrawl.contracts.export import (
     ExportAttempt,
@@ -364,6 +366,8 @@ __all__ = [
     "EvidenceAnchor",
     "EvidencePacketManifest",
     "EvidencePublicationFixtureManifest",
+    "LiveEvidenceVerificationFixtureManifest",
+    "LiveEvidenceVerificationRuntimeReport",
     "ExtractionCandidate",
     "ExtractionStrategy",
     "FetchAttempt",
