@@ -42,7 +42,7 @@ Target contract manifest:
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
-| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, OpsReplayObservabilityRuntimeReport, OpsReplayObservabilityFixtureManifest, ProductionBenchmarkReleaseReport, ProductionBenchmarkReleaseFixtureManifest, RealWorldBenchmarkCorpusManifest, RealWorldBenchmarkSiteSpec, RealWorldBenchmarkSiteObservation, RealWorldBenchmarkRunReport, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, ops replay/observability, production release, real-world benchmark validation, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
+| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, OpsReplayObservabilityRuntimeReport, OpsReplayObservabilityFixtureManifest, ProductionBenchmarkReleaseReport, ProductionBenchmarkReleaseFixtureManifest, RealWorldBenchmarkCorpusManifest, RealWorldBenchmarkSiteSpec, RealWorldBenchmarkSiteObservation, RealWorldBenchmarkRunReport, RealWorldAIAgentDecisionTrace, RealWorldAIAgentExtractionCandidate, RealWorldAIAgentBenchmarkRunReport, RealWorldAIAgentBenchmarkManifest, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, ops replay/observability, production release, real-world benchmark validation, AI agent crawl planning/extraction proof, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
 | PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
 | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
 | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
@@ -5812,6 +5812,70 @@ Executable real-world benchmark corpus rules:
 - raw external response bodies remain artifact-backed and must not be copied into command/event payloads.
 - target fixtures cover the public corpus shape and deterministic fake-adapter execution; live public runs supplement deterministic tests and are recorded in `tasks.md` validation results.
 - this gate does not implement site-specific scraper logic, browser execution, credentialed sessions, published extraction outputs, export delivery, or long-running distributed load tests.
+
+## Real-World AI Agent Benchmark Contracts
+
+```yaml
+RealWorldAIAgentDecisionTrace:
+  id: string
+  benchmark_fixture_id: string
+  site_observation_ref: string
+  target_url: string
+  decision_type: crawl_planning | site_understanding | extraction_candidate_generation | verification_repair
+  model_request_ref: string
+  model_response_ref: string
+  model_call_trace_ref: string
+  agent_run_request_ref: string
+  agent_run_result_ref: string
+  agent_action_trace_ref: string
+  tool_call_trace_refs: list
+  context_bundle_trace_ref: string
+  source_observation_refs: list
+  artifact_refs: list
+  content_hash_refs: list
+  source_anchor_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  framework_native_state_refs: list
+  llm_output_evidence_refs: list
+  completion_result: pass | fail
+```
+
+```yaml
+RealWorldAIAgentExtractionCandidate:
+  id: string
+  site_observation_ref: string
+  candidate_payload_ref: string
+  field_anchor_refs: map
+  source_anchor_refs: list
+  artifact_refs: list
+  content_hash_refs: list
+  model_call_trace_ref: string
+  agent_action_trace_ref: string
+  tool_call_trace_refs: list
+  context_bundle_trace_ref: string
+  evidence_coverage_ref: string
+  evidence_packet_ref: string
+  evidence_anchor_refs: list
+  verification_decision_refs: list
+  review_decision_refs: list
+  publication_gate_ref: string
+  llm_output_evidence_refs: list
+  direct_publication_refs: list
+  completion_result: pass | fail
+```
+
+Executable real-world AI agent benchmark rules:
+
+- pass requires a passing row 055 `RealWorldBenchmarkRunReport` and at least four public site observations.
+- each public site must have AI-mediated crawl planning, site understanding, extraction candidate generation, and verification/repair decision traces through `ModelProviderPort` and `AgentRuntimePort`.
+- each AI decision must include `ModelRequest`, `ModelResponse`, `ModelCallTrace`, `AgentRunRequest`, `AgentRunResult`, `AgentActionTrace`, `ToolCallTrace`, `ContextBundleTrace`, policy, command/event/outbox, and replay refs.
+- extraction candidates must bind field anchors to source anchors, artifacts, and content hashes from live crawl observations.
+- model/agent outputs are recommendation or candidate payload refs only; `llm_output_evidence_refs` and direct publication refs are forbidden in passing reports.
+- core state must remain framework-neutral; OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic Kernel, model SDKs, and framework-native state belong behind adapters only.
 
 ## Target Crawl Runtime Contracts
 

@@ -35,25 +35,10 @@ def _execution_record() -> ModelProviderAdapterExecutionRecord:
 
 
 def test_provider_execution_pass_requires_context_security_and_replay_refs() -> None:
+    payload = _execution_record().model_dump()
+    payload.pop("context_bundle_trace_ref")
     with pytest.raises(ValidationError):
-        ModelProviderAdapterExecutionRecord(
-            id="model-provider-execution:bad",
-            provider_name="OpenAI",
-            runtime_spec_ref="runtime:openai",
-            model_request_ref="model-request:bad",
-            model_response_ref="model-response:bad",
-            model_call_trace_ref="model-call-trace:bad",
-            agent_run_request_ref="agent-run-request:bad",
-            agent_run_result_ref="agent-run-result:bad",
-            agent_action_trace_ref="agent-action-trace:bad",
-            command_result_refs=["command-result:bad"],
-            policy_decision_refs=["policy:bad:model-provider"],
-            observability_report_refs=["observability-report:bad"],
-            security_privacy_report_refs=["security-privacy-report:bad"],
-            replay_bundle_ref="replay-bundle:bad",
-            contract_adapter_refs=["contract-adapter:bad"],
-            result=CompletenessResult.PASS,
-        )
+        ModelProviderAdapterExecutionRecord(**payload)
 
 
 def test_provider_execution_rejects_raw_and_provider_canonical_state() -> None:

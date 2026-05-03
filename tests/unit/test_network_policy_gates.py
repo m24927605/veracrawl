@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from veracrawl.contracts.enums import NetworkFailureType
+from veracrawl.contracts.network import NetworkRequest
 from veracrawl.fetch.network_acquisition import (
     build_network_request,
     is_private_network_url,
@@ -9,7 +10,7 @@ from veracrawl.fetch.network_acquisition import (
 )
 
 
-def _request(url: str, scenario: str = "http-success"):
+def _request(url: str, scenario: str = "http-success") -> NetworkRequest:
     return build_network_request(
         fixture_id=f"fixture:{scenario}",
         target_url=url,

@@ -78,6 +78,7 @@ veracrawl-model-providers = "veracrawl.cli.model_providers:main"
 veracrawl-source-coverage = "veracrawl.cli.source_coverage:main"
 veracrawl-release-gate = "veracrawl.cli.release_gate:main"
 veracrawl-real-benchmark = "veracrawl.cli.real_benchmark:main"
+veracrawl-real-ai-benchmark = "veracrawl.cli.real_ai_benchmark:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

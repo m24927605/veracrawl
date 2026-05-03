@@ -2076,6 +2076,41 @@ real external public corpus. It does not replace the synthetic benchmark suite
 and does not claim full browser, authenticated-session, extraction publication,
 export, scale, or long-running production readiness by itself.
 
+Real-world AI agent benchmark acceptance:
+
+```text
+veracrawl-real-ai-benchmark run tests/fixtures/<real_world_ai_agent_fixture_id> --profile target --out .veracrawl-real-runs/<real_world_ai_agent_fixture_id>
+```
+
+Required real-world AI agent fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| real-world-ai-agent-public-corpus | row 055 public corpus plus AI crawl planning, site understanding, extraction candidate, verification/repair, model call, agent action, tool call, context bundle, source anchor, evidence/verification gate, command/event/outbox, and replay refs pass |
+| real-world-ai-agent-missing-model-trace | missing model call trace fails |
+| real-world-ai-agent-candidate-missing-source-anchor | candidate without source anchors/artifact/content hash refs fails |
+| real-world-ai-agent-llm-output-as-evidence | model/agent output as source evidence fails |
+| real-world-ai-agent-publication-bypass | direct publication without evidence/verification gate fails |
+| real-world-ai-agent-framework-state-canonical | framework-native canonical state fails |
+| real-world-ai-agent-missing-replay | missing AI replay refs fails |
+
+Real-world AI agent benchmark acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_real_world_ai_agent_contracts.py`
+- `pytest tests/contract/test_real_world_ai_agent_contract_registry.py`
+- `pytest tests/contract/test_real_world_ai_agent_import_boundaries.py`
+- `pytest tests/unit/test_real_world_ai_agent_runtime.py`
+- `pytest tests/unit/test_real_world_ai_agent_replay.py`
+- `pytest tests/integration/test_real_world_ai_agent_fixtures.py`
+- one recorded live CLI run against `tests/fixtures/real-world-ai-agent-public-corpus`
+- `run_report.json` and trace JSON files proving non-empty model call, agent action, tool call, and context bundle traces
+
+This acceptance proves VeraCrawl can combine a real public crawl with
+framework-neutral AI planning and extraction candidate generation. It does not
+permit LLM output to replace source evidence, does not publish real-site outputs
+directly, and does not couple core to any concrete agent framework.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

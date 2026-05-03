@@ -4,10 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from veracrawl.extract.candidates import build_extraction_strategy, create_anchored_candidate
-from veracrawl.normalize.pipeline import normalize_html_document
+from veracrawl.normalize.pipeline import NormalizationResult, normalize_html_document
 
 
-def _normalized():
+def _normalized() -> NormalizationResult:
     return normalize_html_document(
         fixture_id="unit-candidate",
         run_ref="run:unit-candidate",

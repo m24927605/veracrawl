@@ -232,6 +232,12 @@ from veracrawl.contracts.publication import (
     ResultPublicationExportFixtureManifest,
     ResultPublicationExportRuntimeReport,
 )
+from veracrawl.contracts.real_world_ai_agent import (
+    RealWorldAIAgentBenchmarkManifest,
+    RealWorldAIAgentBenchmarkRunReport,
+    RealWorldAIAgentDecisionTrace,
+    RealWorldAIAgentExtractionCandidate,
+)
 from veracrawl.contracts.real_world_benchmark import (
     RealWorldBenchmarkCorpusManifest,
     RealWorldBenchmarkRunReport,
@@ -478,6 +484,10 @@ __all__ = [
     "ProductWorkflowReadinessRecord",
     "ProductionBenchmarkReleaseFixtureManifest",
     "ProductionBenchmarkReleaseReport",
+    "RealWorldAIAgentBenchmarkManifest",
+    "RealWorldAIAgentBenchmarkRunReport",
+    "RealWorldAIAgentDecisionTrace",
+    "RealWorldAIAgentExtractionCandidate",
     "RealWorldBenchmarkCorpusManifest",
     "RealWorldBenchmarkRunReport",
     "RealWorldBenchmarkSiteObservation",

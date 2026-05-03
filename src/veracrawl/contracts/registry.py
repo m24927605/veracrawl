@@ -78,6 +78,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_ops_runtime_ref: str | None = None
     expected_release_ref: str | None = None
     expected_real_world_benchmark_ref: str | None = None
+    expected_real_world_ai_agent_benchmark_ref: str | None = None
     expected_security_privacy_ref: str | None = None
     expected_agent_adapter_ref: str | None = None
     expected_agent_model_adapter_ref: str | None = None
@@ -492,6 +493,35 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "real_world_benchmark",
         tests=["tests/integration/test_real_world_benchmark_fixtures.py"],
+    ),
+    "RealWorldAIAgentDecisionTrace": _contract(
+        "RealWorldAIAgentDecisionTrace",
+        OwnerService.AGENTS,
+        "real_world_ai_agent",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_real_world_ai_agent_contracts.py"],
+    ),
+    "RealWorldAIAgentExtractionCandidate": _contract(
+        "RealWorldAIAgentExtractionCandidate",
+        OwnerService.EXTRACT,
+        "real_world_ai_agent",
+        mutation_allowed=True,
+        tests=["tests/contract/test_real_world_ai_agent_contracts.py"],
+    ),
+    "RealWorldAIAgentBenchmarkRunReport": _contract(
+        "RealWorldAIAgentBenchmarkRunReport",
+        OwnerService.OPS,
+        "real_world_ai_agent",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_real_world_ai_agent_contracts.py"],
+    ),
+    "RealWorldAIAgentBenchmarkManifest": _contract(
+        "RealWorldAIAgentBenchmarkManifest",
+        OwnerService.TESTS,
+        "real_world_ai_agent",
+        tests=["tests/integration/test_real_world_ai_agent_fixtures.py"],
     ),
     "DRRestoreFixtureManifest": _contract(
         "DRRestoreFixtureManifest",
@@ -3037,6 +3067,55 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["real_world_benchmark_corpus_manifest_recorded"],
         ),
+        "record_real_world_ai_agent_decision": CommandTypeRegistration(
+            command_type="record_real_world_ai_agent_decision",
+            owner_service=OwnerService.AGENTS,
+            target_aggregate_type="RealWorldAIAgentDecisionTrace",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["real_world_ai_agent_decision_recorded"],
+        ),
+        "record_real_world_ai_agent_extraction_candidate": (
+            CommandTypeRegistration(
+                command_type="record_real_world_ai_agent_extraction_candidate",
+                owner_service=OwnerService.EXTRACT,
+                target_aggregate_type="RealWorldAIAgentExtractionCandidate",
+                payload_schema_ref="BaseCommandPayload",
+                required_policy_decision_types=[
+                    "source_adapter",
+                    "runtime_verification",
+                    "publication_gate",
+                ],
+                emitted_event_types=[
+                    "real_world_ai_agent_extraction_candidate_recorded"
+                ],
+            )
+        ),
+        "record_real_world_ai_agent_benchmark_report": CommandTypeRegistration(
+            command_type="record_real_world_ai_agent_benchmark_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="RealWorldAIAgentBenchmarkRunReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["real_world_ai_agent_benchmark_reported"],
+        ),
+        "record_real_world_ai_agent_benchmark_manifest": CommandTypeRegistration(
+            command_type="record_real_world_ai_agent_benchmark_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="RealWorldAIAgentBenchmarkManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=[
+                "real_world_ai_agent_benchmark_manifest_recorded"
+            ],
+        ),
         "record_export_target_spec": CommandTypeRegistration(
             command_type="record_export_target_spec",
             owner_service=OwnerService.EXPORT,
@@ -3528,6 +3607,10 @@ EVENT_TYPES.update(
             "real_world_benchmark_site_observed",
             "real_world_benchmark_run_reported",
             "real_world_benchmark_corpus_manifest_recorded",
+            "real_world_ai_agent_decision_recorded",
+            "real_world_ai_agent_extraction_candidate_recorded",
+            "real_world_ai_agent_benchmark_reported",
+            "real_world_ai_agent_benchmark_manifest_recorded",
             "export_target_recorded",
             "export_dispatched",
             "export_delivered",
@@ -4359,6 +4442,27 @@ for _real_world_fixture, _negative in {
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
         expected_real_world_benchmark_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _real_world_ai_fixture, _negative in {
+    "real-world-ai-agent-public-corpus": False,
+    "real-world-ai-agent-missing-model-trace": True,
+    "real-world-ai-agent-candidate-missing-source-anchor": True,
+    "real-world-ai-agent-llm-output-as-evidence": True,
+    "real-world-ai-agent-publication-bypass": True,
+    "real-world-ai-agent-framework-state-canonical": True,
+    "real-world-ai-agent-missing-replay": True,
+}.items():
+    _base = f"tests/fixtures/{_real_world_ai_fixture}"
+    FIXTURE_ORACLES[_real_world_ai_fixture] = FixtureOracleRegistration(
+        fixture_id=_real_world_ai_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_real_world_ai_agent_benchmark_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -5845,6 +5949,31 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "LiveHttpAcquisitionReport",
             "NetworkResponse",
             "TargetSourceObservationRecord",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "real_world_ai_agent_benchmark_gate": _target_area(
+        "real_world_ai_agent_benchmark_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "RealWorldAIAgentBenchmarkManifest",
+            "RealWorldAIAgentDecisionTrace",
+            "RealWorldAIAgentExtractionCandidate",
+            "RealWorldAIAgentBenchmarkRunReport",
+            "RealWorldBenchmarkRunReport",
+            "RealWorldBenchmarkSiteObservation",
+            "ModelRequest",
+            "ModelResponse",
+            "ModelCallTrace",
+            "AgentRunRequest",
+            "AgentRunResult",
+            "AgentActionTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
             "CommandResult",
             "EventCursorRecord",
             "OutboxRecord",

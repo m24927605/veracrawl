@@ -13,8 +13,10 @@ from veracrawl.contracts.enums import (
 )
 from veracrawl.contracts.target_runtime import (
     TargetAdapterBackedSourceManifest,
+    TargetAdapterBackedSourceRecord,
     TargetProcessingEvidenceEntry,
     TargetProcessingEvidenceManifest,
+    TargetProcessingEvidenceRecord,
     TargetSourceCorpusManifest,
 )
 from veracrawl.target_runtime.runner import run_target_runtime_fixture
@@ -26,7 +28,15 @@ def _load(path: Path) -> dict[str, object]:
     return data
 
 
-def _inputs(fixture_name: str):
+def _inputs(
+    fixture_name: str,
+) -> tuple[
+    Path,
+    TargetAdapterBackedSourceManifest,
+    list[TargetAdapterBackedSourceRecord],
+    TargetProcessingEvidenceManifest,
+    list[TargetProcessingEvidenceRecord],
+]:
     fixture_dir = Path("tests/fixtures") / fixture_name
     corpus = TargetSourceCorpusManifest.model_validate(_load(fixture_dir / "corpus.json"))
     adapter_manifest = TargetAdapterBackedSourceManifest.model_validate(

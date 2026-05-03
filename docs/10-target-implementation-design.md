@@ -1681,6 +1681,38 @@ Real-world benchmark corpus gate:
   SDKs, agent frameworks, credential systems, export targets, or site-specific
   scraper modules into core.
 
+Real-world AI agent benchmark gate:
+
+- `veracrawl.contracts.real_world_ai_agent` owns
+  `RealWorldAIAgentDecisionTrace`, `RealWorldAIAgentExtractionCandidate`,
+  `RealWorldAIAgentBenchmarkRunReport`, and
+  `RealWorldAIAgentBenchmarkManifest`.
+- `veracrawl.benchmarks.real_world_ai_agent` composes a passing row 055 public
+  corpus result with `ModelProviderPort` and `AgentRuntimePort`. Core receives
+  adapter bindings through ports and never imports concrete model SDKs or agent
+  frameworks.
+- `veracrawl.cli.real_ai_benchmark` exposes `veracrawl-real-ai-benchmark run`.
+  The CLI runs the referenced public corpus, dynamically loads the default local
+  model provider and VeraCrawl native agent adapter, writes aggregate reports,
+  decision traces, candidates, model/agent/tool/context traces, and summary JSON
+  under the selected output directory.
+- every passing public site observation requires four AI decision types: crawl
+  planning, site understanding, extraction candidate generation, and
+  verification/repair. Each decision has model request/response, model call
+  trace, agent run request/result, agent action trace, controlled tool trace,
+  context bundle trace, policy, command/event/outbox, and replay refs.
+- extraction candidates are source-bound. Candidate field anchors must point to
+  source anchor refs backed by public crawl artifacts and content hashes. Model
+  or agent output can propose a candidate but cannot become source evidence.
+- direct publication refs are rejected unless evidence coverage, evidence
+  packet, evidence anchor, verification, review, and publication gate refs are
+  present. This benchmark records gate readiness, not published real-site
+  outputs.
+- missing AI traces, missing source anchors, LLM output as evidence, publication
+  bypass, framework-native canonical state, core import coupling, adapter
+  unavailability, and replay gaps fail with
+  `RealWorldAIAgentBenchmarkFailureType`.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

@@ -1028,6 +1028,22 @@ uv run --python python3.12 --extra dev veracrawl-real-benchmark run \
   --out .veracrawl-real-runs/real-world-public-corpus
 ```
 
+Run the real-world public AI agent benchmark:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-real-ai-benchmark run \
+  tests/fixtures/real-world-ai-agent-public-corpus \
+  --profile target \
+  --out .veracrawl-real-runs/real-world-ai-agent-public-corpus
+```
+
+The AI benchmark first runs the public corpus, then invokes VeraCrawl's
+framework-neutral model and agent ports for crawl planning, site understanding,
+extraction candidate generation, and verification/repair decisions. Passing
+reports include model call, agent action, tool call, context bundle, source
+anchor, candidate, evidence/verification gate, command/event/outbox, and replay
+refs. Model or agent output is never accepted as source evidence.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

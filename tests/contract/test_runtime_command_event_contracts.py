@@ -17,7 +17,6 @@ from veracrawl.contracts.enums import (
 from veracrawl.contracts.objective import CrawlObjective, CrawlPlan, CrawlRun, RunPlanSnapshot
 from veracrawl.contracts.processing import ExtractionCandidate
 from veracrawl.control.runtime import (
-    RuntimeRepositories,
     commit_owner_mutation,
     evaluate_completion_gate,
     run_runtime_fixture,
@@ -25,6 +24,7 @@ from veracrawl.control.runtime import (
 from veracrawl.fetch.runtime import execute_source_adapter_fixture
 from veracrawl.policy.gates import decision_for
 from veracrawl.runtime_events.event_store import InMemoryEventStore
+from veracrawl.runtime_support.repositories import RuntimeRepositories
 
 
 def _objective() -> CrawlObjective:

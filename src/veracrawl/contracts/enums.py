@@ -612,6 +612,30 @@ class RealWorldBenchmarkFailureType(StrEnum):
     REPLAY_MISMATCH = "real_world_replay_mismatch"
 
 
+class RealWorldAIAgentDecisionType(StrEnum):
+    CRAWL_PLANNING = "crawl_planning"
+    SITE_UNDERSTANDING = "site_understanding"
+    EXTRACTION_CANDIDATE_GENERATION = "extraction_candidate_generation"
+    VERIFICATION_REPAIR = "verification_repair"
+
+
+class RealWorldAIAgentBenchmarkFailureType(StrEnum):
+    MISSING_REAL_WORLD_CORPUS = "real_world_ai_missing_real_world_corpus"
+    MISSING_MODEL_CALL_TRACE = "real_world_ai_missing_model_call_trace"
+    MISSING_AGENT_ACTION_TRACE = "real_world_ai_missing_agent_action_trace"
+    MISSING_TOOL_CALL_TRACE = "real_world_ai_missing_tool_call_trace"
+    MISSING_CONTEXT_BUNDLE_TRACE = "real_world_ai_missing_context_bundle_trace"
+    MISSING_CANDIDATE_SOURCE_ANCHOR = (
+        "real_world_ai_missing_candidate_source_anchor"
+    )
+    LLM_OUTPUT_AS_EVIDENCE = "real_world_ai_llm_output_as_evidence"
+    PUBLICATION_BYPASS = "real_world_ai_publication_bypass"
+    FRAMEWORK_STATE_PERSISTED = "real_world_ai_framework_state_persisted"
+    CORE_IMPORT_BOUNDARY = "real_world_ai_core_import_boundary"
+    MISSING_REPLAY_REFS = "real_world_ai_missing_replay_refs"
+    ADAPTER_UNAVAILABLE = "real_world_ai_adapter_unavailable"
+
+
 class SecurityActionSurface(StrEnum):
     NETWORK = "network"
     PROMPT = "prompt"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from veracrawl.contracts.enums import CompletenessResult
+from veracrawl.contracts.infrastructure import RuntimeInfrastructureSpec
 from veracrawl.runtime_support.infrastructure_gate import (
     run_runtime_infrastructure_gate,
     run_runtime_infrastructure_runtime_unavailable_gate,
@@ -8,7 +9,7 @@ from veracrawl.runtime_support.infrastructure_gate import (
 )
 
 
-def _spec():
+def _spec() -> RuntimeInfrastructureSpec:
     return runtime_infrastructure_spec(
         "unit",
         persistence_adapter_ref="persistence-adapter:unit:postgres",

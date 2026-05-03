@@ -1,0 +1,4 @@
+{
+  "fixture_id": "real-world-ai-agent-missing-replay",
+  "expected_failure_type": "real_world_ai_missing_replay_refs"
+}

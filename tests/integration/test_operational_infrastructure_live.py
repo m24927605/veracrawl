@@ -24,7 +24,14 @@ def live_infrastructure() -> Iterator[tuple[str, str, str, str, str, str]]:
         os.getenv("VERACRAWL_S3_SECRET_ACCESS_KEY"),
     )
     if all(explicit):
-        yield tuple(str(value) for value in explicit)
+        yield (
+            str(explicit[0]),
+            str(explicit[1]),
+            str(explicit[2]),
+            str(explicit[3]),
+            str(explicit[4]),
+            str(explicit[5]),
+        )
         return
     if os.getenv("VERACRAWL_INFRASTRUCTURE_DOCKER") != "1":
         pytest.skip("set VERACRAWL_* live vars or VERACRAWL_INFRASTRUCTURE_DOCKER=1")
@@ -161,7 +168,8 @@ def _docker_host_port(container_id: str, port: str) -> tuple[str, str]:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    return port_output.rsplit(":", maxsplit=1)
+    host, host_port = port_output.rsplit(":", maxsplit=1)
+    return host, host_port
 
 
 def _wait_for_postgres(psycopg: Any, dsn: str) -> None:

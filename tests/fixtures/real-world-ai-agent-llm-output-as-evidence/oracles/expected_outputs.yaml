@@ -1,0 +1,4 @@
+{
+  "fixture_id": "real-world-ai-agent-llm-output-as-evidence",
+  "expected_failure_type": "real_world_ai_llm_output_as_evidence"
+}
