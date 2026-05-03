@@ -1070,6 +1070,15 @@ class CredentialedSessionFailureType(StrEnum):
     ADAPTER_UNAVAILABLE = "credentialed_session_adapter_unavailable"
 
 
+class LiveNormalizationFailureType(StrEnum):
+    MISSING_UPSTREAM = "live_normalization_missing_upstream"
+    EMPTY_CONTENT = "live_normalization_empty_content"
+    MISSING_ANCHOR_MAP = "live_normalization_missing_anchor_map"
+    MISSING_SITE_MODEL = "live_normalization_missing_site_model"
+    REPLAY_MISMATCH = "live_normalization_replay_mismatch"
+    NORMALIZATION_FAILED = "live_normalization_failed"
+
+
 class BrowserStepStatus(StrEnum):
     PLANNED = "planned"
     EXECUTED = "executed"

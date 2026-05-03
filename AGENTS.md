@@ -118,12 +118,12 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/044-credentialed-session-runtime/plan.md`.
-Use it with `specs/044-credentialed-session-runtime/spec.md`,
-`specs/044-credentialed-session-runtime/research.md`,
-`specs/044-credentialed-session-runtime/data-model.md`,
-`specs/044-credentialed-session-runtime/contracts/`, and
-`specs/044-credentialed-session-runtime/quickstart.md` for Credentialed Session Runtime
+Current active Spec Kit plan: `specs/045-live-normalization-site-understanding/plan.md`.
+Use it with `specs/045-live-normalization-site-understanding/spec.md`,
+`specs/045-live-normalization-site-understanding/research.md`,
+`specs/045-live-normalization-site-understanding/data-model.md`,
+`specs/045-live-normalization-site-understanding/contracts/`, and
+`specs/045-live-normalization-site-understanding/quickstart.md` for Live Normalization And Site Understanding Runtime
 work. The post-037 roadmap remains governed by
 `specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
 do not invent additional production specs unless both are amended first.

@@ -363,6 +363,36 @@ credentials, bypass login walls, automate unauthorized access, implement a real
 external vault, normalize/extract authenticated content, or claim final
 production benchmark readiness.
 
+## Live Normalization And Site Understanding Runtime Slice
+
+The live normalization runtime proves that acquired live artifacts can become
+replayable processing and site-understanding refs without turning derived
+context into source evidence:
+
+- `veracrawl.contracts.processing`: `LiveNormalizationRuntimeReport` and
+  `LiveNormalizationFixtureManifest` require live HTTP, structured source, and
+  browser snapshot prerequisite refs plus normalized document, normalization
+  manifest, source anchor, anchor map, link analysis, page type, site model,
+  artifact, policy, command/event/outbox, derived-context, and replay refs
+  before pass.
+- `veracrawl.normalize.live_runtime`: core aggregate runtime receives acquired
+  content and upstream refs through explicit inputs, calls the existing
+  normalization pipeline, and does not import concrete network, browser, source,
+  storage, model, or agent framework adapters.
+- Linked pages record real `LinkProvenance` refs. Linkless detail or
+  browser-shaped pages record deterministic no-link analysis refs instead of
+  fabricated link provenance.
+- `veracrawl.cli.live_normalization`: `veracrawl-live-normalization`
+  dynamically loads local HTTP, structured source, and browser fixture adapters
+  at the CLI edge, then validates listing, detail, browser, missing-upstream,
+  empty-content, missing-anchor-map, missing-site-model, and replay-mismatch
+  fixtures.
+
+This slice proves normalization and site-understanding lineage over acquired
+local live artifacts. It does not publish outputs, treat site models as source
+evidence, implement schema extraction candidates, or claim final production
+benchmark readiness.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable

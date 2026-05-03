@@ -408,6 +408,37 @@ This acceptance proves credentialed session runtime semantics. It does not
 replace normalization/extraction, evidence, publication, worker scale, external
 benchmark, or release gates.
 
+Live normalization and site understanding fixture contract:
+
+```text
+veracrawl-live-normalization run tests/fixtures/<live_normalization_fixture_id> --profile target --out .veracrawl-test-runs/<live_normalization_fixture_id>
+```
+
+Required live normalization fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| live-normalization-listing-success | live HTTP, structured source, and browser snapshot prerequisite refs plus normalized document, manifest, anchors, link provenance, link analysis, page type, site model, artifact, derived-context, policy, command/event/outbox, and replay refs pass |
+| live-normalization-detail-success | linkless detail content passes with source anchors, page type, site model, and deterministic no-link analysis refs, without fabricated link provenance |
+| live-normalization-browser-success | browser-shaped content passes with browser snapshot prerequisite lineage and deterministic no-link analysis refs |
+| live-normalization-missing-upstream | missing live/structured/browser prerequisite refs fail with `live_normalization_missing_upstream` |
+| live-normalization-empty-content | empty normalized content fails with `live_normalization_empty_content` |
+| live-normalization-missing-anchor-map | missing anchor map refs fail with `live_normalization_missing_anchor_map` |
+| live-normalization-missing-site-model | missing site model refs fail with `live_normalization_missing_site_model` |
+| live-normalization-replay-mismatch | missing or inconsistent replay refs fail with `live_normalization_replay_mismatch` |
+
+Live normalization acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_live_normalization_contracts.py`
+- `pytest tests/unit/test_live_normalization_runtime.py`
+- `pytest tests/integration/test_live_normalization_fixtures.py`
+- `veracrawl-live-normalization` CLI loop over all live normalization fixtures
+
+This acceptance proves live normalization and site-understanding runtime
+semantics. It does not replace schema extraction candidates, evidence,
+publication, worker scale, external benchmark, or release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

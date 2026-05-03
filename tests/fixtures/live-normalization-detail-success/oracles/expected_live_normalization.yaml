@@ -1,0 +1,1 @@
+{"fixture_id":"live-normalization-detail-success","required_refs":["live_http","structured_source","browser_snapshot","normalized_document","normalization_manifest","anchor_map","source_anchor","no_link_analysis","page_type","site_model","artifact","policy","command","event_cursor","outbox","replay","derived_context"],"derived_context_is_not_source_evidence":true}

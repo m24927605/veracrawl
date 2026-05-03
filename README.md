@@ -123,6 +123,15 @@ replay refs without persisting raw secrets or adapter-native session state.
 Missing authorization, out-of-scope use, raw secret leakage, unsafe credential
 use, missing audit, missing redacted replay, and replay mismatch fail with typed
 diagnostics.
+The live normalization and site understanding runtime turns acquired live
+artifacts into normalized documents, normalization manifests, source anchors,
+link provenance or deterministic no-link analysis, page type classifications,
+site model refs, derived-context refs, command/event/outbox refs, and replay
+refs. `veracrawl-live-normalization` proves listing, detail, and browser-shaped
+pages can be normalized from real local HTTP acquisitions while missing upstream
+refs, empty content, missing anchor maps, missing site models, and replay
+mismatch fail with typed diagnostics. Derived site understanding remains
+planning context and must not be treated as source evidence.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter

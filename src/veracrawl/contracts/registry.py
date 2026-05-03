@@ -82,6 +82,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_dynamic_source_runtime_ref: str | None = None
     expected_browser_snapshot_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
+    expected_live_normalization_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -1543,6 +1544,19 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         tests=["tests/unit/test_process_replay.py"],
     ),
+    "LiveNormalizationRuntimeReport": _contract(
+        "LiveNormalizationRuntimeReport",
+        OwnerService.NORMALIZE,
+        "processing",
+        mutation_allowed=True,
+        tests=["tests/contract/test_live_normalization_contracts.py"],
+    ),
+    "LiveNormalizationFixtureManifest": _contract(
+        "LiveNormalizationFixtureManifest",
+        OwnerService.TESTS,
+        "processing",
+        tests=["tests/contract/test_live_normalization_contracts.py"],
+    ),
     "ProcessFixtureManifest": _contract(
         "ProcessFixtureManifest",
         OwnerService.TESTS,
@@ -2194,6 +2208,21 @@ COMMAND_TYPES.update(
             target_aggregate_type="LinkProvenance",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["link_provenance_recorded"],
+        ),
+        "record_live_normalization_runtime_report": CommandTypeRegistration(
+            command_type="record_live_normalization_runtime_report",
+            owner_service=OwnerService.NORMALIZE,
+            target_aggregate_type="LiveNormalizationRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["live_normalization"],
+            emitted_event_types=["live_normalization_runtime_reported"],
+        ),
+        "record_live_normalization_fixture_manifest": CommandTypeRegistration(
+            command_type="record_live_normalization_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="LiveNormalizationFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["live_normalization_fixture_manifest_recorded"],
         ),
         "record_extraction_strategy": CommandTypeRegistration(
             command_type="record_extraction_strategy",
@@ -3071,6 +3100,8 @@ EVENT_TYPES.update(
             "normalization_manifest_recorded",
             "anchor_map_recorded",
             "link_provenance_recorded",
+            "live_normalization_runtime_reported",
+            "live_normalization_fixture_manifest_recorded",
             "page_type_classified",
             "site_model_recorded",
             "extraction_strategy_recorded",
@@ -4286,6 +4317,28 @@ for _credentialed_session_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _live_normalization_fixture, _negative in {
+    "live-normalization-listing-success": False,
+    "live-normalization-detail-success": False,
+    "live-normalization-browser-success": False,
+    "live-normalization-missing-upstream": True,
+    "live-normalization-empty-content": True,
+    "live-normalization-missing-anchor-map": True,
+    "live-normalization-missing-site-model": True,
+    "live-normalization-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_live_normalization_fixture}"
+    FIXTURE_ORACLES[_live_normalization_fixture] = FixtureOracleRegistration(
+        fixture_id=_live_normalization_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_live_normalization_ref=f"{_base}/oracles/expected_live_normalization.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -4493,6 +4546,30 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "BrowserSnapshotRuntimeReport",
             "SourceAdapterResult",
             "SecurityPolicyCheck",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "live_normalization_site_understanding": _target_area(
+        "live_normalization_site_understanding",
+        OwnerService.NORMALIZE,
+        "materialized",
+        materialized=[
+            "LiveNormalizationRuntimeReport",
+            "LiveNormalizationFixtureManifest",
+            "LiveHttpAcquisitionReport",
+            "StructuredSourceAdaptersRuntimeReport",
+            "BrowserSnapshotRuntimeReport",
+            "NormalizedDocument",
+            "NormalizationManifest",
+            "TextAnchor",
+            "AnchorMap",
+            "LinkProvenance",
+            "PageTypeClassification",
+            "SiteModel",
             "CommandResult",
             "EventCursorRecord",
             "OutboxRecord",

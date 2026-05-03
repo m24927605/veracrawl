@@ -5838,6 +5838,17 @@ Executable target runtime rules:
   typed `CredentialedSessionFailureType` diagnostics. Raw secrets, cookies,
   vault-native handles, and adapter-native session state must remain
   adapter-owned and must not become canonical VeraCrawl state.
+- Live normalization runtime reports can claim `pass` only when row 041 live
+  HTTP refs, row 042 structured source refs, and row 043 browser snapshot refs
+  are present with normalized document refs, normalization manifest refs, source
+  anchor refs, anchor map refs, link analysis refs, page type refs, site model
+  refs, raw and normalized artifact refs, policy refs, command/event/outbox
+  refs, derived-context refs, and replay refs. Pages with outbound links require
+  real `LinkProvenance` refs; linkless pages require deterministic no-link
+  analysis refs and must not fabricate link provenance. Missing upstream refs,
+  empty content, missing anchor maps, missing site models, or replay mismatch
+  fail with typed `LiveNormalizationFailureType` diagnostics. Page type and site
+  model refs are planning context, not source evidence or published output.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

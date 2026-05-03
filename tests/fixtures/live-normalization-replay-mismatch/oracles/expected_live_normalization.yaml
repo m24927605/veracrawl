@@ -1,0 +1,1 @@
+{"fixture_id":"live-normalization-replay-mismatch","expected_failure_type":"live_normalization_replay_mismatch","required_refs":["live_http","structured_source","browser_snapshot","typed_failure","missing_ref_fields"]}

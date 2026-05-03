@@ -1,0 +1,1 @@
+{"fixture_id":"live-normalization-missing-upstream","expected_failure_type":"live_normalization_missing_upstream","required_refs":["typed_failure","missing_ref_fields"]}

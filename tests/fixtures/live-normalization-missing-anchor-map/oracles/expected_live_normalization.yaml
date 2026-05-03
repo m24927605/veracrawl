@@ -1,0 +1,1 @@
+{"fixture_id":"live-normalization-missing-anchor-map","expected_failure_type":"live_normalization_missing_anchor_map","required_refs":["live_http","structured_source","browser_snapshot","typed_failure","missing_ref_fields"]}
