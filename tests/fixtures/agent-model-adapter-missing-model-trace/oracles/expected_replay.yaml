@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-missing-model-trace",
+  "expected_completeness_result": "fail",
+  "expected_missing_ref": "model_call_trace_refs"
+}

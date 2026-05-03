@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-missing-run-control",
+  "expected_completeness_result": "fail",
+  "expected_missing_ref": "run_control_report_ref"
+}

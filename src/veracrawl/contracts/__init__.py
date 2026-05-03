@@ -26,6 +26,10 @@ from veracrawl.contracts.agent_adapter import (
     AgentRuntimeAdapterFixtureManifest,
     AgentRuntimeAdapterReport,
 )
+from veracrawl.contracts.agent_model_runtime import (
+    AgentModelAdapterFixtureManifest,
+    AgentModelAdapterRuntimeReport,
+)
 from veracrawl.contracts.artifact import (
     ObjectStoreAdapterSpec,
     ObjectStoreConformanceReport,
@@ -299,6 +303,8 @@ __all__ = [
     "AgentActionTrace",
     "AgentAdapterExecutionRecord",
     "AgentHandoff",
+    "AgentModelAdapterFixtureManifest",
+    "AgentModelAdapterRuntimeReport",
     "AgentRecommendation",
     "AgentRunRequest",
     "AgentRunResult",

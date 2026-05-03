@@ -77,6 +77,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_observability_ref: str | None = None
     expected_security_privacy_ref: str | None = None
     expected_agent_adapter_ref: str | None = None
+    expected_agent_model_adapter_ref: str | None = None
     expected_model_provider_ref: str | None = None
     expected_source_coverage_ref: str | None = None
     expected_dynamic_source_runtime_ref: str | None = None
@@ -268,6 +269,20 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "model_provider_adapter",
         tests=["tests/integration/test_model_provider_adapter_fixtures.py"],
+    ),
+    "AgentModelAdapterRuntimeReport": _contract(
+        "AgentModelAdapterRuntimeReport",
+        OwnerService.AGENTS,
+        "agent_model_runtime",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_agent_model_adapter_runtime_contracts.py"],
+    ),
+    "AgentModelAdapterFixtureManifest": _contract(
+        "AgentModelAdapterFixtureManifest",
+        OwnerService.TESTS,
+        "agent_model_runtime",
+        tests=["tests/integration/test_agent_model_adapter_runtime_fixtures.py"],
     ),
     "SourceCoverageAdapterExecutionRecord": _contract(
         "SourceCoverageAdapterExecutionRecord",
@@ -1768,6 +1783,21 @@ COMMAND_TYPES: dict[str, CommandTypeRegistration] = {
         payload_schema_ref="BaseCommandPayload",
         emitted_event_types=["model_provider_adapter_fixture_manifest_recorded"],
     ),
+    "record_agent_model_adapter_runtime_report": CommandTypeRegistration(
+        command_type="record_agent_model_adapter_runtime_report",
+        owner_service=OwnerService.AGENTS,
+        target_aggregate_type="AgentModelAdapterRuntimeReport",
+        payload_schema_ref="BaseCommandPayload",
+        required_policy_decision_types=["prompt_context", "tool_call"],
+        emitted_event_types=["agent_model_adapter_runtime_reported"],
+    ),
+    "record_agent_model_adapter_fixture_manifest": CommandTypeRegistration(
+        command_type="record_agent_model_adapter_fixture_manifest",
+        owner_service=OwnerService.TESTS,
+        target_aggregate_type="AgentModelAdapterFixtureManifest",
+        payload_schema_ref="BaseCommandPayload",
+        emitted_event_types=["agent_model_adapter_fixture_manifest_recorded"],
+    ),
     "record_source_coverage_adapter_execution": CommandTypeRegistration(
         command_type="record_source_coverage_adapter_execution",
         owner_service=OwnerService.PORTS,
@@ -3096,6 +3126,8 @@ EVENT_TYPES: dict[str, EventTypeRegistration] = {
         "model_provider_adapter_execution_recorded",
         "model_provider_adapter_reported",
         "model_provider_adapter_fixture_manifest_recorded",
+        "agent_model_adapter_runtime_reported",
+        "agent_model_adapter_fixture_manifest_recorded",
         "output_type_coverage_recorded",
         "output_type_coverage_reported",
         "output_type_coverage_fixture_manifest_recorded",
@@ -4528,6 +4560,35 @@ for _result_publication_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _agent_model_adapter_fixture, _negative in {
+    "agent-model-adapter-local-runtime-success": False,
+    "agent-model-adapter-runtime-unavailable": True,
+    "agent-model-adapter-missing-run-control": True,
+    "agent-model-adapter-missing-live-normalization": True,
+    "agent-model-adapter-missing-schema-extraction": True,
+    "agent-model-adapter-unsupported-provider": True,
+    "agent-model-adapter-unsupported-framework": True,
+    "agent-model-adapter-raw-prompt-leak": True,
+    "agent-model-adapter-raw-response-leak": True,
+    "agent-model-adapter-raw-credential-leak": True,
+    "agent-model-adapter-framework-state-canonical": True,
+    "agent-model-adapter-provider-transcript-canonical": True,
+    "agent-model-adapter-missing-model-trace": True,
+    "agent-model-adapter-missing-tool-trace": True,
+    "agent-model-adapter-missing-replay": True,
+    "agent-model-adapter-core-import-boundary": True,
+}.items():
+    _base = f"tests/fixtures/{_agent_model_adapter_fixture}"
+    FIXTURE_ORACLES[_agent_model_adapter_fixture] = FixtureOracleRegistration(
+        fixture_id=_agent_model_adapter_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_agent_model_adapter_ref=(
+            f"{_base}/oracles/expected_agent_model_adapter.yaml"
+        ),
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -4838,6 +4899,30 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "ExportWithdrawalAttempt",
             "ExportCorrectionRecord",
             "ExportReconciliationReport",
+            "PolicyDecision",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "real_agent_model_adapter_runtime": _target_area(
+        "real_agent_model_adapter_runtime",
+        OwnerService.AGENTS,
+        "materialized",
+        materialized=[
+            "AgentModelAdapterRuntimeReport",
+            "AgentModelAdapterFixtureManifest",
+            "AgentRunRequest",
+            "AgentRunResult",
+            "AgentActionTrace",
+            "ModelRequest",
+            "ModelResponse",
+            "ModelCallTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
+            "ModelProviderAdapterExecutionRecord",
+            "AgentAdapterExecutionRecord",
             "PolicyDecision",
             "CommandResult",
             "EventCursorRecord",

@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-local-runtime-success",
+  "expected_completeness_result": "pass",
+  "required_replay_ref": "replay-bundle:agent-model-adapter-local-runtime-success:agent-model"
+}

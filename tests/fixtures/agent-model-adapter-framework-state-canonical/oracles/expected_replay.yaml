@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-framework-state-canonical",
+  "expected_completeness_result": "fail",
+  "expected_failure_ref": "framework-state:agent-model-adapter-framework-state-canonical:canonical"
+}

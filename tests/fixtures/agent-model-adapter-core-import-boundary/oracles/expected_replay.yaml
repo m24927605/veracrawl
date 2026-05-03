@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-core-import-boundary",
+  "expected_completeness_result": "fail",
+  "expected_failure_ref": "core-import-violation:agent-model-adapter-core-import-boundary:adapter-import"
+}

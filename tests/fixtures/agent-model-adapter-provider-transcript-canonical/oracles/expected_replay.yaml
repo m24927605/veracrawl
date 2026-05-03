@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-provider-transcript-canonical",
+  "expected_completeness_result": "fail",
+  "expected_failure_ref": "provider-transcript:agent-model-adapter-provider-transcript-canonical:canonical"
+}

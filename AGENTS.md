@@ -118,12 +118,12 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/048-result-publication-export-runtime/plan.md`.
-Use it with `specs/048-result-publication-export-runtime/spec.md`,
-`specs/048-result-publication-export-runtime/research.md`,
-`specs/048-result-publication-export-runtime/data-model.md`,
-`specs/048-result-publication-export-runtime/contracts/`, and
-`specs/048-result-publication-export-runtime/quickstart.md` for Result Publication And Export Runtime
+Current active Spec Kit plan: `specs/049-real-agent-model-adapter-runtime/plan.md`.
+Use it with `specs/049-real-agent-model-adapter-runtime/spec.md`,
+`specs/049-real-agent-model-adapter-runtime/research.md`,
+`specs/049-real-agent-model-adapter-runtime/data-model.md`,
+`specs/049-real-agent-model-adapter-runtime/contracts/`, and
+`specs/049-real-agent-model-adapter-runtime/quickstart.md` for Real Agent And Model Adapter Runtime
 work. The post-037 roadmap remains governed by
 `specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
 do not invent additional production specs unless both are amended first.

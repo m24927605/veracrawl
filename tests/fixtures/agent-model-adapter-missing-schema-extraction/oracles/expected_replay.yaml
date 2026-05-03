@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-missing-schema-extraction",
+  "expected_completeness_result": "fail",
+  "expected_missing_ref": "schema_extraction_runtime_report_ref"
+}

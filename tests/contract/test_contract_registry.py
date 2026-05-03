@@ -67,6 +67,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "schema_extraction_candidate_runtime",
         "live_evidence_verification_runtime",
         "result_publication_export_runtime",
+        "real_agent_model_adapter_runtime",
         "graph_frontier_review_runtime_gate",
         "temporal_kg_identity_projection_gate",
         "scheduler",

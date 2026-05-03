@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-missing-replay",
+  "expected_completeness_result": "fail",
+  "expected_missing_ref": "replay_bundle_ref"
+}

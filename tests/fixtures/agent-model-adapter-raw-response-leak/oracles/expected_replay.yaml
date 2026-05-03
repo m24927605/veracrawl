@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-raw-response-leak",
+  "expected_completeness_result": "fail",
+  "expected_failure_ref": "raw-response-leak:agent-model-adapter-raw-response-leak:agent-model"
+}

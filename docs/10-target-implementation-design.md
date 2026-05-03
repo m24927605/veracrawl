@@ -914,6 +914,47 @@ Rules:
 - missing model traces, tool traces, security/privacy refs, observability refs, replay refs, or unsupported framework names are deterministic failures.
 - this slice proves framework-neutral adapter mapping and boundary enforcement. It does not prove production model provider accounts, vendor service availability, review UI, export delivery, distributed persistence, production browser rendering, or production scale readiness.
 
+### Real Agent And Model Adapter Runtime Slice
+
+The real adapter runtime composes model provider and agent framework adapters
+through ports so VeraCrawl planning, extraction, and repair can execute without
+coupling core packages to any SDK or framework.
+
+Required implementation:
+
+- `AgentModelAdapterRuntimeReport` aggregates row 039 run-control refs, row 045
+  live-normalization refs, row 046 schema-extraction refs, planner/extractor/
+  repair agent run refs, provider/framework execution refs, model request/
+  response/trace refs, agent request/result/action trace refs, context/tool
+  trace refs, adapter runtime refs, policy/security/observability refs,
+  command/event/outbox refs, and replay refs.
+- `veracrawl.agents.real_adapter_runtime` is core-owned and imports only
+  VeraCrawl contracts and ports. It receives `ModelRuntimeBinding` and
+  `AgentRuntimeBinding` values whose ports are composed outside core.
+- `veracrawl.adapters.model_providers.local_runtime` and
+  `veracrawl.adapters.agent_frameworks.native_runtime` provide executable local
+  adapters for deterministic validation.
+- `veracrawl.adapters.model_providers.external_runtime` and
+  `veracrawl.adapters.agent_frameworks.external_runtime` provide generic
+  wrapper adapters for SDK/framework-specific modules without adding static
+  dependencies to core.
+- `veracrawl-agent-model-runtime` dynamically loads adapter modules at the CLI
+  edge and records unavailable external SDKs or wrapper callables as
+  `needs_review`.
+
+Rules:
+
+- a passing runtime must prove planner, extractor, and repair/drift turns.
+- external OpenAI Agent SDK, LangChain, LangGraph, CrewAI, AutoGen, Semantic
+  Kernel, OpenAI, Anthropic, Gemini, OpenAI-compatible, local, or future
+  adapters must remain replaceable adapter modules.
+- missing external SDKs, credentials, or wrapper callables are `needs_review`,
+  not a fake pass.
+- raw prompts, raw responses, raw credentials, provider-native transcripts, and
+  framework-native state cannot become canonical VeraCrawl state.
+- unsupported provider/framework names, missing model/tool/context traces,
+  replay gaps, or core imports of adapter packages are deterministic failures.
+
 Agent reasoning quality requirements:
 
 - Planner must record ambiguities, assumptions, rejected alternatives, selected adapter rationale, evidence requirements, policy risks, and expected failure modes.

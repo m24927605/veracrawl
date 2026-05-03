@@ -640,6 +640,25 @@ class ModelProviderAdapterFailureType(StrEnum):
     UNSUPPORTED_PROVIDER = "model_provider_adapter_unsupported_provider"
 
 
+class AgentModelAdapterRuntimeFailureType(StrEnum):
+    MISSING_RUN_CONTROL = "agent_model_adapter_missing_run_control"
+    MISSING_LIVE_NORMALIZATION = "agent_model_adapter_missing_live_normalization"
+    MISSING_SCHEMA_EXTRACTION = "agent_model_adapter_missing_schema_extraction"
+    ADAPTER_RUNTIME_UNAVAILABLE = "agent_model_adapter_runtime_unavailable"
+    UNSUPPORTED_PROVIDER = "agent_model_adapter_unsupported_provider"
+    UNSUPPORTED_FRAMEWORK = "agent_model_adapter_unsupported_framework"
+    RAW_PROMPT_LEAK = "agent_model_adapter_raw_prompt_leak"
+    RAW_RESPONSE_LEAK = "agent_model_adapter_raw_response_leak"
+    RAW_CREDENTIAL_LEAK = "agent_model_adapter_raw_credential_leak"
+    FRAMEWORK_STATE_CANONICAL = "agent_model_adapter_framework_state_canonical"
+    PROVIDER_TRANSCRIPT_CANONICAL = "agent_model_adapter_provider_transcript_canonical"
+    MISSING_MODEL_TRACE = "agent_model_adapter_missing_model_trace"
+    MISSING_TOOL_TRACE = "agent_model_adapter_missing_tool_trace"
+    MISSING_CONTEXT_TRACE = "agent_model_adapter_missing_context_trace"
+    MISSING_REPLAY_REFS = "agent_model_adapter_missing_replay_refs"
+    CORE_IMPORT_BOUNDARY = "agent_model_adapter_core_import_boundary"
+
+
 class SourceCoverageFailureType(StrEnum):
     MISSING_RUNTIME_REFS = "source_coverage_missing_runtime_refs"
     ADAPTER_NATIVE_STATE_CANONICAL = "source_coverage_adapter_native_state_canonical"

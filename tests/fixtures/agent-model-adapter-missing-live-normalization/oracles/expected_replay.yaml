@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-missing-live-normalization",
+  "expected_completeness_result": "fail",
+  "expected_missing_ref": "live_normalization_runtime_report_ref"
+}

@@ -5886,6 +5886,20 @@ Executable target runtime rules:
   withdrawal propagation, correction without withdrawal, missing privacy refs,
   direct export bypass, or replay mismatch fail or enter needs-review with
   typed `ResultPublicationExportFailureType` diagnostics.
+- Real agent/model adapter runtime reports can claim `pass` only when row 039
+  run-control refs, row 045 live-normalization refs, and row 046
+  schema-extraction refs are present and planner, extractor, and repair agent
+  turns execute through `ModelProviderPort` and `AgentRuntimePort` bindings.
+  Passing reports require canonical `ModelRequest`, `ModelResponse`,
+  `ModelCallTrace`, `AgentRunRequest`, `AgentRunResult`, `AgentActionTrace`,
+  `ToolCallTrace`, `ContextBundleTrace`, adapter runtime refs, policy refs,
+  observability refs, security/privacy refs, command/event/outbox refs, and
+  replay refs. Missing external SDKs, credentials, or wrapper callables return
+  `needs_review`; raw prompt/response/credential leakage, framework-native
+  canonical state, provider-native canonical transcripts, unsupported
+  providers/frameworks, core adapter imports, missing model/tool/context traces,
+  or missing replay fail with typed `AgentModelAdapterRuntimeFailureType`
+  diagnostics.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

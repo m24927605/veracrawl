@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-unsupported-provider",
+  "expected_completeness_result": "fail",
+  "expected_failure_ref": "unsupported-provider:agent-model-adapter-unsupported-provider:unknown"
+}

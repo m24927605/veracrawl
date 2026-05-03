@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-runtime-unavailable",
+  "expected_completeness_result": "needs_review",
+  "required_unavailable_runtime_ref": "missing-runtime:agent-model-adapter-runtime-unavailable:openai"
+}

@@ -1233,6 +1233,51 @@ model provider accounts, vendor service uptime, review UI, export delivery,
 distributed storage, distributed queueing, production browser rendering, or
 production scale readiness.
 
+Real agent/model adapter runtime fixture contract:
+
+```text
+veracrawl-agent-model-runtime run tests/fixtures/<agent_model_adapter_fixture_id> --profile target --out .veracrawl-test-runs/<agent_model_adapter_fixture_id>
+```
+
+Required real agent/model adapter runtime fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| agent-model-adapter-local-runtime-success | local model provider and native VeraCrawl agent runtime execute planner, extractor, and repair turns through ports with canonical model/agent/context/tool trace, policy, security/privacy, command/event/outbox, adapter runtime, and replay refs |
+| agent-model-adapter-runtime-unavailable | missing external SDK, credential, or wrapper callable returns `needs_review` with unavailable runtime refs |
+| agent-model-adapter-missing-run-control | missing row 039 run-control ref fails |
+| agent-model-adapter-missing-live-normalization | missing row 045 live-normalization ref fails |
+| agent-model-adapter-missing-schema-extraction | missing row 046 schema-extraction ref fails |
+| agent-model-adapter-unsupported-provider | unsupported provider names fail |
+| agent-model-adapter-unsupported-framework | unsupported framework names fail |
+| agent-model-adapter-raw-prompt-leak | raw prompt persistence fails |
+| agent-model-adapter-raw-response-leak | raw response persistence fails |
+| agent-model-adapter-raw-credential-leak | raw credential persistence fails |
+| agent-model-adapter-framework-state-canonical | framework-native canonical state fails |
+| agent-model-adapter-provider-transcript-canonical | provider-native canonical transcript state fails |
+| agent-model-adapter-missing-model-trace | missing model call trace refs fail |
+| agent-model-adapter-missing-tool-trace | missing tool call trace refs fail |
+| agent-model-adapter-missing-replay | missing replay refs fail |
+| agent-model-adapter-core-import-boundary | core adapter/framework/model SDK import boundary violations fail |
+
+Real agent/model adapter runtime acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_agent_model_adapter_runtime_contract_registry.py`
+- `pytest tests/contract/test_agent_model_adapter_runtime_contracts.py`
+- `pytest tests/contract/test_agent_model_adapter_runtime_import_boundaries.py`
+- `pytest tests/unit/test_agent_model_adapter_runtime.py`
+- `pytest tests/unit/test_agent_model_adapter_runtime_adapters.py`
+- `pytest tests/integration/test_agent_model_adapter_runtime_fixtures.py`
+- `veracrawl-agent-model-runtime` CLI loop over all real agent/model adapter fixtures
+
+This acceptance proves integrated adapter runtime execution through VeraCrawl
+ports, dynamic adapter loading, core import boundaries, local executable
+planner/extractor/repair turns, unavailable external runtime honesty, and
+canonical trace/security/replay completeness. It does not prove external vendor
+account readiness, model quality, token billing, managed framework uptime, or
+production scale readiness.
+
 Security/privacy lifecycle gate fixture contract:
 
 ```text

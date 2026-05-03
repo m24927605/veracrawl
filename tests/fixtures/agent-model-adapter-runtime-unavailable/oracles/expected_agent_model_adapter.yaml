@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-runtime-unavailable",
+  "expected_completion_result": "needs_review",
+  "required_report_ref": "agent-model-adapter-runtime-report:agent-model-adapter-runtime-unavailable"
+}

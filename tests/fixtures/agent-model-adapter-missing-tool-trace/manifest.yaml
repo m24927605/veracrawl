@@ -1,0 +1,11 @@
+{
+  "id": "agent-model-adapter-missing-tool-trace",
+  "scenario": "agent-model-adapter-missing-tool-trace",
+  "profile_refs": ["target"],
+  "provider_names": ["Local model runtime"],
+  "framework_names": ["VeraCrawl Native Runtime"],
+  "expected_completion_result": "fail",
+  "expected_operator_status": "agent_model_adapter_missing_tool_trace",
+  "expected_failure_type": "agent_model_adapter_missing_tool_trace",
+  "negative_case": true
+}

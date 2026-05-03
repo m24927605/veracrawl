@@ -158,6 +158,15 @@ refs, command/event/outbox refs, and replay refs. `veracrawl-result-publication`
 proves that outputs cannot be exported directly from candidates or published
 without evidence, accepted verification, privacy lifecycle, publication policy,
 delivery receipt, withdrawal/correction, and replay lineage.
+The real agent/model adapter runtime composes model providers and agent
+frameworks through VeraCrawl ports for planner, extractor, and repair turns.
+`veracrawl-agent-model-runtime` proves local runtime adapters can execute those
+turns through port bindings while core persists only canonical requests,
+responses, traces, adapter runtime refs, policy/security refs, command/event
+refs, and replay refs. Missing external SDKs, provider credentials, or wrapper
+callables remain `needs_review`; raw prompts/responses/credentials,
+framework-native state, provider-native transcripts, unsupported adapters, and
+core adapter imports fail deterministically.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter
@@ -1156,6 +1165,34 @@ for fixture in \
   model-provider-adapter-unsupported-provider
 do
   uv run --python python3.12 --extra dev veracrawl-model-providers run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run real agent/model adapter runtime fixtures:
+
+```sh
+for fixture in \
+  agent-model-adapter-local-runtime-success \
+  agent-model-adapter-runtime-unavailable \
+  agent-model-adapter-missing-run-control \
+  agent-model-adapter-missing-live-normalization \
+  agent-model-adapter-missing-schema-extraction \
+  agent-model-adapter-unsupported-provider \
+  agent-model-adapter-unsupported-framework \
+  agent-model-adapter-raw-prompt-leak \
+  agent-model-adapter-raw-response-leak \
+  agent-model-adapter-raw-credential-leak \
+  agent-model-adapter-framework-state-canonical \
+  agent-model-adapter-provider-transcript-canonical \
+  agent-model-adapter-missing-model-trace \
+  agent-model-adapter-missing-tool-trace \
+  agent-model-adapter-missing-replay \
+  agent-model-adapter-core-import-boundary
+do
+  uv run --python python3.12 --extra dev veracrawl-agent-model-runtime run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

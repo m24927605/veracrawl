@@ -1,0 +1,11 @@
+{
+  "id": "agent-model-adapter-raw-credential-leak",
+  "scenario": "agent-model-adapter-raw-credential-leak",
+  "profile_refs": ["target"],
+  "provider_names": ["Local model runtime"],
+  "framework_names": ["VeraCrawl Native Runtime"],
+  "expected_completion_result": "fail",
+  "expected_operator_status": "agent_model_adapter_raw_credential_leak",
+  "expected_failure_type": "agent_model_adapter_raw_credential_leak",
+  "negative_case": true
+}

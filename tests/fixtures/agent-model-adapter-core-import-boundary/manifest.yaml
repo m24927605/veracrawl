@@ -1,0 +1,11 @@
+{
+  "id": "agent-model-adapter-core-import-boundary",
+  "scenario": "agent-model-adapter-core-import-boundary",
+  "profile_refs": ["target"],
+  "provider_names": ["Local model runtime"],
+  "framework_names": ["VeraCrawl Native Runtime"],
+  "expected_completion_result": "fail",
+  "expected_operator_status": "agent_model_adapter_core_import_boundary",
+  "expected_failure_type": "agent_model_adapter_core_import_boundary",
+  "negative_case": true
+}

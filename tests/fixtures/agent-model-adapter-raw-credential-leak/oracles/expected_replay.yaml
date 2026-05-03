@@ -1,0 +1,5 @@
+{
+  "fixture_id": "agent-model-adapter-raw-credential-leak",
+  "expected_completeness_result": "fail",
+  "expected_failure_ref": "raw-credential-leak:agent-model-adapter-raw-credential-leak:agent-model"
+}
