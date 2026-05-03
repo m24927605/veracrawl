@@ -33,3 +33,21 @@ def test_agent_reasoning_as_evidence_is_rejected() -> None:
         policy_decision_refs=["policy:unit:agents"],
     )
     assert result.report.operator_status == "agent_reasoning_as_evidence"
+
+
+def test_missing_agent_model_runtime_is_rejected() -> None:
+    result = run_multi_agent_repair(
+        fixture_id="unit-missing-agent-model",
+        scenario="multi-agent-missing-agent-model-runtime",
+        policy_decision_refs=["policy:unit:agents"],
+    )
+    assert result.report.operator_status == "missing_agent_model_runtime"
+
+
+def test_missing_live_evidence_is_rejected() -> None:
+    result = run_multi_agent_repair(
+        fixture_id="unit-missing-live-evidence",
+        scenario="multi-agent-missing-live-evidence",
+        policy_decision_refs=["policy:unit:agents"],
+    )
+    assert result.report.operator_status == "missing_live_evidence"

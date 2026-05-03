@@ -4029,9 +4029,16 @@ for _multi_agent_fixture, _negative in {
     "multi-agent-repair-success": False,
     "coordination-arbitration-success": False,
     "repair-loop-evidence-success": False,
+    "crawl-repair-success": False,
+    "extraction-repair-success": False,
     "owner-service-bypass": True,
     "unresolved-coordination-conflict": True,
     "agent-reasoning-as-evidence": True,
+    "multi-agent-missing-agent-model-runtime": True,
+    "multi-agent-missing-live-evidence": True,
+    "multi-agent-missing-tool-gate": True,
+    "multi-agent-missing-owner-command": True,
+    "multi-agent-replay-mismatch": True,
 }.items():
     _base = f"tests/fixtures/{_multi_agent_fixture}"
     FIXTURE_ORACLES[_multi_agent_fixture] = FixtureOracleRegistration(

@@ -40,9 +40,16 @@ def test_multi_agent_commands_events_fixtures_registered() -> None:
         "multi-agent-repair-success",
         "coordination-arbitration-success",
         "repair-loop-evidence-success",
+        "crawl-repair-success",
+        "extraction-repair-success",
         "owner-service-bypass",
         "unresolved-coordination-conflict",
         "agent-reasoning-as-evidence",
+        "multi-agent-missing-agent-model-runtime",
+        "multi-agent-missing-live-evidence",
+        "multi-agent-missing-tool-gate",
+        "multi-agent-missing-owner-command",
+        "multi-agent-replay-mismatch",
     }.issubset(FIXTURE_ORACLES)
 
 

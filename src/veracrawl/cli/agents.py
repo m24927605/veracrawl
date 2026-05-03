@@ -25,16 +25,23 @@ class MultiAgentFixtureRunReport(TimestampedModel):
     completion_result: CompletenessResult
     operator_status: str
     workflow_ref: Ref | None = None
+    agent_model_adapter_runtime_report_ref: Ref | None = None
+    live_evidence_verification_runtime_report_ref: Ref | None = None
     handoff_refs: list[Ref] = Field(default_factory=list)
     coordination_decision_refs: list[Ref] = Field(default_factory=list)
     repair_signal_refs: list[Ref] = Field(default_factory=list)
     agent_action_trace_refs: list[Ref] = Field(default_factory=list)
+    controlled_tool_call_refs: list[Ref] = Field(default_factory=list)
+    owner_command_refs: list[Ref] = Field(default_factory=list)
+    review_escalation_refs: list[Ref] = Field(default_factory=list)
     policy_decision_refs: list[Ref] = Field(default_factory=list)
     command_record_refs: list[Ref] = Field(default_factory=list)
     event_cursor_refs: list[Ref] = Field(default_factory=list)
     outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
     failure_report_refs: list[Ref] = Field(default_factory=list)
     missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: str | None = None
 
 
 def _load_json_like(path: Path) -> dict[str, Any]:
@@ -74,16 +81,27 @@ def _to_run_report(
         completion_result=report.completion_result,
         operator_status=report.operator_status,
         workflow_ref=report.workflow_ref,
+        agent_model_adapter_runtime_report_ref=(
+            report.agent_model_adapter_runtime_report_ref
+        ),
+        live_evidence_verification_runtime_report_ref=(
+            report.live_evidence_verification_runtime_report_ref
+        ),
         handoff_refs=report.handoff_refs,
         coordination_decision_refs=report.coordination_decision_refs,
         repair_signal_refs=report.repair_signal_refs,
         agent_action_trace_refs=report.agent_action_trace_refs,
+        controlled_tool_call_refs=report.controlled_tool_call_refs,
+        owner_command_refs=report.owner_command_refs,
+        review_escalation_refs=report.review_escalation_refs,
         policy_decision_refs=report.policy_decision_refs,
         command_record_refs=report.command_record_refs,
         event_cursor_refs=report.event_cursor_refs,
         outbox_refs=report.outbox_refs,
+        replay_bundle_ref=report.replay_bundle_ref,
         failure_report_refs=report.failure_report_refs,
         missing_ref_fields=report.missing_ref_fields,
+        failure_type=report.failure_type.value if report.failure_type else None,
     )
 
 
@@ -100,6 +118,11 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> MultiAgentFixt
         )
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
+    if (
+        manifest.expected_failure_type is not None
+        and report.failure_type != manifest.expected_failure_type.value
+    ):
+        raise ValueError(f"fixture {manifest.id} failure mismatch: {report.failure_type}")
     out.mkdir(parents=True, exist_ok=True)
     (out / "run_report.json").write_text(
         json.dumps(report.model_dump(mode="json"), sort_keys=True, indent=2) + "\n",

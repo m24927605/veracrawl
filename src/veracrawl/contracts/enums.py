@@ -382,6 +382,11 @@ class MultiAgentFailureType(StrEnum):
     MISSING_REPAIR_EVIDENCE = "missing_repair_evidence"
     UNRESOLVED_COORDINATION_CONFLICT = "unresolved_coordination_conflict"
     AGENT_REASONING_AS_EVIDENCE = "agent_reasoning_as_evidence"
+    MISSING_AGENT_MODEL_RUNTIME = "missing_agent_model_runtime"
+    MISSING_LIVE_EVIDENCE = "missing_live_evidence"
+    MISSING_TOOL_GATE = "missing_tool_gate"
+    MISSING_OWNER_COMMAND = "missing_owner_command"
+    MISSING_REPLAY_REFS = "missing_replay_refs"
 
 
 class ReviewItemType(StrEnum):

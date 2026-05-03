@@ -663,16 +663,23 @@ MultiAgentRepairReport:
   id: string
   run_ref: string
   workflow_ref: string
+  agent_model_adapter_runtime_report_ref: string
+  live_evidence_verification_runtime_report_ref: string
   handoff_refs: list
   coordination_decision_refs: list
   repair_signal_refs: list
   agent_action_trace_refs: list
+  controlled_tool_call_refs: list
+  owner_command_refs: list
+  review_escalation_refs: list
   policy_decision_refs: list
   command_record_refs: list
   event_cursor_refs: list
   outbox_refs: list
+  replay_bundle_ref: string
   failure_report_refs: list
   missing_ref_fields: list
+  failure_type: loop_budget_exhausted | owner_service_bypass | missing_repair_evidence | unresolved_coordination_conflict | agent_reasoning_as_evidence | missing_agent_model_runtime | missing_live_evidence | missing_tool_gate | missing_owner_command | missing_replay_refs
   operator_status: string
   completion_result: pass | fail | needs_review
   created_at: timestamp
@@ -680,10 +687,11 @@ MultiAgentRepairReport:
 
 Rules:
 
-- pass requires workflow, handoff, coordination, repair, agent trace, policy, command, event cursor, and outbox refs.
+- pass requires workflow, row 049 agent/model adapter runtime, row 047 live evidence, handoff, coordination, repair, agent trace, controlled tool, owner command, policy, command, event cursor, outbox, and replay refs.
 - agents cannot bypass owner-service commands for durable mutations.
 - before/after evidence and rollback refs are required for repair loops.
 - agent reasoning refs must not satisfy publication evidence requirements.
+- missing agent/model runtime refs, missing live evidence refs, missing controlled tool refs, missing owner command refs, or replay gaps are typed multi-agent failures.
 
 ## MemoryRetrievalTrace
 

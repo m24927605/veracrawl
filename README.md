@@ -326,12 +326,14 @@ exclusion, tainted-memory prompt-use blocking, memory replay reports, and
 memory-as-evidence boundary checks. It is not a claim that production memory
 stores, vector/search retrieval, export delivery, distributed persistence,
 production browser rendering, or production scale operations are complete.
-The multi-agent repair spine adds framework-neutral workflow, handoff,
-coordination decision, drift repair signal, repair replay report, owner-service
-boundary, arbitration, and agent-reasoning-as-evidence checks. It is not a claim
-that any concrete agent framework, model SDK, review UI, export delivery,
-distributed persistence, production browser rendering, or production scale
-operations are complete.
+The multi-agent orchestration and repair runtime adds framework-neutral workflow,
+handoff, coordination decision, crawl/extraction/drift repair signal, repair
+replay report, controlled tool refs, owner-service command refs, row 049
+agent/model adapter refs, row 047 live evidence refs, arbitration, review
+escalation, and agent-reasoning-as-evidence checks. It is not a claim that any
+concrete external agent framework, vendor model account, review UI, export
+delivery, distributed persistence, production browser rendering, or production
+scale operations are complete.
 The production persistence/queue runtime spine adds persistence adapter specs,
 transaction records, durable idempotency records, persistent queue operation
 records, a standard-library reference filesystem store, event cursor replay,
@@ -812,9 +814,16 @@ for fixture in \
   multi-agent-repair-success \
   coordination-arbitration-success \
   repair-loop-evidence-success \
+  crawl-repair-success \
+  extraction-repair-success \
   owner-service-bypass \
   unresolved-coordination-conflict \
-  agent-reasoning-as-evidence
+  agent-reasoning-as-evidence \
+  multi-agent-missing-agent-model-runtime \
+  multi-agent-missing-live-evidence \
+  multi-agent-missing-tool-gate \
+  multi-agent-missing-owner-command \
+  multi-agent-replay-mismatch
 do
   uv run --python python3.12 --extra dev veracrawl-agent-workflow run \
     tests/fixtures/$fixture \

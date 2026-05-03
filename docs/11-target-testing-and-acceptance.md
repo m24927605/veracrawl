@@ -1057,12 +1057,19 @@ Required multi-agent fixtures:
 
 | Fixture | Required acceptance |
 | --- | --- |
-| multi-agent-repair-success | workflow, handoffs, coordination decision, repair signal, agent traces, policy refs, and replay refs are complete |
+| multi-agent-repair-success | workflow, row 049 agent/model runtime, row 047 live evidence, handoffs, coordination decision, repair signal, controlled tools, owner commands, agent traces, policy refs, and replay refs are complete |
 | coordination-arbitration-success | conflicting repair proposals are resolved by explicit coordination decision and owner command ref |
 | repair-loop-evidence-success | repair loop includes before evidence, after evidence, rollback path, and policy refs |
+| crawl-repair-success | crawl repair workflow records frontier/fetch-analysis participation and owner-commanded repair refs |
+| extraction-repair-success | extraction repair workflow records extractor/verifier/drift participation and evidence-backed repair refs |
 | owner-service-bypass | agent direct durable mutation is rejected |
 | unresolved-coordination-conflict | conflicting recommendations without coordination fail replay |
 | agent-reasoning-as-evidence | agent reasoning refs used as source evidence are rejected |
+| multi-agent-missing-agent-model-runtime | missing row 049 agent/model runtime ref fails |
+| multi-agent-missing-live-evidence | missing row 047 live evidence ref fails |
+| multi-agent-missing-tool-gate | missing controlled tool refs fail |
+| multi-agent-missing-owner-command | missing owner-service command refs fail |
+| multi-agent-replay-mismatch | missing replay refs fail |
 
 Multi-agent repair acceptance requires:
 
@@ -1076,11 +1083,11 @@ Multi-agent repair acceptance requires:
 - `pytest tests/integration/test_multi_agent_fixtures.py`
 
 This acceptance proves framework-neutral workflow records, handoffs,
-coordination decisions, repair signals, replay refs, owner-service mutation
-boundaries, and agent-reasoning-as-evidence rejection. It does not prove concrete
-agent framework integration, model SDK integration, review UI, export delivery,
-distributed storage, distributed queueing, production browser rendering, or
-production scale readiness.
+coordination decisions, repair signals, row 049/047 dependency gates,
+controlled tools, owner-service mutation boundaries, replay refs, and
+agent-reasoning-as-evidence rejection. It does not prove external vendor account
+readiness, review UI, export delivery, distributed storage, distributed queueing,
+production browser rendering, or production scale readiness.
 
 Model provider adapter operational gate fixture contract:
 

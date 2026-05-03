@@ -1,0 +1,1 @@
+{"required_event_types":["multi_agent_workflow_started","agent_handoff_completed","coordination_decision_recorded","multi_agent_workflow_completed"]}

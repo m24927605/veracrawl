@@ -1,0 +1,1 @@
+{"id":"multi-agent-missing-live-evidence","scenario":"multi-agent-missing-live-evidence","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"missing_live_evidence","expected_failure_type":"missing_live_evidence","negative_case":true}

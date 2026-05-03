@@ -1,0 +1,1 @@
+{"id":"multi-agent-replay-mismatch","scenario":"multi-agent-replay-mismatch","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"missing_replay_refs","expected_failure_type":"missing_replay_refs","negative_case":true}

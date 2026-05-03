@@ -75,3 +75,30 @@ def test_multi_agent_report_pass_requires_replay_refs() -> None:
             operator_status="multi_agent_repair_completed",
             completion_result=CompletenessResult.PASS,
         )
+
+
+def test_multi_agent_report_pass_requires_adapter_evidence_tool_and_owner_refs() -> None:
+    report = MultiAgentRepairReport(
+        id="multi-agent-repair-report:unit",
+        run_ref="run:unit",
+        workflow_ref="multi-agent-workflow:unit",
+        agent_model_adapter_runtime_report_ref="agent-model-adapter-runtime-report:unit",
+        live_evidence_verification_runtime_report_ref=(
+            "live-evidence-verification-runtime-report:unit"
+        ),
+        handoff_refs=["agent-handoff:unit:extractor"],
+        coordination_decision_refs=["coordination-decision:unit:repair"],
+        repair_signal_refs=["drift-repair-signal:unit:primary"],
+        agent_action_trace_refs=["agent-trace:unit:planner"],
+        controlled_tool_call_refs=["tool-call-trace:unit:planner:controlled-tool"],
+        owner_command_refs=["command:unit:apply-repair"],
+        policy_decision_refs=["policy:unit:multi-agent"],
+        command_record_refs=["command-record:unit:multi-agent"],
+        event_cursor_refs=["event-cursor:unit:multi-agent"],
+        outbox_refs=["outbox:unit:multi-agent"],
+        replay_bundle_ref="replay-bundle:unit:multi-agent",
+        operator_status="multi_agent_repair_completed",
+        completion_result=CompletenessResult.PASS,
+    )
+    assert report.agent_model_adapter_runtime_report_ref
+    assert report.live_evidence_verification_runtime_report_ref

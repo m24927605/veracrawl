@@ -15,6 +15,7 @@ from veracrawl.contracts.enums import (
     CoordinationDecisionStatus,
     CoordinationDecisionType,
     FrameworkStatePersistence,
+    MultiAgentFailureType,
     MultiAgentWorkflowStatus,
     RepairSignalStatus,
     RuntimeType,
@@ -361,16 +362,23 @@ class MultiAgentRepairReport(TimestampedModel):
     id: str
     run_ref: Ref
     workflow_ref: Ref | None = None
+    agent_model_adapter_runtime_report_ref: Ref | None = None
+    live_evidence_verification_runtime_report_ref: Ref | None = None
     handoff_refs: list[Ref] = Field(default_factory=list)
     coordination_decision_refs: list[Ref] = Field(default_factory=list)
     repair_signal_refs: list[Ref] = Field(default_factory=list)
     agent_action_trace_refs: list[Ref] = Field(default_factory=list)
+    controlled_tool_call_refs: list[Ref] = Field(default_factory=list)
+    owner_command_refs: list[Ref] = Field(default_factory=list)
+    review_escalation_refs: list[Ref] = Field(default_factory=list)
     policy_decision_refs: list[Ref] = Field(default_factory=list)
     command_record_refs: list[Ref] = Field(default_factory=list)
     event_cursor_refs: list[Ref] = Field(default_factory=list)
     outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
     failure_report_refs: list[Ref] = Field(default_factory=list)
     missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: MultiAgentFailureType | None = None
     operator_status: str
     completion_result: CompletenessResult
 
@@ -379,22 +387,32 @@ class MultiAgentRepairReport(TimestampedModel):
         if self.completion_result == CompletenessResult.PASS:
             required = {
                 "workflow_ref": self.workflow_ref,
+                "agent_model_adapter_runtime_report_ref": (
+                    self.agent_model_adapter_runtime_report_ref
+                ),
+                "live_evidence_verification_runtime_report_ref": (
+                    self.live_evidence_verification_runtime_report_ref
+                ),
                 "handoff_refs": self.handoff_refs,
                 "coordination_decision_refs": self.coordination_decision_refs,
                 "repair_signal_refs": self.repair_signal_refs,
                 "agent_action_trace_refs": self.agent_action_trace_refs,
+                "controlled_tool_call_refs": self.controlled_tool_call_refs,
+                "owner_command_refs": self.owner_command_refs,
                 "policy_decision_refs": self.policy_decision_refs,
                 "command_record_refs": self.command_record_refs,
                 "event_cursor_refs": self.event_cursor_refs,
                 "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
             }
             missing = [name for name, value in required.items() if not value]
-            if missing or self.missing_ref_fields:
+            if missing or self.missing_ref_fields or self.failure_type:
                 raise ValueError(f"passing multi-agent repair report missing refs: {missing}")
-        if self.completion_result != CompletenessResult.PASS and not (
-            self.failure_report_refs or self.missing_ref_fields
-        ):
-            raise ValueError("non-pass multi-agent repair report requires failures")
+        if self.completion_result != CompletenessResult.PASS:
+            if self.failure_type is None:
+                raise ValueError("non-pass multi-agent repair report requires failure_type")
+            if not (self.failure_report_refs or self.missing_ref_fields):
+                raise ValueError("non-pass multi-agent repair report requires failures")
         return self
 
 
@@ -404,6 +422,7 @@ class MultiAgentFixtureManifest(TimestampedModel):
     profile_refs: list[str] = Field(default_factory=list)
     expected_completion_result: str
     expected_operator_status: str
+    expected_failure_type: MultiAgentFailureType | None = None
     negative_case: bool = False
 
     @model_validator(mode="after")

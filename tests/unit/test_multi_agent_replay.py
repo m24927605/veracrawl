@@ -25,3 +25,13 @@ def test_multi_agent_replay_reports_unresolved_conflict() -> None:
     )
     assert not multi_agent_replay_passes(result.report)
     assert "unresolved_coordination_conflict" in missing_multi_agent_replay_refs(result.report)
+
+
+def test_multi_agent_replay_requires_replay_bundle_ref() -> None:
+    result = run_multi_agent_repair(
+        fixture_id="unit-replay-mismatch",
+        scenario="multi-agent-replay-mismatch",
+        policy_decision_refs=["policy:unit:agents"],
+    )
+    assert not multi_agent_replay_passes(result.report)
+    assert "missing_replay_refs" in missing_multi_agent_replay_refs(result.report)

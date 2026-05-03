@@ -1,0 +1,1 @@
+{"id":"multi-agent-missing-tool-gate","scenario":"multi-agent-missing-tool-gate","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"missing_tool_gate","expected_failure_type":"missing_tool_gate","negative_case":true}
