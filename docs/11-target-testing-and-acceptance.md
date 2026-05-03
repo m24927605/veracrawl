@@ -2322,6 +2322,41 @@ Repair quality acceptance requires:
 This acceptance proves only repair success quality. It does not prove final
 cost/latency/stability release readiness.
 
+Cost/latency/stability quality release gate acceptance:
+
+```text
+veracrawl-quality-release-gate run tests/fixtures/<quality_release_fixture_id> --profile quality --out .veracrawl-test-runs/<quality_release_fixture_id>
+```
+
+Required quality release fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| quality-release-ready | quality gate refs from 058-063, three stability runs, cost, latency, throughput, retry, token/call, stability, policy, command/event/outbox, SLO metric, audit, release decision, and replay refs pass |
+| quality-release-missing-prior-gate | missing prior quality gate fails |
+| quality-release-cost-exceeded | cost budget failure is typed |
+| quality-release-latency-violation | p95 latency SLO failure is typed |
+| quality-release-retry-violation | retry-rate failure is typed |
+| quality-release-stability-regression | stability regression fails |
+| quality-release-insufficient-runs | insufficient stability runs fail |
+| quality-release-replay-gap | replay gap fails |
+| quality-release-false-ready | false-ready status fails |
+| quality-release-missing-command-event | missing command/event refs fail |
+
+Quality release acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_quality_release_contracts.py`
+- `pytest tests/contract/test_quality_release_contract_registry.py`
+- `pytest tests/contract/test_quality_release_import_boundaries.py`
+- `pytest tests/unit/test_quality_release_runtime.py`
+- `pytest tests/unit/test_quality_release_replay.py`
+- `pytest tests/integration/test_quality_release_fixtures.py`
+- one recorded deterministic CLI run against `tests/fixtures/quality-release-ready`
+
+This acceptance is the final production crawl quality release gate for the
+defined roadmap rows 058-064.
+
 ## Non-deceptive Completion Checklist
 
 A target capability cannot be called complete unless all answers are yes:

@@ -1167,6 +1167,23 @@ repairs, owner-service command refs, before/after evidence, rollback/escalation
 refs, policy refs, command/event/outbox refs, and replay refs. This gate does
 not claim final production-quality release readiness.
 
+Run the final quality release gate:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-quality-release-gate run \
+  tests/fixtures/quality-release-ready \
+  --profile quality \
+  --out .veracrawl-real-runs/quality-release-ready
+```
+
+The quality release gate aggregates the quality benchmark reports from rows
+058-063, requires at least three stability runs, and blocks release on missing
+quality gates, cost budget violations, latency SLO violations, retry rate
+violations, stability regressions, replay gaps, false-ready status, or missing
+command/event/outbox refs. Passing reports include prior gate refs, SLO metric
+refs, audit refs, release decision refs, policy refs, command/event/outbox refs,
+and replay refs.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

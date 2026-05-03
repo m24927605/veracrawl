@@ -88,6 +88,7 @@ veracrawl-deep-crawl-benchmark = "veracrawl.cli.deep_crawl:main"
 veracrawl-field-oracle-benchmark = "veracrawl.cli.field_oracle:main"
 veracrawl-quality-metrics = "veracrawl.cli.quality_metrics:main"
 veracrawl-repair-quality-benchmark = "veracrawl.cli.repair_success:main"
+veracrawl-quality-release-gate = "veracrawl.cli.quality_release:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

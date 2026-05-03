@@ -1331,6 +1331,33 @@ class RepairOutcome(StrEnum):
     FAILED_UNSAFE = "failed_unsafe"
 
 
+class QualityReleaseFailureType(StrEnum):
+    MISSING_QUALITY_GATE_REPORT = "quality_release_missing_quality_gate_report"
+    COST_BUDGET_EXCEEDED = "quality_release_cost_budget_exceeded"
+    LATENCY_SLO_VIOLATION = "quality_release_latency_slo_violation"
+    RETRY_RATE_EXCEEDED = "quality_release_retry_rate_exceeded"
+    STABILITY_REGRESSION = "quality_release_stability_regression"
+    INSUFFICIENT_STABILITY_RUNS = "quality_release_insufficient_stability_runs"
+    REPLAY_GAP = "quality_release_replay_gap"
+    FALSE_READY_STATUS = "quality_release_false_ready_status"
+    MISSING_COMMAND_EVENT_REFS = "quality_release_missing_command_event_refs"
+
+
+class QualityReleaseGateType(StrEnum):
+    REAL_WORLD_PUBLIC_CORPUS = "real_world_public_corpus"
+    BROWSER_QUALITY = "browser_quality"
+    DEEP_CRAWL_FRONTIER = "deep_crawl_frontier"
+    FIELD_LEVEL_ORACLE = "field_level_oracle"
+    PRECISION_RECALL = "precision_recall"
+    REPAIR_SUCCESS = "repair_success"
+
+
+class QualityReleaseDecision(StrEnum):
+    RELEASE_READY = "release_ready"
+    BLOCKED = "blocked"
+    NEEDS_REVIEW = "needs_review"
+
+
 class CredentialedSessionFailureType(StrEnum):
     POLICY_DENIED = "credentialed_session_policy_denied"
     MISSING_AUTHORIZATION = "credentialed_session_missing_authorization"

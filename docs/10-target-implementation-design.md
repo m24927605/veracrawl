@@ -1857,6 +1857,24 @@ Repair success rate benchmark:
 - this gate proves repair quality only. Cost/latency/stability release remains
   the final production-quality spec.
 
+Cost/latency/stability quality release gate:
+
+- `veracrawl.contracts.quality_release` owns `QualityReleaseManifest`,
+  `QualityReleaseThresholds`, `QualityReleaseGateRef`,
+  `QualityReleaseStabilityRun`, and `QualityReleaseReport`.
+- `veracrawl.benchmarks.quality_release` consumes prior quality gate refs for
+  rows 058-063 and deterministic stability runs instead of rerunning the
+  expensive lower benchmarks.
+- default thresholds require six prior quality gate refs, at least three
+  stability runs, total cost <= 2.50 USD, p95 latency <= 5000 ms, throughput >=
+  30 pages/minute, retry rate <= 0.10, token/model-call budgets, and stability
+  variance <= 0.05.
+- passing reports must carry policy, command/event/outbox, SLO metric, audit,
+  release decision, and replay refs.
+- missing prior gates, cost budget violations, latency SLO violations, retry
+  violations, stability regressions, insufficient runs, replay gaps, false-ready
+  status, and missing command/event refs fail with `QualityReleaseFailureType`.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

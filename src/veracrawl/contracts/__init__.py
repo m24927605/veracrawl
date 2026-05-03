@@ -271,6 +271,13 @@ from veracrawl.contracts.quality_metrics import (
     QualityMetricManifest,
     QualityMetricThresholds,
 )
+from veracrawl.contracts.quality_release import (
+    QualityReleaseGateRef,
+    QualityReleaseManifest,
+    QualityReleaseReport,
+    QualityReleaseStabilityRun,
+    QualityReleaseThresholds,
+)
 from veracrawl.contracts.real_world_ai_agent import (
     RealWorldAIAgentBenchmarkManifest,
     RealWorldAIAgentBenchmarkRunReport,
@@ -643,6 +650,11 @@ __all__ = [
     "QualityReport",
     "QualityMetricManifest",
     "QualityMetricThresholds",
+    "QualityReleaseGateRef",
+    "QualityReleaseManifest",
+    "QualityReleaseReport",
+    "QualityReleaseStabilityRun",
+    "QualityReleaseThresholds",
     "TemporalGraphProjectionRecord",
     "TemporalKGEntityIdentity",
     "TemporalKGFixtureManifest",

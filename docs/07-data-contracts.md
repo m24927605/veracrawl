@@ -6479,3 +6479,15 @@ Executable target runtime rules:
   model-only evidence, missing traces, missing rollback, unresolved critical
   repairs, and missing replay fail with typed `RepairBenchmarkFailureType`
   diagnostics.
+- Cost/latency/stability quality release contracts are
+  `QualityReleaseManifest`, `QualityReleaseThresholds`,
+  `QualityReleaseGateRef`, `QualityReleaseStabilityRun`, and
+  `QualityReleaseReport`. Passing reports require quality gate report refs for
+  rows 058-063, at least three stability runs, cost budget compliance, p95
+  latency compliance, throughput floor, retry-rate ceiling, token/model-call
+  budgets, stability variance ceiling, policy refs, command/event/outbox refs,
+  SLO metric refs, audit refs, release decision refs, and replay refs. Missing
+  prior gates, cost budget violations, latency SLO violations, retry
+  violations, stability regressions, insufficient runs, replay gaps, false-ready
+  status, and missing command/event refs fail with typed
+  `QualityReleaseFailureType` diagnostics.

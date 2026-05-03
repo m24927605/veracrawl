@@ -1,0 +1,1 @@
+{"max_p95_latency_ms": 5000, "max_retry_rate": 0.1, "max_total_cost_usd": 2.5, "min_stability_run_count": 3, "required_quality_gate_count": 6}

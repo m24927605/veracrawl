@@ -1,0 +1,1 @@
+{"expected_event_types": ["quality_release_gate_ref_recorded", "quality_release_stability_run_recorded", "quality_release_reported"]}

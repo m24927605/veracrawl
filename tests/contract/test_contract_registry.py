@@ -87,6 +87,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "real_world_ai_agent_benchmark_gate",
         "real_world_quality_corpus_gate",
         "repair_success_rate_benchmark",
+        "cost_latency_stability_quality_release_gate",
     }
     assert set(TARGET_CONTRACT_AREAS) == expected
     for area, registration in TARGET_CONTRACT_AREAS.items():

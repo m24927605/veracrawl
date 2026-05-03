@@ -91,6 +91,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_field_oracle_ref: str | None = None
     expected_quality_metrics_ref: str | None = None
     expected_repair_quality_ref: str | None = None
+    expected_quality_release_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -2057,6 +2058,40 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "repair_success",
         tests=["tests/integration/test_repair_success_fixtures.py"],
     ),
+    "QualityReleaseThresholds": _contract(
+        "QualityReleaseThresholds",
+        OwnerService.OPS,
+        "quality_release",
+        tests=["tests/contract/test_quality_release_contracts.py"],
+    ),
+    "QualityReleaseGateRef": _contract(
+        "QualityReleaseGateRef",
+        OwnerService.OPS,
+        "quality_release",
+        mutation_allowed=True,
+        tests=["tests/contract/test_quality_release_contracts.py"],
+    ),
+    "QualityReleaseStabilityRun": _contract(
+        "QualityReleaseStabilityRun",
+        OwnerService.OPS,
+        "quality_release",
+        mutation_allowed=True,
+        tests=["tests/contract/test_quality_release_contracts.py"],
+    ),
+    "QualityReleaseReport": _contract(
+        "QualityReleaseReport",
+        OwnerService.OPS,
+        "quality_release",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_quality_release_contracts.py"],
+    ),
+    "QualityReleaseManifest": _contract(
+        "QualityReleaseManifest",
+        OwnerService.TESTS,
+        "quality_release",
+        tests=["tests/integration/test_quality_release_fixtures.py"],
+    ),
     "TargetContractAreaCoverage": ContractRegistration(
         contract_name="TargetContractAreaCoverage",
         owner_service=OwnerService.CONTRACTS,
@@ -2788,6 +2823,37 @@ COMMAND_TYPES.update(
             target_aggregate_type="RepairQualityManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["repair_quality_manifest_recorded"],
+        ),
+        "record_quality_release_gate_ref": CommandTypeRegistration(
+            command_type="record_quality_release_gate_ref",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="QualityReleaseGateRef",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["quality_release_gate_ref_recorded"],
+        ),
+        "record_quality_release_stability_run": CommandTypeRegistration(
+            command_type="record_quality_release_stability_run",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="QualityReleaseStabilityRun",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["quality_release_stability_run_recorded"],
+        ),
+        "record_quality_release_report": CommandTypeRegistration(
+            command_type="record_quality_release_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="QualityReleaseReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_verification"],
+            emitted_event_types=["quality_release_reported"],
+        ),
+        "record_quality_release_manifest": CommandTypeRegistration(
+            command_type="record_quality_release_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="QualityReleaseManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["quality_release_manifest_recorded"],
         ),
         "record_normalization_manifest": CommandTypeRegistration(
             command_type="record_normalization_manifest",
@@ -3936,6 +4002,10 @@ EVENT_TYPES.update(
         "repair_attempt_trace_recorded",
         "repair_quality_reported",
         "repair_quality_manifest_recorded",
+        "quality_release_gate_ref_recorded",
+        "quality_release_stability_run_recorded",
+        "quality_release_reported",
+        "quality_release_manifest_recorded",
         "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
@@ -5437,6 +5507,30 @@ for _repair_quality_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _quality_release_fixture, _negative in {
+    "quality-release-ready": False,
+    "quality-release-missing-prior-gate": True,
+    "quality-release-cost-exceeded": True,
+    "quality-release-latency-violation": True,
+    "quality-release-retry-violation": True,
+    "quality-release-stability-regression": True,
+    "quality-release-insufficient-runs": True,
+    "quality-release-replay-gap": True,
+    "quality-release-false-ready": True,
+    "quality-release-missing-command-event": True,
+}.items():
+    _base = f"tests/fixtures/{_quality_release_fixture}"
+    FIXTURE_ORACLES[_quality_release_fixture] = FixtureOracleRegistration(
+        fixture_id=_quality_release_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_quality_release_ref=f"{_base}/oracles/expected_quality_release.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 for _credentialed_session_fixture, _negative in {
     "credentialed-session-success": False,
     "credentialed-session-missing-authorization": True,
@@ -5896,6 +5990,30 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "EvidencePacket",
             "VerificationDecision",
             "PublicationReport",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "PolicyDecision",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "cost_latency_stability_quality_release_gate": _target_area(
+        "cost_latency_stability_quality_release_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "QualityReleaseManifest",
+            "QualityReleaseThresholds",
+            "QualityReleaseGateRef",
+            "QualityReleaseStabilityRun",
+            "QualityReleaseReport",
+            "RealWorldQualityCorpusReport",
+            "BrowserQualityReport",
+            "DeepCrawlQualityReport",
+            "FieldOracleBenchmarkReport",
+            "PrecisionRecallQualityReport",
+            "RepairQualityReport",
+            "MetricSample",
             "CommandResult",
             "EventCursorRecord",
             "OutboxRecord",
