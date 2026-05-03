@@ -1555,6 +1555,15 @@ Ops replay and observability runtime slice:
 - missing result publication, missing worker orchestration, missing ops console, missing observability, stale dashboard, unresolved recovery, unsafe operator action, and replay mismatch are typed `OpsReplayObservabilityFailureType` failures.
 - this slice does not implement a production dashboard frontend, managed telemetry storage, paging integrations, production deployment automation, cloud autoscaling control, or concrete worker fleet management; it proves the canonical operator runtime contract is wired and replayable.
 
+Production benchmark release gate slice:
+
+- `ProductionBenchmarkReleaseReport` composes target runtime, source coverage, product acceptance, security/privacy, result publication/export, worker orchestration, and ops replay/observability reports into one final release decision.
+- `veracrawl.release.benchmark_gate` is deterministic core runtime composition and imports only VeraCrawl contracts plus existing core runtimes; concrete UI, telemetry, storage, queue, browser, model, agent framework, cloud, and site-specific scraper implementations remain outside core.
+- passing reports require authorized benchmark manifest/corpus refs, scenario refs, source, processing, evidence, verification, publication, export, replay, ops, scale, safety, policy, command/event/outbox, artifact, redaction, benchmark run, SLO metric, release decision, and audit refs.
+- `veracrawl-release-gate run` executes target-profile success and negative release fixtures and writes a stable `run_report.json`.
+- missing target runtime, missing source coverage, missing product acceptance, missing security/privacy, missing publication, missing worker orchestration, missing ops runtime, SLO violation, release blocker, false-ready status, and replay mismatch are typed `ProductionBenchmarkReleaseFailureType` failures.
+- this slice does not implement managed deployment, production UI, external benchmark services, cloud autoscaling control, paging integrations, or unauthorized public crawling; it proves the canonical target release contract is wired and replayable.
+
 Security/privacy lifecycle gate slice:
 
 - `veracrawl.runtime_support.security_privacy` is core-owned and imports only VeraCrawl contracts.

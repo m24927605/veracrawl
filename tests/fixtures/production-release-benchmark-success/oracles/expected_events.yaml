@@ -1,0 +1,1 @@
+{"required_events":["production_benchmark_release_reported","production_benchmark_release_fixture_manifest_recorded"],"forbidden_events":["production_release_false_ready","single_site_scraper_completed"]}

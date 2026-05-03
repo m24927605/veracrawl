@@ -585,6 +585,22 @@ class OpsReplayObservabilityFailureType(StrEnum):
     REPLAY_MISMATCH = "ops_runtime_replay_mismatch"
 
 
+class ProductionBenchmarkReleaseFailureType(StrEnum):
+    MISSING_TARGET_RUNTIME = "production_release_missing_target_runtime"
+    MISSING_SOURCE_COVERAGE = "production_release_missing_source_coverage"
+    MISSING_PRODUCT_ACCEPTANCE = "production_release_missing_product_acceptance"
+    MISSING_SECURITY_PRIVACY = "production_release_missing_security_privacy"
+    MISSING_PUBLICATION = "production_release_missing_publication"
+    MISSING_WORKER_ORCHESTRATION = (
+        "production_release_missing_worker_orchestration"
+    )
+    MISSING_OPS_RUNTIME = "production_release_missing_ops_runtime"
+    SLO_VIOLATION = "production_release_slo_violation"
+    RELEASE_BLOCKER_PRESENT = "production_release_blocker_present"
+    FALSE_READY = "production_release_false_ready"
+    REPLAY_MISMATCH = "production_release_replay_mismatch"
+
+
 class SecurityActionSurface(StrEnum):
     NETWORK = "network"
     PROMPT = "prompt"

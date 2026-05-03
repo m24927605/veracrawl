@@ -76,6 +76,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_dr_restore_ref: str | None = None
     expected_observability_ref: str | None = None
     expected_ops_runtime_ref: str | None = None
+    expected_release_ref: str | None = None
     expected_security_privacy_ref: str | None = None
     expected_agent_adapter_ref: str | None = None
     expected_agent_model_adapter_ref: str | None = None
@@ -450,6 +451,20 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "ops",
         tests=["tests/integration/test_ops_replay_observability_fixtures.py"],
+    ),
+    "ProductionBenchmarkReleaseReport": _contract(
+        "ProductionBenchmarkReleaseReport",
+        OwnerService.OPS,
+        "release",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_production_benchmark_release_contracts.py"],
+    ),
+    "ProductionBenchmarkReleaseFixtureManifest": _contract(
+        "ProductionBenchmarkReleaseFixtureManifest",
+        OwnerService.TESTS,
+        "release",
+        tests=["tests/integration/test_production_benchmark_release_fixtures.py"],
     ),
     "DRRestoreFixtureManifest": _contract(
         "DRRestoreFixtureManifest",
@@ -2941,6 +2956,29 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["ops_replay_observability_fixture_manifest_recorded"],
         ),
+        "record_production_benchmark_release_report": CommandTypeRegistration(
+            command_type="record_production_benchmark_release_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="ProductionBenchmarkReleaseReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "runtime_publication",
+                "export_dispatch",
+                "ops_recovery",
+            ],
+            emitted_event_types=["production_benchmark_release_reported"],
+        ),
+        "record_production_benchmark_release_fixture_manifest": (
+            CommandTypeRegistration(
+                command_type="record_production_benchmark_release_fixture_manifest",
+                owner_service=OwnerService.TESTS,
+                target_aggregate_type="ProductionBenchmarkReleaseFixtureManifest",
+                payload_schema_ref="BaseCommandPayload",
+                emitted_event_types=[
+                    "production_benchmark_release_fixture_manifest_recorded"
+                ],
+            )
+        ),
         "record_export_target_spec": CommandTypeRegistration(
             command_type="record_export_target_spec",
             owner_service=OwnerService.EXPORT,
@@ -3427,6 +3465,8 @@ EVENT_TYPES.update(
             "ops_console_reported",
             "ops_replay_observability_runtime_reported",
             "ops_replay_observability_fixture_manifest_recorded",
+            "production_benchmark_release_reported",
+            "production_benchmark_release_fixture_manifest_recorded",
             "export_target_recorded",
             "export_dispatched",
             "export_delivered",
@@ -4217,6 +4257,32 @@ for _ops_runtime_fixture, _negative in {
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
         expected_ops_runtime_ref=f"{_base}/oracles/expected_ops_runtime.yaml",
         expected_observability_ref=f"{_base}/oracles/expected_observability.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _production_release_fixture, _negative in {
+    "production-release-benchmark-success": False,
+    "production-release-missing-target-runtime": True,
+    "production-release-missing-source-coverage": True,
+    "production-release-missing-product-acceptance": True,
+    "production-release-missing-security-privacy": True,
+    "production-release-missing-publication": True,
+    "production-release-missing-worker-orchestration": True,
+    "production-release-missing-ops-runtime": True,
+    "production-release-slo-violation": True,
+    "production-release-blocker-present": True,
+    "production-release-false-ready": True,
+    "production-release-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_production_release_fixture}"
+    FIXTURE_ORACLES[_production_release_fixture] = FixtureOracleRegistration(
+        fixture_id=_production_release_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_release_ref=f"{_base}/oracles/expected_release.yaml",
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -5665,6 +5731,26 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "RunbookAction",
             "MetricSample",
             "TraceSpan",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "production_benchmark_release_gate": _target_area(
+        "production_benchmark_release_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "ProductionBenchmarkReleaseReport",
+            "ProductionBenchmarkReleaseFixtureManifest",
+            "TargetRuntimeReport",
+            "SourceCoverageAdapterReport",
+            "ProductAcceptanceGateReport",
+            "SecurityPrivacyReport",
+            "ResultPublicationExportRuntimeReport",
+            "WorkerOrchestrationRuntimeReport",
+            "OpsReplayObservabilityRuntimeReport",
             "CommandResult",
             "EventCursorRecord",
             "OutboxRecord",

@@ -234,6 +234,10 @@ from veracrawl.contracts.publication import (
 )
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
+from veracrawl.contracts.release import (
+    ProductionBenchmarkReleaseFixtureManifest,
+    ProductionBenchmarkReleaseReport,
+)
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
 from veracrawl.contracts.scale import (
     AutoscalingDecision,
@@ -466,6 +470,8 @@ __all__ = [
     "ProductAcceptanceFixtureManifest",
     "ProductAcceptanceGateReport",
     "ProductWorkflowReadinessRecord",
+    "ProductionBenchmarkReleaseFixtureManifest",
+    "ProductionBenchmarkReleaseReport",
     "ProjectionCleanupRecord",
     "ProjectionMismatchReport",
     "ProjectionRebuildJob",

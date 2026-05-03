@@ -391,6 +391,15 @@ recovery through canonical refs. Missing row 048 publication, missing row 052
 worker orchestration, missing ops console, missing observability, stale
 dashboards, unresolved recovery, unsafe operator action, and replay mismatch
 fail with typed diagnostics.
+The production benchmark and release gate composes target runtime, source
+coverage, product acceptance, security/privacy, result publication/export,
+worker orchestration, and ops runtime refs into one auditable production release
+decision. `veracrawl-release-gate` proves the authorized deterministic benchmark
+cannot pass unless source, processing, evidence, verification, publication,
+export, replay, ops, scale, safety, policy, command/event/outbox, artifact,
+redaction, SLO, release decision, and audit refs are present. Missing lower
+runtime gates, SLO violations, release blockers, false-ready status, and replay
+mismatch fail with typed diagnostics.
 The concrete persistence adapter spine proves executable SQLite adapter
 semantics for transactions, migrations, idempotency, event cursors, outbox,
 artifact index, queue leases, and replay refs. The Postgres descriptor is
@@ -987,6 +996,19 @@ do
     --telemetry-backend-ref telemetry-backend:local \
     --collector-handoff-ref collector-handoff:local \
     --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run production benchmark release gate fixtures:
+
+```sh
+for fixture in tests/fixtures/production-release-*; do
+  uv run --python python3.12 --extra dev veracrawl-release-gate run \
+    "$fixture" \
+    --profile target \
+    --telemetry-backend-ref telemetry-backend:local \
+    --collector-handoff-ref collector-handoff:local \
+    --out ".veracrawl-test-runs/$(basename "$fixture")"
 done
 ```
 

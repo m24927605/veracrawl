@@ -118,12 +118,12 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/053-ops-console-replay-observability/plan.md`.
-Use it with `specs/053-ops-console-replay-observability/spec.md`,
-`specs/053-ops-console-replay-observability/research.md`,
-`specs/053-ops-console-replay-observability/data-model.md`,
-`specs/053-ops-console-replay-observability/contracts/`, and
-`specs/053-ops-console-replay-observability/quickstart.md` for Ops Console, Replay, And Observability Runtime
+Current active Spec Kit plan: `specs/054-production-benchmark-release-gate/plan.md`.
+Use it with `specs/054-production-benchmark-release-gate/spec.md`,
+`specs/054-production-benchmark-release-gate/research.md`,
+`specs/054-production-benchmark-release-gate/data-model.md`,
+`specs/054-production-benchmark-release-gate/contracts/`, and
+`specs/054-production-benchmark-release-gate/quickstart.md` for Production Benchmark And Release Gate
 work. The post-037 roadmap remains governed by
 `specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
 do not invent additional production specs unless both are amended first.

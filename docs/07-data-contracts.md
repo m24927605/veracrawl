@@ -42,7 +42,7 @@ Target contract manifest:
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
-| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, OpsReplayObservabilityRuntimeReport, OpsReplayObservabilityFixtureManifest, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, ops replay/observability, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
+| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, OpsReplayObservabilityRuntimeReport, OpsReplayObservabilityFixtureManifest, ProductionBenchmarkReleaseReport, ProductionBenchmarkReleaseFixtureManifest, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, ops replay/observability, production release, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
 | PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
 | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
 | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
@@ -1219,6 +1219,8 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_worker_orchestration_fixture_manifest | tests | WorkerOrchestrationFixtureManifest | BaseCommandPayload | target profile, expected result, expected status, typed failure, and required refs validate | none | worker_orchestration_fixture_manifest_recorded | negative fixture claiming pass is rejected |
 | record_ops_replay_observability_runtime_report | ops | OpsReplayObservabilityRuntimeReport | BaseCommandPayload | publication/export, worker orchestration, ops console, observability, operator workflow, policy, command/event/outbox, redaction, and replay refs validate | expected_version | ops_replay_observability_runtime_reported | missing dependency or unsafe operator refs fail replay |
 | record_ops_replay_observability_fixture_manifest | tests | OpsReplayObservabilityFixtureManifest | BaseCommandPayload | target profile, expected result, expected status, typed failure, and required refs validate | none | ops_replay_observability_fixture_manifest_recorded | negative fixture claiming pass is rejected |
+| record_production_benchmark_release_report | ops | ProductionBenchmarkReleaseReport | BaseCommandPayload | target runtime, source coverage, product acceptance, security/privacy, publication/export, worker orchestration, ops runtime, policy, command/event/outbox, SLO, release decision, audit, and replay refs validate | expected_version | production_benchmark_release_reported | missing gate, blocker, false-ready, SLO, or replay gaps fail release |
+| record_production_benchmark_release_fixture_manifest | tests | ProductionBenchmarkReleaseFixtureManifest | BaseCommandPayload | target profile, expected result, expected release status, typed failure, and required gate refs validate | none | production_benchmark_release_fixture_manifest_recorded | negative fixture claiming pass is rejected |
 | record_queue_broker_adapter | ports | QueueBrokerAdapterSpec | BaseCommandPayload | queue names, broker capabilities, fencing, idempotency, fairness, backpressure, and policy refs validate | none | queue_broker_adapter_recorded | broker missing capability blocks operational target pass |
 | record_queue_broker_operation | scheduler | QueueBrokerOperationRecord | BaseCommandPayload | enqueue, duplicate enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, visibility, retry, fairness, backpressure, and policy refs validate | lease_required | queue_broker_operation_recorded | missing fencing, heartbeat, or dead-letter refs fail conformance |
 | record_queue_broker_conformance_report | review_replay | QueueBrokerConformanceReport | BaseCommandPayload | adapter, topology, item, broker operation, lease, heartbeat, ack/nack, dead-letter, fencing, retry, fairness, backpressure, policy, contract-only, and replay refs validate | expected_version | queue_broker_conformance_reported | runtime-unavailable brokers must report needs_review, not pass |
@@ -1651,6 +1653,8 @@ Target state transition matrix:
 | WorkerOrchestrationFixtureManifest | created before fixture execution; immutable after create | record_worker_orchestration_fixture_manifest | tests | target fixture expectations and required refs | negative pass rejection tests |
 | OpsReplayObservabilityRuntimeReport | created as pass/fail/needs_review; immutable after create | record_ops_replay_observability_runtime_report | ops | publication/export, worker orchestration, ops console, observability, operator workflow, policy, and replay refs | missing dependency, stale dashboard, unsafe action, and replay mismatch tests |
 | OpsReplayObservabilityFixtureManifest | created before fixture execution; immutable after create | record_ops_replay_observability_fixture_manifest | tests | target fixture expectations and required refs | negative pass rejection tests |
+| ProductionBenchmarkReleaseReport | created as pass/fail/needs_review; immutable after create | record_production_benchmark_release_report | ops | target runtime, source coverage, product acceptance, security/privacy, publication, worker, ops, SLO, release, audit, policy, and replay refs | missing gate, release blocker, false-ready, SLO, and replay mismatch tests |
+| ProductionBenchmarkReleaseFixtureManifest | created before fixture execution; immutable after create | record_production_benchmark_release_fixture_manifest | tests | target fixture expectations and required gate refs | negative pass rejection tests |
 | QueueBrokerAdapterSpec | proposed -> recorded/superseded | record_queue_broker_adapter | ports | queue broker policy | broker capability and import boundary tests |
 | QueueBrokerOperationRecord | created append-only | record_queue_broker_operation | scheduler | lease, fencing, retry, dead-letter policy | queue broker operation contract tests |
 | QueueBrokerConformanceReport | created as pass/fail/needs_review; immutable after create | record_queue_broker_conformance_report | review_replay | broker conformance refs, no-runtime, and failure boundaries | queue broker fixture tests |
@@ -3895,6 +3899,8 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | worker_orchestration_fixture_manifest_recorded | OpsEventPayload | WorkerOrchestrationFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required refs | fixture refs remain |
 | ops_replay_observability_runtime_reported | OpsEventPayload | OpsReplayObservabilityRuntimeReport | after required | publication/export, worker orchestration, ops console, observability, run-control, review, replay, export, recovery, DR, dashboard, alert, metric, trace, policy, command/event/outbox, redaction, and replay refs | operational refs remain |
 | ops_replay_observability_fixture_manifest_recorded | OpsEventPayload | OpsReplayObservabilityFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required refs | fixture refs remain |
+| production_benchmark_release_reported | OpsEventPayload | ProductionBenchmarkReleaseReport | after required | target runtime, source coverage, product acceptance, security/privacy, publication/export, worker orchestration, ops runtime, SLO, release decision, audit, command/event/outbox, and replay refs | operational refs remain |
+| production_benchmark_release_fixture_manifest_recorded | OpsEventPayload | ProductionBenchmarkReleaseFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required gate refs | fixture refs remain |
 | queue_broker_adapter_recorded | QueueBrokerEventPayload | QueueBrokerAdapterSpec | after required | queue names, capability refs, visibility timeout, policy refs | broker URL and credentials redacted |
 | queue_broker_operation_recorded | QueueBrokerEventPayload | QueueBrokerOperationRecord | after required | queue item, lease, fencing token hash/ref, visibility timeout, heartbeat, retry, dead-letter refs | fencing secret material redacted |
 | queue_broker_conformance_reported | QueueBrokerEventPayload | QueueBrokerConformanceReport | after required | adapter, topology, operation, lease, heartbeat, ack/nack, dead-letter, failure, contract-only, replay refs | stable refs remain |
@@ -5612,6 +5618,81 @@ Executable ops replay/observability runtime rules:
 - non-pass reports must expose `OpsReplayObservabilityFailureType` diagnostics and at least one failure, missing-ref, stale dashboard, unresolved recovery, unsafe action, observability gap, or replay gap ref.
 - target fixtures must cover review/replay success, incident recovery success, cost/alert success, missing publication, missing worker orchestration, missing ops console, missing observability, stale dashboard, unresolved recovery, unsafe operator action, and replay mismatch.
 - this runtime does not persist dashboard-only state as canonical state and does not import concrete UI frameworks, telemetry backends, storage clients, queue clients, browser engines, model SDKs, agent frameworks, or site-specific scraper modules into core.
+
+## ProductionBenchmarkReleaseReport
+
+```yaml
+ProductionBenchmarkReleaseReport:
+  id: string
+  fixture_id: string
+  run_ref: string
+  benchmark_manifest_refs: list
+  authorized_corpus_refs: list
+  benchmark_scenario_refs: list
+  target_runtime_report_ref: string
+  source_coverage_report_ref: string
+  product_acceptance_report_ref: string
+  security_privacy_report_ref: string
+  result_publication_export_report_ref: string
+  worker_orchestration_runtime_report_ref: string
+  ops_replay_observability_runtime_report_ref: string
+  source_gate_refs: list
+  processing_gate_refs: list
+  evidence_gate_refs: list
+  verification_gate_refs: list
+  publication_gate_refs: list
+  export_gate_refs: list
+  replay_gate_refs: list
+  ops_gate_refs: list
+  scale_gate_refs: list
+  safety_gate_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  artifact_refs: list
+  redaction_map_refs: list
+  benchmark_run_refs: list
+  slo_metric_refs: list
+  release_decision_refs: list
+  audit_report_refs: list
+  failure_type: production_release_missing_target_runtime | production_release_missing_source_coverage | production_release_missing_product_acceptance | production_release_missing_security_privacy | production_release_missing_publication | production_release_missing_worker_orchestration | production_release_missing_ops_runtime | production_release_slo_violation | production_release_blocker_present | production_release_false_ready | production_release_replay_mismatch
+  failure_report_refs: list
+  missing_gate_refs: list
+  slo_violation_refs: list
+  release_blocker_refs: list
+  false_ready_refs: list
+  replay_gap_refs: list
+  missing_ref_fields: list
+  diagnostics: list
+  release_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## ProductionBenchmarkReleaseFixtureManifest
+
+```yaml
+ProductionBenchmarkReleaseFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_release_status: string
+  expected_failure_type: production_release_missing_target_runtime | production_release_missing_source_coverage | production_release_missing_product_acceptance | production_release_missing_security_privacy | production_release_missing_publication | production_release_missing_worker_orchestration | production_release_missing_ops_runtime | production_release_slo_violation | production_release_blocker_present | production_release_false_ready | production_release_replay_mismatch
+  negative_case: boolean
+  required_gate_refs: list
+  created_at: timestamp
+```
+
+Executable production benchmark release rules:
+
+- pass requires `TargetRuntimeReport`, `SourceCoverageAdapterReport`, `ProductAcceptanceGateReport`, `SecurityPrivacyReport`, `ResultPublicationExportRuntimeReport`, `WorkerOrchestrationRuntimeReport`, and `OpsReplayObservabilityRuntimeReport` refs.
+- pass requires authorized benchmark manifest/corpus, scenario, source, processing, evidence, verification, publication, export, replay, ops, scale, safety, policy, command, event cursor, outbox, artifact, redaction, SLO metric, release decision, and audit refs.
+- pass is rejected when typed failures, missing gate refs, SLO violations, release blockers, false-ready refs, replay gaps, or missing refs are present.
+- non-pass reports must expose `ProductionBenchmarkReleaseFailureType` diagnostics and at least one failure, missing gate, SLO, blocker, false-ready, replay, or missing-ref detail.
+- target fixtures must cover benchmark success, missing target runtime, missing source coverage, missing product acceptance, missing security/privacy, missing publication, missing worker orchestration, missing ops runtime, SLO violation, release blocker, false-ready status, and replay mismatch.
+- this release gate does not contact unauthorized public websites and does not import concrete UI frameworks, telemetry backends, storage clients, queue clients, browser engines, model SDKs, agent frameworks, cloud SDKs, or site-specific scraper modules into core.
 
 ## Target Crawl Runtime Contracts
 

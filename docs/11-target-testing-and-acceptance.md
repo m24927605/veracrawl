@@ -1398,6 +1398,45 @@ UI, managed telemetry storage, paging integrations, production deployment
 automation, cloud autoscaling control, concrete worker fleet management, or
 site-specific scraper behavior.
 
+Production benchmark release fixture contract:
+
+```text
+veracrawl-release-gate run tests/fixtures/<production_release_fixture_id> --profile target --telemetry-backend-ref telemetry-backend:test --collector-handoff-ref collector-handoff:test --out .veracrawl-test-runs/<production_release_fixture_id>
+```
+
+Required release fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| production-release-benchmark-success | target runtime, source coverage, product acceptance, security/privacy, publication/export, worker orchestration, ops runtime, source, processing, evidence, verification, publication, export, replay, ops, scale, safety, policy, command/event/outbox, artifact, redaction, SLO, release decision, and audit refs are complete |
+| production-release-missing-target-runtime | missing target runtime fails with `production_release_missing_target_runtime` |
+| production-release-missing-source-coverage | missing source coverage fails with `production_release_missing_source_coverage` |
+| production-release-missing-product-acceptance | missing product acceptance fails with `production_release_missing_product_acceptance` |
+| production-release-missing-security-privacy | missing security/privacy fails with `production_release_missing_security_privacy` |
+| production-release-missing-publication | missing result publication/export fails with `production_release_missing_publication` |
+| production-release-missing-worker-orchestration | missing worker orchestration fails with `production_release_missing_worker_orchestration` |
+| production-release-missing-ops-runtime | missing ops replay/observability runtime fails with `production_release_missing_ops_runtime` |
+| production-release-slo-violation | SLO violation blocks release with `production_release_slo_violation` |
+| production-release-blocker-present | release blocker blocks release with `production_release_blocker_present` |
+| production-release-false-ready | false release-ready status fails with `production_release_false_ready` |
+| production-release-replay-mismatch | replay mismatch fails with `production_release_replay_mismatch` |
+
+Production release acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_production_benchmark_release_contracts.py`
+- `pytest tests/contract/test_production_benchmark_release_contract_registry.py`
+- `pytest tests/contract/test_production_benchmark_release_import_boundaries.py`
+- `pytest tests/unit/test_production_benchmark_release_gate.py`
+- `pytest tests/unit/test_production_benchmark_release_replay.py`
+- `pytest tests/integration/test_production_benchmark_release_fixtures.py`
+- `veracrawl-release-gate` CLI loop over all production release fixtures
+
+This acceptance proves final target release readiness can be approved or
+blocked from canonical refs. It does not prove managed deployment, production
+UI, external benchmark services, cloud autoscaling control, paging integrations,
+or unauthorized public crawling.
+
 Export connector fixture contract:
 
 ```text
@@ -1910,6 +1949,10 @@ Acceptance gates:
 - `ops-runtime-review-replay-success`, `ops-runtime-incident-recovery-success`, and `ops-runtime-cost-alert-success` pass only when operator workflow, review, replay, graph/debug, export/withdrawal, failure/recovery, DR, quality, dashboard, alert, runbook, cost, signal, metric, trace, policy, command/event/outbox, redaction, and replay refs are present
 - `ops-runtime-missing-publication`, `ops-runtime-missing-worker-orchestration`, `ops-runtime-missing-ops-console`, `ops-runtime-missing-observability`, `ops-runtime-stale-dashboard`, `ops-runtime-unresolved-recovery`, `ops-runtime-unsafe-operator-action`, and `ops-runtime-replay-mismatch` fail deterministically with typed `OpsReplayObservabilityFailureType` diagnostics
 - ops replay/observability import-boundary tests prove core does not import concrete UI frameworks, telemetry clients, storage clients, queue clients, browser runtimes, model SDKs, agent frameworks, or site-specific scraper modules
+- production benchmark release fixtures prove target runtime, source coverage, product acceptance, security/privacy, publication/export, worker orchestration, and ops runtime reports compose into one auditable release report
+- `production-release-benchmark-success` passes only when source, processing, evidence, verification, publication, export, replay, ops, scale, safety, policy, command/event/outbox, artifact, redaction, SLO, release decision, and audit refs are present
+- `production-release-missing-target-runtime`, `production-release-missing-source-coverage`, `production-release-missing-product-acceptance`, `production-release-missing-security-privacy`, `production-release-missing-publication`, `production-release-missing-worker-orchestration`, `production-release-missing-ops-runtime`, `production-release-slo-violation`, `production-release-blocker-present`, `production-release-false-ready`, and `production-release-replay-mismatch` fail deterministically with typed `ProductionBenchmarkReleaseFailureType` diagnostics
+- production release import-boundary tests prove core does not import concrete UI frameworks, telemetry clients, storage clients, queue clients, browser runtimes, model SDKs, agent frameworks, cloud SDKs, or site-specific scraper modules
 
 ### Target Crawl Runtime Profile
 
