@@ -6,6 +6,7 @@ from pydantic import Field, model_validator
 
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import (
+    AdapterType,
     AgentRecommendationSubject,
     CompletenessResult,
     TargetRuntimeFailureType,
@@ -128,6 +129,9 @@ class TargetRuntimeReport(TimestampedModel):
     pattern_record_refs: list[Ref] = Field(default_factory=list)
     source_observation_refs: list[Ref] = Field(default_factory=list)
     content_hash_refs: list[Ref] = Field(default_factory=list)
+    adapter_backed_source_refs: list[Ref] = Field(default_factory=list)
+    source_adapter_result_refs: list[Ref] = Field(default_factory=list)
+    adapter_output_refs: list[Ref] = Field(default_factory=list)
     accepted_output_refs: list[Ref] = Field(default_factory=list)
     evidence_refs: list[Ref] = Field(default_factory=list)
     verification_refs: list[Ref] = Field(default_factory=list)
@@ -199,12 +203,14 @@ class TargetRuntimeFixtureManifest(TimestampedModel):
     scenario: str
     profile_refs: list[str] = Field(default_factory=list)
     source_corpus_ref: Ref | None = None
+    adapter_backed_source_ref: Ref | None = None
     expected_status: TargetRuntimeStatus
     expected_completion_result: CompletenessResult
     expected_operator_status: str
     expected_failure_type: TargetRuntimeFailureType | None = None
     expected_pattern_count: int = 0
     expected_source_observation_count: int = 0
+    expected_adapter_result_count: int = 0
     negative_case: bool = False
 
     @model_validator(mode="after")
@@ -326,4 +332,103 @@ class TargetSourceObservationRecord(TimestampedModel):
             )
             if not has_failure_diagnostics:
                 raise ValueError("failed source observation requires diagnostics")
+        return self
+
+
+class TargetAdapterBackedSourceEntry(TimestampedModel):
+    id: str
+    corpus_entry_ref: Ref
+    adapter_type: AdapterType
+    adapter_spec_ref: Ref
+    adapter_source_ref: Ref
+    policy_decision_ref: Ref
+    expected_output_ref: Ref | None = None
+    expected_content_hash_ref: Ref | None = None
+    require_source_adapter_result: bool = True
+    allow_direct_source_fallback: bool = False
+    policy_denied: bool = False
+    simulate_missing_adapter_result: bool = False
+    simulate_direct_source_bypass: bool = False
+
+    @model_validator(mode="after")
+    def validate_adapter_backed_entry(self) -> TargetAdapterBackedSourceEntry:
+        if not (self.adapter_spec_ref and self.adapter_source_ref and self.policy_decision_ref):
+            raise ValueError("adapter-backed source entry requires adapter and policy refs")
+        simulated_negative = (
+            self.simulate_missing_adapter_result or self.simulate_direct_source_bypass
+        )
+        if (
+            not self.require_source_adapter_result
+            and not self.allow_direct_source_fallback
+            and not simulated_negative
+        ):
+            raise ValueError("adapter-backed source entry cannot omit adapter result proof")
+        return self
+
+
+class TargetAdapterBackedSourceManifest(TimestampedModel):
+    id: str
+    fixture_id: str
+    entries: list[TargetAdapterBackedSourceEntry] = Field(default_factory=list)
+    required_adapter_types: list[AdapterType] = Field(default_factory=list)
+    expected_adapter_result_count: int
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_oracle_ref: Ref
+    allow_direct_source_fallback: bool = False
+
+    @model_validator(mode="after")
+    def validate_adapter_backed_manifest(self) -> TargetAdapterBackedSourceManifest:
+        corpus_refs = [entry.corpus_entry_ref for entry in self.entries]
+        if len(corpus_refs) != len(set(corpus_refs)):
+            raise ValueError("adapter-backed source corpus refs must be unique")
+        if self.expected_adapter_result_count > 0 and not self.required_adapter_types:
+            raise ValueError("adapter-backed source manifest requires adapter types")
+        if not self.policy_decision_refs:
+            raise ValueError("adapter-backed source manifest requires policy refs")
+        if self.allow_direct_source_fallback:
+            raise ValueError("adapter-backed source manifest cannot allow direct fallback")
+        return self
+
+
+class TargetAdapterBackedSourceRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    corpus_entry_ref: Ref
+    adapter_type: AdapterType
+    source_adapter_result_ref: Ref | None = None
+    adapter_output_refs: list[Ref] = Field(default_factory=list)
+    adapter_policy_decision_refs: list[Ref] = Field(default_factory=list)
+    adapter_replay_refs: list[Ref] = Field(default_factory=list)
+    source_observation_ref: Ref | None = None
+    content_hash_ref: Ref | None = None
+    direct_source_bypass_refs: list[Ref] = Field(default_factory=list)
+    missing_adapter_result_refs: list[Ref] = Field(default_factory=list)
+    adapter_output_mismatch_refs: list[Ref] = Field(default_factory=list)
+    policy_denied_refs: list[Ref] = Field(default_factory=list)
+    replay_mismatch_refs: list[Ref] = Field(default_factory=list)
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_adapter_backed_record(self) -> TargetAdapterBackedSourceRecord:
+        diagnostics = (
+            self.direct_source_bypass_refs
+            or self.missing_adapter_result_refs
+            or self.adapter_output_mismatch_refs
+            or self.policy_denied_refs
+            or self.replay_mismatch_refs
+        )
+        if self.result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "source_adapter_result_ref": self.source_adapter_result_ref,
+                "adapter_output_refs": self.adapter_output_refs,
+                "adapter_policy_decision_refs": self.adapter_policy_decision_refs,
+                "adapter_replay_refs": self.adapter_replay_refs,
+                "source_observation_ref": self.source_observation_ref,
+                "content_hash_ref": self.content_hash_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing or diagnostics:
+                raise ValueError(f"passing adapter-backed source missing refs: {missing}")
+        elif not diagnostics:
+            raise ValueError("failed adapter-backed source requires typed diagnostics")
         return self

@@ -5435,6 +5435,9 @@ TargetRuntimeReport:
   artifact_refs: list
   source_observation_refs: list
   content_hash_refs: list
+  adapter_backed_source_refs: list
+  source_adapter_result_refs: list
+  adapter_output_refs: list
   ai_recommendation_refs: list
   repair_action_refs: list
   review_item_refs: list
@@ -5453,12 +5456,14 @@ TargetRuntimeFixtureManifest:
   scenario: string
   profile_refs: list
   source_corpus_ref: string | null
+  adapter_backed_source_ref: string | null
   expected_status: complete | needs_review | blocked | failed
   expected_completion_result: pass | fail | needs_review
   expected_operator_status: string
   expected_failure_type: string | null
   expected_pattern_count: integer
   expected_source_observation_count: integer
+  expected_adapter_result_count: integer
   negative_case: boolean
 ```
 
@@ -5510,6 +5515,55 @@ TargetSourceObservationRecord:
   result: pass | fail | needs_review
 ```
 
+```yaml
+TargetAdapterBackedSourceEntry:
+  id: string
+  corpus_entry_ref: string
+  adapter_type: http | sitemap | rss | browser_snapshot | api_source | document_source | ...
+  adapter_spec_ref: string
+  adapter_source_ref: string
+  policy_decision_ref: string
+  expected_output_ref: string | null
+  expected_content_hash_ref: string | null
+  require_source_adapter_result: boolean
+  allow_direct_source_fallback: boolean
+  policy_denied: boolean
+  simulate_missing_adapter_result: boolean
+  simulate_direct_source_bypass: boolean
+```
+
+```yaml
+TargetAdapterBackedSourceManifest:
+  id: string
+  fixture_id: string
+  entries: list[TargetAdapterBackedSourceEntry]
+  required_adapter_types: list
+  expected_adapter_result_count: integer
+  policy_decision_refs: list
+  replay_oracle_ref: string
+  allow_direct_source_fallback: boolean
+```
+
+```yaml
+TargetAdapterBackedSourceRecord:
+  id: string
+  run_ref: string
+  corpus_entry_ref: string
+  adapter_type: http | sitemap | rss | browser_snapshot | api_source | document_source | ...
+  source_adapter_result_ref: string | null
+  adapter_output_refs: list
+  adapter_policy_decision_refs: list
+  adapter_replay_refs: list
+  source_observation_ref: string | null
+  content_hash_ref: string | null
+  direct_source_bypass_refs: list
+  missing_adapter_result_refs: list
+  adapter_output_mismatch_refs: list
+  policy_denied_refs: list
+  replay_mismatch_refs: list
+  result: pass | fail | needs_review
+```
+
 Executable target runtime rules:
 
 - `TargetRuntimeReport` can claim `complete` only when at least seven website patterns have pattern records and accepted outputs, evidence, verification, graph, export, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay refs exist.
@@ -5521,3 +5575,9 @@ Executable target runtime rules:
   observations require content hash, artifact, evidence, graph, policy, and
   replay refs derived from source content. Blocked or failed observations must
   carry typed diagnostics and cannot contribute to a complete report.
+- Adapter-backed target runtime fixtures require `TargetAdapterBackedSourceManifest`
+  and adapter-backed records for declared corpus entries. Passing adapter-backed
+  records require source adapter result, adapter output, adapter policy, adapter
+  replay, source observation, and content hash refs. Missing adapter results,
+  adapter output mismatches, policy-denied adapter output, replay mismatch, or
+  direct source bypass block target completion.

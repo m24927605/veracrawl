@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import Any, cast
 
 from pydantic import ValidationError
 
 from veracrawl.contracts.target_runtime import (
+    TargetAdapterBackedSourceManifest,
+    TargetAdapterBackedSourceRecord,
     TargetRuntimeFixtureManifest,
     TargetRuntimeReport,
+    TargetSourceCorpusManifest,
 )
 from veracrawl.target_runtime.runner import run_target_runtime_fixture
 
@@ -25,18 +31,58 @@ def _load_json_like(path: Path) -> dict[str, Any]:
     return data
 
 
+def _load_module(module_name: str) -> ModuleType:
+    return importlib.import_module(module_name)
+
+
+def _adapter_records_for(
+    fixture_dir: Path,
+    *,
+    adapter_backed_source_ref: str,
+    source_corpus_ref: str | None,
+) -> tuple[TargetAdapterBackedSourceManifest, list[TargetAdapterBackedSourceRecord]]:
+    if source_corpus_ref is None:
+        raise ValueError("adapter-backed target runtime requires source_corpus_ref")
+    adapter_manifest = TargetAdapterBackedSourceManifest.model_validate(
+        _load_json_like(fixture_dir / adapter_backed_source_ref)
+    )
+    source_corpus = TargetSourceCorpusManifest.model_validate(
+        _load_json_like(fixture_dir / source_corpus_ref)
+    )
+    module = _load_module("veracrawl.adapters.sources.target_runtime")
+    builder = cast(
+        Callable[..., list[TargetAdapterBackedSourceRecord]],
+        module.__dict__["build_adapter_backed_source_records"],
+    )
+    return adapter_manifest, builder(
+        fixture_dir=fixture_dir,
+        adapter_manifest=adapter_manifest,
+        source_corpus=source_corpus,
+    )
+
+
 def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeReport:
     manifest = TargetRuntimeFixtureManifest.model_validate(
         _load_json_like(fixture_dir / "manifest.yaml")
     )
     if profile not in manifest.profile_refs:
         raise ValueError(f"fixture {manifest.id} does not support profile {profile}")
+    adapter_manifest: TargetAdapterBackedSourceManifest | None = None
+    adapter_records: list[TargetAdapterBackedSourceRecord] | None = None
+    if manifest.adapter_backed_source_ref is not None:
+        adapter_manifest, adapter_records = _adapter_records_for(
+            fixture_dir,
+            adapter_backed_source_ref=manifest.adapter_backed_source_ref,
+            source_corpus_ref=manifest.source_corpus_ref,
+        )
     result = run_target_runtime_fixture(
         fixture_id=manifest.id,
         scenario=manifest.scenario,
         profile=profile,
         fixture_dir=fixture_dir,
         source_corpus_ref=manifest.source_corpus_ref,
+        adapter_manifest=adapter_manifest,
+        adapter_records=adapter_records,
     )
     report = result.report
     if report.status != manifest.expected_status:
@@ -64,6 +110,11 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeR
         raise ValueError(
             f"expected {manifest.expected_source_observation_count} source observations, "
             f"got {len(report.source_observation_refs)}"
+        )
+    if len(report.source_adapter_result_refs) < manifest.expected_adapter_result_count:
+        raise ValueError(
+            f"expected {manifest.expected_adapter_result_count} source adapter results, "
+            f"got {len(report.source_adapter_result_refs)}"
         )
     out.mkdir(parents=True, exist_ok=True)
     (out / "run_report.json").write_text(

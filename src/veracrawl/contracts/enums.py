@@ -1163,6 +1163,9 @@ class TargetRuntimeFailureType(StrEnum):
     FALSE_COMPLETE = "target_runtime_false_complete"
     DRIFT_REPAIR_REQUIRED = "target_runtime_drift_repair_required"
     ORACLE_MISMATCH = "target_runtime_oracle_mismatch"
+    ADAPTER_RESULT_MISSING = "target_runtime_adapter_result_missing"
+    ADAPTER_OUTPUT_MISMATCH = "target_runtime_adapter_output_mismatch"
+    DIRECT_SOURCE_BYPASS = "target_runtime_direct_source_bypass"
 
 
 class GraphNodeType(StrEnum):

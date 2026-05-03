@@ -40,3 +40,13 @@ def test_target_runtime_core_has_no_concrete_framework_imports() -> None:
     for path in files:
         imported = _import_roots(path)
         assert not (imported & FORBIDDEN_IMPORT_ROOTS), (path, imported)
+
+
+def test_target_runtime_core_does_not_import_concrete_adapters() -> None:
+    files = [
+        Path("src/veracrawl/contracts/target_runtime.py"),
+        *Path("src/veracrawl/target_runtime").glob("*.py"),
+    ]
+    for path in files:
+        source = path.read_text(encoding="utf-8")
+        assert "veracrawl.adapters" not in source, path

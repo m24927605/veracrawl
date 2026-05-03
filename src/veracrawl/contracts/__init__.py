@@ -243,6 +243,9 @@ from veracrawl.contracts.source_runtime import (
     SourceFixtureManifest,
 )
 from veracrawl.contracts.target_runtime import (
+    TargetAdapterBackedSourceEntry,
+    TargetAdapterBackedSourceManifest,
+    TargetAdapterBackedSourceRecord,
     TargetAIRecommendationRecord,
     TargetCrawlPatternRecord,
     TargetRuntimeFixtureManifest,
@@ -460,6 +463,9 @@ __all__ = [
     "TemporalKGProjectionRecord",
     "TemporalKGRuntimeReport",
     "TargetAIRecommendationRecord",
+    "TargetAdapterBackedSourceEntry",
+    "TargetAdapterBackedSourceManifest",
+    "TargetAdapterBackedSourceRecord",
     "TargetCrawlPatternRecord",
     "TargetSourceCorpusEntry",
     "TargetSourceCorpusManifest",

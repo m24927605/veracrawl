@@ -231,6 +231,10 @@ Required acceptance:
 - source-backed target runtime fixtures must prove at least seven website
   patterns from local source corpora by deriving source observations, content
   hashes, evidence, graph, export, and replay refs from actual fixture content
+- adapter-backed target runtime fixtures must prove that source-backed
+  observations can be tied to source adapter result refs, adapter output refs,
+  adapter policy refs, and adapter replay refs without importing concrete
+  adapters into target runtime core
 - target product acceptance workflows pass through `ProductAcceptanceGateReport`
 - every output type has evidence coverage and publication acceptance checks
 - no adapter, pattern, or output type can be labeled target-complete while scaffolded, untested, or manually simulated

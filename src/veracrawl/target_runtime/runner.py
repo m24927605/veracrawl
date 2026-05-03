@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from veracrawl.contracts.common import Ref
@@ -16,6 +16,8 @@ from veracrawl.contracts.enums import (
     TargetWebsitePattern,
 )
 from veracrawl.contracts.target_runtime import (
+    TargetAdapterBackedSourceManifest,
+    TargetAdapterBackedSourceRecord,
     TargetAIRecommendationRecord,
     TargetCrawlPatternRecord,
     TargetRuntimeReport,
@@ -31,6 +33,7 @@ class TargetRuntimeResult:
     ai_recommendations: list[TargetAIRecommendationRecord]
     report: TargetRuntimeReport
     source_observations: list[TargetSourceObservationRecord]
+    adapter_backed_records: list[TargetAdapterBackedSourceRecord] = field(default_factory=list)
 
 
 _TARGET_PATTERNS: tuple[TargetWebsitePattern, ...] = (
@@ -84,6 +87,8 @@ def run_target_runtime_fixture(
     profile: str = "target",
     fixture_dir: Path | None = None,
     source_corpus_ref: Ref | None = None,
+    adapter_manifest: TargetAdapterBackedSourceManifest | None = None,
+    adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
 ) -> TargetRuntimeResult:
     if profile != "target":
         raise ValueError(f"unsupported target runtime profile: {profile}")
@@ -95,6 +100,8 @@ def run_target_runtime_fixture(
             scenario=scenario,
             fixture_dir=fixture_dir,
             source_corpus_ref=source_corpus_ref,
+            adapter_manifest=adapter_manifest,
+            adapter_records=adapter_records,
         )
     if scenario == "target-runtime-needs-review":
         return _needs_review_result(fixture_id)
@@ -249,6 +256,8 @@ def _source_backed_result(
     scenario: str,
     fixture_dir: Path,
     source_corpus_ref: Ref,
+    adapter_manifest: TargetAdapterBackedSourceManifest | None = None,
+    adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
 ) -> TargetRuntimeResult:
     corpus = TargetSourceCorpusManifest.model_validate(
         json.loads((fixture_dir / source_corpus_ref).read_text(encoding="utf-8"))
@@ -288,6 +297,7 @@ def _source_backed_result(
             missing_ref_fields=["source_policy_refs"],
             extra_policy_refs=corpus.policy_decision_refs + policy_denials,
             observations=observations,
+            adapter_records=adapter_records or [],
         )
     if prompt_injections:
         return _source_backed_failure(
@@ -298,6 +308,7 @@ def _source_backed_result(
             missing_ref_fields=["trusted_prompt_boundary_ref"],
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
+            adapter_records=adapter_records or [],
         )
     if missing_fields:
         return _source_backed_failure(
@@ -308,6 +319,28 @@ def _source_backed_result(
             missing_ref_fields=["evidence_refs"],
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
+            adapter_records=adapter_records or [],
+        )
+    adapter_failure = _adapter_backed_failure(
+        adapter_manifest=adapter_manifest,
+        adapter_records=adapter_records or [],
+        observations=observations,
+    )
+    if adapter_failure is not None:
+        failure, status, missing_ref_fields, diagnostics = adapter_failure
+        return _source_backed_failure(
+            fixture_id=fixture_id,
+            failure=failure,
+            status=status,
+            diagnostics=diagnostics,
+            missing_ref_fields=missing_ref_fields,
+            extra_policy_refs=_adapter_policy_refs(
+                corpus.policy_decision_refs,
+                adapter_records or [],
+                adapter_manifest,
+            ),
+            observations=observations,
+            adapter_records=adapter_records or [],
         )
     if replay_mismatches or scenario == "source-backed-target-replay-mismatch":
         return _source_backed_failure(
@@ -318,6 +351,7 @@ def _source_backed_result(
             missing_ref_fields=["replay_bundle_ref"],
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
+            adapter_records=adapter_records or [],
         )
     if not corpus.export_complete or scenario == "source-backed-target-partial-export":
         return _source_backed_failure(
@@ -328,14 +362,126 @@ def _source_backed_result(
             missing_ref_fields=["export_receipt_refs"],
             extra_policy_refs=corpus.policy_decision_refs,
             observations=observations,
+            adapter_records=adapter_records or [],
         )
 
     return _source_backed_success(
         fixture_id=fixture_id,
         observations=observations,
         repaired_fields=repaired_fields,
-        policy_refs=corpus.policy_decision_refs,
+        policy_refs=_adapter_policy_refs(
+            corpus.policy_decision_refs,
+            adapter_records or [],
+            adapter_manifest,
+        ),
+        adapter_records=adapter_records or [],
     )
+
+
+def _adapter_backed_failure(
+    *,
+    adapter_manifest: TargetAdapterBackedSourceManifest | None,
+    adapter_records: list[TargetAdapterBackedSourceRecord],
+    observations: list[TargetSourceObservationRecord],
+) -> tuple[TargetRuntimeFailureType, TargetRuntimeStatus, list[str], list[str]] | None:
+    if adapter_manifest is None:
+        return None
+    record_by_entry = {record.corpus_entry_ref: record for record in adapter_records}
+    observation_by_entry = {
+        observation.corpus_entry_ref: observation for observation in observations
+    }
+    missing_entries = [
+        entry.corpus_entry_ref
+        for entry in adapter_manifest.entries
+        if entry.corpus_entry_ref not in record_by_entry
+    ]
+    passing_records = [
+        record for record in adapter_records if record.result == CompletenessResult.PASS
+    ]
+    for record in adapter_records:
+        observation = observation_by_entry.get(record.corpus_entry_ref)
+        if record.direct_source_bypass_refs:
+            return (
+                TargetRuntimeFailureType.DIRECT_SOURCE_BYPASS,
+                TargetRuntimeStatus.FAILED,
+                ["source_adapter_result_refs"],
+                ["adapter-backed target runtime detected direct source bypass"],
+            )
+        if record.missing_adapter_result_refs:
+            return (
+                TargetRuntimeFailureType.ADAPTER_RESULT_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["source_adapter_result_refs"],
+                ["adapter-backed target runtime missing source adapter result refs"],
+            )
+        if record.policy_denied_refs:
+            return (
+                TargetRuntimeFailureType.POLICY_DENIED,
+                TargetRuntimeStatus.BLOCKED,
+                ["source_policy_refs"],
+                ["adapter-backed source adapter output denied by policy"],
+            )
+        if record.adapter_output_mismatch_refs:
+            return (
+                TargetRuntimeFailureType.ADAPTER_OUTPUT_MISMATCH,
+                TargetRuntimeStatus.FAILED,
+                ["adapter_output_refs"],
+                ["adapter-backed source adapter output did not match oracle"],
+            )
+        if record.replay_mismatch_refs:
+            return (
+                TargetRuntimeFailureType.REPLAY_MISMATCH,
+                TargetRuntimeStatus.FAILED,
+                ["replay_bundle_ref"],
+                ["adapter-backed source adapter replay refs did not match oracle"],
+            )
+        if observation is None:
+            return (
+                TargetRuntimeFailureType.ADAPTER_RESULT_MISSING,
+                TargetRuntimeStatus.FAILED,
+                ["source_observation_refs"],
+                ["adapter-backed source record has no matching source observation"],
+            )
+        if (
+            record.source_observation_ref != observation.source_observation_ref
+            or record.content_hash_ref != observation.content_hash_ref
+        ):
+            return (
+                TargetRuntimeFailureType.REPLAY_MISMATCH,
+                TargetRuntimeStatus.FAILED,
+                ["content_hash_refs"],
+                ["adapter-backed source content hash does not match observation"],
+            )
+    if missing_entries or len(passing_records) < adapter_manifest.expected_adapter_result_count:
+        return (
+            TargetRuntimeFailureType.ADAPTER_RESULT_MISSING,
+            TargetRuntimeStatus.FAILED,
+            ["source_adapter_result_refs"],
+            ["adapter-backed target runtime missing source adapter result refs"],
+        )
+    required_types = set(adapter_manifest.required_adapter_types)
+    covered_types = {record.adapter_type for record in passing_records}
+    if required_types - covered_types:
+        return (
+            TargetRuntimeFailureType.ADAPTER_RESULT_MISSING,
+            TargetRuntimeStatus.FAILED,
+            ["source_adapter_result_refs"],
+            ["adapter-backed target runtime missing required adapter type refs"],
+        )
+    return None
+
+
+def _adapter_policy_refs(
+    policy_refs: list[Ref],
+    adapter_records: list[TargetAdapterBackedSourceRecord],
+    adapter_manifest: TargetAdapterBackedSourceManifest | None,
+) -> list[Ref]:
+    refs = list(policy_refs)
+    if adapter_manifest is not None:
+        refs.extend(adapter_manifest.policy_decision_refs)
+    for record in adapter_records:
+        refs.extend(record.adapter_policy_decision_refs)
+    return sorted(set(refs))
 
 
 def _observe_source_entry(
@@ -393,15 +539,20 @@ def _source_backed_success(
     observations: list[TargetSourceObservationRecord],
     repaired_fields: list[Ref],
     policy_refs: list[Ref],
+    adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
 ) -> TargetRuntimeResult:
     command_refs = _command_refs(fixture_id)
     event_refs = _event_refs(fixture_id) + [f"event-cursor:{fixture_id}:source-backed"]
     outbox_refs = _outbox_refs(fixture_id)
     replay_ref = _replay_ref(fixture_id)
+    adapter_record_by_entry = {
+        record.corpus_entry_ref: record for record in (adapter_records or [])
+    }
     pattern_records = [
         _pattern_record_from_observation(
             fixture_id=fixture_id,
             observation=observation,
+            adapter_record=adapter_record_by_entry.get(observation.corpus_entry_ref),
             command_refs=command_refs,
             event_refs=event_refs,
             outbox_refs=outbox_refs,
@@ -437,6 +588,17 @@ def _source_backed_success(
             for observation in observations
             if observation.content_hash_ref is not None
         ],
+        adapter_backed_source_refs=[record.id for record in adapter_records or []],
+        source_adapter_result_refs=[
+            record.source_adapter_result_ref
+            for record in adapter_records or []
+            if record.source_adapter_result_ref is not None
+        ],
+        adapter_output_refs=[
+            output_ref
+            for record in adapter_records or []
+            for output_ref in record.adapter_output_refs
+        ],
         accepted_output_refs=_collect(pattern_records, "accepted_output_refs"),
         evidence_refs=_collect(pattern_records, "evidence_refs"),
         verification_refs=_collect(pattern_records, "verification_refs"),
@@ -453,9 +615,13 @@ def _source_backed_success(
         recovery_action_refs=[f"recovery-action:{fixture_id}:source-backed"],
         privacy_lifecycle_refs=[f"privacy:{fixture_id}:source-backed"],
         replay_bundle_ref=replay_ref,
-        operator_status="source_backed_target_runtime_completed",
+        operator_status=(
+            "adapter_backed_target_runtime_completed"
+            if adapter_records
+            else "source_backed_target_runtime_completed"
+        ),
     )
-    return TargetRuntimeResult(pattern_records, [ai], report, observations)
+    return TargetRuntimeResult(pattern_records, [ai], report, observations, adapter_records or [])
 
 
 def _source_backed_failure(
@@ -467,6 +633,7 @@ def _source_backed_failure(
     missing_ref_fields: list[str],
     extra_policy_refs: list[Ref],
     observations: list[TargetSourceObservationRecord],
+    adapter_records: list[TargetAdapterBackedSourceRecord] | None = None,
 ) -> TargetRuntimeResult:
     ai = _blocked_ai_recommendation(
         fixture_id=fixture_id,
@@ -493,6 +660,17 @@ def _source_backed_failure(
             for observation in observations
             if observation.content_hash_ref is not None
         ],
+        adapter_backed_source_refs=[record.id for record in adapter_records or []],
+        source_adapter_result_refs=[
+            record.source_adapter_result_ref
+            for record in adapter_records or []
+            if record.source_adapter_result_ref is not None
+        ],
+        adapter_output_refs=[
+            output_ref
+            for record in adapter_records or []
+            for output_ref in record.adapter_output_refs
+        ],
         policy_decision_refs=extra_policy_refs,
         command_record_refs=_command_refs(fixture_id),
         event_cursor_refs=_event_refs(fixture_id),
@@ -504,13 +682,14 @@ def _source_backed_failure(
         diagnostics=diagnostics,
         operator_status=failure.value,
     )
-    return TargetRuntimeResult([], [ai], report, observations)
+    return TargetRuntimeResult([], [ai], report, observations, adapter_records or [])
 
 
 def _pattern_record_from_observation(
     *,
     fixture_id: str,
     observation: TargetSourceObservationRecord,
+    adapter_record: TargetAdapterBackedSourceRecord | None,
     command_refs: list[Ref],
     event_refs: list[Ref],
     outbox_refs: list[Ref],
@@ -518,13 +697,34 @@ def _pattern_record_from_observation(
 ) -> TargetCrawlPatternRecord:
     suffix = observation.website_pattern.value
     digest_part = (observation.content_hash_ref or "sha256:unknown").removeprefix("sha256:")[:12]
+    source_adapter_result_refs = (
+        [adapter_record.source_adapter_result_ref]
+        if adapter_record is not None and adapter_record.source_adapter_result_ref is not None
+        else [f"source-result:{fixture_id}:{observation.corpus_entry_ref}"]
+    )
+    adapter_output_refs = adapter_record.adapter_output_refs if adapter_record is not None else []
+    policy_refs = list(observation.policy_decision_refs)
+    replay_refs = [replay_ref, *observation.replay_refs]
+    pattern_specific_refs: dict[str, Ref] = {
+        "source_path_ref": observation.source_path_ref,
+        "content_hash_ref": observation.content_hash_ref or f"hash-missing:{fixture_id}",
+        "general_pattern_ref": f"pattern:{suffix}",
+    }
+    if adapter_record is not None:
+        policy_refs = sorted(set(policy_refs + adapter_record.adapter_policy_decision_refs))
+        replay_refs.extend(adapter_record.adapter_replay_refs)
+        pattern_specific_refs["adapter_backed_source_ref"] = adapter_record.id
+        if adapter_record.source_adapter_result_ref is not None:
+            pattern_specific_refs["source_adapter_result_ref"] = (
+                adapter_record.source_adapter_result_ref
+            )
     return TargetCrawlPatternRecord(
         id=f"target-pattern:{fixture_id}:{observation.corpus_entry_ref}:{digest_part}",
         run_ref=_run_ref(fixture_id),
         website_pattern=observation.website_pattern,
         frontier_item_refs=[f"frontier:{fixture_id}:{observation.corpus_entry_ref}"],
         source_observation_refs=[observation.source_observation_ref or observation.id],
-        source_adapter_result_refs=[f"source-result:{fixture_id}:{observation.corpus_entry_ref}"],
+        source_adapter_result_refs=source_adapter_result_refs,
         extraction_result_refs=observation.extracted_field_refs,
         accepted_output_refs=[
             f"accepted-output:{fixture_id}:{observation.corpus_entry_ref}:{digest_part}"
@@ -532,18 +732,17 @@ def _pattern_record_from_observation(
         evidence_refs=observation.evidence_refs,
         verification_refs=[f"verification:{fixture_id}:{observation.corpus_entry_ref}:{digest_part}"],
         graph_refs=observation.graph_refs,
-        policy_decision_refs=observation.policy_decision_refs,
+        policy_decision_refs=policy_refs,
         command_record_refs=command_refs,
         event_cursor_refs=event_refs,
         outbox_refs=outbox_refs,
-        artifact_refs=[observation.artifact_ref] if observation.artifact_ref else [],
-        replay_refs=[replay_ref, *observation.replay_refs],
+        artifact_refs=(
+            ([observation.artifact_ref] if observation.artifact_ref else [])
+            + adapter_output_refs
+        ),
+        replay_refs=replay_refs,
         operator_visible_refs=[f"operator-result:{fixture_id}:{observation.corpus_entry_ref}"],
-        pattern_specific_refs={
-            "source_path_ref": observation.source_path_ref,
-            "content_hash_ref": observation.content_hash_ref or f"hash-missing:{fixture_id}",
-            "general_pattern_ref": f"pattern:{suffix}",
-        },
+        pattern_specific_refs=pattern_specific_refs,
         result=CompletenessResult.PASS,
     )
 
@@ -652,6 +851,9 @@ def _missing_fields_for(failure: TargetRuntimeFailureType) -> list[str]:
         TargetRuntimeFailureType.FALSE_COMPLETE: ["status_accuracy_refs"],
         TargetRuntimeFailureType.DRIFT_REPAIR_REQUIRED: ["repair_action_refs"],
         TargetRuntimeFailureType.ORACLE_MISMATCH: ["oracle_refs"],
+        TargetRuntimeFailureType.ADAPTER_RESULT_MISSING: ["source_adapter_result_refs"],
+        TargetRuntimeFailureType.ADAPTER_OUTPUT_MISMATCH: ["adapter_output_refs"],
+        TargetRuntimeFailureType.DIRECT_SOURCE_BYPASS: ["source_adapter_result_refs"],
     }[failure]
 
 

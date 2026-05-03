@@ -1542,6 +1542,17 @@ Acceptance gates:
   `source-backed-target-replay-mismatch`, and
   `source-backed-target-partial-export` block or fail deterministically with
   typed target runtime failure refs and no false complete report
+- `adapter-backed-target-success` materializes deterministic local source adapter
+  outputs outside target runtime core and completes only when at least seven
+  adapter-backed source records, source adapter result refs, adapter output refs,
+  source observations, content hashes, evidence, graph, export, policy,
+  command/event/outbox, privacy, and replay refs are present
+- `adapter-backed-target-missing-adapter-result`,
+  `adapter-backed-target-output-mismatch`,
+  `adapter-backed-target-policy-denied`,
+  `adapter-backed-target-replay-mismatch`, and
+  `adapter-backed-target-direct-source-bypass` fail or block deterministically
+  with typed target runtime failure refs and no false complete report
 - import-boundary tests prove target runtime core does not import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
 - registry validation includes target runtime contracts, commands, events, fixtures, and target area coverage
 

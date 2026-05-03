@@ -175,6 +175,14 @@ accepted output refs, evidence refs, graph refs, export receipts, and replay ref
 from actual file content, and fail when evidence, policy, prompt-taint, replay,
 or export completeness gates are not satisfied. This remains a generic target
 runtime foundation, not a single-site scraper.
+The adapter-backed target runtime adds source adapter lineage to that proof.
+Adapter-backed fixtures materialize deterministic local source adapter outputs
+outside target runtime core, then pass canonical adapter-backed records into the
+runner. A complete report must expose adapter-backed source refs, source adapter
+result refs, adapter output refs, source observations, content hashes, evidence,
+graph, export, policy, command/event/outbox, and replay refs. Missing adapter
+results, adapter output mismatches, adapter policy denials, replay mismatches,
+and direct source bypass attempts fail or block deterministically.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation

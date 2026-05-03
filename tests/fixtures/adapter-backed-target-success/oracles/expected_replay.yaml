@@ -1,0 +1,1 @@
+{"required_refs":["source_adapter_result_refs","adapter_output_refs","content_hash_refs","replay_bundle_ref","command_record_refs","event_cursor_refs","outbox_refs"]}

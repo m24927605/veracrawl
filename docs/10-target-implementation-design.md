@@ -1261,6 +1261,16 @@ Target crawl runtime slice:
   contain site-specific scraper modules, concrete agent framework imports, model
   SDK imports, browser runtime imports, HTTP client imports, storage clients, or
   export destination clients in core.
+- adapter-backed target runtime fixtures add `TargetAdapterBackedSourceEntry`,
+  `TargetAdapterBackedSourceManifest`, and `TargetAdapterBackedSourceRecord`.
+  `veracrawl-target-runtime` may load deterministic local adapter materialization
+  from adapter-owned modules, but `veracrawl.target_runtime.runner` receives only
+  canonical records and does not import concrete adapters.
+- adapter-backed completion requires source adapter result refs, adapter output
+  refs, adapter-backed source refs, source observations, content hashes, evidence,
+  graph, export, policy, command/event/outbox, privacy, and replay refs. Missing
+  adapter result refs, adapter output mismatch, policy-denied adapter output,
+  replay mismatch, and direct source bypass fail or block deterministically.
 - this slice is an executable target architecture runtime path over deterministic fixtures. It is not a claim that live Internet crawling, production browser fleets, production credential vaults, concrete agent frameworks, managed model providers, production export destinations, or production worker fleets are operational.
 
 Disaster recovery:
