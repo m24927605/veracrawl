@@ -19,6 +19,7 @@ from veracrawl.contracts.enums import (
     ScaleQueueName,
     ScaleRetryClass,
     ScaleShardLeaseStatus,
+    WorkerOrchestrationFailureType,
     WorkerPool,
 )
 
@@ -233,6 +234,152 @@ class ScaleRecoveryReport(TimestampedModel):
                 raise ValueError(f"passing scale recovery report missing refs: {missing}")
         elif not (self.failure_record_refs or self.missing_ref_fields):
             raise ValueError("non-pass scale recovery report requires failures")
+        return self
+
+
+class WorkerOrchestrationRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    production_persistence_runtime_report_ref: Ref | None = None
+    queue_broker_conformance_report_ref: Ref | None = None
+    live_http_acquisition_report_ref: Ref | None = None
+    live_normalization_runtime_report_ref: Ref | None = None
+    live_evidence_verification_runtime_report_ref: Ref | None = None
+    scale_recovery_report_ref: Ref | None = None
+    worker_pool_refs: list[Ref] = Field(default_factory=list)
+    worker_heartbeat_refs: list[Ref] = Field(default_factory=list)
+    worker_capacity_refs: list[Ref] = Field(default_factory=list)
+    queue_topology_ref: Ref | None = None
+    queue_item_refs: list[Ref] = Field(default_factory=list)
+    shard_lease_refs: list[Ref] = Field(default_factory=list)
+    lease_heartbeat_refs: list[Ref] = Field(default_factory=list)
+    fencing_token_refs: list[Ref] = Field(default_factory=list)
+    visibility_timeout_refs: list[Ref] = Field(default_factory=list)
+    fairness_scope_refs: list[Ref] = Field(default_factory=list)
+    retry_refs: list[Ref] = Field(default_factory=list)
+    dead_letter_refs: list[Ref] = Field(default_factory=list)
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    recovery_action_refs: list[Ref] = Field(default_factory=list)
+    duplicate_suppression_refs: list[Ref] = Field(default_factory=list)
+    backpressure_signal_refs: list[Ref] = Field(default_factory=list)
+    autoscaling_decision_refs: list[Ref] = Field(default_factory=list)
+    pending_outbox_refs: list[Ref] = Field(default_factory=list)
+    event_gap_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_type: WorkerOrchestrationFailureType | None = None
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    hidden_dead_letter_refs: list[Ref] = Field(default_factory=list)
+    duplicate_pollution_refs: list[Ref] = Field(default_factory=list)
+    unrecovered_stale_lease_refs: list[Ref] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)
+    operator_status: str
+    completion_result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_worker_orchestration_report(
+        self,
+    ) -> WorkerOrchestrationRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "production_persistence_runtime_report_ref": (
+                    self.production_persistence_runtime_report_ref
+                ),
+                "queue_broker_conformance_report_ref": (
+                    self.queue_broker_conformance_report_ref
+                ),
+                "live_http_acquisition_report_ref": self.live_http_acquisition_report_ref,
+                "live_normalization_runtime_report_ref": (
+                    self.live_normalization_runtime_report_ref
+                ),
+                "live_evidence_verification_runtime_report_ref": (
+                    self.live_evidence_verification_runtime_report_ref
+                ),
+                "scale_recovery_report_ref": self.scale_recovery_report_ref,
+                "worker_pool_refs": self.worker_pool_refs,
+                "worker_heartbeat_refs": self.worker_heartbeat_refs,
+                "worker_capacity_refs": self.worker_capacity_refs,
+                "queue_topology_ref": self.queue_topology_ref,
+                "queue_item_refs": self.queue_item_refs,
+                "shard_lease_refs": self.shard_lease_refs,
+                "lease_heartbeat_refs": self.lease_heartbeat_refs,
+                "fencing_token_refs": self.fencing_token_refs,
+                "visibility_timeout_refs": self.visibility_timeout_refs,
+                "fairness_scope_refs": self.fairness_scope_refs,
+                "retry_refs": self.retry_refs,
+                "dead_letter_refs": self.dead_letter_refs,
+                "failure_record_refs": self.failure_record_refs,
+                "recovery_action_refs": self.recovery_action_refs,
+                "duplicate_suppression_refs": self.duplicate_suppression_refs,
+                "backpressure_signal_refs": self.backpressure_signal_refs,
+                "autoscaling_decision_refs": self.autoscaling_decision_refs,
+                "pending_outbox_refs": self.pending_outbox_refs,
+                "event_gap_refs": self.event_gap_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+                or self.hidden_dead_letter_refs
+                or self.duplicate_pollution_refs
+                or self.unrecovered_stale_lease_refs
+            ):
+                raise ValueError(
+                    f"passing worker orchestration report missing refs: {missing}"
+                )
+            if len(set(self.worker_pool_refs)) < len(WorkerPool):
+                raise ValueError("passing worker orchestration report requires every pool")
+        elif not (
+            self.failure_type
+            and (
+                self.failure_report_refs
+                or self.missing_ref_fields
+                or self.hidden_dead_letter_refs
+                or self.duplicate_pollution_refs
+                or self.unrecovered_stale_lease_refs
+            )
+        ):
+            raise ValueError("non-pass worker orchestration report requires diagnostics")
+        return self
+
+
+class WorkerOrchestrationFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: WorkerOrchestrationFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_worker_orchestration_fixture(
+        self,
+    ) -> WorkerOrchestrationFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("worker orchestration fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("worker orchestration fixture must declare required ref types")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative worker orchestration fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError("negative worker orchestration fixture requires failure type")
+        if self.expected_failure_type is not None and not self.negative_case:
+            raise ValueError("expected failure type requires negative case")
         return self
 
 

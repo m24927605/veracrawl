@@ -1862,6 +1862,10 @@ Acceptance gates:
 - operational observability fixtures prove metrics, traces, alerts, runbooks, quality/cost signals, dashboard watermarks, failure/recovery refs, DR refs, policy, command, event cursor, outbox, redaction, collector handoff, telemetry backend, and replay refs through canonical VeraCrawl observability contracts
 - no-runtime observability and data-surface-only observability fixtures must remain `needs_review` and contract-only; an ops console report alone cannot be labeled operational observability pass
 - negative observability fixtures for missing metrics, missing traces, missing alerts, missing runbook actions, stale dashboard watermarks, missing DR refs, missing redaction refs, missing replay refs, secret leakage, and unsafe runbook without approval must fail deterministically
+- worker orchestration fixtures prove production persistence, queue broker, live acquisition, live normalization, live evidence, and scale recovery refs compose into one replayable worker-runtime report
+- `worker-orchestration-production-success`, `worker-orchestration-worker-crash-recovered`, and `worker-orchestration-backpressure-autoscale-success` pass only when every target worker pool has heartbeat and capacity refs plus queue item, shard lease, lease heartbeat, fencing, visibility timeout, fairness, retry, dead-letter, failure, recovery, duplicate suppression, backpressure, autoscaling, pending outbox, event gap, policy, command/event/outbox, and replay refs
+- `worker-orchestration-missing-persistence`, `worker-orchestration-missing-queue-broker`, `worker-orchestration-stale-lease-unrecovered`, `worker-orchestration-missing-heartbeat`, `worker-orchestration-dead-letter-hidden`, `worker-orchestration-duplicate-pollution`, `worker-orchestration-backpressure-without-policy`, and `worker-orchestration-replay-mismatch` fail deterministically with typed `WorkerOrchestrationFailureType` diagnostics
+- worker orchestration import-boundary tests prove core does not import concrete storage clients, queue clients, browser runtimes, telemetry clients, model SDKs, agent frameworks, or site-specific scraper modules
 
 ### Target Crawl Runtime Profile
 
@@ -1938,6 +1942,22 @@ Acceptance gates:
 - graph/memory production import-boundary tests prove core does not import graph
   stores, vector stores, concrete queues, storage clients, browser runtimes,
   model SDKs, agent frameworks, or site-specific scraper modules
+- `worker-orchestration-production-success`,
+  `worker-orchestration-worker-crash-recovered`, and
+  `worker-orchestration-backpressure-autoscale-success` complete only when
+  production persistence, queue broker, live acquisition, normalization,
+  evidence, scale recovery, worker pool, queue/lease, failure/recovery,
+  backpressure/autoscaling, policy, command/event/outbox, and replay refs are
+  present
+- `worker-orchestration-missing-persistence`,
+  `worker-orchestration-missing-queue-broker`,
+  `worker-orchestration-stale-lease-unrecovered`,
+  `worker-orchestration-missing-heartbeat`,
+  `worker-orchestration-dead-letter-hidden`,
+  `worker-orchestration-duplicate-pollution`,
+  `worker-orchestration-backpressure-without-policy`, and
+  `worker-orchestration-replay-mismatch` fail deterministically with typed
+  `WorkerOrchestrationFailureType` refs and no false worker-runtime pass claim
 - import-boundary tests prove target runtime core does not import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
 - registry validation includes target runtime contracts, commands, events, fixtures, and target area coverage
 

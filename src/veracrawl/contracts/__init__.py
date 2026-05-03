@@ -246,6 +246,8 @@ from veracrawl.contracts.scale import (
     ScaleFixtureManifest,
     ScaleRecoveryReport,
     ShardLease,
+    WorkerOrchestrationFixtureManifest,
+    WorkerOrchestrationRuntimeReport,
 )
 from veracrawl.contracts.scheduler import FrontierItem, QueueLease, SchedulerRecoveryReport
 from veracrawl.contracts.security_privacy import (
@@ -557,6 +559,8 @@ __all__ = [
     "WebsitePatternCoverageFixtureManifest",
     "WebsitePatternCoverageRecord",
     "WebsitePatternCoverageReport",
+    "WorkerOrchestrationFixtureManifest",
+    "WorkerOrchestrationRuntimeReport",
     "registry_json",
     "validate_registry",
 ]

@@ -88,6 +88,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_live_evidence_ref: str | None = None
     expected_result_publication_ref: str | None = None
     expected_graph_memory_ref: str | None = None
+    expected_worker_orchestration_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -629,6 +630,19 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "scale",
         mutation_allowed=True,
         tests=["tests/unit/test_scale_replay.py"],
+    ),
+    "WorkerOrchestrationRuntimeReport": _contract(
+        "WorkerOrchestrationRuntimeReport",
+        OwnerService.OPS,
+        "scale",
+        mutation_allowed=True,
+        tests=["tests/contract/test_worker_orchestration_contracts.py"],
+    ),
+    "WorkerOrchestrationFixtureManifest": _contract(
+        "WorkerOrchestrationFixtureManifest",
+        OwnerService.TESTS,
+        "scale",
+        tests=["tests/integration/test_worker_orchestration_fixtures.py"],
     ),
     "ScaleFixtureManifest": _contract(
         "ScaleFixtureManifest",
@@ -3015,6 +3029,21 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["scale_recovery_reported"],
         ),
+        "record_worker_orchestration_runtime_report": CommandTypeRegistration(
+            command_type="record_worker_orchestration_runtime_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="WorkerOrchestrationRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["queue_broker", "backpressure", "autoscaling"],
+            emitted_event_types=["worker_orchestration_runtime_reported"],
+        ),
+        "record_worker_orchestration_fixture_manifest": CommandTypeRegistration(
+            command_type="record_worker_orchestration_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="WorkerOrchestrationFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["worker_orchestration_fixture_manifest_recorded"],
+        ),
         "record_queue_broker_adapter": CommandTypeRegistration(
             command_type="record_queue_broker_adapter",
             owner_service=OwnerService.PORTS,
@@ -3381,6 +3410,8 @@ EVENT_TYPES.update(
             "autoscaling_decided",
             "retry_dead_letter_recorded",
             "scale_recovery_reported",
+            "worker_orchestration_runtime_reported",
+            "worker_orchestration_fixture_manifest_recorded",
             "queue_broker_adapter_recorded",
             "queue_broker_operation_recorded",
             "queue_broker_conformance_reported",
@@ -4172,6 +4203,33 @@ for _scale_fixture, _negative in {
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _worker_fixture, _negative in {
+    "worker-orchestration-production-success": False,
+    "worker-orchestration-worker-crash-recovered": False,
+    "worker-orchestration-backpressure-autoscale-success": False,
+    "worker-orchestration-missing-persistence": True,
+    "worker-orchestration-missing-queue-broker": True,
+    "worker-orchestration-stale-lease-unrecovered": True,
+    "worker-orchestration-missing-heartbeat": True,
+    "worker-orchestration-dead-letter-hidden": True,
+    "worker-orchestration-duplicate-pollution": True,
+    "worker-orchestration-backpressure-without-policy": True,
+    "worker-orchestration-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_worker_fixture}"
+    FIXTURE_ORACLES[_worker_fixture] = FixtureOracleRegistration(
+        fixture_id=_worker_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_worker_orchestration_ref=(
+            f"{_base}/oracles/expected_worker_orchestration.yaml"
+        ),
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -5694,6 +5752,31 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "BackpressureSignal",
             "AutoscalingDecision",
             "ScaleRecoveryReport",
+        ],
+    ),
+    "worker_orchestration_scale_runtime": _target_area(
+        "worker_orchestration_scale_runtime",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "WorkerOrchestrationRuntimeReport",
+            "WorkerOrchestrationFixtureManifest",
+            "ProductionPersistenceRuntimeReport",
+            "QueueBrokerConformanceReport",
+            "LiveHttpAcquisitionReport",
+            "LiveNormalizationRuntimeReport",
+            "LiveEvidenceVerificationRuntimeReport",
+            "QueueTopologySpec",
+            "QueueItem",
+            "ShardLease",
+            "RetryDeadLetterRecord",
+            "BackpressureSignal",
+            "AutoscalingDecision",
+            "ScaleRecoveryReport",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
         ],
     ),
 }

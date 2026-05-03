@@ -1,0 +1,1 @@
+{"expected_completion_result":"pass","required_refs":["production_persistence_runtime_report_ref","queue_broker_conformance_report_ref","scale_recovery_report_ref","worker_pool_refs","queue_item_refs","shard_lease_refs","policy_decision_refs","command_record_refs","event_cursor_refs","outbox_refs","replay_bundle_ref"]}

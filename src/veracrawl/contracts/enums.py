@@ -860,11 +860,15 @@ class BackpressureSignalType(StrEnum):
 
 
 class WorkerPool(StrEnum):
+    FRONTIER = "frontier"
     FETCH = "fetch"
     BROWSER = "browser"
     PROCESSING = "processing"
+    VERIFICATION = "verification"
+    REVIEW = "review"
     EXPORT = "export"
     PROJECTION = "projection"
+    RECOVERY = "recovery"
 
 
 class ScaleFailureType(StrEnum):
@@ -873,6 +877,17 @@ class ScaleFailureType(StrEnum):
     AUTOSCALE_WITHOUT_POLICY = "autoscale_without_policy"
     DEAD_LETTER_MISSING_FAILURE_RECORD = "dead_letter_missing_failure_record"
     REPLAY_MISSING_SCALE_REFS = "replay_missing_scale_refs"
+
+
+class WorkerOrchestrationFailureType(StrEnum):
+    MISSING_PERSISTENCE = "worker_orchestration_missing_persistence"
+    MISSING_QUEUE_BROKER = "worker_orchestration_missing_queue_broker"
+    STALE_LEASE_UNRECOVERED = "worker_orchestration_stale_lease_unrecovered"
+    MISSING_HEARTBEAT = "worker_orchestration_missing_heartbeat"
+    DEAD_LETTER_HIDDEN = "worker_orchestration_dead_letter_hidden"
+    DUPLICATE_POLLUTION = "worker_orchestration_duplicate_pollution"
+    BACKPRESSURE_WITHOUT_POLICY = "worker_orchestration_backpressure_without_policy"
+    REPLAY_MISMATCH = "worker_orchestration_replay_mismatch"
 
 
 class QueueBrokerAdapterKind(StrEnum):

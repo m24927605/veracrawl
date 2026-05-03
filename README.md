@@ -371,6 +371,17 @@ not a claim that concrete queue brokers, storage engines, metrics/tracing
 backends, cloud autoscaling APIs, production distributed persistence,
 production worker fleets, production browser rendering, or production scale
 operations are complete.
+The worker orchestration and scale runtime composes production persistence,
+queue broker conformance, live acquisition, live normalization, live evidence,
+and scale recovery refs into one replayable worker runtime report.
+`veracrawl-worker-orchestration` proves frontier, fetch, browser, processing,
+verification, review, export, projection, and recovery worker pools all expose
+heartbeats, capacity refs, queue items, leases, fencing tokens, visibility
+timeouts, retry/dead-letter/failure/recovery refs, duplicate suppression,
+backpressure, autoscaling, policy, command/event/outbox, and replay refs.
+Missing persistence, missing queue broker, unrecovered stale leases, missing
+heartbeats, hidden dead letters, duplicate pollution, backpressure without
+policy, and replay gaps fail deterministically.
 The concrete persistence adapter spine proves executable SQLite adapter
 semantics for transactions, migrations, idempotency, event cursors, outbox,
 artifact index, queue leases, and replay refs. The Postgres descriptor is
@@ -916,6 +927,29 @@ for fixture in \
   replay-missing-scale-refs
 do
   uv run --python python3.12 --extra dev veracrawl-scale run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run worker orchestration fixtures:
+
+```sh
+for fixture in \
+  worker-orchestration-production-success \
+  worker-orchestration-worker-crash-recovered \
+  worker-orchestration-backpressure-autoscale-success \
+  worker-orchestration-missing-persistence \
+  worker-orchestration-missing-queue-broker \
+  worker-orchestration-stale-lease-unrecovered \
+  worker-orchestration-missing-heartbeat \
+  worker-orchestration-dead-letter-hidden \
+  worker-orchestration-duplicate-pollution \
+  worker-orchestration-backpressure-without-policy \
+  worker-orchestration-replay-mismatch
+do
+  uv run --python python3.12 --extra dev veracrawl-worker-orchestration run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

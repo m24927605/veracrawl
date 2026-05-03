@@ -42,7 +42,7 @@ Target contract manifest:
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
-| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
+| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
 | PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
 | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
 | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
@@ -1215,6 +1215,8 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | decide_autoscaling | ops | AutoscalingDecision | AutoscalingPayload | current budgets and queue metrics loaded | none | autoscaling_decided | budget cap rejection logged |
 | record_autoscaling_decision | ops | AutoscalingDecision | BaseCommandPayload | reason signals and policy refs validate for capacity changes | none | autoscaling_decided | autoscale without policy is rejected |
 | record_scale_recovery_report | review_replay | ScaleRecoveryReport | BaseCommandPayload | queue, lease, backpressure, autoscaling, dead-letter, failure/recovery, DR, policy, command, event, outbox, and replay refs validate | expected_version | scale_recovery_reported | missing scale refs fail replay |
+| record_worker_orchestration_runtime_report | ops | WorkerOrchestrationRuntimeReport | BaseCommandPayload | production persistence, queue broker, live acquisition, normalization, evidence, scale recovery, worker pool, queue/lease, retry/dead-letter, backpressure/autoscaling, policy, command/event/outbox, and replay refs validate | expected_version | worker_orchestration_runtime_reported | missing worker orchestration refs fail replay |
+| record_worker_orchestration_fixture_manifest | tests | WorkerOrchestrationFixtureManifest | BaseCommandPayload | target profile, expected result, expected status, typed failure, and required refs validate | none | worker_orchestration_fixture_manifest_recorded | negative fixture claiming pass is rejected |
 | record_queue_broker_adapter | ports | QueueBrokerAdapterSpec | BaseCommandPayload | queue names, broker capabilities, fencing, idempotency, fairness, backpressure, and policy refs validate | none | queue_broker_adapter_recorded | broker missing capability blocks operational target pass |
 | record_queue_broker_operation | scheduler | QueueBrokerOperationRecord | BaseCommandPayload | enqueue, duplicate enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, visibility, retry, fairness, backpressure, and policy refs validate | lease_required | queue_broker_operation_recorded | missing fencing, heartbeat, or dead-letter refs fail conformance |
 | record_queue_broker_conformance_report | review_replay | QueueBrokerConformanceReport | BaseCommandPayload | adapter, topology, item, broker operation, lease, heartbeat, ack/nack, dead-letter, fencing, retry, fairness, backpressure, policy, contract-only, and replay refs validate | expected_version | queue_broker_conformance_reported | runtime-unavailable brokers must report needs_review, not pass |
@@ -1599,7 +1601,7 @@ BackfillJob:
 ```yaml
 StateMachineSpec:
   id: string
-  entity_type: CrawlObjective | CrawlPlan | CrawlJob | CrawlRun | SourceAdapterResult | FrontierItem | ProcessingTask | BrowserInteractionStep | AgentRunResult | ToolCallTrace | FrontierRecommendation | MultiAgentWorkflow | AgentHandoff | CrossScopeMemoryTunnel | ExtractionStrategy | ExtractionCandidate | EvidencePacket | VerificationDecision | PublishedOutput | VerifiedFact | ExportJob | ExportAttempt | ExportWithdrawalJob | ExportWithdrawalAttempt | ReviewItem | ConflictRecord | DriftEvent | RecoveryAction | ProjectionWatermark | ProjectionRebuildJob | BackfillJob | SchemaMigrationRun | EventMigrationRun | DRRestoreRun | TemporalKGEntityIdentity | TemporalKGProjectionRecord | MemoryEvent | OperationalTemporalMemoryRecord | QueueTopologySpec | QueueItem | ShardLease | RetryDeadLetterRecord | BackpressureSignal | AutoscalingDecision | ScaleRecoveryReport | PersistenceAdapterSpec | PersistenceMigrationRecord | PersistenceAdapterConformanceReport | PersistenceTransactionRecord | IdempotencyPersistenceRecord | PersistentQueueOperationRecord | PersistenceRuntimeReport | ArtifactLifecycleState
+  entity_type: CrawlObjective | CrawlPlan | CrawlJob | CrawlRun | SourceAdapterResult | FrontierItem | ProcessingTask | BrowserInteractionStep | AgentRunResult | ToolCallTrace | FrontierRecommendation | MultiAgentWorkflow | AgentHandoff | CrossScopeMemoryTunnel | ExtractionStrategy | ExtractionCandidate | EvidencePacket | VerificationDecision | PublishedOutput | VerifiedFact | ExportJob | ExportAttempt | ExportWithdrawalJob | ExportWithdrawalAttempt | ReviewItem | ConflictRecord | DriftEvent | RecoveryAction | ProjectionWatermark | ProjectionRebuildJob | BackfillJob | SchemaMigrationRun | EventMigrationRun | DRRestoreRun | TemporalKGEntityIdentity | TemporalKGProjectionRecord | MemoryEvent | OperationalTemporalMemoryRecord | QueueTopologySpec | QueueItem | ShardLease | RetryDeadLetterRecord | BackpressureSignal | AutoscalingDecision | ScaleRecoveryReport | WorkerOrchestrationRuntimeReport | WorkerOrchestrationFixtureManifest | PersistenceAdapterSpec | PersistenceMigrationRecord | PersistenceAdapterConformanceReport | PersistenceTransactionRecord | IdempotencyPersistenceRecord | PersistentQueueOperationRecord | PersistenceRuntimeReport | ArtifactLifecycleState
   version: string
   states: list
   transitions:
@@ -1643,6 +1645,8 @@ Target state transition matrix:
 | BackpressureSignal | created as recorded; immutable after create | record_backpressure_signal | ops | backpressure policy | threshold and policy tests |
 | AutoscalingDecision | proposed -> recorded/rejected | record_autoscaling_decision | ops | autoscaling policy | capacity-change policy tests |
 | ScaleRecoveryReport | created as pass/fail/needs_review; immutable after create | record_scale_recovery_report | review_replay | scale replay and DR refs | missing scale refs tests |
+| WorkerOrchestrationRuntimeReport | created as pass/fail/needs_review; immutable after create | record_worker_orchestration_runtime_report | ops | worker pool, queue, lease, recovery, backpressure, autoscaling, policy, replay refs | missing worker orchestration refs tests |
+| WorkerOrchestrationFixtureManifest | created before fixture execution; immutable after create | record_worker_orchestration_fixture_manifest | tests | target fixture expectations and required refs | negative pass rejection tests |
 | QueueBrokerAdapterSpec | proposed -> recorded/superseded | record_queue_broker_adapter | ports | queue broker policy | broker capability and import boundary tests |
 | QueueBrokerOperationRecord | created append-only | record_queue_broker_operation | scheduler | lease, fencing, retry, dead-letter policy | queue broker operation contract tests |
 | QueueBrokerConformanceReport | created as pass/fail/needs_review; immutable after create | record_queue_broker_conformance_report | review_replay | broker conformance refs, no-runtime, and failure boundaries | queue broker fixture tests |
@@ -3731,7 +3735,7 @@ Every event type must have an `EventTypeSpec` row. This matrix defines the requi
 | run_diary_written | control/agents | RunDiaryEvent | run | yes | replay |
 | drift_detected | graph/extract/ops | DriftEvent | run | yes | repair, review |
 | review_created, review_decided, conflict_adjudicated | review_replay/verify | ReviewItem/ConflictRecord | review_item, conflict | yes | publish, ops, replay |
-| backpressure_signal_recorded, autoscaling_decided, scale_recovery_reported | ops/review_replay | BackpressureSignal/AutoscalingDecision/ScaleRecoveryReport | run | yes | ops, scheduler, replay |
+| backpressure_signal_recorded, autoscaling_decided, scale_recovery_reported, worker_orchestration_runtime_reported, worker_orchestration_fixture_manifest_recorded | ops/review_replay/tests | BackpressureSignal/AutoscalingDecision/ScaleRecoveryReport/WorkerOrchestrationRuntimeReport/WorkerOrchestrationFixtureManifest | run | yes | ops, scheduler, replay |
 | persistence_adapter_recorded, persistence_transaction_recorded, persistence_migration_recorded, idempotency_persisted, persistent_queue_operation_recorded, persistence_runtime_reported, persistence_adapter_conformance_reported | runtime_events/scheduler/review_replay | PersistenceAdapterSpec/PersistenceTransactionRecord/PersistenceMigrationRecord/IdempotencyPersistenceRecord/PersistentQueueOperationRecord/PersistenceRuntimeReport/PersistenceAdapterConformanceReport | run | yes | replay, scheduler, ops |
 | queue_broker_adapter_recorded, queue_broker_operation_recorded, queue_broker_conformance_reported | ports/scheduler/review_replay | QueueBrokerAdapterSpec/QueueBrokerOperationRecord/QueueBrokerConformanceReport | run | yes | replay, scheduler, ops |
 | object_store_adapter_recorded, object_store_operation_recorded, object_store_conformance_reported | ports/artifact_lifecycle/review_replay | ObjectStoreAdapterSpec/ObjectStoreOperationRecord/ObjectStoreConformanceReport | artifact | yes | replay, artifact lifecycle, ops |
@@ -3883,6 +3887,8 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | backpressure_signal_recorded | OpsEventPayload | BackpressureSignal | after required | signal type, threshold, measured value | operational metrics remain |
 | autoscaling_decided | OpsEventPayload | AutoscalingDecision | after required | scaling action, budget refs, decision reason | operational metrics remain |
 | scale_recovery_reported | OpsEventPayload | ScaleRecoveryReport | after required | queue, lease, backpressure, autoscaling, dead-letter, DR, command, event, outbox, replay refs | operational refs remain |
+| worker_orchestration_runtime_reported | OpsEventPayload | WorkerOrchestrationRuntimeReport | after required | production persistence, queue broker, worker pool, queue/lease, retry/dead-letter, backpressure/autoscaling, policy, command/event/outbox, replay refs | operational refs remain |
+| worker_orchestration_fixture_manifest_recorded | OpsEventPayload | WorkerOrchestrationFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required refs | fixture refs remain |
 | queue_broker_adapter_recorded | QueueBrokerEventPayload | QueueBrokerAdapterSpec | after required | queue names, capability refs, visibility timeout, policy refs | broker URL and credentials redacted |
 | queue_broker_operation_recorded | QueueBrokerEventPayload | QueueBrokerOperationRecord | after required | queue item, lease, fencing token hash/ref, visibility timeout, heartbeat, retry, dead-letter refs | fencing secret material redacted |
 | queue_broker_conformance_reported | QueueBrokerEventPayload | QueueBrokerConformanceReport | after required | adapter, topology, operation, lease, heartbeat, ack/nack, dead-letter, failure, contract-only, replay refs | stable refs remain |
@@ -4100,7 +4106,7 @@ BackpressureSignal:
 ```yaml
 AutoscalingDecision:
   id: string
-  worker_pool: fetch | browser | processing | export | projection
+  worker_pool: frontier | fetch | browser | processing | verification | review | export | projection | recovery
   reason_signal_refs: list
   from_capacity: integer
   to_capacity: integer
@@ -4140,6 +4146,83 @@ Rules:
 - a passing `ScaleRecoveryReport` requires queue topology, queue item, shard lease, backpressure, autoscaling, dead-letter, failure, recovery, DR restore, policy, command, event cursor, outbox, and replay refs.
 - non-pass reports must expose failure records or missing refs; scale failures cannot be hidden as successful throughput degradation.
 - scale decisions never satisfy publication evidence; they only explain scheduling, reliability, recovery, and throughput behavior.
+
+## WorkerOrchestrationRuntimeReport
+
+```yaml
+WorkerOrchestrationRuntimeReport:
+  id: string
+  fixture_id: string
+  run_ref: string
+  production_persistence_runtime_report_ref: string
+  queue_broker_conformance_report_ref: string
+  live_http_acquisition_report_ref: string
+  live_normalization_runtime_report_ref: string
+  live_evidence_verification_runtime_report_ref: string
+  scale_recovery_report_ref: string
+  worker_pool_refs: list
+  worker_heartbeat_refs: list
+  worker_capacity_refs: list
+  queue_topology_ref: string
+  queue_item_refs: list
+  shard_lease_refs: list
+  lease_heartbeat_refs: list
+  fencing_token_refs: list
+  visibility_timeout_refs: list
+  fairness_scope_refs: list
+  retry_refs: list
+  dead_letter_refs: list
+  failure_record_refs: list
+  recovery_action_refs: list
+  duplicate_suppression_refs: list
+  backpressure_signal_refs: list
+  autoscaling_decision_refs: list
+  pending_outbox_refs: list
+  event_gap_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  failure_type: worker_orchestration_missing_persistence | worker_orchestration_missing_queue_broker | worker_orchestration_stale_lease_unrecovered | worker_orchestration_missing_heartbeat | worker_orchestration_dead_letter_hidden | worker_orchestration_duplicate_pollution | worker_orchestration_backpressure_without_policy | worker_orchestration_replay_mismatch
+  failure_report_refs: list
+  missing_ref_fields: list
+  hidden_dead_letter_refs: list
+  duplicate_pollution_refs: list
+  unrecovered_stale_lease_refs: list
+  diagnostics: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+Rules:
+
+- a passing `WorkerOrchestrationRuntimeReport` requires production persistence, queue broker conformance, live HTTP acquisition, live normalization, live evidence verification, scale recovery, every target worker pool, heartbeat, capacity, queue item, shard lease, lease heartbeat, fencing, visibility timeout, fairness, retry, dead-letter, failure, recovery, duplicate suppression, backpressure, autoscaling, pending outbox, event gap, policy, command, event cursor, outbox, and replay refs.
+- pass is rejected if a typed failure, missing refs, hidden dead letters, duplicate pollution, or unrecovered stale leases are present.
+- non-pass reports must expose a typed `WorkerOrchestrationFailureType` plus failure, missing-ref, or violation refs.
+- worker orchestration records never satisfy source evidence or publication requirements; they only prove reliable execution, scaling, recovery, and replay visibility.
+
+## WorkerOrchestrationFixtureManifest
+
+```yaml
+WorkerOrchestrationFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: WorkerOrchestrationFailureType
+  negative_case: boolean
+  required_ref_types: list
+  created_at: timestamp
+```
+
+Rules:
+
+- target-profile worker orchestration fixtures must declare `target` in `profile_refs` and list required ref types.
+- negative fixtures must not expect `pass` and must name the expected typed failure.
+- positive fixtures cannot declare a failure type.
 
 ## ObjectStoreAdapterSpec
 

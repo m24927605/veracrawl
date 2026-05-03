@@ -1461,6 +1461,15 @@ Scale hardening executable slice:
 - stale leases, unfair site starvation, autoscaling without policy, dead letters without failure records, and replay gaps are target-profile failures.
 - the target spine remains queue/storage/cloud/metrics/tracing-neutral; concrete brokers, stores, telemetry backends, and cloud autoscalers are adapter work, not core coupling.
 
+Worker orchestration and scale runtime slice:
+
+- `WorkerOrchestrationRuntimeReport` composes production persistence runtime refs, queue broker conformance refs, live HTTP acquisition refs, live normalization refs, live evidence verification refs, and `ScaleRecoveryReport` refs into one replayable worker-runtime acceptance record.
+- worker pools cover frontier, fetch, browser, processing, verification, review, export, projection, and recovery without binding core to a concrete worker framework, queue client, browser engine, model SDK, or agent framework.
+- passing worker orchestration requires worker pool refs, worker heartbeat refs, worker capacity refs, queue topology, queue item, shard lease, lease heartbeat, fencing token, visibility timeout, fairness, retry, dead-letter, failure, recovery, duplicate suppression, backpressure, autoscaling, pending outbox, event gap, policy, command, event cursor, outbox, and replay refs.
+- `veracrawl.scale.worker_orchestration` is deterministic core runtime composition; adapter-owned brokers, stores, telemetry, browsers, and worker process managers remain outside core and must connect through ports/adapters.
+- `veracrawl-worker-orchestration run` executes target-profile success and negative fixtures and writes a stable `run_report.json`.
+- missing production persistence, missing queue broker conformance, unrecovered stale leases, missing lease heartbeats, hidden dead letters, duplicate pollution, backpressure/autoscaling without policy, and replay mismatch are typed `WorkerOrchestrationFailureType` failures.
+
 Production persistence and queue runtime slice:
 
 - `PersistenceAdapterSpec` records adapter capability refs for metadata store, event log, outbox, artifact index, and queue ports without binding core to a concrete database, queue broker, object store, or cloud SDK.
