@@ -280,6 +280,39 @@ refs, and replay completeness. It does not prove graph intelligence, memory
 intelligence, export delivery, distributed persistence, production browser
 rendering, review UI, or production scale readiness.
 
+## Target Output Type Coverage Gate Slice
+
+The output coverage gate proves that every target output family can pass the same
+evidence-backed publication boundary:
+
+- `OutputTypeCoverageRecord` records per-output-type source evidence, evidence
+  coverage, verification, publication, output manifest, privacy lifecycle,
+  type-specific, command, event cursor, outbox, and replay refs.
+- `OutputTypePublicationGateReport` can claim `pass` only when `record`,
+  `table`, `document_metadata`, `document`, `file`, `dataset`, and `fact` are
+  all covered.
+- `veracrawl.publish.output_coverage` is deterministic and imports only
+  VeraCrawl contracts.
+- `veracrawl-output-coverage` runs success, no-runtime, aggregate negative, and
+  source-specific derived-context negative fixtures without static dependencies
+  on storage, queues, export targets, browsers, model SDKs, agent frameworks,
+  HTTP clients, or site-specific scrapers.
+
+Rules:
+
+- candidate, graph, memory, agent reasoning, and temporal KG refs are diagnostic
+  only and cannot satisfy source evidence requirements.
+- candidate-as-evidence, graph-as-evidence, memory-as-evidence,
+  agent-reasoning-as-evidence, and temporal-KG-as-evidence each have their own
+  deterministic negative fixture and failure type.
+- table outputs require row/cell evidence refs.
+- file outputs require hash, MIME, and lifecycle refs.
+- dataset outputs require item and item evidence refs.
+- fact outputs require fact verification refs.
+- this slice proves target output type publication readiness. It does not prove
+  external export delivery, warehouse/database/object-store writes, production
+  persistence, or production browser rendering.
+
 ## Basic Site Graph Spine Slice
 
 The basic graph slice turns acquisition, normalization, and site-understanding

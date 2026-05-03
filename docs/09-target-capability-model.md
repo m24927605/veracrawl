@@ -129,7 +129,7 @@ Target support for authenticated sources means customer-authorized, scoped crede
 | Site understanding | Infer navigation, page types, templates, duplicate zones, low-value zones, API-like endpoints, forms, and search paths | site model, graph projection, classifier metrics, review report |
 | Adaptive frontier | Prioritize, retire, retry, and expand frontier items from objective relevance, graph signals, freshness, uncertainty, failures, and budgets | frontier state tests, priority explanation, replayable transitions |
 | Extraction | Produce schema-bound candidates from normalized documents, DOM anchors, tables, structured data, scripts, PDFs, and approved document text | extraction strategy, candidate refs, validator result, anchor maps |
-| Evidence | Build source-backed evidence packets for records, tables, document metadata, files, datasets, and facts | evidence coverage map, raw-to-normalized replay, source anchors |
+| Evidence | Build source-backed evidence packets for records, tables, document metadata, files, datasets, and facts | evidence coverage map, raw-to-normalized replay, source anchors, `OutputTypePublicationGateReport` |
 | Verification | Accept, reject, review, conflict, supersede, or expire outputs by policy, evidence, schema constraints, freshness, and contradiction checks | verification decision, conflict record, output verification aggregate |
 | Publication | Publish only verified outputs with immutable manifests and evidence refs | output manifest, publication event, review decision, result receipt |
 | Graph intelligence | Maintain URL, hyperlink, canonical, redirect, page-structure, entity, citation/source, evidence, task, and temporal graph projections | graph build manifest, projection watermark, graph quality report, `GraphFrontierReviewRuntimeReport`, `TemporalKGRuntimeReport` |
@@ -298,6 +298,8 @@ Required acceptance:
 - false-merge and false-split temporal KG repairs require `TemporalKGIdentityAdjudicationRecord` plus conflict, invalidation, supersession, authority, source event, policy, and replay refs
 - temporal KG projections can inform planning, review, contradiction detection, and repair, but cannot satisfy source evidence, verification, publication, or output manifest requirements
 - missing live temporal KG runtime refs return `needs_review`; provisional identity, projection-as-evidence, missing canonical source, missing bitemporal refs, false merge without adjudication, false split without supersession, or missing replay fail deterministically
+- `OutputTypePublicationGateReport` pass requires `record`, `table`, `document_metadata`, `document`, `file`, `dataset`, and `fact` output coverage records with source evidence, evidence coverage, verification, publication, output manifest, privacy lifecycle, command/event/outbox, and replay refs
+- candidate, graph, memory, agent reasoning, or temporal KG refs cannot satisfy source evidence for any output type; missing output type, unsupported output type, missing type-specific refs, or missing replay fail deterministically
 
 ### Export And Correction Profile
 

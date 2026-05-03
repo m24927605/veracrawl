@@ -36,7 +36,7 @@ Target contract manifest:
 | FetchAttempt, FetchResult, PageSnapshot, NormalizedDocument, NormalizationManifest | required | raw artifacts, rendered artifacts, documents, and normalized outputs carry replayable transformation refs |
 | ExtractionStrategy, ExtractionCandidate, EvidencePacket | required | schema-bound and approved exploratory extraction preserve anchors and source refs |
 | VerificationRecommendation, VerificationDecision, ConflictRecord, AdjudicationDecision | required | evidence, contradictions, freshness, and review/adjudication are explicit |
-| PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact | required | immutable publication and fact projection preserve evidence and verification lineage |
+| PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact, OutputTypeCoverageRecord, OutputTypePublicationGateReport | required | immutable publication and fact projection preserve evidence and verification lineage across all target output types |
 | GraphBuildManifest, GraphNode, GraphEdge, GraphSignal, TemporalKGProjectionRecord, TemporalKGEntityIdentity, TemporalKGRuntimeReport | required | graph projections have input refs, watermarks, quality metrics, graph-driven frontier/review decisions, and evidence-derived temporal semantics |
 | MemoryEvent, CrossScopeMemoryTunnel, OperationalTemporalMemoryRecord | required | memory has scope, trust, taint, promotion policy, freshness, invalidation, cross-scope authorization, operational temporal records, evidence refs, and prompt-use restrictions |
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
@@ -1166,6 +1166,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | build_evidence | evidence | EvidencePacket | EvidencePayload | candidate exists; anchors resolvable | expected_version | evidence_built | missing required anchors fail coverage |
 | decide_verification | verify | VerificationDecision | VerificationDecisionPayload | evidence packet and publication policy loaded | expected_version | verification_decided | conflict creates ConflictRecord and review item |
 | publish_output | publish | PublishedOutput | PublicationPayload | accepted verification and coverage aggregate pass | expected_version | output_published, result_materialized | unresolved conflicts reject publication |
+| record_output_type_coverage | publish | OutputTypeCoverageRecord | BaseCommandPayload | output type has source evidence, verification, publication, manifest, lifecycle, policy, and replay refs | expected_version | output_type_coverage_recorded | candidate/graph/memory/agent/temporal KG context cannot satisfy source evidence |
+| record_output_type_coverage_report | publish | OutputTypePublicationGateReport | BaseCommandPayload | every target output type has coverage record refs or typed failure/review refs | expected_version | output_type_coverage_reported | missing output type, unsupported type, missing type refs, or missing replay fails |
+| record_output_type_coverage_fixture_manifest | tests | OutputTypeCoverageFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | output_type_coverage_fixture_manifest_recorded | invalid negative/pass pairing rejected |
 | dispatch_export | export | ExportJob, ExportAttempt | ExportDispatchPayload | export target approved; output manifest immutable | expected_version | export_dispatched | idempotency preserves destination mapping |
 | complete_export | export | ExportAttempt, ExportDeliveryReceipt | ExportReceiptPayload | destination receipt validates | expected_version | export_delivered | rejected destination marks attempt failed |
 | fail_export | export | ExportAttempt | ExportFailurePayload | retry classification recorded | expected_version | error_recorded | transient retry or permanent failure decision |
@@ -2951,6 +2954,85 @@ OutputManifest:
   content_hash: string
   created_at: timestamp
 ```
+
+## OutputTypeCoverageRecord
+
+`OutputTypeCoverageRecord` is the executable target coverage contract for one
+published output type.
+
+```yaml
+OutputTypeCoverageRecord:
+  id: string
+  run_ref: string
+  output_type: record | table | document_metadata | document | file | dataset | fact
+  candidate_ref: string
+  published_output_ref: string
+  output_manifest_ref: string
+  evidence_packet_ref: string
+  evidence_coverage_ref: string
+  verification_decision_ref: string
+  publication_policy_refs: list
+  source_evidence_refs: list
+  field_evidence_refs: list
+  type_specific_refs: map
+  privacy_lifecycle_refs: list
+  artifact_refs: list
+  diagnostic_graph_refs: list
+  diagnostic_memory_refs: list
+  diagnostic_agent_reasoning_refs: list
+  diagnostic_temporal_kg_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  result: pass | fail | needs_review
+```
+
+Rules:
+
+- pass requires source evidence, evidence coverage, verification, publication,
+  manifest, lifecycle, policy, command, event cursor, outbox, and replay refs.
+- table outputs require table structure, row, and cell anchor refs.
+- documents require artifact, normalized document or section refs.
+- files require hash, MIME, and lifecycle refs.
+- datasets require manifest, item, and item evidence refs.
+- facts require fact key, verification, and temporal context refs.
+- candidate, graph, memory, agent reasoning, and temporal KG refs are diagnostic
+  only and cannot satisfy source evidence requirements.
+
+## OutputTypePublicationGateReport
+
+```yaml
+OutputTypePublicationGateReport:
+  id: string
+  run_ref: string
+  coverage_record_refs: list
+  covered_output_types: list
+  missing_output_types: list
+  unsupported_output_type_refs: list
+  derived_context_as_evidence_refs: list
+  missing_type_specific_refs: list
+  missing_replay_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_ref: string
+  contract_only_refs: list
+  missing_runtime_refs: list
+  failure_type: string
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+```
+
+Pass requires coverage records for all target output types: `record`, `table`,
+`document_metadata`, `document`, `file`, `dataset`, and `fact`. Missing output
+types, unsupported types, aggregate or source-specific derived context as
+evidence, missing type-specific refs, and missing replay refs fail
+deterministically. Source-specific derived context failures include candidate,
+graph, memory, agent reasoning, and temporal KG refs used as source evidence.
 
 ## EvidenceCoverageMap
 

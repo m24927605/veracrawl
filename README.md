@@ -424,6 +424,33 @@ do
 done
 ```
 
+Run target output type coverage fixtures:
+
+```sh
+for fixture in \
+  output-type-coverage-success \
+  output-type-coverage-runtime-unavailable \
+  output-type-coverage-missing-output-type \
+  output-type-coverage-unsupported-output-type \
+  output-type-coverage-derived-context-as-evidence \
+  output-type-coverage-candidate-as-evidence \
+  output-type-coverage-graph-as-evidence \
+  output-type-coverage-memory-as-evidence \
+  output-type-coverage-agent-reasoning-as-evidence \
+  output-type-coverage-temporal-kg-as-evidence \
+  output-type-coverage-missing-table-cell-evidence \
+  output-type-coverage-missing-file-lifecycle \
+  output-type-coverage-missing-dataset-item-evidence \
+  output-type-coverage-missing-fact-verification \
+  output-type-coverage-missing-replay
+do
+  uv run --python python3.12 --extra dev veracrawl-output-coverage run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
 Run basic site graph fixtures:
 
 ```sh

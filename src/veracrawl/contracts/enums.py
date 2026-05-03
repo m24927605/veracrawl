@@ -1044,6 +1044,37 @@ class PublicationFailureType(StrEnum):
     REVIEW_NOT_ACCEPTED = "review_not_accepted"
 
 
+class TargetOutputType(StrEnum):
+    RECORD = "record"
+    TABLE = "table"
+    DOCUMENT_METADATA = "document_metadata"
+    DOCUMENT = "document"
+    FILE = "file"
+    DATASET = "dataset"
+    FACT = "fact"
+
+
+class OutputTypeCoverageFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "output_type_coverage_missing_runtime_refs"
+    MISSING_OUTPUT_TYPE = "output_type_coverage_missing_output_type"
+    UNSUPPORTED_OUTPUT_TYPE = "output_type_coverage_unsupported_output_type"
+    DERIVED_CONTEXT_AS_EVIDENCE = "output_type_coverage_derived_context_as_evidence"
+    CANDIDATE_AS_EVIDENCE = "output_type_coverage_candidate_as_evidence"
+    GRAPH_AS_EVIDENCE = "output_type_coverage_graph_as_evidence"
+    MEMORY_AS_EVIDENCE = "output_type_coverage_memory_as_evidence"
+    AGENT_REASONING_AS_EVIDENCE = "output_type_coverage_agent_reasoning_as_evidence"
+    TEMPORAL_KG_AS_EVIDENCE = "output_type_coverage_temporal_kg_as_evidence"
+    MISSING_TABLE_CELL_EVIDENCE = (
+        "output_type_coverage_missing_table_cell_evidence"
+    )
+    MISSING_FILE_LIFECYCLE = "output_type_coverage_missing_file_lifecycle"
+    MISSING_DATASET_ITEM_EVIDENCE = (
+        "output_type_coverage_missing_dataset_item_evidence"
+    )
+    MISSING_FACT_VERIFICATION = "output_type_coverage_missing_fact_verification"
+    MISSING_REPLAY_REFS = "output_type_coverage_missing_replay_refs"
+
+
 class GraphNodeType(StrEnum):
     URL = "url"
     PAGE_TYPE = "page_type"

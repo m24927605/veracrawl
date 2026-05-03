@@ -1,0 +1,1 @@
+{"id":"output-type-coverage-missing-output-type","scenario":"output-type-coverage-missing-output-type","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"output_type_coverage_missing_output_type","expected_failure_type":"output_type_coverage_missing_output_type","negative_case":true}

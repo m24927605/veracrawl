@@ -495,6 +495,47 @@ publication failures, and replay refs. It does not prove graph intelligence,
 memory intelligence, export delivery, distributed storage, distributed queueing,
 production browser rendering, review UI, or production scale readiness.
 
+Target output type coverage fixture contract:
+
+```text
+veracrawl-output-coverage run tests/fixtures/<output_type_coverage_fixture_id> --profile target --out .veracrawl-test-runs/<output_type_coverage_fixture_id>
+```
+
+Required output type coverage fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| output-type-coverage-success | all seven target output types produce source-backed coverage records and a pass publication gate report |
+| output-type-coverage-runtime-unavailable | contract-only output coverage reports needs-review with missing runtime refs and no published output |
+| output-type-coverage-missing-output-type | missing target output type fails with typed missing-output diagnostics |
+| output-type-coverage-unsupported-output-type | unsupported output type fails before publication |
+| output-type-coverage-derived-context-as-evidence | candidate, graph, memory, agent reasoning, or temporal KG refs used as evidence fail publication |
+| output-type-coverage-candidate-as-evidence | candidate refs used as source evidence fail publication |
+| output-type-coverage-graph-as-evidence | graph refs used as source evidence fail publication |
+| output-type-coverage-memory-as-evidence | memory refs used as source evidence fail publication |
+| output-type-coverage-agent-reasoning-as-evidence | agent reasoning refs used as source evidence fail publication |
+| output-type-coverage-temporal-kg-as-evidence | temporal KG refs used as source evidence fail publication |
+| output-type-coverage-missing-table-cell-evidence | table output without row/cell evidence refs fails |
+| output-type-coverage-missing-file-lifecycle | file output without artifact hash or lifecycle refs fails |
+| output-type-coverage-missing-dataset-item-evidence | dataset output without item evidence refs fails |
+| output-type-coverage-missing-fact-verification | fact output without fact verification refs fails |
+| output-type-coverage-missing-replay | output coverage without command, event, outbox, and replay refs fails |
+
+Output type coverage acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_output_type_coverage_contract_registry.py`
+- `pytest tests/contract/test_output_type_coverage_contracts.py`
+- `pytest tests/contract/test_output_type_coverage_import_boundaries.py`
+- `pytest tests/unit/test_output_type_coverage_gate.py`
+- `pytest tests/integration/test_output_type_coverage_fixtures.py`
+
+This acceptance proves that the target publication boundary can cover records,
+tables, document metadata, documents, files, datasets, and facts without using
+derived context as source evidence. It does not prove external export delivery,
+warehouse/database/object-store writes, production persistence, review UI,
+production browser rendering, or production scale readiness.
+
 Basic site graph fixture contract:
 
 ```text

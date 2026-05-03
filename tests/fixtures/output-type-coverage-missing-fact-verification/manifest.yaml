@@ -1,0 +1,1 @@
+{"id":"output-type-coverage-missing-fact-verification","scenario":"output-type-coverage-missing-fact-verification","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"output_type_coverage_missing_fact_verification","expected_failure_type":"output_type_coverage_missing_fact_verification","negative_case":true}

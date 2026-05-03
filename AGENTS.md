@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/029-temporal-kg-identity-projection-gate/plan.md`.
-Use it with `specs/029-temporal-kg-identity-projection-gate/spec.md`,
-`specs/029-temporal-kg-identity-projection-gate/research.md`,
-`specs/029-temporal-kg-identity-projection-gate/data-model.md`,
-`specs/029-temporal-kg-identity-projection-gate/contracts/`, and
-`specs/029-temporal-kg-identity-projection-gate/quickstart.md` for VeraCrawl Temporal KG Identity Projection Gate work.
+Current active Spec Kit plan: `specs/030-output-type-coverage-gate/plan.md`.
+Use it with `specs/030-output-type-coverage-gate/spec.md`,
+`specs/030-output-type-coverage-gate/research.md`,
+`specs/030-output-type-coverage-gate/data-model.md`,
+`specs/030-output-type-coverage-gate/contracts/`, and
+`specs/030-output-type-coverage-gate/quickstart.md` for VeraCrawl Target Output Type Coverage Gate work.
 <!-- SPECKIT END -->

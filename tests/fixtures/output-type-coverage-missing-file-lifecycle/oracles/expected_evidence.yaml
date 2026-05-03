@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"output_type_coverage_missing_file_lifecycle","required_refs":["file_artifact_hash_ref","privacy_lifecycle_ref"]}

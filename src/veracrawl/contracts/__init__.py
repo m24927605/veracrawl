@@ -183,7 +183,14 @@ from veracrawl.contracts.processing import (
     SiteModel,
     TextAnchor,
 )
-from veracrawl.contracts.publication import OutputManifest, PublicationReport, PublishedOutput
+from veracrawl.contracts.publication import (
+    OutputManifest,
+    OutputTypeCoverageFixtureManifest,
+    OutputTypeCoverageRecord,
+    OutputTypePublicationGateReport,
+    PublicationReport,
+    PublishedOutput,
+)
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
 from veracrawl.contracts.replay import ReplayBundleManifest, ReplayValidationReport
@@ -356,6 +363,9 @@ __all__ = [
     "ObjectStoreFixtureManifest",
     "ObjectStoreOperationRecord",
     "OutputManifest",
+    "OutputTypeCoverageFixtureManifest",
+    "OutputTypeCoverageRecord",
+    "OutputTypePublicationGateReport",
     "OutboxRecord",
     "OperationalTemporalMemoryRecord",
     "PageSnapshot",

@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"output_type_coverage_missing_table_cell_evidence","required_refs":["row_refs","cell_anchor_refs"]}

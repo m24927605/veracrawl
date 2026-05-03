@@ -1,0 +1,1 @@
+{"expected_result":"fail","failure_type":"output_type_coverage_derived_context_as_evidence","forbidden_evidence_sources":["candidate","graph","memory","agent_reasoning","temporal_kg"]}

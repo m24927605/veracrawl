@@ -29,6 +29,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "evidence",
         "verification",
         "publication",
+        "output_type_coverage_gate",
         "evidence_publication",
         "projection",
         "graph",
