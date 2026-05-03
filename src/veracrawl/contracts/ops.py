@@ -20,6 +20,7 @@ from veracrawl.contracts.enums import (
     OpsDashboardType,
     OpsFailureType,
     OpsRecoveryStatus,
+    OpsReplayObservabilityFailureType,
     OpsSeverity,
     RecoveryActionType,
     ReplayMode,
@@ -829,4 +830,148 @@ class OpsFixtureManifest(TimestampedModel):
             raise ValueError("ops fixture must support target profile")
         if self.negative_case and self.expected_completion_result == "pass":
             raise ValueError("negative ops fixture must not expect pass")
+        return self
+
+
+class OpsReplayObservabilityRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    result_publication_export_report_ref: Ref | None = None
+    worker_orchestration_runtime_report_ref: Ref | None = None
+    ops_console_report_ref: Ref | None = None
+    observability_report_ref: Ref | None = None
+    run_control_action_refs: list[Ref] = Field(default_factory=list)
+    review_item_refs: list[Ref] = Field(default_factory=list)
+    evidence_review_refs: list[Ref] = Field(default_factory=list)
+    replay_audit_view_refs: list[Ref] = Field(default_factory=list)
+    graph_debug_refs: list[Ref] = Field(default_factory=list)
+    export_status_refs: list[Ref] = Field(default_factory=list)
+    withdrawal_status_refs: list[Ref] = Field(default_factory=list)
+    recovery_action_refs: list[Ref] = Field(default_factory=list)
+    failure_record_refs: list[Ref] = Field(default_factory=list)
+    dr_restore_report_refs: list[Ref] = Field(default_factory=list)
+    quality_report_refs: list[Ref] = Field(default_factory=list)
+    dashboard_snapshot_refs: list[Ref] = Field(default_factory=list)
+    alert_record_refs: list[Ref] = Field(default_factory=list)
+    runbook_action_refs: list[Ref] = Field(default_factory=list)
+    cost_metric_refs: list[Ref] = Field(default_factory=list)
+    observability_signal_refs: list[Ref] = Field(default_factory=list)
+    metric_sample_refs: list[Ref] = Field(default_factory=list)
+    trace_span_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    redaction_map_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_type: OpsReplayObservabilityFailureType | None = None
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    stale_dashboard_refs: list[Ref] = Field(default_factory=list)
+    unresolved_recovery_refs: list[Ref] = Field(default_factory=list)
+    unsafe_operator_action_refs: list[Ref] = Field(default_factory=list)
+    observability_gap_refs: list[Ref] = Field(default_factory=list)
+    replay_gap_refs: list[Ref] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)
+    operator_status: str
+    completion_result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_ops_replay_observability_report(
+        self,
+    ) -> OpsReplayObservabilityRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "result_publication_export_report_ref": (
+                    self.result_publication_export_report_ref
+                ),
+                "worker_orchestration_runtime_report_ref": (
+                    self.worker_orchestration_runtime_report_ref
+                ),
+                "ops_console_report_ref": self.ops_console_report_ref,
+                "observability_report_ref": self.observability_report_ref,
+                "run_control_action_refs": self.run_control_action_refs,
+                "review_item_refs": self.review_item_refs,
+                "evidence_review_refs": self.evidence_review_refs,
+                "replay_audit_view_refs": self.replay_audit_view_refs,
+                "graph_debug_refs": self.graph_debug_refs,
+                "export_status_refs": self.export_status_refs,
+                "withdrawal_status_refs": self.withdrawal_status_refs,
+                "recovery_action_refs": self.recovery_action_refs,
+                "failure_record_refs": self.failure_record_refs,
+                "dr_restore_report_refs": self.dr_restore_report_refs,
+                "quality_report_refs": self.quality_report_refs,
+                "dashboard_snapshot_refs": self.dashboard_snapshot_refs,
+                "alert_record_refs": self.alert_record_refs,
+                "runbook_action_refs": self.runbook_action_refs,
+                "cost_metric_refs": self.cost_metric_refs,
+                "observability_signal_refs": self.observability_signal_refs,
+                "metric_sample_refs": self.metric_sample_refs,
+                "trace_span_refs": self.trace_span_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "redaction_map_refs": self.redaction_map_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+                or self.stale_dashboard_refs
+                or self.unresolved_recovery_refs
+                or self.unsafe_operator_action_refs
+                or self.observability_gap_refs
+                or self.replay_gap_refs
+            ):
+                raise ValueError(
+                    f"passing ops replay observability report missing refs: {missing}"
+                )
+        elif not (
+            self.failure_type
+            and (
+                self.failure_report_refs
+                or self.missing_ref_fields
+                or self.stale_dashboard_refs
+                or self.unresolved_recovery_refs
+                or self.unsafe_operator_action_refs
+                or self.observability_gap_refs
+                or self.replay_gap_refs
+            )
+        ):
+            raise ValueError("non-pass ops replay observability report requires diagnostics")
+        return self
+
+
+class OpsReplayObservabilityFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    profile_refs: list[str] = Field(default_factory=list)
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: OpsReplayObservabilityFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_ops_replay_observability_fixture(
+        self,
+    ) -> OpsReplayObservabilityFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("ops replay observability fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("ops replay observability fixture must declare required ref types")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative ops replay observability fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError(
+                    "negative ops replay observability fixture requires failure type"
+                )
+        if self.expected_failure_type is not None and not self.negative_case:
+            raise ValueError("expected failure type requires negative case")
         return self

@@ -574,6 +574,17 @@ class ObservabilityFailureType(StrEnum):
     UNSAFE_RUNBOOK_WITHOUT_APPROVAL = "observability_unsafe_runbook_without_approval"
 
 
+class OpsReplayObservabilityFailureType(StrEnum):
+    MISSING_PUBLICATION = "ops_runtime_missing_publication"
+    MISSING_WORKER_ORCHESTRATION = "ops_runtime_missing_worker_orchestration"
+    MISSING_OPS_CONSOLE = "ops_runtime_missing_ops_console"
+    MISSING_OBSERVABILITY = "ops_runtime_missing_observability"
+    STALE_DASHBOARD = "ops_runtime_stale_dashboard"
+    UNRESOLVED_RECOVERY = "ops_runtime_unresolved_recovery"
+    UNSAFE_OPERATOR_ACTION = "ops_runtime_unsafe_operator_action"
+    REPLAY_MISMATCH = "ops_runtime_replay_mismatch"
+
+
 class SecurityActionSurface(StrEnum):
     NETWORK = "network"
     PROMPT = "prompt"

@@ -1,0 +1,1 @@
+{"required_events":["ops_replay_observability_runtime_reported","ops_replay_observability_fixture_manifest_recorded"],"forbidden_events":["dashboard_state_mutated_directly","single_site_scraper_completed"]}

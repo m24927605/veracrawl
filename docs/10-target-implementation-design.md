@@ -1546,6 +1546,15 @@ Operational observability gate slice:
 - no-runtime and ops-console-only observability return `needs_review`; missing metrics, traces, alerts, runbooks, dashboard watermarks, DR refs, redaction refs, replay refs, secret leakage, and unsafe runbook actions without approval are deterministic failures.
 - this slice does not implement managed telemetry storage, OpenTelemetry collector deployment, Grafana dashboards, cloud monitoring accounts, paging integrations, on-call automation, deployment automation, production worker fleets, browser rendering, model SDK integration, or concrete agent framework integration. Those remain separate target gates.
 
+Ops replay and observability runtime slice:
+
+- `OpsReplayObservabilityRuntimeReport` composes row 048 result publication/export refs, row 052 worker orchestration refs, `OpsConsoleReport`, and `ObservabilityReport` into one operator-visible acceptance aggregate.
+- `veracrawl.ops.replay_observability_runtime` is deterministic core runtime composition; it imports only VeraCrawl contracts and core runtimes, while UI frameworks, telemetry backends, storage clients, queue clients, browser engines, model SDKs, agent frameworks, and site-specific scraper code remain outside core.
+- passing reports require run-control action refs, review item refs, evidence review refs, replay audit refs, graph/debug refs, export/withdrawal status refs, failure/recovery refs, DR restore refs, quality refs, dashboard refs, alert/runbook refs, cost/signal/metric/trace refs, policy refs, command/event/outbox refs, redaction refs, and replay bundle refs.
+- `veracrawl-ops-runtime run` executes target-profile review/replay, incident recovery, and cost/alert success fixtures plus missing dependency and unsafe-operator negative fixtures, then writes a stable `run_report.json`.
+- missing result publication, missing worker orchestration, missing ops console, missing observability, stale dashboard, unresolved recovery, unsafe operator action, and replay mismatch are typed `OpsReplayObservabilityFailureType` failures.
+- this slice does not implement a production dashboard frontend, managed telemetry storage, paging integrations, production deployment automation, cloud autoscaling control, or concrete worker fleet management; it proves the canonical operator runtime contract is wired and replayable.
+
 Security/privacy lifecycle gate slice:
 
 - `veracrawl.runtime_support.security_privacy` is core-owned and imports only VeraCrawl contracts.

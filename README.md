@@ -382,6 +382,15 @@ backpressure, autoscaling, policy, command/event/outbox, and replay refs.
 Missing persistence, missing queue broker, unrecovered stale leases, missing
 heartbeats, hidden dead letters, duplicate pollution, backpressure without
 policy, and replay gaps fail deterministically.
+The ops replay and observability runtime composes result publication/export,
+worker orchestration, ops console, and operational observability into one
+operator-visible target aggregate. `veracrawl-ops-runtime` proves operators can
+inspect, pause/resume, replay, recover, explain bad outputs, view graph/debug
+context, track export/withdrawal status, review alerts/cost, and verify
+recovery through canonical refs. Missing row 048 publication, missing row 052
+worker orchestration, missing ops console, missing observability, stale
+dashboards, unresolved recovery, unsafe operator action, and replay mismatch
+fail with typed diagnostics.
 The concrete persistence adapter spine proves executable SQLite adapter
 semantics for transactions, migrations, idempotency, event cursors, outbox,
 artifact index, queue leases, and replay refs. The Postgres descriptor is
@@ -952,6 +961,31 @@ do
   uv run --python python3.12 --extra dev veracrawl-worker-orchestration run \
     tests/fixtures/$fixture \
     --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run ops replay/observability runtime fixtures:
+
+```sh
+for fixture in \
+  ops-runtime-review-replay-success \
+  ops-runtime-incident-recovery-success \
+  ops-runtime-cost-alert-success \
+  ops-runtime-missing-publication \
+  ops-runtime-missing-worker-orchestration \
+  ops-runtime-missing-ops-console \
+  ops-runtime-missing-observability \
+  ops-runtime-stale-dashboard \
+  ops-runtime-unresolved-recovery \
+  ops-runtime-unsafe-operator-action \
+  ops-runtime-replay-mismatch
+do
+  uv run --python python3.12 --extra dev veracrawl-ops-runtime run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --telemetry-backend-ref telemetry-backend:local \
+    --collector-handoff-ref collector-handoff:local \
     --out .veracrawl-test-runs/$fixture
 done
 ```

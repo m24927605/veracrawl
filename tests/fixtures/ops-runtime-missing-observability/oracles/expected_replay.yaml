@@ -1,0 +1,1 @@
+{"expected_completion_result":"fail","required_diagnostic_refs":["failure_report_refs","missing_ref_fields","observability_gap_refs"],"forbidden_pass_refs":["observability_report_ref"]}

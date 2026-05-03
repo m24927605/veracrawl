@@ -42,7 +42,7 @@ Target contract manifest:
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
 | ProjectionSpec, ProjectionWatermark, ProjectionRebuildJob, ProjectionMismatchReport, SchemaMigrationRun, EventMigrationRun, BackfillJob | required | migrations, rebuilds, watermarks, rollback, and deterministic hashes are contracted |
 | ServiceOwnershipSpec, StateMachineSpec, FieldPresenceSpec, ReferenceSpec, EventTypeSpec | required | validation, ownership, event taxonomy, migration, projection rebuild, and state transition tests derive from contracts |
-| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
+| QueueTopologySpec, QueueItem, ShardLease, RetryDeadLetterRecord, BackpressureSignal, AutoscalingDecision, ScaleRecoveryReport, WorkerOrchestrationRuntimeReport, WorkerOrchestrationFixtureManifest, OpsReplayObservabilityRuntimeReport, OpsReplayObservabilityFixtureManifest, ProjectionMismatchReport, DRRestorePlan, DRRestoreRun, DRRestoreReport | required | scale, worker orchestration, ops replay/observability, reliability, queueing, projection mismatch, replay, and DR behavior are contracted |
 | PersistenceAdapterSpec, PersistenceMigrationRecord, PersistenceAdapterConformanceReport, PersistenceAdapterFixtureManifest, PersistenceTransactionRecord, IdempotencyPersistenceRecord, PersistentQueueOperationRecord, PersistenceRuntimeReport | required | production-facing persistence, concrete adapter conformance, migrations, idempotency, event cursor, outbox, artifact index, and replay behavior are contracted |
 | QueueBrokerAdapterSpec, QueueBrokerOperationRecord, QueueBrokerConformanceReport, QueueBrokerFixtureManifest | required | operational queue broker adapter semantics, fencing tokens, visibility timeout, heartbeat, idempotent enqueue, dead letters, fairness, backpressure, policy, no-runtime, negative, and replay behavior are contracted |
 | ObjectStoreAdapterSpec, ObjectStoreOperationRecord, ObjectStoreConformanceReport, ObjectStoreFixtureManifest | required | operational object store adapter semantics, digest verification, read-after-write, delete markers, lifecycle, retention, privacy, no-runtime, negative, and replay behavior are contracted |
@@ -1217,6 +1217,8 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_scale_recovery_report | review_replay | ScaleRecoveryReport | BaseCommandPayload | queue, lease, backpressure, autoscaling, dead-letter, failure/recovery, DR, policy, command, event, outbox, and replay refs validate | expected_version | scale_recovery_reported | missing scale refs fail replay |
 | record_worker_orchestration_runtime_report | ops | WorkerOrchestrationRuntimeReport | BaseCommandPayload | production persistence, queue broker, live acquisition, normalization, evidence, scale recovery, worker pool, queue/lease, retry/dead-letter, backpressure/autoscaling, policy, command/event/outbox, and replay refs validate | expected_version | worker_orchestration_runtime_reported | missing worker orchestration refs fail replay |
 | record_worker_orchestration_fixture_manifest | tests | WorkerOrchestrationFixtureManifest | BaseCommandPayload | target profile, expected result, expected status, typed failure, and required refs validate | none | worker_orchestration_fixture_manifest_recorded | negative fixture claiming pass is rejected |
+| record_ops_replay_observability_runtime_report | ops | OpsReplayObservabilityRuntimeReport | BaseCommandPayload | publication/export, worker orchestration, ops console, observability, operator workflow, policy, command/event/outbox, redaction, and replay refs validate | expected_version | ops_replay_observability_runtime_reported | missing dependency or unsafe operator refs fail replay |
+| record_ops_replay_observability_fixture_manifest | tests | OpsReplayObservabilityFixtureManifest | BaseCommandPayload | target profile, expected result, expected status, typed failure, and required refs validate | none | ops_replay_observability_fixture_manifest_recorded | negative fixture claiming pass is rejected |
 | record_queue_broker_adapter | ports | QueueBrokerAdapterSpec | BaseCommandPayload | queue names, broker capabilities, fencing, idempotency, fairness, backpressure, and policy refs validate | none | queue_broker_adapter_recorded | broker missing capability blocks operational target pass |
 | record_queue_broker_operation | scheduler | QueueBrokerOperationRecord | BaseCommandPayload | enqueue, duplicate enqueue, lease, heartbeat, ack, nack, dead-letter, fencing, visibility, retry, fairness, backpressure, and policy refs validate | lease_required | queue_broker_operation_recorded | missing fencing, heartbeat, or dead-letter refs fail conformance |
 | record_queue_broker_conformance_report | review_replay | QueueBrokerConformanceReport | BaseCommandPayload | adapter, topology, item, broker operation, lease, heartbeat, ack/nack, dead-letter, fencing, retry, fairness, backpressure, policy, contract-only, and replay refs validate | expected_version | queue_broker_conformance_reported | runtime-unavailable brokers must report needs_review, not pass |
@@ -1647,6 +1649,8 @@ Target state transition matrix:
 | ScaleRecoveryReport | created as pass/fail/needs_review; immutable after create | record_scale_recovery_report | review_replay | scale replay and DR refs | missing scale refs tests |
 | WorkerOrchestrationRuntimeReport | created as pass/fail/needs_review; immutable after create | record_worker_orchestration_runtime_report | ops | worker pool, queue, lease, recovery, backpressure, autoscaling, policy, replay refs | missing worker orchestration refs tests |
 | WorkerOrchestrationFixtureManifest | created before fixture execution; immutable after create | record_worker_orchestration_fixture_manifest | tests | target fixture expectations and required refs | negative pass rejection tests |
+| OpsReplayObservabilityRuntimeReport | created as pass/fail/needs_review; immutable after create | record_ops_replay_observability_runtime_report | ops | publication/export, worker orchestration, ops console, observability, operator workflow, policy, and replay refs | missing dependency, stale dashboard, unsafe action, and replay mismatch tests |
+| OpsReplayObservabilityFixtureManifest | created before fixture execution; immutable after create | record_ops_replay_observability_fixture_manifest | tests | target fixture expectations and required refs | negative pass rejection tests |
 | QueueBrokerAdapterSpec | proposed -> recorded/superseded | record_queue_broker_adapter | ports | queue broker policy | broker capability and import boundary tests |
 | QueueBrokerOperationRecord | created append-only | record_queue_broker_operation | scheduler | lease, fencing, retry, dead-letter policy | queue broker operation contract tests |
 | QueueBrokerConformanceReport | created as pass/fail/needs_review; immutable after create | record_queue_broker_conformance_report | review_replay | broker conformance refs, no-runtime, and failure boundaries | queue broker fixture tests |
@@ -3889,6 +3893,8 @@ Generated contract tests must compare `CrawlRunEvent.event_type` to this registr
 | scale_recovery_reported | OpsEventPayload | ScaleRecoveryReport | after required | queue, lease, backpressure, autoscaling, dead-letter, DR, command, event, outbox, replay refs | operational refs remain |
 | worker_orchestration_runtime_reported | OpsEventPayload | WorkerOrchestrationRuntimeReport | after required | production persistence, queue broker, worker pool, queue/lease, retry/dead-letter, backpressure/autoscaling, policy, command/event/outbox, replay refs | operational refs remain |
 | worker_orchestration_fixture_manifest_recorded | OpsEventPayload | WorkerOrchestrationFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required refs | fixture refs remain |
+| ops_replay_observability_runtime_reported | OpsEventPayload | OpsReplayObservabilityRuntimeReport | after required | publication/export, worker orchestration, ops console, observability, run-control, review, replay, export, recovery, DR, dashboard, alert, metric, trace, policy, command/event/outbox, redaction, and replay refs | operational refs remain |
+| ops_replay_observability_fixture_manifest_recorded | OpsEventPayload | OpsReplayObservabilityFixtureManifest | after required | fixture id, scenario, expected status, typed failure, required refs | fixture refs remain |
 | queue_broker_adapter_recorded | QueueBrokerEventPayload | QueueBrokerAdapterSpec | after required | queue names, capability refs, visibility timeout, policy refs | broker URL and credentials redacted |
 | queue_broker_operation_recorded | QueueBrokerEventPayload | QueueBrokerOperationRecord | after required | queue item, lease, fencing token hash/ref, visibility timeout, heartbeat, retry, dead-letter refs | fencing secret material redacted |
 | queue_broker_conformance_reported | QueueBrokerEventPayload | QueueBrokerConformanceReport | after required | adapter, topology, operation, lease, heartbeat, ack/nack, dead-letter, failure, contract-only, replay refs | stable refs remain |
@@ -5533,6 +5539,79 @@ Executable review/replay/ops console rules:
 - `OpsConsoleReport` pass requires review, replay audit, quality, dashboard, DR restore, policy, command, event cursor, and outbox refs.
 - Negative ops fixtures must fail explicitly for missing review evidence, unresolved failure without recovery, stale dashboard projection, and unsafe recovery without review or approval.
 - These contracts provide a replayable target ops data surface. Operational observability is now validated separately by `ObservabilityReport` and related signal contracts. This data surface still does not claim production UI, managed telemetry storage, alert delivery, export delivery, distributed persistence, production browser rendering, or production scale readiness.
+
+## OpsReplayObservabilityRuntimeReport
+
+```yaml
+OpsReplayObservabilityRuntimeReport:
+  id: string
+  fixture_id: string
+  run_ref: string
+  result_publication_export_report_ref: string
+  worker_orchestration_runtime_report_ref: string
+  ops_console_report_ref: string
+  observability_report_ref: string
+  run_control_action_refs: list
+  review_item_refs: list
+  evidence_review_refs: list
+  replay_audit_view_refs: list
+  graph_debug_refs: list
+  export_status_refs: list
+  withdrawal_status_refs: list
+  recovery_action_refs: list
+  failure_record_refs: list
+  dr_restore_report_refs: list
+  quality_report_refs: list
+  dashboard_snapshot_refs: list
+  alert_record_refs: list
+  runbook_action_refs: list
+  cost_metric_refs: list
+  observability_signal_refs: list
+  metric_sample_refs: list
+  trace_span_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  redaction_map_refs: list
+  replay_bundle_ref: string
+  failure_type: ops_runtime_missing_publication | ops_runtime_missing_worker_orchestration | ops_runtime_missing_ops_console | ops_runtime_missing_observability | ops_runtime_stale_dashboard | ops_runtime_unresolved_recovery | ops_runtime_unsafe_operator_action | ops_runtime_replay_mismatch
+  failure_report_refs: list
+  missing_ref_fields: list
+  stale_dashboard_refs: list
+  unresolved_recovery_refs: list
+  unsafe_operator_action_refs: list
+  observability_gap_refs: list
+  replay_gap_refs: list
+  diagnostics: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+  created_at: timestamp
+```
+
+## OpsReplayObservabilityFixtureManifest
+
+```yaml
+OpsReplayObservabilityFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: ops_runtime_missing_publication | ops_runtime_missing_worker_orchestration | ops_runtime_missing_ops_console | ops_runtime_missing_observability | ops_runtime_stale_dashboard | ops_runtime_unresolved_recovery | ops_runtime_unsafe_operator_action | ops_runtime_replay_mismatch
+  negative_case: boolean
+  required_ref_types: list
+  created_at: timestamp
+```
+
+Executable ops replay/observability runtime rules:
+
+- pass requires row 048 `ResultPublicationExportRuntimeReport`, row 052 `WorkerOrchestrationRuntimeReport`, `OpsConsoleReport`, and `ObservabilityReport` refs.
+- pass requires run-control, review, evidence review, replay audit, graph/debug, export/withdrawal status, failure/recovery, DR restore, quality, dashboard, alert, runbook, cost, signal, metric, trace, policy, command, event cursor, outbox, redaction, and replay bundle refs.
+- pass is rejected when typed failures, missing refs, stale dashboard refs, unresolved recovery refs, unsafe operator actions, observability gaps, or replay gaps are present.
+- non-pass reports must expose `OpsReplayObservabilityFailureType` diagnostics and at least one failure, missing-ref, stale dashboard, unresolved recovery, unsafe action, observability gap, or replay gap ref.
+- target fixtures must cover review/replay success, incident recovery success, cost/alert success, missing publication, missing worker orchestration, missing ops console, missing observability, stale dashboard, unresolved recovery, unsafe operator action, and replay mismatch.
+- this runtime does not persist dashboard-only state as canonical state and does not import concrete UI frameworks, telemetry backends, storage clients, queue clients, browser engines, model SDKs, agent frameworks, or site-specific scraper modules into core.
 
 ## Target Crawl Runtime Contracts
 

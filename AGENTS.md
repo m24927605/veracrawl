@@ -118,12 +118,12 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/052-worker-orchestration-scale-runtime/plan.md`.
-Use it with `specs/052-worker-orchestration-scale-runtime/spec.md`,
-`specs/052-worker-orchestration-scale-runtime/research.md`,
-`specs/052-worker-orchestration-scale-runtime/data-model.md`,
-`specs/052-worker-orchestration-scale-runtime/contracts/`, and
-`specs/052-worker-orchestration-scale-runtime/quickstart.md` for Worker Orchestration And Scale Runtime
+Current active Spec Kit plan: `specs/053-ops-console-replay-observability/plan.md`.
+Use it with `specs/053-ops-console-replay-observability/spec.md`,
+`specs/053-ops-console-replay-observability/research.md`,
+`specs/053-ops-console-replay-observability/data-model.md`,
+`specs/053-ops-console-replay-observability/contracts/`, and
+`specs/053-ops-console-replay-observability/quickstart.md` for Ops Console, Replay, And Observability Runtime
 work. The post-037 roadmap remains governed by
 `specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
 do not invent additional production specs unless both are amended first.

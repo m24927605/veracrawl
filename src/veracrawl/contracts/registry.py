@@ -75,6 +75,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_graph_ref: str | None = None
     expected_dr_restore_ref: str | None = None
     expected_observability_ref: str | None = None
+    expected_ops_runtime_ref: str | None = None
     expected_security_privacy_ref: str | None = None
     expected_agent_adapter_ref: str | None = None
     expected_agent_model_adapter_ref: str | None = None
@@ -435,6 +436,20 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "ops",
         tests=["tests/integration/test_ops_fixtures.py"],
+    ),
+    "OpsReplayObservabilityRuntimeReport": _contract(
+        "OpsReplayObservabilityRuntimeReport",
+        OwnerService.OPS,
+        "ops",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_ops_replay_observability_contracts.py"],
+    ),
+    "OpsReplayObservabilityFixtureManifest": _contract(
+        "OpsReplayObservabilityFixtureManifest",
+        OwnerService.TESTS,
+        "ops",
+        tests=["tests/integration/test_ops_replay_observability_fixtures.py"],
     ),
     "DRRestoreFixtureManifest": _contract(
         "DRRestoreFixtureManifest",
@@ -2911,6 +2926,21 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["ops_console_reported"],
         ),
+        "record_ops_replay_observability_runtime_report": CommandTypeRegistration(
+            command_type="record_ops_replay_observability_runtime_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="OpsReplayObservabilityRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["ops_recovery", "observability"],
+            emitted_event_types=["ops_replay_observability_runtime_reported"],
+        ),
+        "record_ops_replay_observability_fixture_manifest": CommandTypeRegistration(
+            command_type="record_ops_replay_observability_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="OpsReplayObservabilityFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["ops_replay_observability_fixture_manifest_recorded"],
+        ),
         "record_export_target_spec": CommandTypeRegistration(
             command_type="record_export_target_spec",
             owner_service=OwnerService.EXPORT,
@@ -3395,6 +3425,8 @@ EVENT_TYPES.update(
             "quality_report_recorded",
             "ops_dashboard_snapshot_recorded",
             "ops_console_reported",
+            "ops_replay_observability_runtime_reported",
+            "ops_replay_observability_fixture_manifest_recorded",
             "export_target_recorded",
             "export_dispatched",
             "export_delivered",
@@ -4159,6 +4191,32 @@ for _ops_fixture, _negative in {
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_evidence_ref=f"{_base}/oracles/expected_evidence.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _ops_runtime_fixture, _negative in {
+    "ops-runtime-review-replay-success": False,
+    "ops-runtime-incident-recovery-success": False,
+    "ops-runtime-cost-alert-success": False,
+    "ops-runtime-missing-publication": True,
+    "ops-runtime-missing-worker-orchestration": True,
+    "ops-runtime-missing-ops-console": True,
+    "ops-runtime-missing-observability": True,
+    "ops-runtime-stale-dashboard": True,
+    "ops-runtime-unresolved-recovery": True,
+    "ops-runtime-unsafe-operator-action": True,
+    "ops-runtime-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_ops_runtime_fixture}"
+    FIXTURE_ORACLES[_ops_runtime_fixture] = FixtureOracleRegistration(
+        fixture_id=_ops_runtime_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_ops_runtime_ref=f"{_base}/oracles/expected_ops_runtime.yaml",
+        expected_observability_ref=f"{_base}/oracles/expected_observability.yaml",
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -5583,6 +5641,34 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "OpsDashboardSnapshot",
             "QualityReport",
             "DRRestoreReport",
+        ],
+    ),
+    "ops_replay_observability_runtime": _target_area(
+        "ops_replay_observability_runtime",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "OpsReplayObservabilityRuntimeReport",
+            "OpsReplayObservabilityFixtureManifest",
+            "ResultPublicationExportRuntimeReport",
+            "WorkerOrchestrationRuntimeReport",
+            "OpsConsoleReport",
+            "ObservabilityReport",
+            "ReviewItem",
+            "ReplayAuditView",
+            "FailureRecord",
+            "RecoveryAction",
+            "DRRestoreReport",
+            "QualityReport",
+            "OpsDashboardSnapshot",
+            "AlertRecord",
+            "RunbookAction",
+            "MetricSample",
+            "TraceSpan",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
         ],
     ),
     "security_privacy_lifecycle_gate": _target_area(

@@ -1358,6 +1358,46 @@ It does not prove production dashboard frontend, production observability
 backend, alerting system, export delivery, distributed storage, distributed
 queueing, production browser rendering, or production scale readiness.
 
+Ops replay/observability runtime fixture contract:
+
+```text
+veracrawl-ops-runtime run tests/fixtures/<ops_runtime_fixture_id> --profile target --telemetry-backend-ref telemetry-backend:test --collector-handoff-ref collector-handoff:test --out .veracrawl-test-runs/<ops_runtime_fixture_id>
+```
+
+Required ops runtime fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| ops-runtime-review-replay-success | result publication/export, worker orchestration, ops console, observability, review, replay audit, graph/debug, dashboard, policy, command/event/outbox, redaction, and replay refs are complete |
+| ops-runtime-incident-recovery-success | alert, runbook, failure, recovery, DR restore, approval/policy, command/event/outbox, redaction, and replay refs are complete |
+| ops-runtime-cost-alert-success | cost metric, metric sample, trace, alert, dashboard, quality, policy, command/event/outbox, and replay refs are complete |
+| ops-runtime-missing-publication | missing row 048 publication/export fails with `ops_runtime_missing_publication` |
+| ops-runtime-missing-worker-orchestration | missing row 052 worker orchestration fails with `ops_runtime_missing_worker_orchestration` |
+| ops-runtime-missing-ops-console | missing ops console refs fail with `ops_runtime_missing_ops_console` |
+| ops-runtime-missing-observability | missing observability refs fail with `ops_runtime_missing_observability` |
+| ops-runtime-stale-dashboard | stale dashboard state fails with `ops_runtime_stale_dashboard` |
+| ops-runtime-unresolved-recovery | unresolved failure/recovery state fails with `ops_runtime_unresolved_recovery` |
+| ops-runtime-unsafe-operator-action | side-effecting operator action without required review/approval fails with `ops_runtime_unsafe_operator_action` |
+| ops-runtime-replay-mismatch | missing or inconsistent replay closure fails with `ops_runtime_replay_mismatch` |
+
+Ops replay/observability runtime acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_ops_replay_observability_contracts.py`
+- `pytest tests/contract/test_ops_replay_observability_contract_registry.py`
+- `pytest tests/contract/test_ops_replay_observability_import_boundaries.py`
+- `pytest tests/unit/test_ops_replay_observability_runtime.py`
+- `pytest tests/unit/test_ops_replay_observability_replay.py`
+- `pytest tests/integration/test_ops_replay_observability_fixtures.py`
+- `veracrawl-ops-runtime` CLI loop over all ops runtime fixtures
+
+This acceptance proves the target operator aggregate is wired through canonical
+publication/export, worker orchestration, ops console, observability, policy,
+command/event/outbox, redaction, and replay refs. It does not prove production
+UI, managed telemetry storage, paging integrations, production deployment
+automation, cloud autoscaling control, concrete worker fleet management, or
+site-specific scraper behavior.
+
 Export connector fixture contract:
 
 ```text
@@ -1866,6 +1906,10 @@ Acceptance gates:
 - `worker-orchestration-production-success`, `worker-orchestration-worker-crash-recovered`, and `worker-orchestration-backpressure-autoscale-success` pass only when every target worker pool has heartbeat and capacity refs plus queue item, shard lease, lease heartbeat, fencing, visibility timeout, fairness, retry, dead-letter, failure, recovery, duplicate suppression, backpressure, autoscaling, pending outbox, event gap, policy, command/event/outbox, and replay refs
 - `worker-orchestration-missing-persistence`, `worker-orchestration-missing-queue-broker`, `worker-orchestration-stale-lease-unrecovered`, `worker-orchestration-missing-heartbeat`, `worker-orchestration-dead-letter-hidden`, `worker-orchestration-duplicate-pollution`, `worker-orchestration-backpressure-without-policy`, and `worker-orchestration-replay-mismatch` fail deterministically with typed `WorkerOrchestrationFailureType` diagnostics
 - worker orchestration import-boundary tests prove core does not import concrete storage clients, queue clients, browser runtimes, telemetry clients, model SDKs, agent frameworks, or site-specific scraper modules
+- ops replay/observability runtime fixtures prove publication/export, worker orchestration, ops console, and operational observability compose into one operator-visible replay aggregate
+- `ops-runtime-review-replay-success`, `ops-runtime-incident-recovery-success`, and `ops-runtime-cost-alert-success` pass only when operator workflow, review, replay, graph/debug, export/withdrawal, failure/recovery, DR, quality, dashboard, alert, runbook, cost, signal, metric, trace, policy, command/event/outbox, redaction, and replay refs are present
+- `ops-runtime-missing-publication`, `ops-runtime-missing-worker-orchestration`, `ops-runtime-missing-ops-console`, `ops-runtime-missing-observability`, `ops-runtime-stale-dashboard`, `ops-runtime-unresolved-recovery`, `ops-runtime-unsafe-operator-action`, and `ops-runtime-replay-mismatch` fail deterministically with typed `OpsReplayObservabilityFailureType` diagnostics
+- ops replay/observability import-boundary tests prove core does not import concrete UI frameworks, telemetry clients, storage clients, queue clients, browser runtimes, model SDKs, agent frameworks, or site-specific scraper modules
 
 ### Target Crawl Runtime Profile
 
