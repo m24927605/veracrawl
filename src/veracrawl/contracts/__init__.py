@@ -183,6 +183,11 @@ from veracrawl.contracts.processing import (
     SiteModel,
     TextAnchor,
 )
+from veracrawl.contracts.product_acceptance import (
+    ProductAcceptanceFixtureManifest,
+    ProductAcceptanceGateReport,
+    ProductWorkflowReadinessRecord,
+)
 from veracrawl.contracts.publication import (
     OutputManifest,
     OutputTypeCoverageFixtureManifest,
@@ -384,6 +389,9 @@ __all__ = [
     "PersistenceTransactionRecord",
     "PersistentQueueOperationRecord",
     "PolicyDecision",
+    "ProductAcceptanceFixtureManifest",
+    "ProductAcceptanceGateReport",
+    "ProductWorkflowReadinessRecord",
     "ProjectionCleanupRecord",
     "ProjectionMismatchReport",
     "ProjectionRebuildJob",

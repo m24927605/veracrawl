@@ -1104,6 +1104,49 @@ class WebsitePatternCoverageFailureType(StrEnum):
     MISSING_REPLAY_REFS = "website_pattern_missing_replay_refs"
 
 
+class TargetProductWorkflow(StrEnum):
+    MULTI_SITE_ONBOARDING = "multi_site_onboarding"
+    OBJECTIVE_TO_PLAN_APPROVAL = "objective_to_plan_approval"
+    DYNAMIC_AUTH_DOCUMENT_API_CRAWL = "dynamic_auth_document_api_crawl"
+    EVIDENCE_REVIEW = "evidence_review"
+    CONFLICT_RESOLUTION = "conflict_resolution"
+    DRIFT_REPAIR = "drift_repair"
+    MEMORY_REUSE = "memory_reuse"
+    EXPORT_AND_WITHDRAWAL = "export_and_withdrawal"
+    REPLAY_AND_AUDIT = "replay_and_audit"
+    OPERATOR_RECOVERY = "operator_recovery"
+
+
+class MinimumProductGate(StrEnum):
+    APPROVED_PLAN_CREATION = "approved_plan_creation"
+    REVIEWER_TIME_PER_OUTPUT = "reviewer_time_per_output"
+    DRIFT_REPAIR_SUCCESS = "drift_repair_success"
+    OPERATOR_RECOVERY_COMPLETION = "operator_recovery_completion"
+    EXPORT_WITHDRAWAL_RECONCILIATION = "export_withdrawal_reconciliation"
+    USER_FACING_STATUS_ACCURACY = "user_facing_status_accuracy"
+    BUYER_VALUE_WORKFLOW_PASS = "buyer_value_workflow_pass"
+
+
+class ProductAcceptanceFailureType(StrEnum):
+    MISSING_RUNTIME_REFS = "product_acceptance_missing_runtime_refs"
+    MISSING_WORKFLOW = "product_acceptance_missing_workflow"
+    MISSING_MINIMUM_GATE = "product_acceptance_missing_minimum_gate"
+    MISSING_EVIDENCE = "product_acceptance_missing_evidence"
+    MISSING_REPLAY = "product_acceptance_missing_replay"
+    MISSING_OPERATOR_VISIBILITY = "product_acceptance_missing_operator_visibility"
+    MISSING_POLICY = "product_acceptance_missing_policy"
+    MISSING_WORKFLOW_SPECIFIC_REFS = (
+        "product_acceptance_missing_workflow_specific_refs"
+    )
+    SCAFFOLD_ONLY = "product_acceptance_scaffold_only"
+    CONTRACT_ONLY = "product_acceptance_contract_only"
+    FALSE_COMPLETE_STATUS = "product_acceptance_false_complete_status"
+    DEGRADED_OPERATIONAL = "product_acceptance_degraded_operational"
+    MISSING_EXPORT_RECONCILIATION = (
+        "product_acceptance_missing_export_reconciliation"
+    )
+
+
 class GraphNodeType(StrEnum):
     URL = "url"
     PAGE_TYPE = "page_type"

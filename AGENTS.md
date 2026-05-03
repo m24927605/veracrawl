@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/031-website-pattern-coverage-gate/plan.md`.
-Use it with `specs/031-website-pattern-coverage-gate/spec.md`,
-`specs/031-website-pattern-coverage-gate/research.md`,
-`specs/031-website-pattern-coverage-gate/data-model.md`,
-`specs/031-website-pattern-coverage-gate/contracts/`, and
-`specs/031-website-pattern-coverage-gate/quickstart.md` for VeraCrawl Target Website Pattern Coverage Gate work.
+Current active Spec Kit plan: `specs/032-product-acceptance-gate/plan.md`.
+Use it with `specs/032-product-acceptance-gate/spec.md`,
+`specs/032-product-acceptance-gate/research.md`,
+`specs/032-product-acceptance-gate/data-model.md`,
+`specs/032-product-acceptance-gate/contracts/`, and
+`specs/032-product-acceptance-gate/quickstart.md` for VeraCrawl Target Product Acceptance Gate work.
 <!-- SPECKIT END -->

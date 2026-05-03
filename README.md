@@ -152,6 +152,13 @@ replay refs. It cannot claim `pass` from adapter-native state, raw secrets,
 unsafe browser side effects, unsupported adapters, or missing adapter-specific
 refs. Missing live source/browser/parser/session/API runtime refs remain
 `needs_review`.
+The product acceptance gate proves the target buyer-value workflows and minimum
+product gates in `docs/11-target-testing-and-acceptance.md`: multi-site
+onboarding, objective-to-plan approval, dynamic/auth/document/API crawl,
+evidence review, conflict resolution, drift repair, memory reuse,
+export/withdrawal, replay/audit, and operator recovery. It cannot claim `pass`
+from technical contract-only reports, mock UI screenshots, scaffold manifests,
+degraded runs, or false `complete`/`verified`/`operational` labels.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation
@@ -469,6 +476,32 @@ for fixture in \
   website-pattern-missing-replay
 do
   uv run --python python3.12 --extra dev veracrawl-website-patterns run \
+    tests/fixtures/$fixture \
+    --profile target \
+    --out .veracrawl-test-runs/$fixture
+done
+```
+
+Run target product acceptance fixtures:
+
+```sh
+for fixture in \
+  product-acceptance-success \
+  product-acceptance-runtime-unavailable \
+  product-acceptance-missing-workflow \
+  product-acceptance-missing-minimum-gate \
+  product-acceptance-missing-evidence \
+  product-acceptance-missing-replay \
+  product-acceptance-missing-operator-visibility \
+  product-acceptance-missing-policy \
+  product-acceptance-missing-workflow-specific-refs \
+  product-acceptance-scaffold-only \
+  product-acceptance-contract-only \
+  product-acceptance-false-complete-status \
+  product-acceptance-degraded-operational \
+  product-acceptance-missing-export-reconciliation
+do
+  uv run --python python3.12 --extra dev veracrawl-product-acceptance run \
     tests/fixtures/$fixture \
     --profile target \
     --out .veracrawl-test-runs/$fixture

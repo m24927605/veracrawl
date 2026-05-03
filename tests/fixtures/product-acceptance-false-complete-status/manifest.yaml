@@ -1,0 +1,1 @@
+{"id":"product-acceptance-false-complete-status","scenario":"product-acceptance-false-complete-status","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"product_acceptance_false_complete_status","expected_failure_type":"product_acceptance_false_complete_status","negative_case":true}

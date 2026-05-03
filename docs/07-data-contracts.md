@@ -36,7 +36,7 @@ Target contract manifest:
 | FetchAttempt, FetchResult, PageSnapshot, NormalizedDocument, NormalizationManifest | required | raw artifacts, rendered artifacts, documents, and normalized outputs carry replayable transformation refs |
 | ExtractionStrategy, ExtractionCandidate, EvidencePacket | required | schema-bound and approved exploratory extraction preserve anchors and source refs |
 | VerificationRecommendation, VerificationDecision, ConflictRecord, AdjudicationDecision | required | evidence, contradictions, freshness, and review/adjudication are explicit |
-| PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact, OutputTypeCoverageRecord, OutputTypePublicationGateReport, WebsitePatternCoverageRecord, WebsitePatternCoverageReport | required | immutable publication and target coverage gates preserve evidence, verification, website pattern, and output type lineage |
+| PublishedOutput, OutputManifest, EvidenceCoverageMap, OutputVerificationAggregate, VerifiedFact, OutputTypeCoverageRecord, OutputTypePublicationGateReport, WebsitePatternCoverageRecord, WebsitePatternCoverageReport, ProductWorkflowReadinessRecord, ProductAcceptanceGateReport | required | immutable publication, target coverage, and product acceptance gates preserve evidence, verification, website pattern, output type, buyer-value workflow, and status-accuracy lineage |
 | GraphBuildManifest, GraphNode, GraphEdge, GraphSignal, TemporalKGProjectionRecord, TemporalKGEntityIdentity, TemporalKGRuntimeReport | required | graph projections have input refs, watermarks, quality metrics, graph-driven frontier/review decisions, and evidence-derived temporal semantics |
 | MemoryEvent, CrossScopeMemoryTunnel, OperationalTemporalMemoryRecord | required | memory has scope, trust, taint, promotion policy, freshness, invalidation, cross-scope authorization, operational temporal records, evidence refs, and prompt-use restrictions |
 | ExportTargetSpec, ExportJob, ExportAttempt, ExportDeliveryReceipt, ExportWithdrawalJob, ExportWithdrawalAttempt | required | file, API, database, warehouse, object store, and queue targets reconcile delivery, correction, and withdrawal |
@@ -1172,6 +1172,9 @@ When a row says `owning service`, the generated `CommandTypeSpec.owner_service` 
 | record_website_pattern_coverage | review_replay | WebsitePatternCoverageRecord | BaseCommandPayload | website pattern has source adapter, site model, source evidence, oracle, policy, pattern-specific, and replay refs | expected_version | website_pattern_coverage_recorded | single-site, scaffold-only, unsafe, or missing pattern refs fail |
 | record_website_pattern_coverage_report | review_replay | WebsitePatternCoverageReport | BaseCommandPayload | every target website pattern has coverage record refs or typed failure/review refs | expected_version | website_pattern_coverage_reported | missing pattern, unsupported pattern, missing source adapter, missing output/evidence, or missing replay fails |
 | record_website_pattern_coverage_fixture_manifest | tests | WebsitePatternCoverageFixtureManifest | BaseCommandPayload | fixture declares target profile and expected outcome | expected_version | website_pattern_coverage_fixture_manifest_recorded | invalid negative/pass pairing rejected |
+| record_product_workflow_readiness | review_replay | ProductWorkflowReadinessRecord | BaseCommandPayload | target product workflow has buyer value, evidence, replay, operator-visible result, policy, command/event/outbox, artifact, workflow-specific, and status-accuracy refs | expected_version | product_workflow_readiness_recorded | missing workflow refs, scaffold-only, contract-only, or false complete labels fail |
+| record_product_acceptance_gate_report | review_replay | ProductAcceptanceGateReport | BaseCommandPayload | every target product workflow and minimum product gate has readiness refs or typed failure/review refs | expected_version | product_acceptance_gate_reported | missing workflow, missing minimum gate, missing evidence/replay/operator visibility/policy, degraded operational labels, or missing export reconciliation fails |
+| record_product_acceptance_fixture_manifest | tests | ProductAcceptanceFixtureManifest | BaseCommandPayload | fixture declares target profile and expected product acceptance outcome | expected_version | product_acceptance_fixture_manifest_recorded | invalid negative/pass pairing rejected |
 | dispatch_export | export | ExportJob, ExportAttempt | ExportDispatchPayload | export target approved; output manifest immutable | expected_version | export_dispatched | idempotency preserves destination mapping |
 | complete_export | export | ExportAttempt, ExportDeliveryReceipt | ExportReceiptPayload | destination receipt validates | expected_version | export_delivered | rejected destination marks attempt failed |
 | fail_export | export | ExportAttempt | ExportFailurePayload | retry classification recorded | expected_version | error_recorded | transient retry or permanent failure decision |
@@ -3118,6 +3121,96 @@ Pass requires coverage records for all target website patterns. Missing pattern,
 unsupported pattern, single-site assumptions, scaffold-only claims, missing
 source adapters, missing site models, missing output/evidence refs, missing
 pattern-specific refs, unsafe interactions, and missing replay refs fail
+deterministically.
+
+## ProductWorkflowReadinessRecord
+
+`ProductWorkflowReadinessRecord` is the executable target product acceptance
+contract for one buyer-value workflow.
+
+```yaml
+ProductWorkflowReadinessRecord:
+  id: string
+  run_ref: string
+  fixture_id: string
+  workflow: multi_site_onboarding | objective_to_plan_approval | dynamic_auth_document_api_crawl | evidence_review | conflict_resolution | drift_repair | memory_reuse | export_and_withdrawal | replay_and_audit | operator_recovery
+  buyer_value_ref: string
+  evidence_refs: list
+  replay_refs: list
+  operator_visible_result_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  artifact_refs: list
+  acceptance_oracle_refs: list
+  minimum_gate_refs: list
+  workflow_specific_refs: map
+  capability_state_refs: list
+  status_accuracy_refs: list
+  export_reconciliation_refs: list
+  recovery_action_refs: list
+  failure_oracle_refs: list
+  scaffold_only_refs: list
+  contract_only_refs: list
+  false_complete_status_refs: list
+  degraded_operational_refs: list
+  export_reconciliation_gap_refs: list
+  missing_ref_fields: list
+  result: pass | fail | needs_review
+```
+
+Rules:
+
+- pass requires buyer value, evidence, replay, operator-visible result, policy,
+  command, event cursor, outbox, artifact, acceptance oracle, workflow-specific,
+  capability state, and status accuracy refs.
+- export/withdrawal requires delivery receipt, withdrawal, destination mapping,
+  and reconciliation refs.
+- operator recovery requires failure record, recovery action, operator status,
+  and replay-visible result refs.
+- scaffold-only, contract-only, false complete, degraded operational, and
+  missing export reconciliation claims cannot satisfy product readiness.
+
+## ProductAcceptanceGateReport
+
+```yaml
+ProductAcceptanceGateReport:
+  id: string
+  run_ref: string
+  fixture_id: string
+  workflow_record_refs: list
+  covered_workflows: list
+  missing_workflows: list
+  minimum_gate_refs: list
+  missing_minimum_gates: list
+  buyer_value_workflow_refs: list
+  evidence_refs: list
+  replay_refs: list
+  operator_visible_result_refs: list
+  policy_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  artifact_refs: list
+  status_accuracy_refs: list
+  workflow_specific_refs: list
+  export_reconciliation_refs: list
+  recovery_action_refs: list
+  failure_type: string
+  failure_report_refs: list
+  missing_ref_fields: list
+  operator_status: string
+  completion_result: pass | fail | needs_review
+```
+
+Pass requires all target product workflows, all minimum product gates, evidence,
+replay, operator-visible result, policy, command/event/outbox, artifact,
+workflow-specific, export reconciliation, recovery action, and status-accuracy
+refs. Missing workflow, missing minimum gate, missing evidence, missing replay,
+missing operator visibility, missing policy, missing workflow-specific refs,
+scaffold-only readiness, contract-only readiness, false complete labels,
+degraded operational labels, and missing export reconciliation fail
 deterministically.
 
 ## EvidenceCoverageMap

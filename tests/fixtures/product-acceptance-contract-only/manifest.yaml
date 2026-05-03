@@ -1,0 +1,1 @@
+{"id":"product-acceptance-contract-only","scenario":"product-acceptance-contract-only","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"product_acceptance_contract_only","expected_failure_type":"product_acceptance_contract_only","negative_case":true}

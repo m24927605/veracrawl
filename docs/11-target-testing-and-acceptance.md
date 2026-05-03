@@ -1326,6 +1326,35 @@ Minimum product gates:
 | User-facing status accuracy | 0 instances where planned, scaffolded, failed, or degraded capability is labeled complete, verified, or operational |
 | Buyer-value workflow pass | every row in Target Product Acceptance Gates must pass with evidence, replay, and operator-visible result refs |
 
+Executable product acceptance fixture contract:
+
+```bash
+veracrawl-product-acceptance run tests/fixtures/<product_acceptance_fixture_id> --profile target --out .veracrawl-test-runs/<product_acceptance_fixture_id>
+```
+
+Required product acceptance fixtures:
+
+| Fixture | Expected behavior |
+| --- | --- |
+| product-acceptance-success | all 10 target product workflows and all 7 minimum product gates pass with evidence, replay, operator-visible result, policy, command/event/outbox, artifact, workflow-specific, export reconciliation, recovery, and status-accuracy refs |
+| product-acceptance-runtime-unavailable | missing live product harness/runtime refs return `needs_review` |
+| product-acceptance-missing-workflow | missing target workflow fails |
+| product-acceptance-missing-minimum-gate | missing minimum product gate fails |
+| product-acceptance-missing-evidence | missing evidence refs fail |
+| product-acceptance-missing-replay | missing replay refs fail |
+| product-acceptance-missing-operator-visibility | missing operator-visible result refs fail |
+| product-acceptance-missing-policy | missing policy refs fail |
+| product-acceptance-missing-workflow-specific-refs | missing workflow-specific refs fail |
+| product-acceptance-scaffold-only | scaffold-only product readiness fails |
+| product-acceptance-contract-only | technical contract-only readiness fails |
+| product-acceptance-false-complete-status | planned, scaffolded, failed, degraded, or contract-only capability labeled complete/verified/operational fails |
+| product-acceptance-degraded-operational | degraded capability labeled operational fails |
+| product-acceptance-missing-export-reconciliation | missing export/withdrawal reconciliation fails |
+
+Product acceptance pass is the only target-level buyer-value readiness claim.
+Individual technical gates remain necessary but cannot replace
+`ProductAcceptanceGateReport`.
+
 ## Agent Reasoning Acceptance Gates
 
 Agent safety is not enough. Target agents must also produce useful, reviewable reasoning artifacts.

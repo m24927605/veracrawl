@@ -347,6 +347,30 @@ Rules:
   credential vaults, production parser farms, production queue scale, or
   production scale readiness.
 
+## Target Product Acceptance Gate Slice
+
+The product acceptance gate proves that target architecture is not only
+technically covered but product-ready across buyer-value workflows:
+
+- `ProductWorkflowReadinessRecord` records per-workflow buyer value, evidence,
+  replay, operator-visible result, policy, command, event cursor, outbox,
+  artifact, acceptance oracle, workflow-specific, capability state, status
+  accuracy, export reconciliation, and recovery refs.
+- `ProductAcceptanceGateReport` can claim `pass` only when multi-site
+  onboarding, objective-to-plan approval, dynamic/auth/document/API crawl,
+  evidence review, conflict resolution, drift repair, memory reuse,
+  export/withdrawal, replay/audit, and operator recovery all have readiness refs
+  and every minimum product gate is present.
+- `veracrawl.product_acceptance.gate` is deterministic and imports only
+  VeraCrawl contracts.
+- `veracrawl-product-acceptance` runs success, no-runtime, missing-workflow,
+  missing-gate, missing-ref, scaffold-only, contract-only, false-complete,
+  degraded-operational, and missing-export-reconciliation fixtures with typed
+  statuses.
+- technical contract-only reports, mock UI screenshots, scaffold manifests,
+  false completion labels, and degraded operational labels cannot satisfy
+  product readiness.
+
 ## Basic Site Graph Spine Slice
 
 The basic graph slice turns acquisition, normalization, and site-understanding

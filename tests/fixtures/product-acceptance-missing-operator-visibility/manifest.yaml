@@ -1,0 +1,1 @@
+{"id":"product-acceptance-missing-operator-visibility","scenario":"product-acceptance-missing-operator-visibility","profile_refs":["target"],"expected_completion_result":"fail","expected_operator_status":"product_acceptance_missing_operator_visibility","expected_failure_type":"product_acceptance_missing_operator_visibility","negative_case":true}

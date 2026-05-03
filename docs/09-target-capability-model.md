@@ -228,6 +228,7 @@ Required acceptance:
 - every target adapter has contract, policy, replay, and fixture coverage
 - every website pattern has a deterministic benchmark fixture, pass/fail oracle,
   and `WebsitePatternCoverageReport`
+- target product acceptance workflows pass through `ProductAcceptanceGateReport`
 - every output type has evidence coverage and publication acceptance checks
 - no adapter, pattern, or output type can be labeled target-complete while scaffolded, untested, or manually simulated
 
@@ -303,6 +304,8 @@ Required acceptance:
 - candidate, graph, memory, agent reasoning, or temporal KG refs cannot satisfy source evidence for any output type; missing output type, unsupported output type, missing type-specific refs, or missing replay fail deterministically
 - `WebsitePatternCoverageReport` pass requires `static`, `sitemap_rss_feed`, `listing_detail`, `search`, `non_destructive_forms`, `javascript_pages`, `authenticated_sources`, `api_like_endpoints`, `documents`, `multi_language_pages`, `drifted_sites`, and `high_volume_sites` benchmark coverage records with source adapter, site model/page type, source evidence, oracle, policy, pattern-specific, command/event/outbox, and replay refs
 - single-site assumptions, scaffold-only manifests, unsupported patterns, unsafe interactions, missing source adapters, missing output/evidence refs, missing pattern-specific refs, or missing replay block target website pattern completion
+- `ProductAcceptanceGateReport` pass requires multi-site onboarding, objective-to-plan approval, dynamic/auth/document/API crawl, evidence review, conflict resolution, drift repair, memory reuse, export and withdrawal, replay and audit, and operator recovery records with buyer-value, evidence, replay, operator-visible result, policy, command/event/outbox, artifact, workflow-specific, export reconciliation, recovery, and status-accuracy refs
+- planned, scaffolded, failed, degraded, mock-only, or contract-only capability claims cannot be labeled `complete`, `verified`, or `operational`; missing workflow, missing minimum gate, missing evidence/replay/operator visibility/policy, missing workflow-specific refs, false completion labels, degraded operational labels, or missing export reconciliation block product acceptance
 
 ### Export And Correction Profile
 
