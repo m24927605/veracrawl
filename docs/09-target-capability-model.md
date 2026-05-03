@@ -228,6 +228,9 @@ Required acceptance:
 - every target adapter has contract, policy, replay, and fixture coverage
 - every website pattern has a deterministic benchmark fixture, pass/fail oracle,
   and `WebsitePatternCoverageReport`
+- source-backed target runtime fixtures must prove at least seven website
+  patterns from local source corpora by deriving source observations, content
+  hashes, evidence, graph, export, and replay refs from actual fixture content
 - target product acceptance workflows pass through `ProductAcceptanceGateReport`
 - every output type has evidence coverage and publication acceptance checks
 - no adapter, pattern, or output type can be labeled target-complete while scaffolded, untested, or manually simulated

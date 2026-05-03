@@ -5433,6 +5433,8 @@ TargetRuntimeReport:
   event_cursor_refs: list
   outbox_refs: list
   artifact_refs: list
+  source_observation_refs: list
+  content_hash_refs: list
   ai_recommendation_refs: list
   repair_action_refs: list
   review_item_refs: list
@@ -5445,9 +5447,77 @@ TargetRuntimeReport:
   missing_ref_fields: list
 ```
 
+```yaml
+TargetRuntimeFixtureManifest:
+  id: string
+  scenario: string
+  profile_refs: list
+  source_corpus_ref: string | null
+  expected_status: complete | needs_review | blocked | failed
+  expected_completion_result: pass | fail | needs_review
+  expected_operator_status: string
+  expected_failure_type: string | null
+  expected_pattern_count: integer
+  expected_source_observation_count: integer
+  negative_case: boolean
+```
+
+```yaml
+TargetSourceCorpusEntry:
+  id: string
+  website_pattern: static | sitemap_rss_feed | listing_detail | api_like_endpoints | documents | drifted_sites | javascript_pages | ...
+  source_path: string
+  content_type: html | json | text
+  expected_fields: map
+  evidence_markers: map
+  policy_decision_ref: string
+  allowed: boolean
+  contains_prompt_injection: boolean
+  requires_export_ref: boolean
+  expected_content_hash_ref: string | null
+  drift_aliases: map
+```
+
+```yaml
+TargetSourceCorpusManifest:
+  id: string
+  fixture_id: string
+  entries: list[TargetSourceCorpusEntry]
+  expected_pattern_count: integer
+  policy_decision_refs: list
+  replay_oracle_ref: string
+  export_complete: boolean
+```
+
+```yaml
+TargetSourceObservationRecord:
+  id: string
+  run_ref: string
+  corpus_entry_ref: string
+  website_pattern: static | sitemap_rss_feed | listing_detail | api_like_endpoints | documents | drifted_sites | javascript_pages | ...
+  source_path_ref: string
+  content_hash_ref: string | null
+  source_observation_ref: string | null
+  artifact_ref: string | null
+  extracted_field_refs: list
+  evidence_refs: list
+  graph_refs: list
+  policy_decision_refs: list
+  replay_refs: list
+  missing_field_refs: list
+  prompt_injection_refs: list
+  failure_report_refs: list
+  result: pass | fail | needs_review
+```
+
 Executable target runtime rules:
 
 - `TargetRuntimeReport` can claim `complete` only when at least seven website patterns have pattern records and accepted outputs, evidence, verification, graph, export, policy, command, event cursor, outbox, artifact, AI recommendation, privacy lifecycle, and replay refs exist.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.
+- Source-backed target runtime fixtures require `TargetSourceCorpusManifest` and
+  one `TargetSourceObservationRecord` per allowed local source entry. Passing
+  observations require content hash, artifact, evidence, graph, policy, and
+  replay refs derived from source content. Blocked or failed observations must
+  carry typed diagnostics and cannot contribute to a complete report.

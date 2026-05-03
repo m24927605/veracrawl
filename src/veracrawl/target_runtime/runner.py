@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.enums import (
@@ -16,6 +19,9 @@ from veracrawl.contracts.target_runtime import (
     TargetAIRecommendationRecord,
     TargetCrawlPatternRecord,
     TargetRuntimeReport,
+    TargetSourceCorpusEntry,
+    TargetSourceCorpusManifest,
+    TargetSourceObservationRecord,
 )
 
 
@@ -24,6 +30,7 @@ class TargetRuntimeResult:
     pattern_records: list[TargetCrawlPatternRecord]
     ai_recommendations: list[TargetAIRecommendationRecord]
     report: TargetRuntimeReport
+    source_observations: list[TargetSourceObservationRecord]
 
 
 _TARGET_PATTERNS: tuple[TargetWebsitePattern, ...] = (
@@ -75,9 +82,20 @@ def run_target_runtime_fixture(
     fixture_id: str,
     scenario: str,
     profile: str = "target",
+    fixture_dir: Path | None = None,
+    source_corpus_ref: Ref | None = None,
 ) -> TargetRuntimeResult:
     if profile != "target":
         raise ValueError(f"unsupported target runtime profile: {profile}")
+    if source_corpus_ref is not None:
+        if fixture_dir is None:
+            raise ValueError("source-backed target runtime requires fixture_dir")
+        return _source_backed_result(
+            fixture_id=fixture_id,
+            scenario=scenario,
+            fixture_dir=fixture_dir,
+            source_corpus_ref=source_corpus_ref,
+        )
     if scenario == "target-runtime-needs-review":
         return _needs_review_result(fixture_id)
     if scenario in _FAILURES:
@@ -154,7 +172,7 @@ def _success_result(*, fixture_id: str, repaired: bool) -> TargetRuntimeResult:
             "target_runtime_drift_repaired" if repaired else "target_runtime_completed"
         ),
     )
-    return TargetRuntimeResult(pattern_records, [ai], report)
+    return TargetRuntimeResult(pattern_records, [ai], report, [])
 
 
 def _needs_review_result(fixture_id: str) -> TargetRuntimeResult:
@@ -183,7 +201,7 @@ def _needs_review_result(fixture_id: str) -> TargetRuntimeResult:
         diagnostics=["recoverable evidence gap requires operator review"],
         operator_status="target_runtime_needs_review",
     )
-    return TargetRuntimeResult([], [ai], report)
+    return TargetRuntimeResult([], [ai], report, [])
 
 
 def _failure_result(
@@ -222,7 +240,312 @@ def _failure_result(
         diagnostics=[diagnostic],
         operator_status=failure.value,
     )
-    return TargetRuntimeResult([], [ai], report)
+    return TargetRuntimeResult([], [ai], report, [])
+
+
+def _source_backed_result(
+    *,
+    fixture_id: str,
+    scenario: str,
+    fixture_dir: Path,
+    source_corpus_ref: Ref,
+) -> TargetRuntimeResult:
+    corpus = TargetSourceCorpusManifest.model_validate(
+        json.loads((fixture_dir / source_corpus_ref).read_text(encoding="utf-8"))
+    )
+    observations: list[TargetSourceObservationRecord] = []
+    repaired_fields: list[Ref] = []
+    replay_mismatches: list[Ref] = []
+    missing_fields: list[Ref] = []
+    prompt_injections: list[Ref] = []
+    policy_denials: list[Ref] = []
+
+    for entry in corpus.entries:
+        source_path = fixture_dir / entry.source_path
+        if not entry.allowed:
+            policy_denials.append(entry.policy_decision_ref)
+            continue
+        content = source_path.read_text(encoding="utf-8")
+        if entry.contains_prompt_injection or "PROMPT_INJECTION" in content:
+            prompt_injections.append(f"prompt-injection:{fixture_id}:{entry.id}")
+            continue
+        observation, repaired, replay_mismatch, missing = _observe_source_entry(
+            fixture_id=fixture_id,
+            entry=entry,
+            content=content,
+        )
+        observations.append(observation)
+        repaired_fields.extend(repaired)
+        replay_mismatches.extend(replay_mismatch)
+        missing_fields.extend(missing)
+
+    if policy_denials:
+        return _source_backed_failure(
+            fixture_id=fixture_id,
+            failure=TargetRuntimeFailureType.POLICY_DENIED,
+            status=TargetRuntimeStatus.BLOCKED,
+            diagnostics=["source corpus entry denied by policy"],
+            missing_ref_fields=["source_policy_refs"],
+            extra_policy_refs=corpus.policy_decision_refs + policy_denials,
+            observations=observations,
+        )
+    if prompt_injections:
+        return _source_backed_failure(
+            fixture_id=fixture_id,
+            failure=TargetRuntimeFailureType.PROMPT_INJECTION,
+            status=TargetRuntimeStatus.BLOCKED,
+            diagnostics=["source corpus contains prompt-injection-tainted content"],
+            missing_ref_fields=["trusted_prompt_boundary_ref"],
+            extra_policy_refs=corpus.policy_decision_refs,
+            observations=observations,
+        )
+    if missing_fields:
+        return _source_backed_failure(
+            fixture_id=fixture_id,
+            failure=TargetRuntimeFailureType.MISSING_EVIDENCE,
+            status=TargetRuntimeStatus.FAILED,
+            diagnostics=["source-backed corpus missing required evidence markers"],
+            missing_ref_fields=["evidence_refs"],
+            extra_policy_refs=corpus.policy_decision_refs,
+            observations=observations,
+        )
+    if replay_mismatches or scenario == "source-backed-target-replay-mismatch":
+        return _source_backed_failure(
+            fixture_id=fixture_id,
+            failure=TargetRuntimeFailureType.REPLAY_MISMATCH,
+            status=TargetRuntimeStatus.FAILED,
+            diagnostics=["source-backed content hash does not match replay oracle"],
+            missing_ref_fields=["replay_bundle_ref"],
+            extra_policy_refs=corpus.policy_decision_refs,
+            observations=observations,
+        )
+    if not corpus.export_complete or scenario == "source-backed-target-partial-export":
+        return _source_backed_failure(
+            fixture_id=fixture_id,
+            failure=TargetRuntimeFailureType.PARTIAL_EXPORT,
+            status=TargetRuntimeStatus.FAILED,
+            diagnostics=["source-backed export receipt set is incomplete"],
+            missing_ref_fields=["export_receipt_refs"],
+            extra_policy_refs=corpus.policy_decision_refs,
+            observations=observations,
+        )
+
+    return _source_backed_success(
+        fixture_id=fixture_id,
+        observations=observations,
+        repaired_fields=repaired_fields,
+        policy_refs=corpus.policy_decision_refs,
+    )
+
+
+def _observe_source_entry(
+    *,
+    fixture_id: str,
+    entry: TargetSourceCorpusEntry,
+    content: str,
+) -> tuple[TargetSourceObservationRecord, list[Ref], list[Ref], list[Ref]]:
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    content_hash_ref = f"sha256:{digest}"
+    extracted: list[Ref] = []
+    evidence: list[Ref] = []
+    repaired: list[Ref] = []
+    missing: list[Ref] = []
+    replay_mismatch: list[Ref] = []
+    for field_name, expected_value in entry.expected_fields.items():
+        marker = entry.evidence_markers.get(field_name, expected_value)
+        if marker in content or expected_value in content:
+            extracted.append(f"field:{fixture_id}:{entry.id}:{field_name}:{digest[:12]}")
+            evidence.append(f"evidence:{fixture_id}:{entry.id}:{field_name}:{digest[:12]}")
+            continue
+        alias = entry.drift_aliases.get(field_name)
+        if alias and alias in content:
+            extracted.append(f"field:{fixture_id}:{entry.id}:{field_name}:{digest[:12]}")
+            evidence.append(f"evidence:{fixture_id}:{entry.id}:{field_name}:alias:{digest[:12]}")
+            repaired.append(f"repair-alias:{fixture_id}:{entry.id}:{field_name}")
+            continue
+        missing.append(f"missing-field:{fixture_id}:{entry.id}:{field_name}")
+    if entry.expected_content_hash_ref and entry.expected_content_hash_ref != content_hash_ref:
+        replay_mismatch.append(f"replay-mismatch:{fixture_id}:{entry.id}")
+    observation = TargetSourceObservationRecord(
+        id=f"source-observation-record:{fixture_id}:{entry.id}",
+        run_ref=_run_ref(fixture_id),
+        corpus_entry_ref=entry.id,
+        website_pattern=entry.website_pattern,
+        source_path_ref=f"source-path:{fixture_id}:{entry.source_path}",
+        content_hash_ref=content_hash_ref,
+        source_observation_ref=f"source-observation:{fixture_id}:{entry.id}:{digest[:12]}",
+        artifact_ref=f"artifact:{fixture_id}:{entry.id}:{digest[:12]}",
+        extracted_field_refs=extracted,
+        evidence_refs=evidence,
+        graph_refs=[f"graph:{fixture_id}:{entry.id}:{entry.website_pattern.value}"],
+        policy_decision_refs=[entry.policy_decision_ref],
+        replay_refs=[f"replay:{fixture_id}:{entry.id}:{digest[:12]}"],
+        missing_field_refs=missing,
+        failure_report_refs=replay_mismatch,
+        result=CompletenessResult.FAIL if (missing or replay_mismatch) else CompletenessResult.PASS,
+    )
+    return observation, repaired, replay_mismatch, missing
+
+
+def _source_backed_success(
+    *,
+    fixture_id: str,
+    observations: list[TargetSourceObservationRecord],
+    repaired_fields: list[Ref],
+    policy_refs: list[Ref],
+) -> TargetRuntimeResult:
+    command_refs = _command_refs(fixture_id)
+    event_refs = _event_refs(fixture_id) + [f"event-cursor:{fixture_id}:source-backed"]
+    outbox_refs = _outbox_refs(fixture_id)
+    replay_ref = _replay_ref(fixture_id)
+    pattern_records = [
+        _pattern_record_from_observation(
+            fixture_id=fixture_id,
+            observation=observation,
+            command_refs=command_refs,
+            event_refs=event_refs,
+            outbox_refs=outbox_refs,
+            replay_ref=replay_ref,
+        )
+        for observation in observations
+    ]
+    ai = _accepted_ai_recommendation(
+        fixture_id=fixture_id,
+        subject=(
+            AgentRecommendationSubject.REPAIR
+            if repaired_fields
+            else AgentRecommendationSubject.CRAWL_PLAN
+        ),
+        repair_refs=repaired_fields,
+    )
+    report = TargetRuntimeReport(
+        id=f"target-runtime-report:{fixture_id}",
+        fixture_id=fixture_id,
+        run_ref=_run_ref(fixture_id),
+        objective_ref=f"objective:{fixture_id}",
+        plan_ref=f"plan:{fixture_id}",
+        status=TargetRuntimeStatus.COMPLETE,
+        completion_result=CompletenessResult.PASS,
+        covered_patterns=[record.website_pattern for record in pattern_records],
+        pattern_record_refs=[record.id for record in pattern_records],
+        source_observation_refs=[
+            observation.source_observation_ref or observation.id
+            for observation in observations
+        ],
+        content_hash_refs=[
+            observation.content_hash_ref
+            for observation in observations
+            if observation.content_hash_ref is not None
+        ],
+        accepted_output_refs=_collect(pattern_records, "accepted_output_refs"),
+        evidence_refs=_collect(pattern_records, "evidence_refs"),
+        verification_refs=_collect(pattern_records, "verification_refs"),
+        graph_refs=_collect(pattern_records, "graph_refs"),
+        export_receipt_refs=[f"export-receipt:{fixture_id}:source-backed"],
+        output_manifest_refs=[f"output-manifest:{fixture_id}:source-backed"],
+        policy_decision_refs=policy_refs,
+        command_record_refs=command_refs,
+        event_cursor_refs=event_refs,
+        outbox_refs=outbox_refs,
+        artifact_refs=_collect(pattern_records, "artifact_refs"),
+        ai_recommendation_refs=[ai.id],
+        repair_action_refs=repaired_fields,
+        recovery_action_refs=[f"recovery-action:{fixture_id}:source-backed"],
+        privacy_lifecycle_refs=[f"privacy:{fixture_id}:source-backed"],
+        replay_bundle_ref=replay_ref,
+        operator_status="source_backed_target_runtime_completed",
+    )
+    return TargetRuntimeResult(pattern_records, [ai], report, observations)
+
+
+def _source_backed_failure(
+    *,
+    fixture_id: str,
+    failure: TargetRuntimeFailureType,
+    status: TargetRuntimeStatus,
+    diagnostics: list[str],
+    missing_ref_fields: list[str],
+    extra_policy_refs: list[Ref],
+    observations: list[TargetSourceObservationRecord],
+) -> TargetRuntimeResult:
+    ai = _blocked_ai_recommendation(
+        fixture_id=fixture_id,
+        subject=(
+            AgentRecommendationSubject.REPAIR
+            if failure == TargetRuntimeFailureType.PROMPT_INJECTION
+            else AgentRecommendationSubject.CRAWL_PLAN
+        ),
+        blocked_ref=f"blocked-action:{fixture_id}:{failure.value}",
+    )
+    report = TargetRuntimeReport(
+        id=f"target-runtime-report:{fixture_id}",
+        fixture_id=fixture_id,
+        run_ref=_run_ref(fixture_id),
+        objective_ref=f"objective:{fixture_id}",
+        plan_ref=f"plan:{fixture_id}",
+        status=status,
+        completion_result=CompletenessResult.FAIL,
+        source_observation_refs=[
+            observation.source_observation_ref or observation.id for observation in observations
+        ],
+        content_hash_refs=[
+            observation.content_hash_ref
+            for observation in observations
+            if observation.content_hash_ref is not None
+        ],
+        policy_decision_refs=extra_policy_refs,
+        command_record_refs=_command_refs(fixture_id),
+        event_cursor_refs=_event_refs(fixture_id),
+        outbox_refs=_outbox_refs(fixture_id),
+        ai_recommendation_refs=[ai.id],
+        failure_type=failure,
+        failure_report_refs=[f"failure:{fixture_id}:{failure.value}"],
+        missing_ref_fields=missing_ref_fields,
+        diagnostics=diagnostics,
+        operator_status=failure.value,
+    )
+    return TargetRuntimeResult([], [ai], report, observations)
+
+
+def _pattern_record_from_observation(
+    *,
+    fixture_id: str,
+    observation: TargetSourceObservationRecord,
+    command_refs: list[Ref],
+    event_refs: list[Ref],
+    outbox_refs: list[Ref],
+    replay_ref: Ref,
+) -> TargetCrawlPatternRecord:
+    suffix = observation.website_pattern.value
+    digest_part = (observation.content_hash_ref or "sha256:unknown").removeprefix("sha256:")[:12]
+    return TargetCrawlPatternRecord(
+        id=f"target-pattern:{fixture_id}:{observation.corpus_entry_ref}:{digest_part}",
+        run_ref=_run_ref(fixture_id),
+        website_pattern=observation.website_pattern,
+        frontier_item_refs=[f"frontier:{fixture_id}:{observation.corpus_entry_ref}"],
+        source_observation_refs=[observation.source_observation_ref or observation.id],
+        source_adapter_result_refs=[f"source-result:{fixture_id}:{observation.corpus_entry_ref}"],
+        extraction_result_refs=observation.extracted_field_refs,
+        accepted_output_refs=[
+            f"accepted-output:{fixture_id}:{observation.corpus_entry_ref}:{digest_part}"
+        ],
+        evidence_refs=observation.evidence_refs,
+        verification_refs=[f"verification:{fixture_id}:{observation.corpus_entry_ref}:{digest_part}"],
+        graph_refs=observation.graph_refs,
+        policy_decision_refs=observation.policy_decision_refs,
+        command_record_refs=command_refs,
+        event_cursor_refs=event_refs,
+        outbox_refs=outbox_refs,
+        artifact_refs=[observation.artifact_ref] if observation.artifact_ref else [],
+        replay_refs=[replay_ref, *observation.replay_refs],
+        operator_visible_refs=[f"operator-result:{fixture_id}:{observation.corpus_entry_ref}"],
+        pattern_specific_refs={
+            "source_path_ref": observation.source_path_ref,
+            "content_hash_ref": observation.content_hash_ref or f"hash-missing:{fixture_id}",
+            "general_pattern_ref": f"pattern:{suffix}",
+        },
+        result=CompletenessResult.PASS,
+    )
 
 
 def _pattern_record(

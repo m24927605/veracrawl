@@ -33,6 +33,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "website_pattern_coverage_gate",
         "product_acceptance_gate",
         "target_crawl_runtime",
+        "source_backed_target_runtime",
         "evidence_publication",
         "projection",
         "graph",

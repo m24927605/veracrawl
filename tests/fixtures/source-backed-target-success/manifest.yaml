@@ -1,0 +1,1 @@
+{"id":"source-backed-target-success","scenario":"source-backed-target-success","profile_refs":["target"],"source_corpus_ref":"corpus.json","expected_status":"complete","expected_completion_result":"pass","expected_operator_status":"source_backed_target_runtime_completed","expected_pattern_count":7,"expected_source_observation_count":7,"negative_case":false}

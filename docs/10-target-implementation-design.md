@@ -1250,6 +1250,17 @@ Target crawl runtime slice:
 - `TargetAIRecommendationRecord` records framework-neutral planning and repair recommendations. It blocks framework-native canonical state and requires policy/tool/trace refs for accepted recommendations.
 - `TargetRuntimeReport` can claim `complete` only when at least seven website patterns are covered in one run and all output, evidence, graph, export, policy, command/event/outbox, artifact, AI, privacy, and replay refs are present.
 - `veracrawl-target-runtime` executes success, drift-repair, needs-review, policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures and writes `run_report.json`.
+- source-backed target runtime fixtures add `TargetSourceCorpusManifest`,
+  `TargetSourceCorpusEntry`, and `TargetSourceObservationRecord` contracts. The
+  runner reads local HTML, XML, JSON, and text source files declared by the
+  fixture, computes content-hash refs, derives field/evidence/graph/export/replay
+  refs from generic descriptors, records framework-neutral repair recommendations
+  for drift aliases, and rejects policy-denied, prompt-tainted, missing-evidence,
+  replay-mismatched, and partial-export source corpora.
+- source-backed execution remains generic runtime infrastructure. It must not
+  contain site-specific scraper modules, concrete agent framework imports, model
+  SDK imports, browser runtime imports, HTTP client imports, storage clients, or
+  export destination clients in core.
 - this slice is an executable target architecture runtime path over deterministic fixtures. It is not a claim that live Internet crawling, production browser fleets, production credential vaults, concrete agent frameworks, managed model providers, production export destinations, or production worker fleets are operational.
 
 Disaster recovery:

@@ -247,6 +247,9 @@ from veracrawl.contracts.target_runtime import (
     TargetCrawlPatternRecord,
     TargetRuntimeFixtureManifest,
     TargetRuntimeReport,
+    TargetSourceCorpusEntry,
+    TargetSourceCorpusManifest,
+    TargetSourceObservationRecord,
 )
 from veracrawl.contracts.verification import ReviewDecision, VerificationDecision
 from veracrawl.contracts.website_pattern import (
@@ -458,6 +461,9 @@ __all__ = [
     "TemporalKGRuntimeReport",
     "TargetAIRecommendationRecord",
     "TargetCrawlPatternRecord",
+    "TargetSourceCorpusEntry",
+    "TargetSourceCorpusManifest",
+    "TargetSourceObservationRecord",
     "TargetRuntimeFixtureManifest",
     "TargetRuntimeReport",
     "TextAnchor",

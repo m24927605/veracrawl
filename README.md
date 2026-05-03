@@ -168,6 +168,13 @@ success fixture covers at least seven website patterns in one run; drift repair,
 needs-review, policy-denied, prompt-injection, missing-evidence,
 replay-mismatch, partial-export, and false-complete fixtures prove unsafe or
 deceptive completion claims cannot pass.
+The source-backed target runtime extends that path with local multi-pattern
+source corpora. Source-backed fixtures read HTML, XML, JSON, and text files from
+the fixture directory, derive content-hash refs, source observation records,
+accepted output refs, evidence refs, graph refs, export receipts, and replay refs
+from actual file content, and fail when evidence, policy, prompt-taint, replay,
+or export completeness gates are not satisfied. This remains a generic target
+runtime foundation, not a single-site scraper.
 The runtime spine can execute deterministic objective-to-output fixtures, enforce
 owner boundaries, block unsafe publication, validate replay refs, and accept
 framework-neutral agent recommendations through commands. The durable foundation

@@ -1531,6 +1531,17 @@ Acceptance gates:
 - `target-runtime-needs-review` returns `needs_review`, includes review/recovery/missing-ref diagnostics, and cannot publish a false complete claim
 - `target-runtime-policy-denied` and `target-runtime-prompt-injection` return `blocked` with typed failure refs
 - `target-runtime-missing-evidence`, `target-runtime-replay-mismatch`, `target-runtime-partial-export`, and `target-runtime-false-complete` return `failed` with typed failure refs
+- `source-backed-target-success` reads local fixture source files and completes
+  only when at least seven website patterns produce source observation refs,
+  content-hash artifact refs, accepted outputs, evidence, graph, export, policy,
+  command/event/outbox, framework-neutral AI repair, privacy, and replay refs
+  derived from actual fixture content
+- `source-backed-target-policy-denied`,
+  `source-backed-target-prompt-injection`,
+  `source-backed-target-missing-evidence`,
+  `source-backed-target-replay-mismatch`, and
+  `source-backed-target-partial-export` block or fail deterministically with
+  typed target runtime failure refs and no false complete report
 - import-boundary tests prove target runtime core does not import concrete agent frameworks, model SDKs, storage clients, queue clients, browser runtimes, HTTP clients, export targets, UI frameworks, or site-specific scraper modules
 - registry validation includes target runtime contracts, commands, events, fixtures, and target area coverage
 

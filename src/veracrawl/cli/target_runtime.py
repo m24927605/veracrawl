@@ -35,6 +35,8 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeR
         fixture_id=manifest.id,
         scenario=manifest.scenario,
         profile=profile,
+        fixture_dir=fixture_dir,
+        source_corpus_ref=manifest.source_corpus_ref,
     )
     report = result.report
     if report.status != manifest.expected_status:
@@ -57,6 +59,11 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> TargetRuntimeR
         raise ValueError(
             f"expected {manifest.expected_pattern_count} patterns, "
             f"got {len(set(report.covered_patterns))}"
+        )
+    if len(report.source_observation_refs) < manifest.expected_source_observation_count:
+        raise ValueError(
+            f"expected {manifest.expected_source_observation_count} source observations, "
+            f"got {len(report.source_observation_refs)}"
         )
     out.mkdir(parents=True, exist_ok=True)
     (out / "run_report.json").write_text(

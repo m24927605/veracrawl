@@ -118,10 +118,10 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/034-target-crawl-runtime/plan.md`.
-Use it with `specs/034-target-crawl-runtime/spec.md`,
-`specs/034-target-crawl-runtime/research.md`,
-`specs/034-target-crawl-runtime/data-model.md`,
-`specs/034-target-crawl-runtime/contracts/`, and
-`specs/034-target-crawl-runtime/quickstart.md` for VeraCrawl Target Crawl Runtime work.
+Current active Spec Kit plan: `specs/035-source-backed-runtime/plan.md`.
+Use it with `specs/035-source-backed-runtime/spec.md`,
+`specs/035-source-backed-runtime/research.md`,
+`specs/035-source-backed-runtime/data-model.md`,
+`specs/035-source-backed-runtime/contracts/`, and
+`specs/035-source-backed-runtime/quickstart.md` for VeraCrawl Source-Backed Target Runtime work.
 <!-- SPECKIT END -->

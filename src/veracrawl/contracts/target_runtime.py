@@ -126,6 +126,8 @@ class TargetRuntimeReport(TimestampedModel):
     completion_result: CompletenessResult
     covered_patterns: list[TargetWebsitePattern] = Field(default_factory=list)
     pattern_record_refs: list[Ref] = Field(default_factory=list)
+    source_observation_refs: list[Ref] = Field(default_factory=list)
+    content_hash_refs: list[Ref] = Field(default_factory=list)
     accepted_output_refs: list[Ref] = Field(default_factory=list)
     evidence_refs: list[Ref] = Field(default_factory=list)
     verification_refs: list[Ref] = Field(default_factory=list)
@@ -196,11 +198,13 @@ class TargetRuntimeFixtureManifest(TimestampedModel):
     id: str
     scenario: str
     profile_refs: list[str] = Field(default_factory=list)
+    source_corpus_ref: Ref | None = None
     expected_status: TargetRuntimeStatus
     expected_completion_result: CompletenessResult
     expected_operator_status: str
     expected_failure_type: TargetRuntimeFailureType | None = None
     expected_pattern_count: int = 0
+    expected_source_observation_count: int = 0
     negative_case: bool = False
 
     @model_validator(mode="after")
@@ -220,4 +224,106 @@ class TargetRuntimeFixtureManifest(TimestampedModel):
                 raise ValueError("negative target runtime fixture must block or fail")
             if self.expected_failure_type is None:
                 raise ValueError("negative target runtime fixture requires failure type")
+        return self
+
+
+class TargetSourceCorpusEntry(TimestampedModel):
+    id: str
+    website_pattern: TargetWebsitePattern
+    source_path: str
+    content_type: str
+    expected_fields: dict[str, str] = Field(default_factory=dict)
+    evidence_markers: dict[str, str] = Field(default_factory=dict)
+    policy_decision_ref: Ref
+    allowed: bool = True
+    contains_prompt_injection: bool = False
+    requires_export_ref: bool = True
+    expected_content_hash_ref: Ref | None = None
+    drift_aliases: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_corpus_entry(self) -> TargetSourceCorpusEntry:
+        has_required_source = self.source_path and self.expected_fields and self.evidence_markers
+        if self.allowed and not has_required_source:
+            raise ValueError("allowed source corpus entry requires source and evidence fields")
+        if not self.policy_decision_ref:
+            raise ValueError("source corpus entry requires policy decision ref")
+        if self.content_type not in {"html", "json", "text"}:
+            raise ValueError("unsupported source corpus content type")
+        return self
+
+
+class TargetSourceCorpusManifest(TimestampedModel):
+    id: str
+    fixture_id: str
+    entries: list[TargetSourceCorpusEntry] = Field(default_factory=list)
+    expected_pattern_count: int
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_oracle_ref: Ref
+    export_complete: bool = True
+
+    @model_validator(mode="after")
+    def validate_source_corpus_manifest(self) -> TargetSourceCorpusManifest:
+        entry_ids = [entry.id for entry in self.entries]
+        if len(entry_ids) != len(set(entry_ids)):
+            raise ValueError("source corpus entry ids must be unique")
+        has_target_pattern_count = (
+            self.expected_pattern_count >= TARGET_RUNTIME_MINIMUM_PATTERN_COUNT
+        )
+        if self.export_complete and has_target_pattern_count:
+            if len(self.entries) < TARGET_RUNTIME_MINIMUM_PATTERN_COUNT:
+                raise ValueError("passing source corpus requires target pattern coverage")
+        if not self.policy_decision_refs:
+            raise ValueError("source corpus manifest requires policy refs")
+        return self
+
+
+class TargetSourceObservationRecord(TimestampedModel):
+    id: str
+    run_ref: Ref
+    corpus_entry_ref: Ref
+    website_pattern: TargetWebsitePattern
+    source_path_ref: Ref
+    content_hash_ref: Ref | None = None
+    source_observation_ref: Ref | None = None
+    artifact_ref: Ref | None = None
+    extracted_field_refs: list[Ref] = Field(default_factory=list)
+    evidence_refs: list[Ref] = Field(default_factory=list)
+    graph_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    replay_refs: list[Ref] = Field(default_factory=list)
+    missing_field_refs: list[Ref] = Field(default_factory=list)
+    prompt_injection_refs: list[Ref] = Field(default_factory=list)
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_source_observation(self) -> TargetSourceObservationRecord:
+        if self.result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "content_hash_ref": self.content_hash_ref,
+                "source_observation_ref": self.source_observation_ref,
+                "artifact_ref": self.artifact_ref,
+                "extracted_field_refs": self.extracted_field_refs,
+                "evidence_refs": self.evidence_refs,
+                "graph_refs": self.graph_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "replay_refs": self.replay_refs,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.missing_field_refs
+                or self.prompt_injection_refs
+                or self.failure_report_refs
+            ):
+                raise ValueError(f"passing source observation missing refs: {missing}")
+        else:
+            has_failure_diagnostics = (
+                self.missing_field_refs
+                or self.prompt_injection_refs
+                or self.failure_report_refs
+            )
+            if not has_failure_diagnostics:
+                raise ValueError("failed source observation requires diagnostics")
         return self
