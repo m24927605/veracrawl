@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-export-success","required_refs":["live_evidence","publication","published_output","output_manifest","result_api","export_receipt","withdrawal","correction","replay"],"forbidden_refs":["candidate_only_export"]}

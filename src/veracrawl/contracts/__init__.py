@@ -218,6 +218,9 @@ from veracrawl.contracts.publication import (
     OutputTypePublicationGateReport,
     PublicationReport,
     PublishedOutput,
+    ResultApiSnapshot,
+    ResultPublicationExportFixtureManifest,
+    ResultPublicationExportRuntimeReport,
 )
 from veracrawl.contracts.recovery import DurableReplayRecoveryReport
 from veracrawl.contracts.registry import registry_json, validate_registry
@@ -460,6 +463,9 @@ __all__ = [
     "ProcessFixtureManifest",
     "PublishedOutput",
     "PublicationReport",
+    "ResultApiSnapshot",
+    "ResultPublicationExportFixtureManifest",
+    "ResultPublicationExportRuntimeReport",
     "QueueBrokerAdapterSpec",
     "QueueBrokerConformanceReport",
     "QueueBrokerFixtureManifest",

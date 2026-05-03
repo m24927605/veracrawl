@@ -85,6 +85,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
     expected_live_evidence_ref: str | None = None
+    expected_result_publication_ref: str | None = None
     expected_replay_ref: str | None = None
     expected_artifact_hashes_ref: str | None = None
     failure_injection_ref: str | None = None
@@ -978,6 +979,28 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "publication",
         mutation_allowed=True,
         tests=["tests/unit/test_publication_replay.py"],
+    ),
+    "ResultApiSnapshot": _contract(
+        "ResultApiSnapshot",
+        OwnerService.PUBLISH,
+        "publication",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_result_publication_export_contracts.py"],
+    ),
+    "ResultPublicationExportRuntimeReport": _contract(
+        "ResultPublicationExportRuntimeReport",
+        OwnerService.PUBLISH,
+        "publication",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_result_publication_export_contracts.py"],
+    ),
+    "ResultPublicationExportFixtureManifest": _contract(
+        "ResultPublicationExportFixtureManifest",
+        OwnerService.TESTS,
+        "publication",
+        tests=["tests/contract/test_result_publication_export_contracts.py"],
     ),
     "OutputTypeCoverageRecord": _contract(
         "OutputTypeCoverageRecord",
@@ -2328,6 +2351,29 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["publication_report_recorded"],
         ),
+        "record_result_api_snapshot": CommandTypeRegistration(
+            command_type="record_result_api_snapshot",
+            owner_service=OwnerService.PUBLISH,
+            target_aggregate_type="ResultApiSnapshot",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_publication"],
+            emitted_event_types=["result_api_snapshot_recorded"],
+        ),
+        "record_result_publication_export_runtime_report": CommandTypeRegistration(
+            command_type="record_result_publication_export_runtime_report",
+            owner_service=OwnerService.PUBLISH,
+            target_aggregate_type="ResultPublicationExportRuntimeReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=["runtime_publication", "export_dispatch"],
+            emitted_event_types=["result_publication_export_runtime_reported"],
+        ),
+        "record_result_publication_export_fixture_manifest": CommandTypeRegistration(
+            command_type="record_result_publication_export_fixture_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="ResultPublicationExportFixtureManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["result_publication_export_fixture_manifest_recorded"],
+        ),
         "record_output_type_coverage": CommandTypeRegistration(
             command_type="record_output_type_coverage",
             owner_service=OwnerService.PUBLISH,
@@ -3173,6 +3219,9 @@ EVENT_TYPES.update(
             "evidence_manifest_recorded",
             "review_decision_recorded",
             "publication_report_recorded",
+            "result_api_snapshot_recorded",
+            "result_publication_export_runtime_reported",
+            "result_publication_export_fixture_manifest_recorded",
             "output_type_coverage_recorded",
             "output_type_coverage_reported",
             "output_type_coverage_fixture_manifest_recorded",
@@ -4450,6 +4499,35 @@ for _live_evidence_fixture, _negative in {
         negative_case=_negative,
     )
 
+for _result_publication_fixture, _negative in {
+    "result-publication-export-success": False,
+    "result-publication-api-success": False,
+    "result-publication-correction-withdrawal-success": False,
+    "result-publication-missing-live-evidence": True,
+    "result-publication-policy-denied": True,
+    "result-publication-verification-not-accepted": True,
+    "result-publication-missing-output-manifest": True,
+    "result-publication-export-missing-receipt": True,
+    "result-publication-withdrawal-missing-propagation": True,
+    "result-publication-correction-without-withdrawal": True,
+    "result-publication-privacy-missing": True,
+    "result-publication-direct-export-bypass": True,
+    "result-publication-replay-mismatch": True,
+}.items():
+    _base = f"tests/fixtures/{_result_publication_fixture}"
+    FIXTURE_ORACLES[_result_publication_fixture] = FixtureOracleRegistration(
+        fixture_id=_result_publication_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_result_publication_ref=(
+            f"{_base}/oracles/expected_result_publication.yaml"
+        ),
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
 
 def _target_area(
     area: str,
@@ -4727,6 +4805,39 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "EvidencePacketManifest",
             "VerificationDecision",
             "ReviewDecision",
+            "PolicyDecision",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "result_publication_export_runtime": _target_area(
+        "result_publication_export_runtime",
+        OwnerService.PUBLISH,
+        "materialized",
+        materialized=[
+            "ResultPublicationExportRuntimeReport",
+            "ResultPublicationExportFixtureManifest",
+            "LiveEvidenceVerificationRuntimeReport",
+            "ExtractionCandidate",
+            "EvidenceCoverageResult",
+            "EvidencePacket",
+            "EvidencePacketManifest",
+            "VerificationDecision",
+            "ReviewDecision",
+            "PublicationReport",
+            "PublishedOutput",
+            "OutputManifest",
+            "ResultApiSnapshot",
+            "ExportTargetSpec",
+            "ExportJob",
+            "ExportAttempt",
+            "ExportDeliveryReceipt",
+            "ExportWithdrawalJob",
+            "ExportWithdrawalAttempt",
+            "ExportCorrectionRecord",
+            "ExportReconciliationReport",
             "PolicyDecision",
             "CommandResult",
             "EventCursorRecord",

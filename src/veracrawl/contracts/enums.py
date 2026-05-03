@@ -1150,6 +1150,19 @@ class PublicationFailureType(StrEnum):
     REVIEW_NOT_ACCEPTED = "review_not_accepted"
 
 
+class ResultPublicationExportFailureType(StrEnum):
+    MISSING_LIVE_EVIDENCE = "result_publication_missing_live_evidence"
+    PUBLICATION_POLICY_DENIED = "result_publication_policy_denied"
+    VERIFICATION_NOT_ACCEPTED = "result_publication_verification_not_accepted"
+    MISSING_OUTPUT_MANIFEST = "result_publication_missing_output_manifest"
+    EXPORT_MISSING_RECEIPT = "result_publication_export_missing_receipt"
+    WITHDRAWAL_MISSING_PROPAGATION = "result_publication_withdrawal_missing_propagation"
+    CORRECTION_WITHOUT_WITHDRAWAL = "result_publication_correction_without_withdrawal"
+    PRIVACY_MISSING = "result_publication_privacy_missing"
+    DIRECT_EXPORT_BYPASS = "result_publication_direct_export_bypass"
+    REPLAY_MISMATCH = "result_publication_replay_mismatch"
+
+
 class TargetOutputType(StrEnum):
     RECORD = "record"
     TABLE = "table"

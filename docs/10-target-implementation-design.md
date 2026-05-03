@@ -451,6 +451,33 @@ This slice proves source-backed evidence and verification semantics. It does
 not publish outputs, export results, call real model providers, orchestrate
 multi-agent repair, or claim final production benchmark readiness.
 
+## Result Publication And Export Runtime Slice
+
+The result publication runtime proves that verified evidence becomes published
+and exportable only through publication, privacy, Result API, export, withdrawal,
+correction, and replay gates:
+
+- `veracrawl.contracts.publication`: `ResultApiSnapshot`,
+  `ResultPublicationExportRuntimeReport`, and
+  `ResultPublicationExportFixtureManifest` require live evidence refs,
+  candidate/evidence/verification refs, publication report refs, published
+  output refs, output manifest refs, Result API refs, export refs, delivery
+  receipt refs, withdrawal/correction refs, destination mapping refs,
+  policy/privacy refs, command/event/outbox refs, and replay refs before pass.
+- `veracrawl.publish.result_runtime`: core aggregate runtime receives row 047
+  evidence objects and refs through explicit inputs, reuses publication gates,
+  materializes Result API snapshots, creates destination-neutral export records,
+  and does not import concrete source, browser, model, agent framework, storage,
+  or export connector adapters.
+- `veracrawl.cli.result_publication`: `veracrawl-result-publication` composes
+  local live HTTP, structured source, browser snapshot, live normalization,
+  schema extraction, and live evidence prerequisites at the CLI edge before
+  validating publication/export success and negative fixtures.
+
+This slice proves publication/export lineage. It does not implement arbitrary
+external warehouse/SaaS connectors, production worker orchestration, operator
+console workflows, or final benchmark readiness.
+
 ## Normalize And Extract Plane Slice
 
 The normalize/extract slice turns raw acquisition output into replayable

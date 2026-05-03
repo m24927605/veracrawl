@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-missing-output-manifest","required_failure":"result_publication_missing_output_manifest","required_missing_refs":["output_manifest_refs"],"forbidden_refs":["export_receipt"]}

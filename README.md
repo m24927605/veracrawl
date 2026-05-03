@@ -151,6 +151,13 @@ are present. Missing schema extraction, missing source anchors, stale evidence,
 contradictory evidence, graph-only evidence, memory-only evidence, verification
 conflict, publication bypass, and replay mismatch produce typed failure or
 needs-review reports without emitting published outputs.
+The result publication and export runtime turns verified evidence into
+published outputs, output manifests, Result API snapshots, destination-neutral
+export jobs, delivery receipts, withdrawal refs, correction refs, policy/privacy
+refs, command/event/outbox refs, and replay refs. `veracrawl-result-publication`
+proves that outputs cannot be exported directly from candidates or published
+without evidence, accepted verification, privacy lifecycle, publication policy,
+delivery receipt, withdrawal/correction, and replay lineage.
 The concrete persistence adapter spine adds a standard-library SQLite adapter,
 Postgres contract descriptor, operational Postgres JSONB adapter, core adapter
 conformance harness, migration records, adapter conformance reports, adapter

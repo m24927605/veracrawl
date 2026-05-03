@@ -9,6 +9,7 @@ from veracrawl.contracts.enums import (
     CompletenessResult,
     OutputTypeCoverageFailureType,
     PublishedOutputStatus,
+    ResultPublicationExportFailureType,
     TargetOutputType,
 )
 
@@ -76,6 +77,30 @@ class PublishedOutput(TimestampedModel):
         return self
 
 
+class ResultApiSnapshot(TimestampedModel):
+    id: str
+    run_ref: Ref
+    published_output_refs: list[Ref] = Field(default_factory=list)
+    output_manifest_refs: list[Ref] = Field(default_factory=list)
+    response_artifact_ref: Ref
+    response_schema_ref: Ref
+    privacy_lifecycle_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref
+    response_hash: str
+
+    @model_validator(mode="after")
+    def validate_result_api_snapshot(self) -> ResultApiSnapshot:
+        if not self.published_output_refs or not self.output_manifest_refs:
+            raise ValueError("result API snapshot requires output and manifest refs")
+        if not self.response_artifact_ref or not self.response_schema_ref:
+            raise ValueError("result API snapshot requires response artifact and schema refs")
+        if not self.privacy_lifecycle_refs:
+            raise ValueError("result API snapshot requires privacy lifecycle refs")
+        if not self.replay_bundle_ref or not self.response_hash:
+            raise ValueError("result API snapshot requires replay and hash refs")
+        return self
+
+
 class PublicationReport(TimestampedModel):
     id: str
     run_ref: Ref
@@ -126,6 +151,98 @@ class PublicationReport(TimestampedModel):
                 raise ValueError("non-pass publication report cannot include output refs")
             if not (self.failure_report_refs or self.missing_ref_fields):
                 raise ValueError("non-pass publication report requires failures or missing refs")
+        return self
+
+
+class ResultPublicationExportRuntimeReport(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    live_evidence_runtime_report_ref: Ref | None = None
+    extraction_candidate_refs: list[Ref] = Field(default_factory=list)
+    evidence_coverage_refs: list[Ref] = Field(default_factory=list)
+    evidence_packet_refs: list[Ref] = Field(default_factory=list)
+    evidence_manifest_refs: list[Ref] = Field(default_factory=list)
+    verification_decision_refs: list[Ref] = Field(default_factory=list)
+    review_decision_refs: list[Ref] = Field(default_factory=list)
+    publication_report_refs: list[Ref] = Field(default_factory=list)
+    published_output_refs: list[Ref] = Field(default_factory=list)
+    output_manifest_refs: list[Ref] = Field(default_factory=list)
+    result_api_snapshot_refs: list[Ref] = Field(default_factory=list)
+    export_target_spec_refs: list[Ref] = Field(default_factory=list)
+    export_job_refs: list[Ref] = Field(default_factory=list)
+    export_attempt_refs: list[Ref] = Field(default_factory=list)
+    delivery_receipt_refs: list[Ref] = Field(default_factory=list)
+    withdrawal_job_refs: list[Ref] = Field(default_factory=list)
+    withdrawal_attempt_refs: list[Ref] = Field(default_factory=list)
+    correction_record_refs: list[Ref] = Field(default_factory=list)
+    destination_object_mapping_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    privacy_lifecycle_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    direct_export_bypass_refs: list[Ref] = Field(default_factory=list)
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: ResultPublicationExportFailureType | None = None
+    operator_status: str
+    completion_result: CompletenessResult
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_result_publication_export_report(
+        self,
+    ) -> ResultPublicationExportRuntimeReport:
+        if self.completion_result == CompletenessResult.PASS:
+            required: dict[str, object] = {
+                "live_evidence_runtime_report_ref": self.live_evidence_runtime_report_ref,
+                "extraction_candidate_refs": self.extraction_candidate_refs,
+                "evidence_coverage_refs": self.evidence_coverage_refs,
+                "evidence_packet_refs": self.evidence_packet_refs,
+                "evidence_manifest_refs": self.evidence_manifest_refs,
+                "verification_decision_refs": self.verification_decision_refs,
+                "review_decision_refs": self.review_decision_refs,
+                "publication_report_refs": self.publication_report_refs,
+                "published_output_refs": self.published_output_refs,
+                "output_manifest_refs": self.output_manifest_refs,
+                "result_api_snapshot_refs": self.result_api_snapshot_refs,
+                "export_target_spec_refs": self.export_target_spec_refs,
+                "export_job_refs": self.export_job_refs,
+                "export_attempt_refs": self.export_attempt_refs,
+                "delivery_receipt_refs": self.delivery_receipt_refs,
+                "withdrawal_job_refs": self.withdrawal_job_refs,
+                "withdrawal_attempt_refs": self.withdrawal_attempt_refs,
+                "correction_record_refs": self.correction_record_refs,
+                "destination_object_mapping_refs": self.destination_object_mapping_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "privacy_lifecycle_refs": self.privacy_lifecycle_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if (
+                missing
+                or self.failure_type is not None
+                or self.failure_report_refs
+                or self.missing_ref_fields
+                or self.direct_export_bypass_refs
+            ):
+                raise ValueError(
+                    f"passing result publication/export report invalid refs: {missing}"
+                )
+        else:
+            if self.failure_type is None:
+                raise ValueError("non-pass result publication/export report requires failure type")
+            if not (
+                self.failure_report_refs
+                or self.missing_ref_fields
+                or self.direct_export_bypass_refs
+            ):
+                raise ValueError("non-pass result publication/export report requires diagnostics")
         return self
 
 
@@ -283,4 +400,30 @@ class OutputTypeCoverageFixtureManifest(TimestampedModel):
             raise ValueError("negative output coverage fixture must expect fail")
         if self.expected_failure_type is not None and not self.negative_case:
             raise ValueError("expected failure type requires negative case")
+        return self
+
+
+class ResultPublicationExportFixtureManifest(TimestampedModel):
+    id: str
+    scenario: str
+    path: str
+    profile_refs: list[str] = Field(default_factory=list)
+    schema_ref: Ref
+    expected_completion_result: CompletenessResult
+    expected_operator_status: str
+    expected_failure_type: ResultPublicationExportFailureType | None = None
+    negative_case: bool = False
+    required_ref_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_result_publication_fixture(self) -> ResultPublicationExportFixtureManifest:
+        if "target" not in self.profile_refs:
+            raise ValueError("result publication fixture must support target profile")
+        if not self.required_ref_types:
+            raise ValueError("result publication fixture must declare required ref types")
+        if self.negative_case:
+            if self.expected_completion_result == CompletenessResult.PASS:
+                raise ValueError("negative result publication fixture must not expect pass")
+            if self.expected_failure_type is None:
+                raise ValueError("negative result publication fixture requires failure type")
         return self

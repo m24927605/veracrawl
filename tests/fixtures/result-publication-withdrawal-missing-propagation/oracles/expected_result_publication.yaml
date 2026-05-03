@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-withdrawal-missing-propagation","required_failure":"result_publication_withdrawal_missing_propagation","expected_completion_result":"needs_review","required_missing_refs":["withdrawal_attempt_refs"]}

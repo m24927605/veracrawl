@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-direct-export-bypass","required_failure":"result_publication_direct_export_bypass","required_refs":["direct_export_bypass"],"forbidden_refs":["published_output","output_manifest","export_receipt"]}

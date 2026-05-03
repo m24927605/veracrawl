@@ -505,6 +505,41 @@ This acceptance proves source-backed evidence and verification semantics. It
 does not replace publication, export, worker scale, external benchmark, or
 release gates.
 
+Result publication/export fixture contract:
+
+```text
+veracrawl-result-publication run tests/fixtures/<result_publication_fixture_id> --profile target --out .veracrawl-test-runs/<result_publication_fixture_id>
+```
+
+Required result publication fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| result-publication-export-success | live evidence refs plus publication report, published output, output manifest, Result API snapshot, export target/job/attempt, delivery receipt, withdrawal/correction, policy/privacy, command/event/outbox, and replay refs pass |
+| result-publication-api-success | API-shaped export target and Result API snapshot pass with the same evidence-backed publication refs |
+| result-publication-correction-withdrawal-success | withdrawal attempts, withdrawal receipts, correction records, and destination mappings are present before pass |
+| result-publication-missing-live-evidence | missing row 047 live evidence fails with `result_publication_missing_live_evidence` |
+| result-publication-policy-denied | publication policy denial fails with `result_publication_policy_denied` |
+| result-publication-verification-not-accepted | non-accepted verification enters `needs_review` with `result_publication_verification_not_accepted` |
+| result-publication-missing-output-manifest | missing output manifest fails with `result_publication_missing_output_manifest` |
+| result-publication-export-missing-receipt | export dispatch without delivery receipt fails with `result_publication_export_missing_receipt` |
+| result-publication-withdrawal-missing-propagation | missing withdrawal propagation enters `needs_review` |
+| result-publication-correction-without-withdrawal | correction without withdrawal fails with `result_publication_correction_without_withdrawal` |
+| result-publication-privacy-missing | missing privacy lifecycle refs fail with `result_publication_privacy_missing` |
+| result-publication-direct-export-bypass | candidate-only export attempts fail with `result_publication_direct_export_bypass` |
+| result-publication-replay-mismatch | missing or inconsistent replay refs fail with `result_publication_replay_mismatch` |
+
+Result publication acceptance requires:
+
+- `veracrawl-contracts validate --format json`
+- `pytest tests/contract/test_result_publication_export_contracts.py`
+- `pytest tests/unit/test_result_publication_export_runtime.py`
+- `pytest tests/integration/test_result_publication_export_fixtures.py`
+- `veracrawl-result-publication` CLI loop over all result publication fixtures
+
+This acceptance proves publication/export materialization semantics. It does
+not replace worker scale, ops console, external benchmark, or release gates.
+
 Concrete persistence adapter fixture contract:
 
 ```text

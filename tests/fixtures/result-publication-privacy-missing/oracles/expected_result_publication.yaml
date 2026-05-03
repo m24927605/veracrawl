@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-privacy-missing","required_failure":"result_publication_privacy_missing","required_missing_refs":["privacy_lifecycle_refs"],"forbidden_refs":["published_output","export_receipt"]}

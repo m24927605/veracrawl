@@ -5874,6 +5874,18 @@ Executable target runtime rules:
   evidence, memory-only evidence, verification conflict, publication bypass, or
   replay mismatch fail or enter needs-review with typed
   `LiveEvidenceVerificationFailureType` diagnostics.
+- Result publication/export runtime reports can claim `pass` only when row 047
+  live evidence refs are present with candidate refs, evidence coverage/packet
+  refs, evidence manifest refs, verification/review refs, publication report
+  refs, published output refs, output manifest refs, Result API snapshot refs,
+  export target/job/attempt refs, delivery receipt refs, withdrawal/correction
+  refs, destination object mapping refs, policy refs, privacy lifecycle refs,
+  command/event/outbox refs, and replay refs. Candidate-only export attempts
+  are forbidden. Missing live evidence, publication policy denial, verification
+  not accepted, missing output manifests, missing export receipts, missing
+  withdrawal propagation, correction without withdrawal, missing privacy refs,
+  direct export bypass, or replay mismatch fail or enter needs-review with
+  typed `ResultPublicationExportFailureType` diagnostics.
 - `TargetAIRecommendationRecord` is framework-neutral. It must not persist framework-native state; accepted recommendations require policy, tool-call, and trace refs.
 - Policy-denied, prompt-injection, missing-evidence, replay-mismatch, partial-export, and false-complete fixtures must fail or block deterministically.
 - `needs_review` is allowed only with review, recovery, or missing-ref diagnostics and cannot be labeled complete.

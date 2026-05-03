@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-replay-mismatch","required_failure":"result_publication_replay_mismatch","required_missing_refs":["replay_bundle_ref"],"forbidden_refs":["command_record","outbox"]}

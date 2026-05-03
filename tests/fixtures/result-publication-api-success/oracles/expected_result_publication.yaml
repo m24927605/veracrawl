@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-api-success","required_refs":["result_api","api_export_target","delivery_receipt","withdrawal","correction","replay"],"forbidden_refs":["candidate_only_export"]}

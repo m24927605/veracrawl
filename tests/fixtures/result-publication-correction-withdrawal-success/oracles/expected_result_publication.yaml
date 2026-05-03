@@ -1,0 +1,1 @@
+{"fixture_id":"result-publication-correction-withdrawal-success","required_refs":["withdrawal_job","withdrawal_attempt","correction_record","destination_mapping","delivery_receipt"],"forbidden_refs":["unwithdrawable_output"]}

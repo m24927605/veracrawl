@@ -118,12 +118,12 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan: `specs/047-live-evidence-verification-runtime/plan.md`.
-Use it with `specs/047-live-evidence-verification-runtime/spec.md`,
-`specs/047-live-evidence-verification-runtime/research.md`,
-`specs/047-live-evidence-verification-runtime/data-model.md`,
-`specs/047-live-evidence-verification-runtime/contracts/`, and
-`specs/047-live-evidence-verification-runtime/quickstart.md` for Live Evidence And Verification Runtime
+Current active Spec Kit plan: `specs/048-result-publication-export-runtime/plan.md`.
+Use it with `specs/048-result-publication-export-runtime/spec.md`,
+`specs/048-result-publication-export-runtime/research.md`,
+`specs/048-result-publication-export-runtime/data-model.md`,
+`specs/048-result-publication-export-runtime/contracts/`, and
+`specs/048-result-publication-export-runtime/quickstart.md` for Result Publication And Export Runtime
 work. The post-037 roadmap remains governed by
 `specs/038-production-runtime-closure/spec.md` and `docs/08-build-roadmap.md`;
 do not invent additional production specs unless both are amended first.
