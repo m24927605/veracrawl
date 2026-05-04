@@ -10,7 +10,9 @@
 This spec fixes the post-037 production runtime roadmap. It does not implement a
 runtime feature by itself. It defines the finite set of remaining specs required
 to move VeraCrawl from executable deterministic target-architecture foundations
-to a production-capable general-purpose AI agent crawler.
+to a production-capable general-purpose AI agent crawler. Specs 068-075 extend
+this control spec with the production-grade closure roadmap discovered after
+the first real ecommerce product benchmarks.
 
 Future production implementation specs MUST come from this roadmap. If a missing
 production capability is discovered, this spec and `docs/08-build-roadmap.md`
@@ -22,7 +24,8 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
   capability across source types, website patterns, schemas, evidence paths,
   graph/memory intelligence, and operations. It does not narrow VeraCrawl into a
   single-site scraper or workflow demo.
-- **Target/V1 boundary**: Specs 039-064 are production sequencing specs. They
+- **Target/V1 boundary**: Specs 039-075 are production sequencing and
+  production-grade closure specs. They
   connect the already completed target architecture foundation to real source
   acquisition, processing, orchestration, AI adapters, persistence, benchmark,
   and operations paths without reducing target architecture.
@@ -40,7 +43,8 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 
 ## Roadmap Rules
 
-- **RR-001**: Specs 039-064 are the approved remaining production runtime specs.
+- **RR-001**: Specs 039-075 are the approved production runtime and
+  production-grade closure specs.
 - **RR-002**: A later implementation spec may be activated only after all prior
   blocking specs listed in the roadmap are complete or explicitly marked
   non-blocking by an amendment to this spec.
@@ -87,6 +91,17 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 | 062 | Precision Recall Quality Benchmark | Compute precision, recall, F1, false-positive, false-negative, unsupported-field, and abstention metrics from field-level oracle reports. | 061 | Corpus-level and per-pattern precision/recall/F1, confidence calibration, no direct LLM evidence, and release-blocking thresholds are reported. |
 | 063 | Repair Success Rate Benchmark | Measure crawl, extraction, verification, drift, and replay repair success under seeded failures without owner-service bypass or policy weakening. | 050, 061, 062 | Seeded repair cases report repair success rate, attempts, model/tool traces, before/after evidence, rollback refs, unresolved escalation, and no unsafe repair bypass. |
 | 064 | Cost Latency Stability Release Gate | Aggregate quality, cost, latency, throughput, token/call usage, retry behavior, and multi-run stability into the production crawl quality release decision. | 058-063 | Quality release passes only when all prior quality benchmark reports exist, SLO/cost budgets are met, three-run stability is acceptable, replay is complete, and no false-ready status is emitted. |
+| 065 | Top Ecommerce Live AI Benchmark | Run a targeted market validation corpus against selected Taiwan and United States major ecommerce public entry points with hosted LLM/agent traces. | 055, 056, 064 | Public ecommerce homepage entry points pass or fail visibly with live HTTP, source anchors, AI traces, evidence/verification refs, command/event/outbox refs, and replay refs. |
+| 066 | US Top Ecommerce Product Price Availability Benchmark | Test whether a specified product's price and availability can be extracted from Amazon, Walmart, and eBay with source evidence and AI traces. | 055, 056, 065 | Product-page extraction passes where source evidence exists and records blocked sources without fabricated inventory. |
+| 067 | Taiwan Top Ecommerce Product Price Availability Benchmark | Test whether the same specified product's price and availability can be extracted from Shopee Taiwan, momo, and PChome 24h with source evidence and AI traces. | 055, 056, 065, 066 | momo and PChome 24h pass with source-backed evidence; Shopee Taiwan source limitations are recorded as needs-review without bypass. |
+| 068 | Production Grade Crawler Closure Roadmap | Fix the finite post-067 closure spec set required before VeraCrawl may claim full production-grade web crawler capability. | 067 | Specs 069-075 are defined with purpose, dependency, non-goals, and completion gates. |
+| 069 | Objective Discovery And Crawl Planning Runtime | Turn high-level objectives into approved discovery plans, candidate sites, entry points, query strategies, crawl bounds, and evidence requirements. | 049, 050, 055, 056, 067, 068 | A high-level objective produces an approved, replayable discovery plan without declared product URLs. |
+| 070 | Unified HTTP Browser Acquisition Escalation Runtime | Escalate from HTTP/structured acquisition to browser rendering when evidence is missing, while preserving sandbox, budget, DOM/network artifacts, and no-bypass policy. | 043, 041, 045, 059, 067, 069 | Browser rendering recovers source-backed DOM evidence when policy allows and records source-limited cases when it does not. |
+| 071 | Authorized Source Access And Official API Runtime | Support official APIs and authorized credentialed sessions as first-class source adapters without leaking secrets or bypassing site controls. | 044, 049, 070 | Authorized APIs/sessions provide source-backed evidence with redaction, audit, replay, and policy refs. |
+| 072 | Adaptive Frontier Deep Crawl Production Runtime | Execute bounded multi-page crawls with AI-assisted frontier prioritization, pagination/detail traversal, canonicalization, dedupe, rate limits, and replayable stop reasons. | 050, 051, 052, 060, 070 | Approved objectives execute as bounded, replayable multi-page crawls with coverage and extraction results. |
+| 073 | Production Extraction Quality And Oracle Runtime | Convert field-level oracle, precision/recall, confidence calibration, abstention, and publication gating into release-blocking production quality checks. | 061, 062, 072 | Publication and release are blocked when source-backed quality gates fail. |
+| 074 | Production Reliability Operations And Cost Runtime | Prove long-running worker, queue, persistence, object store, retry, recovery, observability, cost, latency, and SLO behavior under production-like runs. | 052, 053, 064, 072, 073 | Production-like workloads pass reliability, cost, latency, recovery, observability, and replay gates. |
+| 075 | Production Grade Web Crawler Release Gate | Aggregate 069-074 into one release gate that decides whether VeraCrawl may claim production-grade crawler capability. | 069-074 | Production-grade status passes only when discovery, browser/API acquisition, deep crawl, extraction quality, operations, and safety gates all pass. |
 
 ## Activation Policy
 
@@ -106,11 +121,11 @@ When a roadmap spec is activated:
 - This spec does not implement runtime code.
 - This spec does not claim production readiness.
 - This spec does not authorize creating additional production implementation
-  specs outside 039-064 without first amending this roadmap.
+  specs outside 039-075 without first amending this roadmap.
 
 ## Success Criteria
 
-- **SC-001**: Specs 039-064 exist as planned spec files with fixed purpose,
+- **SC-001**: Specs 039-075 exist as planned spec files with fixed purpose,
   dependency, and completion gate.
 - **SC-002**: `docs/08-build-roadmap.md` contains the same post-037 roadmap.
 - **SC-003**: `AGENTS.md` points future production work to this roadmap before

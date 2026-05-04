@@ -118,21 +118,17 @@ For all Spec Kit plans and implementation tasks:
 - Spec Kit documentation: https://github.github.io/spec-kit/
 
 <!-- SPECKIT START -->
-Current active Spec Kit plan:
-`specs/067-taiwan-product-availability-benchmark/plan.md`.
-Use it with `specs/067-taiwan-product-availability-benchmark/spec.md`,
-`specs/067-taiwan-product-availability-benchmark/research.md`,
-`specs/067-taiwan-product-availability-benchmark/data-model.md`,
-`specs/067-taiwan-product-availability-benchmark/contracts/`, and
-`specs/067-taiwan-product-availability-benchmark/quickstart.md` for the Taiwan
-top ecommerce product price and availability benchmark. This benchmark is a
-targeted product-page validation corpus composed through live HTTP and
-framework-neutral model/agent ports; it must not become site-specific scraper
-code, must not bypass robots/policy gates, must not use login/cart/CAPTCHA/WAF
-bypass, and must honestly record blocked sources such as Shopee Taiwan
-JavaScript shells or product API access limits instead of fabricating price or
-inventory. Production quality specs remain governed by
-`specs/057-production-quality-benchmark-roadmap/spec.md`,
-`specs/038-production-runtime-closure/spec.md`, and
-`docs/08-build-roadmap.md`.
+Current production-grade closure roadmap:
+`specs/068-production-grade-crawler-closure-roadmap/spec.md`.
+Use it with `docs/08-build-roadmap.md` and
+`specs/038-production-runtime-closure/spec.md`. Specs 069-075 are the finite
+production-grade closure specs that must be implemented in order before
+VeraCrawl may claim full production-grade web crawler capability:
+objective discovery/planning, unified HTTP/browser acquisition escalation,
+authorized API/session access, adaptive deep crawl, production extraction
+quality gates, reliability/operations/cost gates, and the final production-grade
+release gate. Do not invent additional production-grade specs without amending
+spec 068 and the roadmap first. Until spec 075 passes, describe VeraCrawl as a
+production-grade foundation or partial production capability, not a fully
+production-grade crawler.
 <!-- SPECKIT END -->
