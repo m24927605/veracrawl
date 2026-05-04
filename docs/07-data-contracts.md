@@ -122,6 +122,15 @@ Acquisition and authorized-source contracts:
   result with credential grant, credential audit, redacted artifacts, source
   anchors, content hashes, policy refs, command/event/outbox refs, and replay
   refs.
+- `EcommerceOfficialApiTargetSpec`, `EcommerceOfficialApiSourceFetch`,
+  `EcommerceOfficialApiRedactedArtifact`, `EcommerceOfficialApiFieldEvidence`,
+  `EcommerceOfficialApiSiteResult`, and `EcommerceOfficialApiBenchmarkReport`:
+  official ecommerce API product evidence contracts for Amazon and eBay adapter
+  validation. Passing fields require official API response bytes, redacted
+  artifacts, source anchors, content hashes, credential grant/audit refs,
+  policy refs, command/event/outbox refs, and replay refs. LLM output cannot be
+  source evidence, and missing credentials or fields remain typed
+  `needs_review`.
 
 Live authorized-source validation:
 
@@ -138,6 +147,10 @@ Live authorized-source validation:
   hashes, source anchors, credential audit refs, policy refs,
   command/event/outbox refs, and replay refs before their 071 lower gate can
   pass.
+- `veracrawl-ecommerce-official-api run-live` is the market-specific official
+  API validation path for Amazon and eBay product evidence. It uses
+  `EcommerceOfficialApiAdapterPort` so core stays decoupled from Amazon/eBay
+  SDKs and records missing credentials as operator-visible `needs_review`.
 - `veracrawl-production-quality-gate run-live` emits canonical
   `ProductionGateReport` contracts from parsed field oracle, precision/recall,
   repair, real-world quality, and quality release reports. It must preserve
@@ -5980,7 +5993,7 @@ ProductAvailabilityTargetSpec:
 
 ```yaml
 ProductAvailabilityFieldEvidence:
-  field_name: identity | price | availability
+  field_name: identity | price | availability | delivery_eta | shipping_fee
   raw_text: string
   normalized_value: string
   amount: number
@@ -6003,6 +6016,11 @@ Executable product availability benchmark rules:
   Accepted field evidence may use the HTTP artifact or a read-only browser DOM
   artifact when the benchmark is configured for browser fallback or browser
   source required mode.
+- delivery ETA and shipping fee are optional field evidence rows. Accepted
+  delivery ETA records normalize source-backed phrases into `min_days` and
+  `max_days`; accepted shipping fee records require amount and currency. Missing
+  or ambiguous ETA/shipping signals remain absent and cannot be filled by model
+  output.
 - needs-review is allowed when at least one declared top ecommerce source passes
   and another source blocks access or does not expose source-backed fields.
 - Taiwan product-page fixtures reuse these contracts. Meta tags such as
@@ -6016,6 +6034,52 @@ Executable product availability benchmark rules:
 - browser source required mode must keep browser engines behind the browser
   adapter port and must record browser DOM artifact refs/content hashes for any
   accepted field evidence.
+
+```yaml
+SortableProductOfferRecord:
+  source_site_result_ref: string
+  price_evidence_ref: string
+  availability_evidence_ref: string
+  delivery_evidence_ref: string | null
+  shipping_fee_evidence_ref: string | null
+  price_amount: number
+  shipping_fee_amount: number | null
+  total_price_amount: number | null
+  delivery_eta_min_days: integer | null
+  availability_sort_rank: integer
+  delivery_sort_rank: integer
+  source_anchor_refs: list
+  artifact_refs: list
+  content_hash_refs: list
+  verification_decision_refs: list
+  command_record_refs: list
+  event_cursor_refs: list
+  outbox_refs: list
+  replay_bundle_refs: list
+```
+
+```yaml
+ProductOfferProjectionReport:
+  offer_record_refs: list
+  sortable_offer_refs: list
+  blocked_offer_refs: list
+  sorted_by_price_refs: list
+  sorted_by_total_price_refs: list
+  sorted_by_delivery_refs: list
+  sorted_by_availability_refs: list
+```
+
+Offer projection rules:
+
+- pass requires every sortable offer to keep source-backed price and
+  availability refs plus policy, command/event/outbox, and replay refs.
+- total price sorting is emitted only when item price and shipping fee use the
+  same currency, or when no shipping fee evidence exists and item price alone is
+  the known total floor.
+- delivery sorting ranks known source-backed ETA before unknown ETA; unknown ETA
+  remains explicit rather than inferred.
+- blocked sources become non-pass offer records with diagnostics and cannot
+  contribute fabricated sort values.
 
 ## Target Crawl Runtime Contracts
 

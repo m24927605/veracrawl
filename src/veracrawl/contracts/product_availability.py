@@ -64,9 +64,7 @@ class ProductAvailabilityTargetSpec(TimestampedModel):
     def validate_target_spec(self) -> ProductAvailabilityTargetSpec:
         if not _is_http_url(self.target_url) or not _is_http_url(self.robots_url):
             raise ValueError("product availability target URLs must be absolute http(s)")
-        if _is_private_network_url(self.target_url) or _is_private_network_url(
-            self.robots_url
-        ):
+        if _is_private_network_url(self.target_url) or _is_private_network_url(self.robots_url):
             raise ValueError("product availability targets cannot use private networks")
         if self.allowed_origin != _origin(self.target_url):
             raise ValueError("allowed_origin must match target_url origin")
@@ -120,7 +118,13 @@ class ProductAvailabilityFieldEvidence(TimestampedModel):
 
     @model_validator(mode="after")
     def validate_field_evidence(self) -> ProductAvailabilityFieldEvidence:
-        if self.field_name not in {"identity", "price", "availability"}:
+        if self.field_name not in {
+            "identity",
+            "price",
+            "availability",
+            "delivery_eta",
+            "shipping_fee",
+        }:
             raise ValueError("unsupported product availability field")
         if self.completion_result != CompletenessResult.PASS:
             raise ValueError("field evidence rows must be passing source-backed rows")
@@ -147,8 +151,10 @@ class ProductAvailabilityFieldEvidence(TimestampedModel):
         missing = [name for name, value in required.items() if not value]
         if missing:
             raise ValueError(f"field evidence missing refs: {missing}")
-        if self.field_name == "price" and self.amount is None and not self.currency:
-            raise ValueError("price evidence requires amount or currency")
+        if self.field_name in {"price", "shipping_fee"} and (
+            self.amount is None or not self.currency
+        ):
+            raise ValueError("price evidence requires amount and currency")
         if self.field_name == "availability":
             ProductAvailabilityStatus(self.normalized_value)
         if self.llm_output_evidence_refs:
@@ -182,6 +188,16 @@ class ProductAvailabilitySiteResult(TimestampedModel):
     price_currency: str | None = None
     availability_status: ProductAvailabilityStatus | None = None
     availability_raw_text: str | None = None
+    delivery_evidence_ref: Ref | None = None
+    delivery_eta_raw_text: str | None = None
+    delivery_eta_min_days: int | None = None
+    delivery_eta_max_days: int | None = None
+    shipping_fee_evidence_ref: Ref | None = None
+    shipping_fee_raw_text: str | None = None
+    shipping_fee_amount: float | None = None
+    shipping_fee_currency: str | None = None
+    total_price_amount: float | None = None
+    total_price_currency: str | None = None
     model_call_trace_refs: list[Ref] = Field(default_factory=list)
     agent_action_trace_refs: list[Ref] = Field(default_factory=list)
     tool_call_trace_refs: list[Ref] = Field(default_factory=list)
@@ -261,6 +277,10 @@ class ProductAvailabilityBenchmarkReport(TimestampedModel):
     field_evidence_refs: list[Ref] = Field(default_factory=list)
     price_evidence_refs: list[Ref] = Field(default_factory=list)
     availability_evidence_refs: list[Ref] = Field(default_factory=list)
+    delivery_evidence_refs: list[Ref] = Field(default_factory=list)
+    shipping_fee_evidence_refs: list[Ref] = Field(default_factory=list)
+    offer_projection_report_ref: Ref | None = None
+    offer_record_refs: list[Ref] = Field(default_factory=list)
     model_call_trace_refs: list[Ref] = Field(default_factory=list)
     agent_action_trace_refs: list[Ref] = Field(default_factory=list)
     tool_call_trace_refs: list[Ref] = Field(default_factory=list)

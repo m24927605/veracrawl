@@ -1131,6 +1131,38 @@ DOM artifacts, content hashes, AI traces, evidence/verification refs, and replay
 refs. If a source such as eBay blocks public item-page access, the result is
 typed `needs_review` or failure with no fabricated price or inventory.
 
+The same benchmark now writes sortable offer artifacts for downstream comparison
+sites:
+
+- `offer_records.json`
+- `offer_projection_report.json`
+
+Accepted offers can be sorted by item price, total price, source-backed delivery
+ETA, and availability. Delivery ETA and shipping fee are optional source-backed
+fields. If an ecommerce page does not expose arrival text, shipping fee, or a
+currency-compatible total price in the accepted source artifact, VeraCrawl leaves
+those values absent rather than inferring them from an LLM or marketplace
+assumption.
+
+Run the official API path for the remaining source-limited US ecommerce
+platforms:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-ecommerce-official-api run-live \
+  tests/fixtures/us-ecommerce-official-api-product-availability \
+  --profile target \
+  --out .veracrawl-test-runs/us-ecommerce-official-api-product-availability
+```
+
+The official API fixture covers Amazon and eBay, because Walmart Marketplace/API
+access was not provided. Amazon uses a credentialed Creators API endpoint
+configured through `AMAZON_CREATORS_API_ENDPOINT` plus
+`AMAZON_CREATORS_API_BEARER_TOKEN` or `AMAZON_CREATORS_API_KEY`. eBay uses
+`EBAY_ACCESS_TOKEN` or `EBAY_CLIENT_ID` plus `EBAY_CLIENT_SECRET` for Browse API
+access. Without those credentials, the command exits successfully with typed
+`needs_review` and zero published product fields; use `--require-pass` only when
+credentialed API access is expected.
+
 Run the Taiwan top ecommerce product price and availability benchmark:
 
 ```sh

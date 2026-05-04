@@ -2152,12 +2152,27 @@ Required product availability fixtures:
 | Fixture | Required acceptance |
 | --- | --- |
 | us-top-ecommerce-product-availability | Amazon and Walmart source-backed product price/availability fields pass when HTTP source evidence is available; Amazon browser DOM source evidence must also be demonstrable with `--browser-source-required`; eBay access denial or unavailable source evidence is recorded as blocked/needs-review with no fabricated price or inventory |
+| us-ecommerce-official-api-product-availability | Amazon and eBay official API adapters produce source-backed product identity, price, and availability only with credentialed official API evidence; missing Amazon Creators API endpoint/token or eBay Browse API credentials is recorded as typed `needs_review` with no fabricated product fields |
 | taiwan-top-ecommerce-product-availability | momo and PChome 24h source-backed product price/availability fields pass; Shopee Taiwan JavaScript shell or API source limitation is recorded as blocked/needs-review with no bypass and no fabricated price or inventory |
 | product-availability-wrong-identity | wrong product identity fails |
 | product-availability-missing-price | missing source-backed price fails |
 | product-availability-missing-availability | missing source-backed availability fails |
 | product-availability-llm-output-as-evidence | model output as source evidence fails |
 | product-availability-missing-replay | missing replay refs fail |
+
+Product offer sorting projection acceptance:
+
+- `ProductAvailabilityFieldEvidence` accepts optional `delivery_eta` and
+  `shipping_fee` rows only when source anchors, artifacts, content hashes,
+  verification refs, command/event/outbox refs, and replay refs exist.
+- `ProductAvailabilitySiteResult` may carry source-backed delivery ETA,
+  shipping fee, and currency-compatible total price fields.
+- `ProductOfferProjectionReport` must include deterministic sorted refs for
+  item price, total price, delivery ETA, and availability.
+- Unknown delivery ETA must remain unknown and sort after source-backed ETA; it
+  must not be inferred from LLM output or marketplace reputation.
+- Blocked ecommerce sources must remain typed non-pass offer records and cannot
+  contribute fabricated sort values.
 
 Acceptance requires contract, registry, import-boundary, unit, replay,
 integration fixture, live CLI, hosted OpenAI CLI, full pytest, and

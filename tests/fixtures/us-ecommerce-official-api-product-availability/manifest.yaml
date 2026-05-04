@@ -1,0 +1,55 @@
+{
+  "id": "us-ecommerce-official-api-product-availability",
+  "scenario": "us-ecommerce-official-api-product-availability",
+  "profile_refs": ["target"],
+  "objective": "Use official credentialed ecommerce APIs for Amazon and eBay product identity, price, and availability evidence when public item pages are source-limited or access controlled.",
+  "target_specs": [
+    {
+      "id": "amazon-creators-api-sandisk-256gb",
+      "site_name": "Amazon",
+      "platform": "amazon",
+      "api_family": "amazon_creators_api_credentialed",
+      "allowed_origin": "https://affiliate-program.amazon.com",
+      "entry_point_url": "https://affiliate-program.amazon.com/creatorsapi",
+      "product_identifier_type": "asin",
+      "product_identifier": "B09X7CRKRZ",
+      "required_identity_terms": ["SanDisk", "256GB", "Extreme", "microSDXC"],
+      "credential_env_vars": [
+        "AMAZON_CREATORS_API_ENDPOINT",
+        "AMAZON_CREATORS_API_BEARER_TOKEN"
+      ],
+      "required_evidence_types": ["identity", "price", "availability"],
+      "expected_site_result": "needs_review"
+    },
+    {
+      "id": "ebay-browse-api-sandisk-256gb",
+      "site_name": "eBay",
+      "platform": "ebay",
+      "api_family": "ebay_browse_v1",
+      "allowed_origin": "https://api.ebay.com",
+      "entry_point_url": "https://api.ebay.com/buy/browse/v1/item_summary/search",
+      "product_identifier_type": "query",
+      "product_identifier": "SanDisk 256GB Extreme microSDXC",
+      "required_identity_terms": ["SanDisk", "256GB", "Extreme"],
+      "credential_env_vars": ["EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET"],
+      "required_evidence_types": ["identity", "price", "availability"],
+      "expected_site_result": "needs_review"
+    }
+  ],
+  "required_ref_types": [
+    "official_api",
+    "authorized_source",
+    "credential_grant",
+    "credential_audit",
+    "redacted_artifact",
+    "source_anchor",
+    "content_hash",
+    "field_evidence",
+    "policy",
+    "command_event_outbox",
+    "replay"
+  ],
+  "expected_completion_result": "needs_review",
+  "expected_operator_status": "ecommerce_official_api_credentials_required",
+  "negative_case": false
+}

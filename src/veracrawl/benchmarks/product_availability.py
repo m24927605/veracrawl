@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from urllib import robotparser
 
+from veracrawl.benchmarks.offer_projection import (
+    ProductOfferProjectionResult,
+    build_product_offer_projection,
+)
 from veracrawl.benchmarks.real_world import RobotsFetchResult
 from veracrawl.browser.observation import execute_browser_observation_acquisition
 from veracrawl.contracts.agent import (
@@ -34,6 +38,10 @@ from veracrawl.contracts.enums import (
     ToolCallStatus,
 )
 from veracrawl.contracts.network import LiveHttpAcquisitionReport
+from veracrawl.contracts.offer_projection import (
+    ProductOfferProjectionReport,
+    SortableProductOfferRecord,
+)
 from veracrawl.contracts.product_availability import (
     ProductAvailabilityBenchmarkManifest,
     ProductAvailabilityBenchmarkReport,
@@ -83,6 +91,8 @@ class ProductAvailabilityBenchmarkResult:
     report: ProductAvailabilityBenchmarkReport
     site_results: list[ProductAvailabilitySiteResult]
     field_evidence: list[ProductAvailabilityFieldEvidence]
+    offer_projection_report: ProductOfferProjectionReport
+    offer_records: list[SortableProductOfferRecord]
     model_requests: list[ModelRequest]
     model_responses: list[ModelResponse]
     model_call_traces: list[ModelCallTrace]
@@ -99,6 +109,14 @@ class _FieldCandidate:
     normalized_value: str
     amount: float | None = None
     currency: str | None = None
+
+
+@dataclass(frozen=True)
+class _DeliveryCandidate:
+    raw_text: str
+    normalized_value: str
+    min_days: int
+    max_days: int
 
 
 @dataclass(frozen=True)
@@ -369,6 +387,8 @@ def run_product_availability_benchmark(
             continue
         assert price is not None
         assert availability is not None
+        delivery_eta = _extract_delivery_eta(body)
+        shipping_fee = _extract_shipping_fee(body, price.currency)
 
         scenario_failure = _scenario_failure(manifest.scenario)
         if scenario_failure is not None:
@@ -445,6 +465,8 @@ def run_product_availability_benchmark(
             identity_terms=identity_terms,
             price=price,
             availability=availability,
+            delivery_eta=delivery_eta,
+            shipping_fee=shipping_fee,
             live_http_report_ref=live_report.id,
             network_response_ref=network_result.response.id,
             artifact_ref=source.field_artifact_ref,
@@ -475,6 +497,8 @@ def run_product_availability_benchmark(
                 evidence=site_field_evidence,
                 price=price,
                 availability=availability,
+                delivery_eta=delivery_eta,
+                shipping_fee=shipping_fee,
                 decision_bundles=decision_bundles,
                 policy_decision_refs=source.policy_decision_refs,
                 command_record_refs=source.command_record_refs,
@@ -483,11 +507,25 @@ def run_product_availability_benchmark(
             )
         )
 
-    report = _build_report(manifest=manifest, site_results=site_results, evidence=field_evidence)
+    offer_projection = build_product_offer_projection(
+        fixture_id=manifest.id,
+        product_name=manifest.product_name,
+        run_ref=f"run:{manifest.id}",
+        site_results=site_results,
+        field_evidence=field_evidence,
+    )
+    report = _build_report(
+        manifest=manifest,
+        site_results=site_results,
+        evidence=field_evidence,
+        offer_projection=offer_projection,
+    )
     return ProductAvailabilityBenchmarkResult(
         report=report,
         site_results=site_results,
         field_evidence=field_evidence,
+        offer_projection_report=offer_projection.report,
+        offer_records=offer_projection.offer_records,
         model_requests=model_requests,
         model_responses=model_responses,
         model_call_traces=model_call_traces,
@@ -729,10 +767,10 @@ def _extract_price(body: str) -> _FieldCandidate | None:
         r'<span class="a-offscreen">\s*([^<]*?(?:TWD|US\s*\$|\$)[^<]*?\d[^<]*?)\s*</span>',
         r'data-pricetopay-label="\{priceToPay\}"[^>]*>\s*([^<]*?\d[^<]*?)\s*</span>',
         r'"priceString"\s*:\s*"(\$[0-9][0-9,]*(?:\.[0-9]{2})?)"',
-        r'(TWD\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?)',
-        r'(NT\s*\$[0-9][0-9,]*(?:\.[0-9]{1,2})?)',
-        r'(US\s*\$[0-9][0-9,]*(?:\.[0-9]{2})?)',
-        r'(\$[0-9][0-9,]*(?:\.[0-9]{2})?)',
+        r"(TWD\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?)",
+        r"(NT\s*\$[0-9][0-9,]*(?:\.[0-9]{1,2})?)",
+        r"(US\s*\$[0-9][0-9,]*(?:\.[0-9]{2})?)",
+        r"(\$[0-9][0-9,]*(?:\.[0-9]{2})?)",
     ]
     for pattern in patterns:
         match = re.search(pattern, body, flags=re.IGNORECASE | re.DOTALL)
@@ -826,19 +864,19 @@ def _extract_availability(body: str) -> _FieldCandidate | None:
         (r'"availabilityStatus"\s*:\s*"IN_STOCK"', ProductAvailabilityStatus.IN_STOCK),
         (r'"availabilityStatus"\s*:\s*"OUT_OF_STOCK"', ProductAvailabilityStatus.OUT_OF_STOCK),
         (
-            r'\bOnly\s+\d+\s+left\s+in\s+stock\b[^.\n]*\.?',
+            r"\bOnly\s+\d+\s+left\s+in\s+stock\b[^.\n]*\.?",
             ProductAvailabilityStatus.LIMITED,
         ),
-        (r'\b\d+\s+left\s+in\s+stock\b', ProductAvailabilityStatus.LIMITED),
-        (r'\bIn Stock\b', ProductAvailabilityStatus.IN_STOCK),
-        (r'\bAdd to Cart\b', ProductAvailabilityStatus.IN_STOCK),
+        (r"\b\d+\s+left\s+in\s+stock\b", ProductAvailabilityStatus.LIMITED),
+        (r"\bIn Stock\b", ProductAvailabilityStatus.IN_STOCK),
+        (r"\bAdd to Cart\b", ProductAvailabilityStatus.IN_STOCK),
         (
             r'class="[^"]*primary-availability-message[^"]*"[^>]*>\s*In Stock\s*<',
             ProductAvailabilityStatus.IN_STOCK,
         ),
-        (r'>\s*Out of stock\s*<', ProductAvailabilityStatus.OUT_OF_STOCK),
-        (r'>\s*Currently unavailable\.?\s*<', ProductAvailabilityStatus.UNAVAILABLE),
-        (r'(\d+)\s+available', ProductAvailabilityStatus.LIMITED),
+        (r">\s*Out of stock\s*<", ProductAvailabilityStatus.OUT_OF_STOCK),
+        (r">\s*Currently unavailable\.?\s*<", ProductAvailabilityStatus.UNAVAILABLE),
+        (r"(\d+)\s+available", ProductAvailabilityStatus.LIMITED),
     ]
     for text in ("熱銷一空", "已售完", "售完", "缺貨", "補貨通知", "可訂購時通知", "貨到通知"):
         patterns.append((re.escape(text), ProductAvailabilityStatus.OUT_OF_STOCK))
@@ -851,6 +889,109 @@ def _extract_availability(body: str) -> _FieldCandidate | None:
                 raw_text=html.unescape(match.group(0)),
                 normalized_value=status.value,
             )
+    return None
+
+
+def _extract_delivery_eta(body: str) -> _DeliveryCandidate | None:
+    meta_delivery = _meta_content(
+        body,
+        (
+            "product:delivery_time",
+            "og:delivery_time",
+            "shipping:delivery_time",
+            "delivery_time",
+            "delivery",
+        ),
+    )
+    if meta_delivery is not None:
+        candidate = _delivery_candidate_from_raw(meta_delivery)
+        if candidate is not None:
+            return candidate
+    for payload in _jsonld_payloads(body):
+        for value in _walk_jsonld_strings(payload):
+            candidate = _delivery_candidate_from_raw(value)
+            if candidate is not None:
+                return candidate
+    source_text = _source_text(body)
+    phrase_patterns = [
+        r"(?:最快)?(?:今天|今日).{0,20}(?:到貨|送達|配達|出貨)",
+        r"(?:最快)?(?:明天|隔日|翌日|次日).{0,20}(?:到貨|送達|配達|出貨)",
+        r"(?:24\s*(?:小時|hours?)|二十四小時).{0,20}(?:到貨|送達|配達|出貨|delivery)",
+        r"(?:到貨|送達|配達|出貨|arrives?|delivers?|delivery|ships).{0,40}?"
+        r"\d+\s*(?:[-~]|到|至)\s*\d+\s*(?:天|日|days?|business days?)",
+        r"\d+\s*(?:[-~]|到|至)\s*\d+\s*(?:天|日|days?|business days?).{0,40}?"
+        r"(?:到貨|送達|配達|出貨|arrives?|delivers?|delivery|ships)",
+        r"(?:within|in)\s+\d+\s*(?:days?|business days?).{0,30}?"
+        r"(?:arrives?|delivers?|delivery)",
+        r"(?:到貨|送達|配達|出貨|arrives?|delivers?|delivery|ships).{0,40}?"
+        r"\d+\s*(?:天|日|days?|business days?)",
+        r"\d+\s*(?:天|日|days?|business days?).{0,40}?"
+        r"(?:到貨|送達|配達|出貨|arrives?|delivers?|delivery|ships)",
+    ]
+    for pattern in phrase_patterns:
+        match = re.search(pattern, source_text, flags=re.IGNORECASE)
+        if match:
+            candidate = _delivery_candidate_from_raw(match.group(0))
+            if candidate is not None:
+                return candidate
+    return None
+
+
+def _extract_shipping_fee(
+    body: str,
+    fallback_currency: str | None,
+) -> _FieldCandidate | None:
+    amount = _meta_content(
+        body,
+        (
+            "product:shipping:amount",
+            "shipping:amount",
+            "shipping_fee",
+            "shipping:price",
+        ),
+    )
+    if amount is not None:
+        currency = _meta_content(
+            body,
+            (
+                "product:shipping:currency",
+                "shipping:currency",
+                "shipping_currency",
+            ),
+        )
+        candidate = _price_candidate_from_raw(f"{currency or fallback_currency or ''} {amount}")
+        return _with_fallback_currency(candidate, fallback_currency)
+
+    source_text = _source_text(body)
+    free_shipping = re.search(
+        r"(免運|免運費|free shipping)",
+        source_text,
+        flags=re.IGNORECASE,
+    )
+    if free_shipping:
+        currency = fallback_currency or _parse_currency(source_text)
+        if currency is None:
+            return None
+        return _FieldCandidate(
+            raw_text=free_shipping.group(0),
+            normalized_value=f"{currency} 0.0",
+            amount=0.0,
+            currency=currency,
+        )
+    shipping_patterns = [
+        r"(?:運費|配送費|宅配|shipping|delivery fee)\s*(?:NT\s*\$|TWD|US\s*\$|\$)?\s*"
+        r"[0-9][0-9,]*(?:\.[0-9]{1,2})?",
+        r"(?:NT\s*\$|TWD|US\s*\$|\$)\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*"
+        r"(?:運費|配送費|shipping|delivery fee)",
+    ]
+    for pattern in shipping_patterns:
+        match = re.search(pattern, source_text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = _price_candidate_from_raw(match.group(0))
+        candidate = _with_fallback_currency(candidate, fallback_currency)
+        if candidate is not None:
+            return candidate
     return None
 
 
@@ -905,6 +1046,23 @@ def _walk_jsonld_products(payload: object) -> list[dict[str, object]]:
     return found
 
 
+def _walk_jsonld_strings(payload: object) -> list[str]:
+    found: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            folded_key = key.casefold()
+            if isinstance(value, str) and (
+                "delivery" in folded_key or "shipping" in folded_key or "transit" in folded_key
+            ):
+                found.append(value)
+            else:
+                found.extend(_walk_jsonld_strings(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            found.extend(_walk_jsonld_strings(item))
+    return found
+
+
 def _price_candidate_from_raw(raw: str) -> _FieldCandidate | None:
     amount = _parse_amount(raw)
     currency = _parse_currency(raw)
@@ -937,6 +1095,95 @@ def _parse_currency(raw: str) -> str | None:
     return currency_match.group(1) if currency_match else None
 
 
+def _with_fallback_currency(
+    candidate: _FieldCandidate | None,
+    fallback_currency: str | None,
+) -> _FieldCandidate | None:
+    if candidate is None:
+        return None
+    if candidate.currency is not None:
+        return candidate
+    if fallback_currency is None:
+        return None
+    return _FieldCandidate(
+        raw_text=candidate.raw_text,
+        normalized_value=f"{fallback_currency} {candidate.amount}",
+        amount=candidate.amount,
+        currency=fallback_currency,
+    )
+
+
+def _delivery_candidate_from_raw(raw: str) -> _DeliveryCandidate | None:
+    normalized = " ".join(html.unescape(raw).split())
+    folded = normalized.casefold()
+    if any(text in normalized for text in ("今天", "今日")) or "same day" in folded:
+        return _DeliveryCandidate(
+            raw_text=normalized,
+            normalized_value="0-0 days",
+            min_days=0,
+            max_days=0,
+        )
+    if (
+        any(text in normalized for text in ("明天", "隔日", "翌日", "次日"))
+        or "tomorrow" in folded
+        or "next day" in folded
+        or re.search(r"\b24\s*hours?\b", folded)
+        or "24小時" in normalized
+    ):
+        return _DeliveryCandidate(
+            raw_text=normalized,
+            normalized_value="1-1 days",
+            min_days=1,
+            max_days=1,
+        )
+    range_match = re.search(
+        r"(\d+)\s*(?:[-~]|到|至)\s*(\d+)\s*(?:天|日|days?|business days?)",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if range_match:
+        min_days = int(range_match.group(1))
+        max_days = int(range_match.group(2))
+        if min_days <= max_days:
+            return _DeliveryCandidate(
+                raw_text=normalized,
+                normalized_value=f"{min_days}-{max_days} days",
+                min_days=min_days,
+                max_days=max_days,
+            )
+    single_match = re.search(
+        r"(?:within|in)?\s*(\d+)\s*(?:天|日|days?|business days?)",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if single_match:
+        days = int(single_match.group(1))
+        return _DeliveryCandidate(
+            raw_text=normalized,
+            normalized_value=f"{days}-{days} days",
+            min_days=days,
+            max_days=days,
+        )
+    return None
+
+
+def _source_text(body: str) -> str:
+    text = re.sub(
+        r"<script\b[^>]*>.*?</script>",
+        " ",
+        body,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(
+        r"<style\b[^>]*>.*?</style>",
+        " ",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    text = re.sub(r"<[^>]+>", " ", text)
+    return " ".join(html.unescape(text).split())
+
+
 def _normalize_availability(value: str) -> ProductAvailabilityStatus | None:
     folded = value.casefold()
     if any(
@@ -945,8 +1192,7 @@ def _normalize_availability(value: str) -> ProductAvailabilityStatus | None:
     ):
         return ProductAvailabilityStatus.OUT_OF_STOCK
     if any(
-        text in value
-        for text in ("加入購物車", "直接購買", "立即購買", "可訂購", "現貨", "有庫存")
+        text in value for text in ("加入購物車", "直接購買", "立即購買", "可訂購", "現貨", "有庫存")
     ):
         return ProductAvailabilityStatus.IN_STOCK
     if "left in stock" in folded:
@@ -1132,6 +1378,8 @@ def _build_field_evidence(
     identity_terms: list[str],
     price: _FieldCandidate,
     availability: _FieldCandidate,
+    delivery_eta: _DeliveryCandidate | None,
+    shipping_fee: _FieldCandidate | None,
     live_http_report_ref: Ref,
     network_response_ref: Ref,
     artifact_ref: Ref,
@@ -1170,6 +1418,28 @@ def _build_field_evidence(
             ProductAvailabilityDecisionType.AVAILABILITY_CANDIDATE,
         ),
     ]
+    if delivery_eta is not None:
+        specs.append(
+            (
+                "delivery_eta",
+                delivery_eta.raw_text,
+                delivery_eta.normalized_value,
+                None,
+                None,
+                ProductAvailabilityDecisionType.VERIFICATION,
+            )
+        )
+    if shipping_fee is not None:
+        specs.append(
+            (
+                "shipping_fee",
+                shipping_fee.raw_text,
+                shipping_fee.normalized_value,
+                shipping_fee.amount,
+                shipping_fee.currency,
+                ProductAvailabilityDecisionType.VERIFICATION,
+            )
+        )
     evidence: list[ProductAvailabilityFieldEvidence] = []
     for field_name, raw, normalized, amount, currency, decision_type in specs:
         bundle = decision_bundles[decision_type]
@@ -1227,12 +1497,23 @@ def _success_site_result(
     evidence: list[ProductAvailabilityFieldEvidence],
     price: _FieldCandidate,
     availability: _FieldCandidate,
+    delivery_eta: _DeliveryCandidate | None,
+    shipping_fee: _FieldCandidate | None,
     decision_bundles: dict[ProductAvailabilityDecisionType, _DecisionBundle],
     policy_decision_refs: list[Ref],
     command_record_refs: list[Ref],
     event_cursor_refs: list[Ref],
     outbox_refs: list[Ref],
 ) -> ProductAvailabilitySiteResult:
+    evidence_by_field = {item.field_name: item.id for item in evidence}
+    total_price_amount = price.amount
+    total_price_currency = price.currency
+    if shipping_fee is not None:
+        if shipping_fee.currency == price.currency and price.amount is not None:
+            total_price_amount = price.amount + (shipping_fee.amount or 0.0)
+        else:
+            total_price_amount = None
+            total_price_currency = None
     return ProductAvailabilitySiteResult(
         id=f"product-availability-site-result:{manifest.id}:{target.id}",
         fixture_id=manifest.id,
@@ -1259,6 +1540,16 @@ def _success_site_result(
         price_currency=price.currency,
         availability_status=ProductAvailabilityStatus(availability.normalized_value),
         availability_raw_text=availability.raw_text,
+        delivery_evidence_ref=evidence_by_field.get("delivery_eta"),
+        delivery_eta_raw_text=delivery_eta.raw_text if delivery_eta is not None else None,
+        delivery_eta_min_days=delivery_eta.min_days if delivery_eta is not None else None,
+        delivery_eta_max_days=delivery_eta.max_days if delivery_eta is not None else None,
+        shipping_fee_evidence_ref=evidence_by_field.get("shipping_fee"),
+        shipping_fee_raw_text=shipping_fee.raw_text if shipping_fee is not None else None,
+        shipping_fee_amount=shipping_fee.amount if shipping_fee is not None else None,
+        shipping_fee_currency=shipping_fee.currency if shipping_fee is not None else None,
+        total_price_amount=total_price_amount,
+        total_price_currency=total_price_currency,
         model_call_trace_refs=[bundle.model_call_trace.id for bundle in decision_bundles.values()],
         agent_action_trace_refs=[
             bundle.agent_action_trace.id for bundle in decision_bundles.values()
@@ -1270,7 +1561,9 @@ def _success_site_result(
         evidence_packet_refs=[item.evidence_packet_ref for item in evidence],
         evidence_anchor_refs=[item.evidence_anchor_ref for item in evidence],
         verification_decision_refs=[item.verification_decision_ref for item in evidence],
-        publication_gate_refs=[f"publication-gate:{manifest.id}:{target.id}:blocked-real-site-output"],
+        publication_gate_refs=[
+            f"publication-gate:{manifest.id}:{target.id}:blocked-real-site-output"
+        ],
         policy_decision_refs=policy_decision_refs,
         command_record_refs=command_record_refs
         + [f"command:{manifest.id}:{target.id}:site-result"],
@@ -1354,11 +1647,10 @@ def _build_report(
     manifest: ProductAvailabilityBenchmarkManifest,
     site_results: list[ProductAvailabilitySiteResult],
     evidence: list[ProductAvailabilityFieldEvidence],
+    offer_projection: ProductOfferProjectionResult,
 ) -> ProductAvailabilityBenchmarkReport:
     passing = [item for item in site_results if item.completion_result == CompletenessResult.PASS]
-    non_pass = [
-        item for item in site_results if item.completion_result != CompletenessResult.PASS
-    ]
+    non_pass = [item for item in site_results if item.completion_result != CompletenessResult.PASS]
     blocked = [ref for item in non_pass for ref in item.blocked_source_refs]
     if len(passing) == len(site_results) and site_results:
         completion = CompletenessResult.PASS
@@ -1397,6 +1689,12 @@ def _build_report(
         availability_evidence_refs=[
             item.id for item in evidence if item.field_name == "availability"
         ],
+        delivery_evidence_refs=[item.id for item in evidence if item.field_name == "delivery_eta"],
+        shipping_fee_evidence_refs=[
+            item.id for item in evidence if item.field_name == "shipping_fee"
+        ],
+        offer_projection_report_ref=offer_projection.report.id,
+        offer_record_refs=[item.id for item in offer_projection.offer_records],
         model_call_trace_refs=_collect("model_call_trace_refs", site_results),
         agent_action_trace_refs=_collect("agent_action_trace_refs", site_results),
         tool_call_trace_refs=_collect("tool_call_trace_refs", site_results),
@@ -1410,8 +1708,7 @@ def _build_report(
         ),
         event_cursor_refs=sorted(
             set(
-                _collect("event_cursor_refs", site_results)
-                + [f"event-cursor:{manifest.id}:report"]
+                _collect("event_cursor_refs", site_results) + [f"event-cursor:{manifest.id}:report"]
             )
         ),
         outbox_refs=sorted(

@@ -1,0 +1,22 @@
+{
+  "fixture_id": "us-ecommerce-official-api-product-availability",
+  "default_without_credentials": {
+    "completion_result": "needs_review",
+    "operator_status": "ecommerce_official_api_credentials_required",
+    "passing_site_count": 0,
+    "blocked_site_count": 2
+  },
+  "credentialed_success_requires": [
+    "authorized_source_refs",
+    "redacted_artifact_refs",
+    "source_anchor_refs",
+    "content_hash_refs",
+    "credential_audit_refs",
+    "field_evidence_refs",
+    "policy_decision_refs",
+    "command_record_refs",
+    "event_cursor_refs",
+    "outbox_refs",
+    "replay_bundle_refs"
+  ]
+}

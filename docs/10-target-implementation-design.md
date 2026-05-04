@@ -1921,6 +1921,21 @@ Production-grade crawler closure runtime:
   raw source body, and emits source anchors, credential audit refs,
   command/event/outbox refs, policy refs, replay refs, and a parsed
   `ProductionGateReport`.
+- `veracrawl-ecommerce-official-api run-live` performs credentialed Amazon and
+  eBay product evidence validation through `EcommerceOfficialApiAdapterPort`.
+  Amazon Creators API endpoint/token handling and eBay Browse API OAuth/token
+  handling live in concrete adapters under `veracrawl.adapters.official_apis`;
+  core receives only neutral responses, refs, typed failures, and redacted
+  artifacts. Missing credentials produce `needs_review`, not fabricated
+  price/availability.
+- `veracrawl-product-availability-benchmark` now materializes product offer
+  projection artifacts in addition to site results and field evidence:
+  `offer_records.json` and `offer_projection_report.json`. The projection is a
+  neutral downstream surface for website sorting by price, total price, delivery
+  ETA, and availability. It does not introduce site-specific scraper logic:
+  delivery ETA and shipping fee are accepted only when present in source-backed
+  HTML, metadata, JSON-LD, or read-only browser DOM text, and missing values
+  stay absent.
 - `veracrawl-production-quality-gate run-live` aggregates parsed field oracle,
   precision/recall, quality release, repair, and real-world quality reports into
   the 073 lower gate. It blocks on non-passing inputs, missing source anchors,

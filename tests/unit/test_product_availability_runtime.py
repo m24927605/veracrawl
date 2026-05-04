@@ -240,6 +240,42 @@ def test_product_availability_extracts_product_meta_price_and_availability(
     assert result.site_results[0].availability_status == "in_stock"
 
 
+def test_product_availability_extracts_delivery_eta_and_sortable_offer(
+    tmp_path: Path,
+) -> None:
+    body = """
+    <html><head><title>SanDisk 256GB Extreme microSDXC</title>
+    <meta name="product:price:amount" content="1,879">
+    <meta name="product:price:currency" content="TWD">
+    <meta name="product:availability" content="in stock">
+    </head><body>
+    SanDisk 256GB Extreme microSDXC 記憶卡 可訂購 最快明天到貨 免運
+    </body></html>
+    """
+    result = _run(tmp_path, body=body)
+    site = result.site_results[0]
+
+    assert result.report.completion_result == CompletenessResult.PASS
+    assert site.delivery_eta_min_days == 1
+    assert site.delivery_eta_max_days == 1
+    assert site.shipping_fee_amount == 0.0
+    assert site.shipping_fee_currency == "TWD"
+    assert site.total_price_amount == 1879.0
+    assert site.delivery_evidence_ref is not None
+    assert site.shipping_fee_evidence_ref is not None
+    assert {item.field_name for item in result.field_evidence} == {
+        "identity",
+        "price",
+        "availability",
+        "delivery_eta",
+        "shipping_fee",
+    }
+    assert result.report.delivery_evidence_refs == [site.delivery_evidence_ref]
+    assert result.report.shipping_fee_evidence_refs == [site.shipping_fee_evidence_ref]
+    assert result.offer_projection_report.sorted_by_delivery_refs == [result.offer_records[0].id]
+    assert result.offer_records[0].total_price_sort_amount == 1879.0
+
+
 def test_product_availability_extracts_chinese_availability_fallback(
     tmp_path: Path,
 ) -> None:
@@ -339,8 +375,7 @@ def test_product_availability_javascript_shell_without_identity_needs_review(
 
     assert result.site_results[0].completion_result == CompletenessResult.NEEDS_REVIEW
     assert (
-        result.site_results[0].failure_type
-        == ProductAvailabilityFailureType.SOURCE_ACCESS_DENIED
+        result.site_results[0].failure_type == ProductAvailabilityFailureType.SOURCE_ACCESS_DENIED
     )
     assert result.site_results[0].missing_ref_fields == ["source_backed_product_identity"]
 

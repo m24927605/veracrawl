@@ -183,17 +183,13 @@ def run_fixture(
         ),
         agent_binding=_agent_binding(manifest),
         browser_adapter_factory=(
-            _browser_adapter_factory
-            if browser_fallback or browser_source_required
-            else None
+            _browser_adapter_factory if browser_fallback or browser_source_required else None
         ),
         browser_source_required=browser_source_required,
     )
     report = result.report
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
     if (
@@ -210,6 +206,14 @@ def run_fixture(
     _write_json(
         out / "field_evidence.json",
         [item.model_dump(mode="json") for item in result.field_evidence],
+    )
+    _write_json(
+        out / "offer_records.json",
+        [item.model_dump(mode="json") for item in result.offer_records],
+    )
+    _write_json(
+        out / "offer_projection_report.json",
+        result.offer_projection_report.model_dump(mode="json"),
     )
     _write_json(
         out / "model_requests.json",
@@ -320,6 +324,11 @@ def _summary(result: ProductAvailabilityBenchmarkResult) -> dict[str, object]:
         "field_evidence_count": len(report.field_evidence_refs),
         "price_evidence_count": len(report.price_evidence_refs),
         "availability_evidence_count": len(report.availability_evidence_refs),
+        "delivery_evidence_count": len(report.delivery_evidence_refs),
+        "shipping_fee_evidence_count": len(report.shipping_fee_evidence_refs),
+        "offer_record_count": len(report.offer_record_refs),
+        "sortable_offer_count": len(result.offer_projection_report.sortable_offer_refs),
+        "offer_projection_operator_status": (result.offer_projection_report.operator_status),
         "model_call_trace_count": len(report.model_call_trace_refs),
         "agent_action_trace_count": len(report.agent_action_trace_refs),
         "tool_call_trace_count": len(report.tool_call_trace_refs),

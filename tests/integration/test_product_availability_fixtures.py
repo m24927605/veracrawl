@@ -159,3 +159,5 @@ def test_product_availability_cli_fixture_contracts(
     assert (tmp_path / "run_report.json").exists()
     assert (tmp_path / "site_results.json").exists()
     assert (tmp_path / "field_evidence.json").exists()
+    assert (tmp_path / "offer_records.json").exists()
+    assert (tmp_path / "offer_projection_report.json").exists()

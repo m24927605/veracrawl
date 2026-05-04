@@ -136,6 +136,25 @@ def test_field_evidence_rejects_llm_output_as_evidence() -> None:
         _field(llm_output_evidence_refs=["model-response:1"])
 
 
+def test_shipping_fee_evidence_requires_amount_and_currency() -> None:
+    fee = _field(
+        field_name="shipping_fee",
+        raw_text="免運",
+        normalized_value="TWD 0.0",
+        amount=0.0,
+        currency="TWD",
+    )
+    assert fee.amount == 0.0
+    with pytest.raises(ValidationError):
+        _field(
+            field_name="shipping_fee",
+            raw_text="運費 60",
+            normalized_value="60.0",
+            amount=60.0,
+            currency=None,
+        )
+
+
 def test_site_result_requires_price_and_availability_refs() -> None:
     assert _site().completion_result == CompletenessResult.PASS
     with pytest.raises(ValidationError):

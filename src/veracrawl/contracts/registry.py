@@ -598,6 +598,79 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "product_availability",
         tests=["tests/integration/test_product_availability_fixtures.py"],
     ),
+    "SortableProductOfferRecord": _contract(
+        "SortableProductOfferRecord",
+        OwnerService.PROJECTION,
+        "offer_projection",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_offer_projection_contracts.py"],
+    ),
+    "ProductOfferProjectionReport": _contract(
+        "ProductOfferProjectionReport",
+        OwnerService.PROJECTION,
+        "offer_projection",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_offer_projection_contracts.py"],
+    ),
+    "ProductOfferProjectionManifest": _contract(
+        "ProductOfferProjectionManifest",
+        OwnerService.TESTS,
+        "offer_projection",
+        tests=["tests/contract/test_offer_projection_contracts.py"],
+    ),
+    "EcommerceOfficialApiTargetSpec": _contract(
+        "EcommerceOfficialApiTargetSpec",
+        OwnerService.OPS,
+        "ecommerce_official_api",
+        tests=["tests/unit/test_ecommerce_official_api_runtime.py"],
+    ),
+    "EcommerceOfficialApiSourceFetch": _contract(
+        "EcommerceOfficialApiSourceFetch",
+        OwnerService.FETCH,
+        "ecommerce_official_api",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_ecommerce_official_api_runtime.py"],
+    ),
+    "EcommerceOfficialApiRedactedArtifact": _contract(
+        "EcommerceOfficialApiRedactedArtifact",
+        OwnerService.ARTIFACT_LIFECYCLE,
+        "ecommerce_official_api",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_ecommerce_official_api_runtime.py"],
+    ),
+    "EcommerceOfficialApiFieldEvidence": _contract(
+        "EcommerceOfficialApiFieldEvidence",
+        OwnerService.EXTRACT,
+        "ecommerce_official_api",
+        mutation_allowed=True,
+        tests=["tests/unit/test_ecommerce_official_api_runtime.py"],
+    ),
+    "EcommerceOfficialApiSiteResult": _contract(
+        "EcommerceOfficialApiSiteResult",
+        OwnerService.OPS,
+        "ecommerce_official_api",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_ecommerce_official_api_runtime.py"],
+    ),
+    "EcommerceOfficialApiBenchmarkReport": _contract(
+        "EcommerceOfficialApiBenchmarkReport",
+        OwnerService.OPS,
+        "ecommerce_official_api",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/unit/test_ecommerce_official_api_runtime.py"],
+    ),
+    "EcommerceOfficialApiBenchmarkManifest": _contract(
+        "EcommerceOfficialApiBenchmarkManifest",
+        OwnerService.TESTS,
+        "ecommerce_official_api",
+        tests=["tests/integration/test_ecommerce_official_api_cli.py"],
+    ),
     "ProductionSourceProfile": _contract(
         "ProductionSourceProfile",
         OwnerService.OPS,
@@ -3628,9 +3701,7 @@ COMMAND_TYPES.update(
                 owner_service=OwnerService.TESTS,
                 target_aggregate_type="ProductionBenchmarkReleaseFixtureManifest",
                 payload_schema_ref="BaseCommandPayload",
-                emitted_event_types=[
-                    "production_benchmark_release_fixture_manifest_recorded"
-                ],
+                emitted_event_types=["production_benchmark_release_fixture_manifest_recorded"],
             )
         ),
         "record_real_world_benchmark_site_observation": CommandTypeRegistration(
@@ -3726,9 +3797,7 @@ COMMAND_TYPES.update(
                     "runtime_verification",
                     "publication_gate",
                 ],
-                emitted_event_types=[
-                    "real_world_ai_agent_extraction_candidate_recorded"
-                ],
+                emitted_event_types=["real_world_ai_agent_extraction_candidate_recorded"],
             )
         ),
         "record_real_world_ai_agent_benchmark_report": CommandTypeRegistration(
@@ -3748,9 +3817,7 @@ COMMAND_TYPES.update(
             owner_service=OwnerService.TESTS,
             target_aggregate_type="RealWorldAIAgentBenchmarkManifest",
             payload_schema_ref="BaseCommandPayload",
-            emitted_event_types=[
-                "real_world_ai_agent_benchmark_manifest_recorded"
-            ],
+            emitted_event_types=["real_world_ai_agent_benchmark_manifest_recorded"],
         ),
         "record_product_availability_field_evidence": CommandTypeRegistration(
             command_type="record_product_availability_field_evidence",
@@ -3794,6 +3861,37 @@ COMMAND_TYPES.update(
             target_aggregate_type="ProductAvailabilityBenchmarkManifest",
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["product_availability_benchmark_manifest_recorded"],
+        ),
+        "record_product_offer_record": CommandTypeRegistration(
+            command_type="record_product_offer_record",
+            owner_service=OwnerService.PROJECTION,
+            target_aggregate_type="SortableProductOfferRecord",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["product_offer_record_recorded"],
+        ),
+        "record_product_offer_projection_report": CommandTypeRegistration(
+            command_type="record_product_offer_projection_report",
+            owner_service=OwnerService.PROJECTION,
+            target_aggregate_type="ProductOfferProjectionReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["product_offer_projection_reported"],
+        ),
+        "record_product_offer_projection_manifest": CommandTypeRegistration(
+            command_type="record_product_offer_projection_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="ProductOfferProjectionManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["product_offer_projection_manifest_recorded"],
         ),
         "record_production_grade_closure_manifest": CommandTypeRegistration(
             command_type="record_production_grade_closure_manifest",
@@ -4272,37 +4370,37 @@ EVENT_TYPES.update(
             "source_acquisition_reported",
             "source_failure_reported",
             "network_request_recorded",
-        "network_response_recorded",
-        "network_acquisition_reported",
-        "live_http_acquisition_reported",
-        "live_http_fixture_manifest_recorded",
-        "browser_step_executed",
-        "browser_snapshot_runtime_reported",
-        "browser_snapshot_fixture_manifest_recorded",
-        "browser_quality_observed",
-        "browser_quality_delta_recorded",
-        "browser_quality_reported",
-        "browser_quality_manifest_recorded",
-        "deep_crawl_frontier_decision_recorded",
-        "deep_crawl_page_observed",
-        "deep_crawl_stop_reason_recorded",
-        "deep_crawl_reported",
-        "deep_crawl_manifest_recorded",
-        "field_oracle_evaluation_recorded",
-        "field_oracle_reported",
-        "field_oracle_manifest_recorded",
-        "quality_metric_confusion_recorded",
-        "quality_metric_reported",
-        "quality_metric_manifest_recorded",
-        "seeded_repair_case_recorded",
-        "repair_attempt_trace_recorded",
-        "repair_quality_reported",
-        "repair_quality_manifest_recorded",
-        "quality_release_gate_ref_recorded",
-        "quality_release_stability_run_recorded",
-        "quality_release_reported",
-        "quality_release_manifest_recorded",
-        "snapshot_written",
+            "network_response_recorded",
+            "network_acquisition_reported",
+            "live_http_acquisition_reported",
+            "live_http_fixture_manifest_recorded",
+            "browser_step_executed",
+            "browser_snapshot_runtime_reported",
+            "browser_snapshot_fixture_manifest_recorded",
+            "browser_quality_observed",
+            "browser_quality_delta_recorded",
+            "browser_quality_reported",
+            "browser_quality_manifest_recorded",
+            "deep_crawl_frontier_decision_recorded",
+            "deep_crawl_page_observed",
+            "deep_crawl_stop_reason_recorded",
+            "deep_crawl_reported",
+            "deep_crawl_manifest_recorded",
+            "field_oracle_evaluation_recorded",
+            "field_oracle_reported",
+            "field_oracle_manifest_recorded",
+            "quality_metric_confusion_recorded",
+            "quality_metric_reported",
+            "quality_metric_manifest_recorded",
+            "seeded_repair_case_recorded",
+            "repair_attempt_trace_recorded",
+            "repair_quality_reported",
+            "repair_quality_manifest_recorded",
+            "quality_release_gate_ref_recorded",
+            "quality_release_stability_run_recorded",
+            "quality_release_reported",
+            "quality_release_manifest_recorded",
+            "snapshot_written",
             "normalization_manifest_recorded",
             "anchor_map_recorded",
             "link_provenance_recorded",
@@ -4424,6 +4522,9 @@ EVENT_TYPES.update(
             "product_availability_site_result_recorded",
             "product_availability_benchmark_reported",
             "product_availability_benchmark_manifest_recorded",
+            "product_offer_record_recorded",
+            "product_offer_projection_reported",
+            "product_offer_projection_manifest_recorded",
             "production_grade_closure_manifest_recorded",
             "crawl_discovery_plan_recorded",
             "discovery_entry_point_recorded",
@@ -5425,9 +5526,7 @@ for _worker_fixture, _negative in {
         manifest_ref=f"{_base}/manifest.yaml",
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
-        expected_worker_orchestration_ref=(
-            f"{_base}/oracles/expected_worker_orchestration.yaml"
-        ),
+        expected_worker_orchestration_ref=(f"{_base}/oracles/expected_worker_orchestration.yaml"),
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -6005,9 +6104,7 @@ for _result_publication_fixture, _negative in {
         manifest_ref=f"{_base}/manifest.yaml",
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
-        expected_result_publication_ref=(
-            f"{_base}/oracles/expected_result_publication.yaml"
-        ),
+        expected_result_publication_ref=(f"{_base}/oracles/expected_result_publication.yaml"),
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -6035,9 +6132,7 @@ for _agent_model_adapter_fixture, _negative in {
     FIXTURE_ORACLES[_agent_model_adapter_fixture] = FixtureOracleRegistration(
         fixture_id=_agent_model_adapter_fixture,
         manifest_ref=f"{_base}/manifest.yaml",
-        expected_agent_model_adapter_ref=(
-            f"{_base}/oracles/expected_agent_model_adapter.yaml"
-        ),
+        expected_agent_model_adapter_ref=(f"{_base}/oracles/expected_agent_model_adapter.yaml"),
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         negative_case=_negative,
     )
@@ -7159,6 +7254,17 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "ProductAvailabilityFieldEvidence",
             "ProductAvailabilitySiteResult",
             "ProductAvailabilityBenchmarkReport",
+            "SortableProductOfferRecord",
+            "ProductOfferProjectionReport",
+            "ProductOfferProjectionManifest",
+            "EcommerceOfficialApiBenchmarkManifest",
+            "EcommerceOfficialApiTargetSpec",
+            "EcommerceOfficialApiSourceFetch",
+            "EcommerceOfficialApiRedactedArtifact",
+            "EcommerceOfficialApiFieldEvidence",
+            "EcommerceOfficialApiSiteResult",
+            "EcommerceOfficialApiBenchmarkReport",
+            "AuthorizedSourceAccessRecord",
             "LiveHttpAcquisitionReport",
             "NetworkResponse",
             "ModelRequest",
@@ -7458,8 +7564,7 @@ def validate_registry() -> RegistryValidationReport:
         model = _import_model(contract_registration.python_model)
         if model is None:
             errors.append(
-                f"{name} python_model cannot be imported: "
-                f"{contract_registration.python_model}"
+                f"{name} python_model cannot be imported: {contract_registration.python_model}"
             )
         elif not hasattr(model, "model_json_schema"):
             errors.append(f"{name} python_model does not expose JSON schema")
@@ -7470,8 +7575,7 @@ def validate_registry() -> RegistryValidationReport:
             errors.append(f"command key/name mismatch: {command_type}")
         if command_registration.payload_schema_ref not in schema_refs:
             errors.append(
-                f"{command_type} payload schema missing: "
-                f"{command_registration.payload_schema_ref}"
+                f"{command_type} payload schema missing: {command_registration.payload_schema_ref}"
             )
         for event_type in command_registration.emitted_event_types:
             if event_type not in EVENT_TYPES:
@@ -7482,8 +7586,7 @@ def validate_registry() -> RegistryValidationReport:
             errors.append(f"event key/name mismatch: {event_type}")
         if event_registration.payload_schema_ref not in schema_refs:
             errors.append(
-                f"{event_type} payload schema missing: "
-                f"{event_registration.payload_schema_ref}"
+                f"{event_type} payload schema missing: {event_registration.payload_schema_ref}"
             )
         if not event_registration.replay_critical_refs:
             errors.append(f"{event_type} missing replay_critical_refs")
