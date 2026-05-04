@@ -140,4 +140,9 @@ For 070 and 073, prefer `run-live` lower gates when making production-grade
 claims. A passing aggregate 075 gate applies to the recorded validation corpus;
 blocked ecommerce sources still remain blocked/needs-review unless solved by
 official APIs or explicitly authorized sources.
+Spec 079 closes the ecommerce manual product URL gap. Query-product tests must
+start from query text plus allowed search/listing entry pages only; product URLs
+may appear only as source-backed `ProductDiscoveryCandidate` outputs and derived
+product availability targets. Do not answer query-driven shopping tasks by
+manually assembling product URLs outside VeraCrawl.
 <!-- SPECKIT END -->

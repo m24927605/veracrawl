@@ -112,6 +112,7 @@ create additional production implementation specs unless this section and
 | 076 | Amazon Official Product API Adapter | Add a credential-gated Amazon official product API path for source-backed product identity, price, and availability when public/browser product pages are source-limited. | 066, 071 | Implemented by `veracrawl-ecommerce-official-api`: `AmazonCreatorsApiAdapter` lives outside core behind `EcommerceOfficialApiAdapterPort`, requires an operator-provided Creators API endpoint and bearer token or API key, validates endpoint origin, emits credential grant/audit refs, redacted artifacts, source anchors, content hashes, policy refs, command/event/outbox refs, and replay refs, and returns typed `needs_review` when credentials or fields are unavailable. No Amazon SDK/native state is stored in core, and no deprecated PA-API production pass is claimed without credentialed evidence. |
 | 077 | eBay Browse API Adapter | Add an official eBay Browse API path for source-backed product search, price, and availability when public item pages are access denied. | 066, 071, 076 | Implemented by `veracrawl-ecommerce-official-api`: `EbayBrowseApiAdapter` lives outside core behind `EcommerceOfficialApiAdapterPort`, supports `EBAY_ACCESS_TOKEN` or OAuth client credentials, calls the official Browse API item summary search endpoint, emits authorized-source/field evidence refs, and reports typed `needs_review` without fabricated price/inventory when credentials, OAuth, source, or field evidence is unavailable. |
 | 078 | Delivery ETA Offer Sorting Projection | Extend product crawl output so downstream comparison sites can sort source-backed offers by price, total price, delivery ETA, and availability without fabricating missing fields. | 066, 067, 076, 077 | Implemented by `veracrawl-product-availability-benchmark`: accepted product fields may now include optional `delivery_eta` and `shipping_fee` evidence rows, `ProductAvailabilitySiteResult` carries optional ETA/shipping/total-price values, and `ProductOfferProjectionReport` materializes deterministic sorted offer refs. Delivery ETA remains optional and source-backed; blocked sites, ambiguous ETA copy, and currency-mismatched shipping totals remain absent or typed non-pass. |
+| 079 | Query Product Discovery And Offer Ranking | Start from a natural-language product query and allowed ecommerce search/listing entry pages, discover product candidate URLs from source-backed artifacts, then compose product availability extraction and offer ranking without manually supplied product URLs. | 066, 067, 078 | Implemented by `veracrawl-product-discovery`: product discovery source specs, source-backed candidate URL records, a derived product availability manifest, product field evidence, offer projection, ranked offers, model/agent/tool/context traces, policy refs, command/event/outbox refs, and replay refs are materialized. Candidate URLs remain advisory until product availability and evidence gates pass; the Taiwan live fixture currently records PChome sortable offers and Yahoo product-page source access denial as needs-review. |
 
 Activation rule: when a planned spec is activated, preserve its number and
 directory, run the Spec Kit clarify/plan/tasks/analyze/implement workflow, record
@@ -123,9 +124,10 @@ They do not claim deep category/product search traversal production readiness
 beyond the recorded public homepage and declared product-page experiments.
 Specs 068-075 are the finite production-grade closure specs required before
 VeraCrawl may claim full production-grade web crawler capability.
-Specs 076-078 are ecommerce market follow-ups layered on top of that closure:
-official API paths for source-limited platforms and sortable offer projection
-for price/arrival/inventory comparison output.
+Specs 076-079 are ecommerce market follow-ups layered on top of that closure:
+official API paths for source-limited platforms, sortable offer projection for
+price/arrival/inventory comparison output, and query-driven product discovery so
+ecommerce comparison tests do not depend on manually supplied product URLs.
 
 Current production-grade claim status: specs 068-075 are implemented and the
 2026-05-04 follow-up live production evidence run passed the aggregate 075 gate

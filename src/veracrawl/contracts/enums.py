@@ -678,6 +678,26 @@ class ProductAvailabilityFailureType(StrEnum):
     ADAPTER_UNAVAILABLE = "product_availability_adapter_unavailable"
 
 
+class ProductDiscoveryDecisionType(StrEnum):
+    QUERY_PLANNING = "query_planning"
+    CANDIDATE_SELECTION = "candidate_selection"
+    VERIFICATION = "verification"
+
+
+class ProductDiscoveryFailureType(StrEnum):
+    ROBOTS_DENIED = "product_discovery_robots_denied"
+    NETWORK_UNAVAILABLE = "product_discovery_network_unavailable"
+    LIVE_HTTP_FAILED = "product_discovery_live_http_failed"
+    SOURCE_ACCESS_DENIED = "product_discovery_source_access_denied"
+    NO_CANDIDATES = "product_discovery_no_candidates"
+    NO_SORTABLE_OFFERS = "product_discovery_no_sortable_offers"
+    PRODUCT_AVAILABILITY_FAILED = "product_discovery_product_availability_failed"
+    MISSING_AI_TRACE = "product_discovery_missing_ai_trace"
+    MISSING_EVIDENCE_REFS = "product_discovery_missing_evidence_refs"
+    MISSING_REPLAY_REFS = "product_discovery_missing_replay_refs"
+    ADAPTER_UNAVAILABLE = "product_discovery_adapter_unavailable"
+
+
 class SecurityActionSurface(StrEnum):
     NETWORK = "network"
     PROMPT = "prompt"

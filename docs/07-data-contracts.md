@@ -6081,6 +6081,25 @@ Offer projection rules:
 - blocked sources become non-pass offer records with diagnostics and cannot
   contribute fabricated sort values.
 
+Query product discovery contracts:
+
+- `ProductDiscoverySourceSpec` declares product query text and allowed
+  search/listing entry pages only. It must not carry manually selected product
+  target URLs.
+- `ProductDiscoveryCandidate` records one candidate URL discovered from a
+  source-backed search artifact, with source anchor, artifact/content hash,
+  canonical URL, framework-neutral model/agent/tool/context trace refs, policy
+  refs, command/event/outbox refs, and replay refs.
+- `ProductDiscoveryRunReport` composes discovered candidates into a derived
+  `ProductAvailabilityBenchmarkManifest`, product availability report, offer
+  projection report, and ranked offer refs.
+- `ProductDiscoveryBenchmarkManifest` declares the query, product identity
+  terms, source specs, candidate bounds, expected result, and required refs.
+
+Discovery candidates are not product facts. Product URLs become usable offer
+records only after the product availability evidence and verification gates
+accept source-backed price, inventory, delivery ETA, and shipping data.
+
 ## Target Crawl Runtime Contracts
 
 ```yaml

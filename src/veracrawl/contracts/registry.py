@@ -93,6 +93,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_repair_quality_ref: str | None = None
     expected_quality_release_ref: str | None = None
     expected_product_availability_ref: str | None = None
+    expected_product_discovery_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -619,6 +620,34 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "offer_projection",
         tests=["tests/contract/test_offer_projection_contracts.py"],
+    ),
+    "ProductDiscoverySourceSpec": _contract(
+        "ProductDiscoverySourceSpec",
+        OwnerService.FETCH,
+        "product_discovery",
+        tests=["tests/contract/test_product_discovery_contracts.py"],
+    ),
+    "ProductDiscoveryCandidate": _contract(
+        "ProductDiscoveryCandidate",
+        OwnerService.EXTRACT,
+        "product_discovery",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_product_discovery_contracts.py"],
+    ),
+    "ProductDiscoveryRunReport": _contract(
+        "ProductDiscoveryRunReport",
+        OwnerService.OPS,
+        "product_discovery",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_product_discovery_contracts.py"],
+    ),
+    "ProductDiscoveryBenchmarkManifest": _contract(
+        "ProductDiscoveryBenchmarkManifest",
+        OwnerService.TESTS,
+        "product_discovery",
+        tests=["tests/integration/test_product_discovery_fixtures.py"],
     ),
     "EcommerceOfficialApiTargetSpec": _contract(
         "EcommerceOfficialApiTargetSpec",
@@ -3893,6 +3922,37 @@ COMMAND_TYPES.update(
             payload_schema_ref="BaseCommandPayload",
             emitted_event_types=["product_offer_projection_manifest_recorded"],
         ),
+        "record_product_discovery_candidate": CommandTypeRegistration(
+            command_type="record_product_discovery_candidate",
+            owner_service=OwnerService.EXTRACT,
+            target_aggregate_type="ProductDiscoveryCandidate",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["product_discovery_candidate_recorded"],
+        ),
+        "record_product_discovery_run_report": CommandTypeRegistration(
+            command_type="record_product_discovery_run_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="ProductDiscoveryRunReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["product_discovery_run_reported"],
+        ),
+        "record_product_discovery_manifest": CommandTypeRegistration(
+            command_type="record_product_discovery_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="ProductDiscoveryBenchmarkManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["product_discovery_manifest_recorded"],
+        ),
         "record_production_grade_closure_manifest": CommandTypeRegistration(
             command_type="record_production_grade_closure_manifest",
             owner_service=OwnerService.TESTS,
@@ -4525,6 +4585,9 @@ EVENT_TYPES.update(
             "product_offer_record_recorded",
             "product_offer_projection_reported",
             "product_offer_projection_manifest_recorded",
+            "product_discovery_candidate_recorded",
+            "product_discovery_run_reported",
+            "product_discovery_manifest_recorded",
             "production_grade_closure_manifest_recorded",
             "crawl_discovery_plan_recorded",
             "discovery_entry_point_recorded",
@@ -5433,6 +5496,23 @@ for _product_availability_fixture, _negative in {
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
         expected_product_availability_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _product_discovery_fixture, _negative in {
+    "query-product-discovery-success": False,
+    "query-product-discovery-no-candidates": True,
+    "taiwan-iphone17-query-product-discovery": False,
+}.items():
+    _base = f"tests/fixtures/{_product_discovery_fixture}"
+    FIXTURE_ORACLES[_product_discovery_fixture] = FixtureOracleRegistration(
+        fixture_id=_product_discovery_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_product_discovery_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -7265,6 +7345,38 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "EcommerceOfficialApiSiteResult",
             "EcommerceOfficialApiBenchmarkReport",
             "AuthorizedSourceAccessRecord",
+            "LiveHttpAcquisitionReport",
+            "NetworkResponse",
+            "ModelRequest",
+            "ModelResponse",
+            "ModelCallTrace",
+            "AgentRunRequest",
+            "AgentRunResult",
+            "AgentActionTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "product_discovery_benchmark_gate": _target_area(
+        "product_discovery_benchmark_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "ProductDiscoveryBenchmarkManifest",
+            "ProductDiscoverySourceSpec",
+            "ProductDiscoveryCandidate",
+            "ProductDiscoveryRunReport",
+            "ProductAvailabilityBenchmarkManifest",
+            "ProductAvailabilityTargetSpec",
+            "ProductAvailabilityFieldEvidence",
+            "ProductAvailabilitySiteResult",
+            "ProductAvailabilityBenchmarkReport",
+            "SortableProductOfferRecord",
+            "ProductOfferProjectionReport",
             "LiveHttpAcquisitionReport",
             "NetworkResponse",
             "ModelRequest",

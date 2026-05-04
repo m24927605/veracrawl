@@ -2180,6 +2180,20 @@ Docker-backed pytest validation. Passing fields require source anchors,
 artifacts, content hashes, model/agent/tool/context traces,
 evidence/verification refs, command/event/outbox refs, and replay refs.
 
+Query-driven product discovery acceptance:
+
+- input manifests contain query text and search/listing entry pages only, with
+  no manually supplied product target URLs
+- source-backed discovery candidates include artifacts, content hashes, source
+  anchors, AI traces, policy refs, command/event/outbox refs, and replay refs
+- derived product availability targets are generated from those candidates
+- wrong-product, wrong-variant, no-candidate, source-limited, and missing-replay
+  cases remain typed non-pass
+- ranked offers are derived from offer projection refs, never model guesses or
+  hand-selected product pages
+- live Taiwan ecommerce query validation records actual pass or needs-review
+  outcomes without login, challenge, WAF, or robots bypass
+
 Expanded real-world public quality corpus acceptance:
 
 ```text

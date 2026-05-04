@@ -1191,6 +1191,23 @@ price/availability evidence to pass. Shopee Taiwan is reported as
 blocked product API access; VeraCrawl does not bypass login, challenge, WAF, or
 source policy limits.
 
+Run query-driven product discovery and offer ranking without manually supplied
+product URLs:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-product-discovery run \
+  tests/fixtures/query-product-discovery-success \
+  --profile target \
+  --out .veracrawl-test-runs/query-product-discovery-success
+```
+
+The discovery manifest supplies query text and allowed search/listing entry
+pages only. VeraCrawl discovers candidate product URLs from source-backed search
+artifacts, records candidate refs and AI traces, derives a product availability
+manifest, runs field evidence gates, and writes `ranked_offers.json`. Candidate
+URLs and LLM output are not source evidence; prices, inventory, delivery ETA,
+and shipping fees remain accepted only from product source artifacts.
+
 Run the expanded real-world public quality corpus:
 
 ```sh

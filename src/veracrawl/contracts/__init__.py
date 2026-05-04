@@ -260,6 +260,12 @@ from veracrawl.contracts.product_availability import (
     ProductAvailabilitySiteResult,
     ProductAvailabilityTargetSpec,
 )
+from veracrawl.contracts.product_discovery import (
+    ProductDiscoveryBenchmarkManifest,
+    ProductDiscoveryCandidate,
+    ProductDiscoveryRunReport,
+    ProductDiscoverySourceSpec,
+)
 from veracrawl.contracts.production_grade import (
     AcquisitionAttemptRecord,
     AuthorizedSourceAccessRecord,
@@ -586,6 +592,10 @@ __all__ = [
     "ProductAvailabilityFieldEvidence",
     "ProductAvailabilitySiteResult",
     "ProductAvailabilityTargetSpec",
+    "ProductDiscoveryBenchmarkManifest",
+    "ProductDiscoveryCandidate",
+    "ProductDiscoveryRunReport",
+    "ProductDiscoverySourceSpec",
     "ProductionGateReport",
     "ProductionGradeCapabilityMatrix",
     "ProductionGradeClosureManifest",

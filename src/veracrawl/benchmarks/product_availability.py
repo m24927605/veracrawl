@@ -724,12 +724,75 @@ def _matched_identity_terms(
     manifest: ProductAvailabilityBenchmarkManifest,
     body: str,
 ) -> list[str]:
-    folded = body.casefold()
     terms = list(dict.fromkeys(manifest.required_identity_terms + target.required_identity_terms))
     rejected = manifest.rejected_identity_terms + target.rejected_identity_terms
-    if any(term.casefold() in folded for term in rejected):
+    identity_text = _product_identity_text(body)
+    identity_haystack = identity_text if identity_text else body
+    folded_identity = identity_haystack.casefold()
+    if _contains_rejected_identity(identity_haystack, rejected):
         return []
-    return [term for term in terms if term.casefold() in folded]
+    matched = [term for term in terms if term.casefold() in folded_identity]
+    if len(matched) == len(terms) or identity_text:
+        return matched
+    folded_body = body.casefold()
+    return [term for term in terms if term.casefold() in folded_body]
+
+
+def _contains_rejected_identity(haystack: str, rejected_terms: list[str]) -> bool:
+    normalized = re.sub(r"[^0-9A-Za-z]+", " ", haystack).casefold()
+    for term in rejected_terms:
+        folded_term = term.casefold()
+        if " " in folded_term:
+            if folded_term in normalized:
+                return True
+            continue
+        if re.search(
+            rf"(?<![0-9a-z]){re.escape(folded_term)}(?![0-9a-z])",
+            normalized,
+        ):
+            return True
+    return False
+
+
+def _product_identity_text(body: str) -> str:
+    parts: list[str] = []
+    for payload in _jsonld_payloads(body):
+        for product in _walk_jsonld_products(payload):
+            for key in ("name", "model", "sku", "mpn"):
+                value = product.get(key)
+                if isinstance(value, str):
+                    parts.append(value)
+    for name in (
+        "product:name",
+        "og:title",
+        "twitter:title",
+        "title",
+    ):
+        value = _meta_content(body, (name,))
+        if value:
+            parts.append(value)
+    title_parser = _TitleParser()
+    title_parser.feed(body)
+    if title_parser.title:
+        parts.append(title_parser.title)
+    for tag in ("h1", "h2"):
+        parts.extend(_tag_texts(body, tag, limit=3))
+    return " ".join(" ".join(parts).split())
+
+
+def _tag_texts(body: str, tag: str, *, limit: int) -> list[str]:
+    texts: list[str] = []
+    for match in re.finditer(
+        rf"<{tag}\b[^>]*>(.*?)</{tag}>",
+        body,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        text = _source_text(match.group(1))
+        if text:
+            texts.append(text)
+        if len(texts) >= limit:
+            break
+    return texts
 
 
 def _is_javascript_app_shell(body: str) -> bool:

@@ -1936,6 +1936,15 @@ Production-grade crawler closure runtime:
   delivery ETA and shipping fee are accepted only when present in source-backed
   HTML, metadata, JSON-LD, or read-only browser DOM text, and missing values
   stay absent.
+- `veracrawl-product-discovery` starts from query text and allowed
+  search/listing entry pages rather than product target URLs. The fetch/agent
+  composition records source-backed `ProductDiscoveryCandidate` refs, derives
+  product availability targets, and reuses the existing field evidence and offer
+  projection gates. Runtime code must remain pattern/config driven: ecommerce
+  platform URL patterns belong to manifests and fixtures, not scraper modules.
+  Product identity matching must prefer structured product identity text,
+  metadata, titles, and headings when evaluating rejected variant terms so
+  navigation chrome cannot create false pass/fail decisions.
 - `veracrawl-production-quality-gate run-live` aggregates parsed field oracle,
   precision/recall, quality release, repair, and real-world quality reports into
   the 073 lower gate. It blocks on non-passing inputs, missing source anchors,
