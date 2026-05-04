@@ -5923,6 +5923,10 @@ Executable product availability benchmark rules:
   traces, evidence/verification refs, command/event/outbox refs, and replay refs.
 - needs-review is allowed when at least one declared top ecommerce source passes
   and another source blocks access or does not expose source-backed fields.
+- Taiwan product-page fixtures reuse these contracts. Meta tags such as
+  `product:price:amount`, `product:price:currency`, `product:availability`, and
+  generic Chinese availability labels are treated as source signals only when
+  bound to artifacts and content hashes.
 - LLM output is advisory only and cannot satisfy `source_anchor_ref`,
   `artifact_ref`, or `content_hash_ref`.
 - blocked source outcomes must include typed failure refs and cannot carry

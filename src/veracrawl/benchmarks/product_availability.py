@@ -231,13 +231,23 @@ def run_product_availability_benchmark(
             identity_terms = []
         required_terms = set(manifest.required_identity_terms + target.required_identity_terms)
         if len(identity_terms) < len(required_terms):
+            failure = ProductAvailabilityFailureType.PRODUCT_IDENTITY_MISMATCH
+            missing_field = "required_identity_terms"
+            diagnostics = ["product page did not contain all required identity terms"]
+            if _is_javascript_app_shell(body):
+                failure = ProductAvailabilityFailureType.SOURCE_ACCESS_DENIED
+                missing_field = "source_backed_product_identity"
+                diagnostics = [
+                    "live HTML was a JavaScript application shell without "
+                    "source-backed product identity"
+                ]
             site_results.append(
                 _failure_site_result(
                     manifest=manifest,
                     target=target,
-                    failure=ProductAvailabilityFailureType.PRODUCT_IDENTITY_MISMATCH,
-                    missing_field="required_identity_terms",
-                    diagnostics=["product page did not contain all required identity terms"],
+                    failure=failure,
+                    missing_field=missing_field,
+                    diagnostics=diagnostics,
                     live_http_report_ref=live_report.id,
                     network_response_ref=network_result.response.id,
                     policy_decision_refs=live_report.policy_decision_refs,
@@ -486,8 +496,23 @@ def _matched_identity_terms(
     return [term for term in terms if term.casefold() in folded]
 
 
+def _is_javascript_app_shell(body: str) -> bool:
+    folded = body.casefold()
+    if "please enable javascript" in folded:
+        return True
+    return bool(
+        re.search(
+            r"<div\b[^>]*\bid\s*=\s*([\"'])(?:app|main|root)\1[^>]*>\s*</div>",
+            body,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    )
+
+
 def _extract_price(body: str) -> _FieldCandidate | None:
     for candidate in _jsonld_price_candidates(body):
+        return candidate
+    for candidate in _meta_price_candidates(body):
         return candidate
     patterns = [
         r'<span class="a-offscreen">\s*([^<]*?(?:TWD|US\s*\$|\$)[^<]*?\d[^<]*?)\s*</span>',
@@ -527,6 +552,32 @@ def _jsonld_price_candidates(body: str) -> list[_FieldCandidate]:
     return candidates
 
 
+def _meta_price_candidates(body: str) -> list[_FieldCandidate]:
+    amount = _meta_content(
+        body,
+        (
+            "product:price:amount",
+            "og:price:amount",
+            "price:amount",
+            "price",
+        ),
+    )
+    if amount is None:
+        return []
+    currency = _meta_content(
+        body,
+        (
+            "product:price:currency",
+            "og:price:currency",
+            "price:currency",
+            "currency",
+        ),
+    )
+    raw = f"{currency or ''} {amount}".strip()
+    candidate = _price_candidate_from_raw(raw)
+    return [candidate] if candidate is not None else []
+
+
 def _extract_availability(body: str) -> _FieldCandidate | None:
     for payload in _jsonld_payloads(body):
         for product in _walk_jsonld_products(payload):
@@ -543,6 +594,21 @@ def _extract_availability(body: str) -> _FieldCandidate | None:
                             raw_text=availability,
                             normalized_value=status.value,
                         )
+    meta_availability = _meta_content(
+        body,
+        (
+            "product:availability",
+            "og:availability",
+            "availability",
+        ),
+    )
+    if meta_availability is not None:
+        status = _normalize_availability(meta_availability)
+        if status is not None:
+            return _FieldCandidate(
+                raw_text=meta_availability,
+                normalized_value=status.value,
+            )
     patterns = [
         (r'"availabilityStatus"\s*:\s*"IN_STOCK"', ProductAvailabilityStatus.IN_STOCK),
         (r'"availabilityStatus"\s*:\s*"OUT_OF_STOCK"', ProductAvailabilityStatus.OUT_OF_STOCK),
@@ -554,6 +620,10 @@ def _extract_availability(body: str) -> _FieldCandidate | None:
         (r'>\s*Currently unavailable\.?\s*<', ProductAvailabilityStatus.UNAVAILABLE),
         (r'(\d+)\s+available', ProductAvailabilityStatus.LIMITED),
     ]
+    for text in ("熱銷一空", "已售完", "售完", "缺貨", "補貨通知", "可訂購時通知", "貨到通知"):
+        patterns.append((re.escape(text), ProductAvailabilityStatus.OUT_OF_STOCK))
+    for text in ("加入購物車", "直接購買", "立即購買", "可訂購", "現貨", "有庫存"):
+        patterns.append((re.escape(text), ProductAvailabilityStatus.IN_STOCK))
     for pattern, status in patterns:
         match = re.search(pattern, body, flags=re.IGNORECASE | re.DOTALL)
         if match:
@@ -562,6 +632,28 @@ def _extract_availability(body: str) -> _FieldCandidate | None:
                 normalized_value=status.value,
             )
     return None
+
+
+def _meta_content(body: str, names: tuple[str, ...]) -> str | None:
+    wanted = {name.casefold() for name in names}
+    for match in re.finditer(r"<meta\b[^>]*>", body, flags=re.IGNORECASE | re.DOTALL):
+        tag = match.group(0)
+        name = _html_attr(tag, "name") or _html_attr(tag, "property")
+        if name is None or name.casefold() not in wanted:
+            continue
+        content = _html_attr(tag, "content")
+        if content is not None:
+            return html.unescape(content).strip()
+    return None
+
+
+def _html_attr(tag: str, attr: str) -> str | None:
+    match = re.search(
+        rf"\b{re.escape(attr)}\s*=\s*([\"'])(.*?)\1",
+        tag,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(2) if match else None
 
 
 def _jsonld_payloads(body: str) -> list[object]:
@@ -615,16 +707,28 @@ def _parse_amount(raw: str) -> float | None:
 
 def _parse_currency(raw: str) -> str | None:
     normalized = raw.replace("\xa0", " ").upper()
-    if "TWD" in normalized:
+    if "TWD" in normalized or "NT$" in normalized or "新台幣" in raw or "台幣" in raw:
         return "TWD"
     if "US $" in normalized or "$" in normalized:
         return "USD"
+    if "元" in raw:
+        return "TWD"
     currency_match = re.search(r"\b([A-Z]{3})\b", normalized)
     return currency_match.group(1) if currency_match else None
 
 
 def _normalize_availability(value: str) -> ProductAvailabilityStatus | None:
     folded = value.casefold()
+    if any(
+        text in value
+        for text in ("熱銷一空", "已售完", "售完", "缺貨", "補貨通知", "可訂購時通知", "貨到通知")
+    ):
+        return ProductAvailabilityStatus.OUT_OF_STOCK
+    if any(
+        text in value
+        for text in ("加入購物車", "直接購買", "立即購買", "可訂購", "現貨", "有庫存")
+    ):
+        return ProductAvailabilityStatus.IN_STOCK
     if "instock" in folded or "in_stock" in folded or "in stock" in folded:
         return ProductAvailabilityStatus.IN_STOCK
     if "outofstock" in folded or "out_of_stock" in folded or "out of stock" in folded:

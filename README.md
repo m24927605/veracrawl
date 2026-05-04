@@ -1116,6 +1116,34 @@ hashes, AI traces, evidence/verification refs, and replay refs. If a source such
 as eBay blocks public item-page access, the result is typed `needs_review` or
 failure with no fabricated price or inventory.
 
+Run the Taiwan top ecommerce product price and availability benchmark:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-product-availability-benchmark run \
+  tests/fixtures/taiwan-top-ecommerce-product-availability \
+  --profile target \
+  --out .veracrawl-real-runs/taiwan-top-ecommerce-product-availability
+```
+
+Run the Taiwan product benchmark with a hosted OpenAI model:
+
+```sh
+set -a; source ~/.env; set +a
+uv run --python python3.12 --extra dev veracrawl-product-availability-benchmark run \
+  tests/fixtures/taiwan-top-ecommerce-product-availability \
+  --profile target \
+  --model-provider openai \
+  --openai-model gpt-5.4-mini \
+  --out .veracrawl-real-runs/taiwan-top-ecommerce-product-availability-openai
+```
+
+The Taiwan product benchmark uses declared public product URLs for Shopee
+Taiwan, momo, and PChome 24h. momo and PChome 24h must provide source-backed
+price/availability evidence to pass. Shopee Taiwan is reported as
+`needs_review` when the allowed public path returns only a JavaScript shell or
+blocked product API access; VeraCrawl does not bypass login, challenge, WAF, or
+source policy limits.
+
 Run the expanded real-world public quality corpus:
 
 ```sh

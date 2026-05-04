@@ -119,17 +119,18 @@ For all Spec Kit plans and implementation tasks:
 
 <!-- SPECKIT START -->
 Current active Spec Kit plan:
-`specs/066-product-price-availability-benchmark/plan.md`.
-Use it with `specs/066-product-price-availability-benchmark/spec.md`,
-`specs/066-product-price-availability-benchmark/research.md`,
-`specs/066-product-price-availability-benchmark/data-model.md`,
-`specs/066-product-price-availability-benchmark/contracts/`, and
-`specs/066-product-price-availability-benchmark/quickstart.md` for the United
-States top ecommerce product price and availability benchmark. This benchmark
-is a targeted product-page validation corpus composed through live HTTP and
+`specs/067-taiwan-product-availability-benchmark/plan.md`.
+Use it with `specs/067-taiwan-product-availability-benchmark/spec.md`,
+`specs/067-taiwan-product-availability-benchmark/research.md`,
+`specs/067-taiwan-product-availability-benchmark/data-model.md`,
+`specs/067-taiwan-product-availability-benchmark/contracts/`, and
+`specs/067-taiwan-product-availability-benchmark/quickstart.md` for the Taiwan
+top ecommerce product price and availability benchmark. This benchmark is a
+targeted product-page validation corpus composed through live HTTP and
 framework-neutral model/agent ports; it must not become site-specific scraper
 code, must not bypass robots/policy gates, must not use login/cart/CAPTCHA/WAF
-bypass, and must honestly record blocked sources instead of fabricating price or
+bypass, and must honestly record blocked sources such as Shopee Taiwan
+JavaScript shells or product API access limits instead of fabricating price or
 inventory. Production quality specs remain governed by
 `specs/057-production-quality-benchmark-roadmap/spec.md`,
 `specs/038-production-runtime-closure/spec.md`, and

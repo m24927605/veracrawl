@@ -2135,11 +2135,18 @@ US top ecommerce product price and availability benchmark acceptance:
 veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --out .veracrawl-real-runs/us-top-ecommerce-product-availability
 ```
 
+Taiwan top ecommerce product price and availability benchmark acceptance:
+
+```text
+veracrawl-product-availability-benchmark run tests/fixtures/taiwan-top-ecommerce-product-availability --profile target --out .veracrawl-real-runs/taiwan-top-ecommerce-product-availability
+```
+
 Required product availability fixtures:
 
 | Fixture | Required acceptance |
 | --- | --- |
 | us-top-ecommerce-product-availability | Amazon and Walmart source-backed product price/availability fields pass; eBay access denial or unavailable source evidence is recorded as blocked/needs-review with no fabricated price or inventory |
+| taiwan-top-ecommerce-product-availability | momo and PChome 24h source-backed product price/availability fields pass; Shopee Taiwan JavaScript shell or API source limitation is recorded as blocked/needs-review with no bypass and no fabricated price or inventory |
 | product-availability-wrong-identity | wrong product identity fails |
 | product-availability-missing-price | missing source-backed price fails |
 | product-availability-missing-availability | missing source-backed availability fails |

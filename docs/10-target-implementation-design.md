@@ -1729,6 +1729,11 @@ Real-world AI agent benchmark gate:
   manifests, reuses live HTTP and model/agent ports, extracts only source-backed
   price and availability field evidence, and returns needs-review when a source
   blocks item-page access instead of bypassing or fabricating values.
+- row 067 reuses the row 066 product availability runtime for Taiwan declared
+  product-page targets. Generic meta tag price/availability extraction and
+  Chinese availability normalization are shared runtime capabilities, not
+  platform-specific scraper modules. JavaScript shell or product API access
+  limits are reported as needs-review/source-limited.
 
 Expanded real-world public quality corpus gate:
 

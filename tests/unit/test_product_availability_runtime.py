@@ -205,6 +205,64 @@ def test_product_availability_extracts_source_backed_price_and_availability(
     assert len(result.field_evidence) == 3
 
 
+def test_product_availability_extracts_product_meta_price_and_availability(
+    tmp_path: Path,
+) -> None:
+    body = """
+    <html><head><title>SanDisk 256GB Extreme microSDXC</title>
+    <meta name="product:price:amount" content="1,879">
+    <meta name="product:price:currency" content="TWD">
+    <meta name="product:availability" content="in stock">
+    </head><body>SanDisk 256GB Extreme microSDXC 記憶卡 可訂購</body></html>
+    """
+    result = _run(tmp_path, body=body)
+
+    assert result.report.completion_result == CompletenessResult.PASS
+    assert result.site_results[0].price_raw_text == "TWD 1,879"
+    assert result.site_results[0].price_amount == 1879.0
+    assert result.site_results[0].price_currency == "TWD"
+    assert result.site_results[0].availability_status == "in_stock"
+
+
+def test_product_availability_extracts_chinese_availability_fallback(
+    tmp_path: Path,
+) -> None:
+    body = """
+    <html><head><title>SanDisk 256GB Extreme microSDXC</title>
+    <script type="application/ld+json">
+    {
+      "@context":"https://schema.org",
+      "@type":"Product",
+      "name":"SanDisk 256GB Extreme microSDXC",
+      "offers":{"@type":"Offer","priceCurrency":"TWD","price":1999}
+    }
+    </script></head><body>SanDisk 256GB Extreme microSDXC 記憶卡 加入購物車</body></html>
+    """
+    result = _run(tmp_path, body=body)
+
+    assert result.report.completion_result == CompletenessResult.PASS
+    assert result.site_results[0].price_currency == "TWD"
+    assert result.site_results[0].availability_status == "in_stock"
+
+
+def test_product_availability_javascript_shell_without_identity_needs_review(
+    tmp_path: Path,
+) -> None:
+    body = """
+    <html><head><title>Product app shell</title></head>
+    <body><noscript>Please enable JavaScript on your browser.</noscript>
+    <div id="main"></div><script src="/assets/app.js"></script></body></html>
+    """
+    result = _run(tmp_path, body=body)
+
+    assert result.site_results[0].completion_result == CompletenessResult.NEEDS_REVIEW
+    assert (
+        result.site_results[0].failure_type
+        == ProductAvailabilityFailureType.SOURCE_ACCESS_DENIED
+    )
+    assert result.site_results[0].missing_ref_fields == ["source_backed_product_identity"]
+
+
 def test_product_availability_wrong_identity_fails(tmp_path: Path) -> None:
     result = _run(tmp_path, scenario="product-availability-wrong-identity")
 

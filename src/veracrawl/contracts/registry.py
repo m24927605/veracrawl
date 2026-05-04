@@ -5088,6 +5088,7 @@ for _real_world_ai_fixture, _negative in {
 
 for _product_availability_fixture, _negative in {
     "us-top-ecommerce-product-availability": False,
+    "taiwan-top-ecommerce-product-availability": False,
     "product-availability-wrong-identity": True,
     "product-availability-missing-price": True,
     "product-availability-missing-availability": True,

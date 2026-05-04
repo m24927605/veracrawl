@@ -88,6 +88,12 @@ def _body_for_target(target: ProductAvailabilityTargetSpec) -> str:
             1,
         ),
         (
+            Path("tests/fixtures/taiwan-top-ecommerce-product-availability"),
+            CompletenessResult.NEEDS_REVIEW,
+            2,
+            1,
+        ),
+        (
             Path("tests/fixtures/product-availability-wrong-identity"),
             CompletenessResult.FAIL,
             0,
