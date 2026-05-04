@@ -1891,6 +1891,39 @@ Cost/latency/stability quality release gate:
   violations, stability regressions, insufficient runs, replay gaps, false-ready
   status, and missing command/event refs fail with `QualityReleaseFailureType`.
 
+Production-grade crawler closure runtime:
+
+- `veracrawl.contracts.production_grade` owns the closure contracts for specs
+  069-075: source profiles, crawl bounds, discovery entry points, candidate
+  source targets, discovery approval decisions, discovery plans, acquisition
+  attempts, authorized source access records, production gate reports,
+  capability matrices, release blockers, false-ready guards, release decisions,
+  and aggregate release reports.
+- `veracrawl.benchmarks.production_grade` implements a framework-neutral,
+  deterministic closure runtime. Core imports only VeraCrawl contracts and
+  standard-library modules; concrete model providers, agent frameworks, browser
+  engines, HTTP clients, queues, databases, and object-store SDKs remain outside
+  core.
+- `veracrawl.cli.production_grade` exposes the production-grade commands:
+  `veracrawl-discovery-planner`, `veracrawl-acquisition-escalation`,
+  `veracrawl-authorized-source`, `veracrawl-deep-crawl-production`,
+  `veracrawl-production-quality-gate`, `veracrawl-production-ops-gate`, and
+  `veracrawl-production-grade-release-gate`.
+- Specs 069-074 produce lower `ProductionGateReport` artifacts. Spec 075 must
+  parse those actual reports through the CLI `--input-report` path; passing six
+  arbitrary string refs is intentionally insufficient.
+- Release pass requires discovery planning, acquisition escalation, authorized
+  source access, deep crawl, extraction quality, and operations reliability
+  reports to be present and `pass`. Missing or non-passing lower reports create
+  `ReleaseBlocker`, `FalseReadyGuard`, `ProductionGradeCapabilityMatrix`,
+  `ReleaseDecision`, and `ProductionGradeReleaseReport` artifacts that explain
+  why production-grade release is blocked.
+- Deterministic closure fixtures prove contract, replay, command/event/outbox,
+  policy, and aggregate gate behavior. They do not by themselves replace live
+  public/authorized corpus validation; production-grade claims still require
+  the aggregate release gate to be supplied with the relevant validated lower
+  reports.
+
 Disaster recovery:
 
 - canonical Postgres, object artifacts, and event log are the recovery source of truth

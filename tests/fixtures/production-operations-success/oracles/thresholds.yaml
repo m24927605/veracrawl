@@ -1,0 +1,6 @@
+{
+  "maximum_p95_latency_ms": 5000,
+  "maximum_retry_rate": 0.05,
+  "maximum_total_cost_usd": 2.0,
+  "minimum_stability_runs": 3
+}

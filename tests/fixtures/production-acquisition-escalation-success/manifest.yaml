@@ -1,0 +1,46 @@
+{
+  "id": "production-acquisition-escalation-success",
+  "scenario": "production-acquisition-escalation-success",
+  "gate_type": "acquisition_escalation",
+  "profile_refs": ["production"],
+  "objective": "Escalate from live HTTP acquisition to browser-render acquisition only when source-backed evidence cannot be obtained through HTTP.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-acquisition-escalation-success",
+    "max_depth": 2,
+    "max_pages": 40,
+    "max_runtime_ms": 150000,
+    "rate_limit_per_minute": 30,
+    "browser_budget_ms": 60000
+  },
+  "source_profiles": [
+    {
+      "id": "source:static-commerce",
+      "site_name": "Static Commerce Fixture",
+      "allowed_origin": "https://static.example-commerce.test",
+      "entry_point_url": "https://static.example-commerce.test/products/sandisk-256gb",
+      "discovery_methods": ["direct_product_url", "structured_data"],
+      "required_evidence_types": ["identity", "price", "availability"],
+      "robots_policy_ref": "policy:static-commerce:robots",
+      "scope_policy_ref": "policy:static-commerce:scope"
+    },
+    {
+      "id": "source:js-commerce",
+      "site_name": "JS Commerce Fixture",
+      "allowed_origin": "https://js.example-commerce.test",
+      "entry_point_url": "https://js.example-commerce.test/products/sandisk-256gb",
+      "discovery_methods": ["browser_render", "dom_snapshot"],
+      "required_evidence_types": ["identity", "price", "availability"],
+      "robots_policy_ref": "policy:js-commerce:robots",
+      "scope_policy_ref": "policy:js-commerce:scope",
+      "browser_required": true
+    }
+  ],
+  "required_capability_refs": [
+    "capability:acquisition_escalation:http_acquisition",
+    "capability:acquisition_escalation:browser_render_escalation",
+    "capability:acquisition_escalation:source_limitation_accounting"
+  ],
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_acquisition_escalation_completed",
+  "negative_case": false
+}

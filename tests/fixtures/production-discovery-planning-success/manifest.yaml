@@ -1,0 +1,45 @@
+{
+  "id": "production-discovery-planning-success",
+  "scenario": "production-discovery-planning-success",
+  "gate_type": "discovery_planning",
+  "profile_refs": ["production"],
+  "objective": "Plan a source-backed crawl for a specified ecommerce product across multiple allowed origins without coupling VeraCrawl core to a single site scraper.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-discovery-planning-success",
+    "max_depth": 3,
+    "max_pages": 80,
+    "max_runtime_ms": 180000,
+    "rate_limit_per_minute": 45,
+    "browser_budget_ms": 45000
+  },
+  "source_profiles": [
+    {
+      "id": "source:momo-search",
+      "site_name": "momo",
+      "allowed_origin": "https://m.momoshop.com.tw",
+      "entry_point_url": "https://m.momoshop.com.tw/search.momo?searchKeyword=SanDisk%20256GB",
+      "discovery_methods": ["internal_search", "listing_detail", "structured_data"],
+      "required_evidence_types": ["identity", "price", "availability", "canonical_url"],
+      "robots_policy_ref": "policy:momo:robots",
+      "scope_policy_ref": "policy:momo:scope"
+    },
+    {
+      "id": "source:pchome-search",
+      "site_name": "PChome 24h",
+      "allowed_origin": "https://24h.pchome.com.tw",
+      "entry_point_url": "https://24h.pchome.com.tw/search/?q=SanDisk%20256GB",
+      "discovery_methods": ["internal_search", "category_frontier", "listing_detail"],
+      "required_evidence_types": ["identity", "price", "availability", "canonical_url"],
+      "robots_policy_ref": "policy:pchome:robots",
+      "scope_policy_ref": "policy:pchome:scope"
+    }
+  ],
+  "required_capability_refs": [
+    "capability:discovery_planning:objective_interpretation",
+    "capability:discovery_planning:candidate_source_selection",
+    "capability:discovery_planning:crawl_bound_approval"
+  ],
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_discovery_planning_completed",
+  "negative_case": false
+}

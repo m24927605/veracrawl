@@ -1,0 +1,5 @@
+{
+  "minimum_source_profile_count": 2,
+  "minimum_policy_ref_count": 3,
+  "minimum_context_bundle_trace_count": 2
+}

@@ -1,0 +1,8 @@
+{
+  "fixture_id": "production-operations-success",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_operations_reliability_completed",
+  "maximum_p95_latency_ms": 5000,
+  "maximum_retry_rate": 0.05,
+  "maximum_total_cost_usd": 2.0
+}

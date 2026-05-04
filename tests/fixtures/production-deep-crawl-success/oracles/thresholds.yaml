@@ -1,0 +1,5 @@
+{
+  "minimum_site_count": 5,
+  "minimum_covered_page_count": 50,
+  "minimum_stop_reason_count": 2
+}

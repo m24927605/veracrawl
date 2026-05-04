@@ -90,6 +90,13 @@ veracrawl-quality-metrics = "veracrawl.cli.quality_metrics:main"
 veracrawl-repair-quality-benchmark = "veracrawl.cli.repair_success:main"
 veracrawl-quality-release-gate = "veracrawl.cli.quality_release:main"
 veracrawl-product-availability-benchmark = "veracrawl.cli.product_availability_benchmark:main"
+veracrawl-discovery-planner = "veracrawl.cli.production_grade:main"
+veracrawl-acquisition-escalation = "veracrawl.cli.production_grade:main"
+veracrawl-authorized-source = "veracrawl.cli.production_grade:main"
+veracrawl-deep-crawl-production = "veracrawl.cli.production_grade:main"
+veracrawl-production-quality-gate = "veracrawl.cli.production_grade:main"
+veracrawl-production-ops-gate = "veracrawl.cli.production_grade:main"
+veracrawl-production-grade-release-gate = "veracrawl.cli.production_grade:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veracrawl"]

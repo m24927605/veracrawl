@@ -1,0 +1,27 @@
+{
+  "id": "production-grade-release-missing-gate",
+  "scenario": "production-grade-release-missing-gate",
+  "gate_type": "production_grade_release",
+  "profile_refs": ["production"],
+  "objective": "Block production-grade release when any validated lower gate report is missing or non-passing.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-grade-release-missing-gate",
+    "max_depth": 5,
+    "max_pages": 120,
+    "max_runtime_ms": 300000,
+    "rate_limit_per_minute": 30,
+    "browser_budget_ms": 90000
+  },
+  "source_profiles": [],
+  "required_capability_refs": [
+    "capability:production_grade_release:discovery_planning",
+    "capability:production_grade_release:acquisition_escalation",
+    "capability:production_grade_release:authorized_source_access",
+    "capability:production_grade_release:deep_crawl_production",
+    "capability:production_grade_release:extraction_quality",
+    "capability:production_grade_release:operations_reliability"
+  ],
+  "expected_completion_result": "fail",
+  "expected_operator_status": "production_grade_release_blocked",
+  "negative_case": false
+}

@@ -1,0 +1,35 @@
+{
+  "id": "production-acquisition-source-limited",
+  "scenario": "production-acquisition-source-limited",
+  "gate_type": "acquisition_escalation",
+  "profile_refs": ["production"],
+  "objective": "Record a source limitation instead of publishing when neither HTTP nor browser-render acquisition can produce source-backed evidence.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-acquisition-source-limited",
+    "max_depth": 2,
+    "max_pages": 20,
+    "max_runtime_ms": 90000,
+    "rate_limit_per_minute": 20,
+    "browser_budget_ms": 45000
+  },
+  "source_profiles": [
+    {
+      "id": "source:blocked-js-commerce",
+      "site_name": "Blocked JS Commerce Fixture",
+      "allowed_origin": "https://blocked.example-commerce.test",
+      "entry_point_url": "https://blocked.example-commerce.test/products/sandisk-256gb",
+      "discovery_methods": ["browser_render", "dom_snapshot"],
+      "required_evidence_types": ["identity", "price", "availability"],
+      "robots_policy_ref": "policy:blocked-commerce:robots",
+      "scope_policy_ref": "policy:blocked-commerce:scope",
+      "browser_required": true,
+      "source_limited": true
+    }
+  ],
+  "required_capability_refs": [
+    "capability:acquisition_escalation:source_limitation_accounting"
+  ],
+  "expected_completion_result": "needs_review",
+  "expected_operator_status": "production_acquisition_source_limited",
+  "negative_case": false
+}

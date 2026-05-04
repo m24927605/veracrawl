@@ -2,7 +2,7 @@
 
 **Feature Branch**: `074-production-reliability-operations-cost-runtime`  
 **Created**: 2026-05-04  
-**Status**: Planned  
+**Status**: Implemented
 **Roadmap Row**: 074  
 **Input**: Production-grade closure requirement: crawler readiness must include long-running reliability, operations, cost, and SLO gates.
 

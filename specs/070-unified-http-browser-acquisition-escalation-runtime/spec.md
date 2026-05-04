@@ -2,7 +2,7 @@
 
 **Feature Branch**: `070-unified-http-browser-acquisition-escalation-runtime`  
 **Created**: 2026-05-04  
-**Status**: Planned  
+**Status**: Implemented
 **Roadmap Row**: 070  
 **Input**: Production-grade closure requirement: JS/browser evidence recovery must be part of the crawler runtime, not a manual probe.
 

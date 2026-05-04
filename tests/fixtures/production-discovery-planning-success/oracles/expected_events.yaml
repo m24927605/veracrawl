@@ -1,0 +1,7 @@
+{
+  "required_event_types": [
+    "production_grade_closure_manifest_recorded",
+    "crawl_discovery_plan_recorded",
+    "production_gate_report_recorded"
+  ]
+}

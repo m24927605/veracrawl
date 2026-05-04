@@ -1271,6 +1271,63 @@ command/event/outbox refs. Passing reports include prior gate refs, SLO metric
 refs, audit refs, release decision refs, policy refs, command/event/outbox refs,
 and replay refs.
 
+Run production-grade closure gates:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-discovery-planner run \
+  tests/fixtures/production-discovery-planning-success \
+  --profile production \
+  --out .veracrawl-test-runs/production-discovery-planning-success
+
+uv run --python python3.12 --extra dev veracrawl-acquisition-escalation run \
+  tests/fixtures/production-acquisition-escalation-success \
+  --profile production \
+  --out .veracrawl-test-runs/production-acquisition-escalation-success
+
+uv run --python python3.12 --extra dev veracrawl-authorized-source run \
+  tests/fixtures/production-authorized-source-success \
+  --profile production \
+  --out .veracrawl-test-runs/production-authorized-source-success
+
+uv run --python python3.12 --extra dev veracrawl-deep-crawl-production run \
+  tests/fixtures/production-deep-crawl-success \
+  --profile production \
+  --out .veracrawl-test-runs/production-deep-crawl-success
+
+uv run --python python3.12 --extra dev veracrawl-production-quality-gate run \
+  tests/fixtures/production-extraction-quality-success \
+  --profile production \
+  --out .veracrawl-test-runs/production-extraction-quality-success
+
+uv run --python python3.12 --extra dev veracrawl-production-ops-gate run \
+  tests/fixtures/production-operations-success \
+  --profile production \
+  --out .veracrawl-test-runs/production-operations-success
+```
+
+Run the aggregate production-grade release gate only with actual lower gate
+report files:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-production-grade-release-gate run \
+  tests/fixtures/production-grade-release-ready \
+  --profile production \
+  --out .veracrawl-test-runs/production-grade-release-ready \
+  --input-report .veracrawl-test-runs/production-discovery-planning-success/production_gate_report.json \
+  --input-report .veracrawl-test-runs/production-acquisition-escalation-success/production_gate_report.json \
+  --input-report .veracrawl-test-runs/production-authorized-source-success/production_gate_report.json \
+  --input-report .veracrawl-test-runs/production-deep-crawl-success/production_gate_report.json \
+  --input-report .veracrawl-test-runs/production-extraction-quality-success/production_gate_report.json \
+  --input-report .veracrawl-test-runs/production-operations-success/production_gate_report.json
+```
+
+The production-grade closure gates implement specs 069-075. The aggregate gate
+rejects ref-only lower gate strings and passes only after parsed reports from
+discovery planning, acquisition escalation, authorized source access, deep
+crawl, extraction quality, and operations reliability are present and passing.
+Missing lower gates, non-passing lower gates, false-ready conditions, missing
+policy/command/event/outbox refs, and missing replay refs block release.
+
 Run persistence and queue runtime fixtures:
 
 ```sh

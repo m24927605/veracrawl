@@ -2,7 +2,7 @@
 
 **Feature Branch**: `069-objective-discovery-crawl-planning-runtime`  
 **Created**: 2026-05-04  
-**Status**: Planned  
+**Status**: Implemented
 **Roadmap Row**: 069  
 **Input**: Production-grade closure requirement: VeraCrawl must crawl from high-level objectives, not only declared URLs.
 

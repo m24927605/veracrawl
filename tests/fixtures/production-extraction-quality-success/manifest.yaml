@@ -1,0 +1,35 @@
+{
+  "id": "production-extraction-quality-success",
+  "scenario": "production-extraction-quality-success",
+  "gate_type": "extraction_quality",
+  "profile_refs": ["production"],
+  "objective": "Gate extraction publication with field-level oracles, precision and recall measurements, source anchors, and verification decisions.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-extraction-quality-success",
+    "max_depth": 3,
+    "max_pages": 80,
+    "max_runtime_ms": 180000,
+    "rate_limit_per_minute": 40,
+    "browser_budget_ms": 45000
+  },
+  "source_profiles": [
+    {
+      "id": "source:oracle-commerce",
+      "site_name": "Oracle Commerce Fixture",
+      "allowed_origin": "https://oracle.example-commerce.test",
+      "entry_point_url": "https://oracle.example-commerce.test/products/sandisk-256gb",
+      "discovery_methods": ["direct_product_url", "structured_data", "field_oracle"],
+      "required_evidence_types": ["identity", "price", "availability", "field_oracle"],
+      "robots_policy_ref": "policy:oracle-commerce:robots",
+      "scope_policy_ref": "policy:oracle-commerce:scope"
+    }
+  ],
+  "required_capability_refs": [
+    "capability:extraction_quality:field_oracles",
+    "capability:extraction_quality:precision_recall_release_block",
+    "capability:extraction_quality:publication_readiness"
+  ],
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_extraction_quality_completed",
+  "negative_case": false
+}

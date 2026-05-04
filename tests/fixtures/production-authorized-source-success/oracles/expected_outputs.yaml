@@ -1,0 +1,7 @@
+{
+  "fixture_id": "production-authorized-source-success",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_authorized_source_access_completed",
+  "minimum_authorized_source_count": 2,
+  "requires_redacted_artifacts": true
+}

@@ -1,0 +1,45 @@
+{
+  "id": "production-deep-crawl-success",
+  "scenario": "production-deep-crawl-success",
+  "gate_type": "deep_crawl_production",
+  "profile_refs": ["production"],
+  "objective": "Run adaptive multi-page crawl planning with replayable frontier decisions, stop reasons, and source-backed coverage across a mixed public corpus.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-deep-crawl-success",
+    "max_depth": 5,
+    "max_pages": 120,
+    "max_runtime_ms": 300000,
+    "rate_limit_per_minute": 30,
+    "browser_budget_ms": 90000
+  },
+  "source_profiles": [
+    {
+      "id": "source:category-commerce",
+      "site_name": "Category Commerce Fixture",
+      "allowed_origin": "https://category.example-commerce.test",
+      "entry_point_url": "https://category.example-commerce.test/c/memory-cards",
+      "discovery_methods": ["category_frontier", "pagination", "listing_detail"],
+      "required_evidence_types": ["identity", "price", "availability", "pagination_stop_reason"],
+      "robots_policy_ref": "policy:category-commerce:robots",
+      "scope_policy_ref": "policy:category-commerce:scope"
+    },
+    {
+      "id": "source:search-commerce",
+      "site_name": "Search Commerce Fixture",
+      "allowed_origin": "https://search.example-commerce.test",
+      "entry_point_url": "https://search.example-commerce.test/search?q=SanDisk%20256GB",
+      "discovery_methods": ["internal_search", "result_ranking", "listing_detail"],
+      "required_evidence_types": ["identity", "price", "availability", "frontier_stop_reason"],
+      "robots_policy_ref": "policy:search-commerce:robots",
+      "scope_policy_ref": "policy:search-commerce:scope"
+    }
+  ],
+  "required_capability_refs": [
+    "capability:deep_crawl_production:adaptive_frontier",
+    "capability:deep_crawl_production:multi_page_coverage",
+    "capability:deep_crawl_production:replayable_stop_reasons"
+  ],
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_deep_crawl_completed",
+  "negative_case": false
+}

@@ -1,0 +1,5 @@
+{
+  "minimum_precision": 0.99,
+  "minimum_recall": 0.9,
+  "minimum_critical_precision": 0.99
+}

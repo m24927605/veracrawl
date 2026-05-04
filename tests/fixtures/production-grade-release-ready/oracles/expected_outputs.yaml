@@ -1,0 +1,7 @@
+{
+  "fixture_id": "production-grade-release-ready",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_grade_release_completed",
+  "minimum_lower_gate_report_count": 6,
+  "requires_all_lower_gate_reports_pass": true
+}

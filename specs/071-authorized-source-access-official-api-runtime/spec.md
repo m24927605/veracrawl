@@ -2,7 +2,7 @@
 
 **Feature Branch**: `071-authorized-source-access-official-api-runtime`  
 **Created**: 2026-05-04  
-**Status**: Planned  
+**Status**: Implemented
 **Roadmap Row**: 071  
 **Input**: Production-grade closure requirement: sites that require authorized access or official APIs need first-class, policy-compliant adapters.
 

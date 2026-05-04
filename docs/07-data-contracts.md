@@ -87,6 +87,64 @@ Target graph types:
 
 Target completion requires implementation specs to map every target contract to owner service, canonical store, artifact store, event types, projection outputs, replay behavior, privacy lifecycle, tests, and acceptance gates.
 
+## Production Grade Closure Contracts
+
+Specs 069-075 materialize the production-grade closure layer in
+`veracrawl.contracts.production_grade`. These contracts do not replace the
+existing target architecture contracts; they aggregate and gate them so
+production-grade crawler claims require concrete lower-gate evidence.
+
+Discovery planning contracts:
+
+- `ProductionSourceProfile`: allowed origin, entry point, discovery methods,
+  required evidence types, robots policy refs, scope policy refs, browser
+  requirement, official API availability, authorized source refs, and
+  source-limited status.
+- `CrawlBound`: depth, page, runtime, rate, and browser budgets for approved
+  plans.
+- `DiscoveryEntryPoint`: policy-approved entry URL with model, agent, tool,
+  context, command/event/outbox, and replay refs.
+- `CandidateSourceTarget`: candidate source profile, entry points, discovery
+  method refs, evidence requirement refs, crawl bound refs, model/agent/tool
+  traces, policy refs, command/event/outbox refs, and replay refs.
+- `CrawlDiscoveryPlan`: objective text, source profile refs, entry point refs,
+  evidence requirements, approval decision refs, model/agent/tool/context refs,
+  policy refs, command/event/outbox refs, and replay refs.
+- `DiscoveryApprovalDecision`: approved or rejected discovery handoff with
+  candidate refs, policy refs, command/event/outbox refs, and replay refs.
+
+Acquisition and authorized-source contracts:
+
+- `AcquisitionAttemptRecord`: HTTP or browser acquisition attempt. Passing
+  attempts require source artifacts, content hashes, and source anchors; missing
+  evidence attempts require source limitation refs.
+- `AuthorizedSourceAccessRecord`: official API or credentialed read-session
+  result with credential grant, credential audit, redacted artifacts, source
+  anchors, content hashes, policy refs, command/event/outbox refs, and replay
+  refs.
+
+Release gate contracts:
+
+- `ProductionGateReport`: per-gate report for discovery, acquisition,
+  authorized source, deep crawl, extraction quality, operations, or aggregate
+  release.
+- `ReleaseBlocker`: typed blocker that prevents production-grade release.
+- `FalseReadyGuard`: guard against missing lower gates, non-passing lower gates,
+  LLM-as-evidence, framework-native canonical state, source-anchor gaps, replay
+  gaps, and publication bypass.
+- `ProductionGradeCapabilityMatrix`: required lower gate types, passing report
+  refs, missing gate types, non-passing report refs, false-ready guard refs, and
+  replay refs.
+- `ReleaseDecision`: pass or blocked decision with blocker refs and diagnostics.
+- `ProductionGradeReleaseReport`: aggregate production-grade release report
+  tying the gate report, capability matrix, release decision, false-ready guards,
+  lower reports, blockers, policy refs, command/event/outbox refs, and replay
+  refs together.
+
+Production-grade release must not pass from arbitrary string refs alone.
+Spec 075 requires parsed `ProductionGateReport` artifacts from specs 069-074,
+and each required lower gate must be present and `pass`.
+
 ## V1 Contract Profile
 
 V1 uses a restricted subset of the broader contracts:

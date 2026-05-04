@@ -1,0 +1,273 @@
+"""Production-grade crawler closure gate CLI."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+from veracrawl.benchmarks.production_grade import (
+    ProductionGradeGateResult,
+    run_production_grade_gate,
+)
+from veracrawl.contracts.production_grade import (
+    ProductionGateReport,
+    ProductionGradeClosureManifest,
+)
+
+_PROGRAM_GATE_TYPES = {
+    "veracrawl-discovery-planner": "discovery_planning",
+    "veracrawl-acquisition-escalation": "acquisition_escalation",
+    "veracrawl-authorized-source": "authorized_source_access",
+    "veracrawl-deep-crawl-production": "deep_crawl_production",
+    "veracrawl-production-quality-gate": "extraction_quality",
+    "veracrawl-production-ops-gate": "operations_reliability",
+    "veracrawl-production-grade-release-gate": "production_grade_release",
+}
+
+
+def _load_json_like(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return data
+
+
+def run_fixture(
+    fixture_dir: Path,
+    *,
+    profile: str,
+    out: Path,
+    gate_type: str | None = None,
+    input_report_refs: list[str] | None = None,
+    input_reports: list[Path] | None = None,
+) -> ProductionGradeGateResult:
+    manifest = ProductionGradeClosureManifest.model_validate(
+        _load_json_like(fixture_dir / "manifest.yaml")
+    )
+    if gate_type is not None and manifest.gate_type != gate_type:
+        raise ValueError(
+            f"fixture {manifest.id} gate mismatch: {manifest.gate_type} != {gate_type}"
+        )
+    lower_gate_reports = [_load_gate_report(path) for path in input_reports or []]
+    result = run_production_grade_gate(
+        manifest=manifest,
+        profile=profile,
+        input_report_refs=input_report_refs,
+        lower_gate_reports=lower_gate_reports,
+    )
+    _write_outputs(out, result)
+    report = result.report
+    if report.completion_result != manifest.expected_completion_result:
+        raise ValueError(
+            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
+        )
+    if report.operator_status != manifest.expected_operator_status:
+        raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
+    return result
+
+
+def _write_outputs(out: Path, result: ProductionGradeGateResult) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "production_gate_report.json").write_text(
+        json.dumps(result.report.model_dump(mode="json"), sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (out / "discovery_plans.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.discovery_plans],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "candidate_targets.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.candidate_targets],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "discovery_entry_points.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.discovery_entry_points],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "discovery_approval_decisions.json").write_text(
+        json.dumps(
+            [
+                item.model_dump(mode="json")
+                for item in result.discovery_approval_decisions
+            ],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "acquisition_attempts.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.acquisition_attempts],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "authorized_sources.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.authorized_sources],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "capability_matrices.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.capability_matrices],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "release_decisions.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.release_decisions],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "false_ready_guards.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.false_ready_guards],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "release_blockers.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.release_blockers],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "production_grade_release_reports.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.release_reports],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report = result.report
+    (out / "summary.json").write_text(
+        json.dumps(
+            {
+                "ok": report.completion_result.value == "pass",
+                "fixture_id": report.fixture_id,
+                "gate_type": report.gate_type,
+                "completion_result": report.completion_result.value,
+                "operator_status": report.operator_status,
+                "capability_count": len(report.capability_refs),
+                "lower_gate_report_count": len(report.lower_gate_report_refs),
+                "release_blocker_count": len(report.release_blocker_refs),
+                "replay_bundle_count": len(report.replay_bundle_refs),
+                "candidate_target_count": len(result.candidate_targets),
+                "discovery_entry_point_count": len(result.discovery_entry_points),
+                "release_report_count": len(result.release_reports),
+                "false_ready_guard_count": len(result.false_ready_guards),
+                "metrics": report.metrics,
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _load_gate_report(path: Path) -> ProductionGateReport:
+    return ProductionGateReport.model_validate(_load_json_like(path))
+
+
+def _gate_from_program(argv: list[str]) -> str | None:
+    program = Path(argv[0]).name if argv else ""
+    return _PROGRAM_GATE_TYPES.get(program)
+
+
+def build_parser(default_gate: str | None) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=Path(sys.argv[0]).name)
+    sub = parser.add_subparsers(dest="command", required=True)
+    run = sub.add_parser("run")
+    run.add_argument("fixture_dir")
+    run.add_argument("--profile", default="production")
+    run.add_argument("--out", required=True)
+    if default_gate is None:
+        run.add_argument(
+            "--gate-type",
+            choices=sorted(set(_PROGRAM_GATE_TYPES.values())),
+            required=True,
+        )
+    run.add_argument("--input-report-ref", action="append", default=[])
+    run.add_argument("--input-report", action="append", default=[])
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args_list = sys.argv if argv is None else [sys.argv[0], *argv]
+    default_gate = _gate_from_program(args_list)
+    parser = build_parser(default_gate)
+    args = parser.parse_args(argv)
+    if args.command == "run":
+        gate_type = default_gate or args.gate_type
+        try:
+            result = run_fixture(
+                Path(args.fixture_dir),
+                profile=args.profile,
+                out=Path(args.out),
+                gate_type=gate_type,
+                input_report_refs=args.input_report_ref,
+                input_reports=[Path(path) for path in args.input_report],
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+            return 1
+        report = result.report
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "fixture_id": report.fixture_id,
+                    "gate_type": report.gate_type,
+                    "completion_result": report.completion_result.value,
+                    "operator_status": report.operator_status,
+                    "release_blocker_count": len(report.release_blocker_refs),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

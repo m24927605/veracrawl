@@ -2,7 +2,7 @@
 
 **Feature Branch**: `072-adaptive-frontier-deep-crawl-production-runtime`  
 **Created**: 2026-05-04  
-**Status**: Planned  
+**Status**: Implemented
 **Roadmap Row**: 072  
 **Input**: Production-grade closure requirement: VeraCrawl must execute bounded multi-page crawls, not only single declared pages.
 

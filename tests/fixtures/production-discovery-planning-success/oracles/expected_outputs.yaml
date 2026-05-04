@@ -1,0 +1,7 @@
+{
+  "fixture_id": "production-discovery-planning-success",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_discovery_planning_completed",
+  "minimum_discovery_plan_count": 1,
+  "minimum_model_call_trace_count": 2
+}

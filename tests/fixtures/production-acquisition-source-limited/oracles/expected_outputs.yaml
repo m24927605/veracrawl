@@ -1,0 +1,7 @@
+{
+  "fixture_id": "production-acquisition-source-limited",
+  "expected_completion_result": "needs_review",
+  "expected_operator_status": "production_acquisition_source_limited",
+  "expected_release_blocker_count": 1,
+  "minimum_acquisition_attempt_count": 2
+}

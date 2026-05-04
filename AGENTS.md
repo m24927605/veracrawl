@@ -122,13 +122,15 @@ Current production-grade closure roadmap:
 `specs/068-production-grade-crawler-closure-roadmap/spec.md`.
 Use it with `docs/08-build-roadmap.md` and
 `specs/038-production-runtime-closure/spec.md`. Specs 069-075 are the finite
-production-grade closure specs that must be implemented in order before
-VeraCrawl may claim full production-grade web crawler capability:
-objective discovery/planning, unified HTTP/browser acquisition escalation,
-authorized API/session access, adaptive deep crawl, production extraction
-quality gates, reliability/operations/cost gates, and the final production-grade
-release gate. Do not invent additional production-grade specs without amending
-spec 068 and the roadmap first. Until spec 075 passes, describe VeraCrawl as a
-production-grade foundation or partial production capability, not a fully
-production-grade crawler.
+production-grade closure specs for objective discovery/planning, unified
+HTTP/browser acquisition escalation, authorized API/session access, adaptive
+deep crawl, production extraction quality gates, reliability/operations/cost
+gates, and the final production-grade release gate. Do not invent additional
+production-grade specs without amending spec 068 and the roadmap first.
+Spec 075 must not pass from arbitrary string refs; it must parse actual
+`ProductionGateReport` artifacts from all six lower gates and each lower gate
+must be present and `pass`. Deterministic closure fixtures prove the release
+mechanics, but do not by themselves justify a full production-grade crawler
+claim unless the aggregate release gate is supplied with the relevant validated
+live/authorized/browser/deep-crawl/quality/ops lower reports.
 <!-- SPECKIT END -->

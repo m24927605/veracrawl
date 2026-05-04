@@ -1,0 +1,6 @@
+{
+  "fixture_id": "production-grade-release-missing-gate",
+  "expected_completion_result": "fail",
+  "expected_operator_status": "production_grade_release_blocked",
+  "expected_release_blocker_count": 1
+}

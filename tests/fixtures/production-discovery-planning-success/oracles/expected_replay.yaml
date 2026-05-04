@@ -1,0 +1,4 @@
+{
+  "requires_replay_bundle_refs": true,
+  "requires_command_event_outbox_refs": true
+}

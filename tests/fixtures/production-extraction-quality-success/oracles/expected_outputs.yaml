@@ -1,0 +1,7 @@
+{
+  "fixture_id": "production-extraction-quality-success",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_extraction_quality_completed",
+  "minimum_precision": 0.99,
+  "minimum_recall": 0.9
+}
