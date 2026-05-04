@@ -129,10 +129,10 @@ This supports claiming production-grade capability for the recorded validation
 corpus. It does not mean every target website is crawlable: the row 066 Amazon
 follow-up now has source-backed HTTP and browser DOM price/availability evidence
 for the recorded product run, while eBay item access, Shopee Taiwan access, and
-some forced browser-source ecommerce pages can still be source-limited or
-identity-mismatched. Those outcomes must remain operator-visible
-needs-review/blocked results unless solved through official APIs or explicitly
-authorized sources.
+some forced browser-source ecommerce pages such as Walmart can still be
+source-limited by human-check pages. Those outcomes must remain
+operator-visible needs-review/blocked results unless solved through official
+APIs or explicitly authorized sources.
 
 ## Phase 0: Contracts And Boundaries
 

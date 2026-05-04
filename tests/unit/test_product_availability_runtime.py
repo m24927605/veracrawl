@@ -311,6 +311,22 @@ def test_product_availability_can_require_browser_dom_source_evidence(
     assert ":browser-render:dom:" in price.artifact_ref
 
 
+def test_product_availability_classifies_browser_human_check_as_source_denied(
+    tmp_path: Path,
+) -> None:
+    result = _run(
+        tmp_path,
+        body=_product_body(),
+        browser_body="Robot or human? Activate and hold the button to confirm that you're human.",
+        browser_source_required=True,
+    )
+
+    site = result.site_results[0]
+    assert site.completion_result == CompletenessResult.NEEDS_REVIEW
+    assert site.failure_type == ProductAvailabilityFailureType.SOURCE_ACCESS_DENIED
+    assert site.missing_ref_fields == ["browser_dom_source"]
+
+
 def test_product_availability_javascript_shell_without_identity_needs_review(
     tmp_path: Path,
 ) -> None:

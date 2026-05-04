@@ -624,6 +624,8 @@ def _browser_source_selection(
         return None
 
     browser = browser_outcome.browser_result
+    if _is_access_control_page(browser.dom_text):
+        return None
     browser_content_hash_ref = browser.dom_content_hash
     if browser_content_hash_ref is None:
         return None
@@ -703,6 +705,19 @@ def _is_javascript_app_shell(body: str) -> bool:
             flags=re.IGNORECASE | re.DOTALL,
         )
     )
+
+
+def _is_access_control_page(body: str) -> bool:
+    folded = body.casefold()
+    markers = (
+        "robot or human",
+        "confirm that you're human",
+        "confirm that you are human",
+        "captcha",
+        "access denied",
+        "request blocked",
+    )
+    return any(marker in folded for marker in markers)
 
 
 def _extract_price(body: str) -> _FieldCandidate | None:

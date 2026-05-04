@@ -198,3 +198,26 @@
   reported `8 passed`, `uv run --python python3.12 --extra dev ruff check src/veracrawl/benchmarks/product_availability.py`
   passed, and `uv run --python python3.12 --extra dev mypy src/veracrawl/benchmarks/product_availability.py`
   passed with no issues.
+- Walmart browser source classification follow-up:
+  a manual Playwright probe of `https://www.walmart.com/ip/264401664` rendered
+  `Robot or human? Activate and hold the button to confirm that you're human.`
+  with no product identity, price, or availability terms. The runtime now
+  classifies browser-rendered human-check/access-control pages as
+  `product_availability_source_access_denied` instead of
+  `product_availability_identity_mismatch`.
+- Walmart classification focused tests:
+  `uv run --python python3.12 --extra dev pytest tests/unit/test_product_availability_runtime.py -q`
+  reported `9 passed`, `uv run --python python3.12 --extra dev ruff check src/veracrawl/benchmarks/product_availability.py tests/unit/test_product_availability_runtime.py`
+  passed, and `uv run --python python3.12 --extra dev mypy src/veracrawl/benchmarks/product_availability.py tests/unit/test_product_availability_runtime.py`
+  passed with no issues.
+- Hosted OpenAI live browser-source-required Walmart rerun:
+  `uv run --python python3.12 --extra dev --extra browser-playwright veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --model-provider openai --openai-model gpt-5.4-mini --browser-source-required --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai-browser-source-required-walmart-classified`
+  reported `completion_result=needs_review`,
+  `operator_status=product_availability_partial_sources_blocked`,
+  `site_count=3`, `passing_site_count=1`, `blocked_site_count=2`,
+  `field_evidence_count=3`, `price_evidence_count=1`,
+  `availability_evidence_count=1`, and 4 OpenAI model/agent/tool/context traces.
+  Amazon remained passing with browser DOM evidence for price `TWD1,876.17` and
+  availability `limited`; Walmart was correctly recorded as
+  `product_availability_source_access_denied` with missing field
+  `browser_dom_source`; eBay remained source-access denied.
