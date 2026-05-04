@@ -1,0 +1,6 @@
+{
+  "minimum_authorized_source_count": 2,
+  "minimum_source_anchor_count": 2,
+  "minimum_credential_audit_count": 2,
+  "minimum_live_source_fetch_count": 2
+}

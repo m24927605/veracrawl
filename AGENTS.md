@@ -133,4 +133,7 @@ must be present and `pass`. Deterministic closure fixtures prove the release
 mechanics, but do not by themselves justify a full production-grade crawler
 claim unless the aggregate release gate is supplied with the relevant validated
 live/authorized/browser/deep-crawl/quality/ops lower reports.
+For 071, prefer `veracrawl-authorized-source run-live` when producing release
+evidence: it must use official API or explicitly authorized read access, never
+CAPTCHA solving, WAF evasion, login-wall bypass, or raw secret persistence.
 <!-- SPECKIT END -->

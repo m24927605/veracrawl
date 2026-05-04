@@ -1,0 +1,47 @@
+{
+  "id": "production-authorized-source-live-official-api",
+  "scenario": "production-authorized-source-live-official-api",
+  "gate_type": "authorized_source_access",
+  "profile_refs": ["production"],
+  "objective": "Use live public official API adapters as authorized sources, with no framework SDK coupling, no raw secret storage, redacted replay artifacts, source anchors, content hashes, and policy-visible no-bypass behavior.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-authorized-source-live-official-api",
+    "max_depth": 1,
+    "max_pages": 2,
+    "max_runtime_ms": 120000,
+    "rate_limit_per_minute": 20,
+    "browser_budget_ms": 1000
+  },
+  "source_profiles": [
+    {
+      "id": "source:pypi-requests-json",
+      "site_name": "PyPI Official JSON API",
+      "allowed_origin": "https://pypi.org",
+      "entry_point_url": "https://pypi.org/pypi/requests/json",
+      "discovery_methods": ["official_api", "package_lookup"],
+      "required_evidence_types": ["identity", "release_metadata", "version_metadata"],
+      "robots_policy_ref": "policy:pypi:robots",
+      "scope_policy_ref": "policy:pypi:scope",
+      "official_api_available": true
+    },
+    {
+      "id": "source:npm-react-registry-json",
+      "site_name": "npm Official Registry API",
+      "allowed_origin": "https://registry.npmjs.org",
+      "entry_point_url": "https://registry.npmjs.org/react/latest",
+      "discovery_methods": ["official_api", "package_lookup"],
+      "required_evidence_types": ["identity", "dist_tags", "version_metadata"],
+      "robots_policy_ref": "policy:npm:robots",
+      "scope_policy_ref": "policy:npm:scope",
+      "official_api_available": true
+    }
+  ],
+  "required_capability_refs": [
+    "capability:authorized_source_access:official_api_adapter",
+    "capability:authorized_source_access:credentialed_read_session",
+    "capability:authorized_source_access:redacted_replay"
+  ],
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_authorized_source_access_completed",
+  "negative_case": false
+}

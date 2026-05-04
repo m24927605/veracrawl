@@ -2409,6 +2409,7 @@ Production-grade crawler closure acceptance:
 veracrawl-discovery-planner run tests/fixtures/production-discovery-planning-success --profile production --out .veracrawl-test-runs/production-discovery-planning-success
 veracrawl-acquisition-escalation run tests/fixtures/production-acquisition-escalation-success --profile production --out .veracrawl-test-runs/production-acquisition-escalation-success
 veracrawl-authorized-source run tests/fixtures/production-authorized-source-success --profile production --out .veracrawl-test-runs/production-authorized-source-success
+veracrawl-authorized-source run-live tests/fixtures/production-authorized-source-live-official-api --profile production --out .veracrawl-real-runs/production-authorized-source-live-official-api
 veracrawl-deep-crawl-production run tests/fixtures/production-deep-crawl-success --profile production --out .veracrawl-test-runs/production-deep-crawl-success
 veracrawl-production-quality-gate run tests/fixtures/production-extraction-quality-success --profile production --out .veracrawl-test-runs/production-extraction-quality-success
 veracrawl-production-ops-gate run tests/fixtures/production-operations-success --profile production --out .veracrawl-test-runs/production-operations-success
@@ -2423,6 +2424,7 @@ Required production-grade closure fixtures:
 | production-acquisition-escalation-success | HTTP and browser acquisition attempts record source-backed artifacts, content hashes, source anchors, source limitations for failed attempts, policy refs, command/event/outbox refs, and replay refs |
 | production-acquisition-source-limited | source-limited acquisition returns needs-review with source limitation and release blocker refs, not fabricated evidence |
 | production-authorized-source-success | official API and credentialed read-session access records preserve credential grant, audit, redacted artifact, source anchor, content hash, policy, command/event/outbox, and replay refs |
+| production-authorized-source-live-official-api | live PyPI and npm official API access produces source-backed redacted artifacts, raw content hashes, source anchors, credential audit refs, policy refs, command/event/outbox refs, replay refs, and a passing 071 lower gate without framework SDK coupling |
 | production-deep-crawl-success | deep crawl gate records bounded coverage metrics, source-backed refs, capability refs, policy refs, command/event/outbox refs, and replay refs |
 | production-extraction-quality-success | quality gate records precision/recall/F1, evidence packet refs, verification refs, publication gate refs, source-backed refs, policy refs, command/event/outbox refs, and replay refs |
 | production-operations-success | ops gate records latency, retry, cost, stability, capability refs, policy refs, command/event/outbox refs, and replay refs |

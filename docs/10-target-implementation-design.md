@@ -1909,6 +1909,13 @@ Production-grade crawler closure runtime:
   `veracrawl-authorized-source`, `veracrawl-deep-crawl-production`,
   `veracrawl-production-quality-gate`, `veracrawl-production-ops-gate`, and
   `veracrawl-production-grade-release-gate`.
+- `veracrawl-authorized-source run-live` performs live public official API
+  evidence acquisition for the 071 lower gate. It uses a concrete
+  standard-library HTTP adapter layer outside core, denies private/non-global
+  hosts, enforces a response-size budget, redacts persisted previews, hashes the
+  raw source body, and emits source anchors, credential audit refs,
+  command/event/outbox refs, policy refs, replay refs, and a parsed
+  `ProductionGateReport`.
 - Specs 069-074 produce lower `ProductionGateReport` artifacts. Spec 075 must
   parse those actual reports through the CLI `--input-report` path; passing six
   arbitrary string refs is intentionally insufficient.

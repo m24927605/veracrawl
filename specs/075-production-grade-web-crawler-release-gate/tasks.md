@@ -94,8 +94,20 @@ Artifact directory:
   The capability matrix records missing `authorized_source_access` and
   `extraction_quality` lower gate reports, and records 070 acquisition
   escalation as non-passing.
+- Follow-up 071 live official API run passed and was fed back into 075:
+  `veracrawl-authorized-source run-live tests/fixtures/production-authorized-source-live-official-api`.
+  The updated 075 run at
+  `.veracrawl-real-runs/production-grade-release-20260504-162133/production-gates/075-release-blocked-with-071-live`
+  still returned `fail` / `production_grade_release_blocked`, but the remaining
+  aggregate blockers were reduced to missing `extraction_quality` and
+  non-passing `production-acquisition-source-limited`.
+- Post-071 validation passed: registry validation, full ruff, focused
+  production-grade/live authorized-source tests, full mypy, full pytest, and
+  Docker-backed focused infrastructure pytest.
 
 Conclusion: specs 068-075 are implemented, but this live evidence run does not
 support claiming VeraCrawl is fully production-grade. The current honest status
-is production-grade foundation with blocked/source-limited live ecommerce
-evidence and one live quality-corpus drift failure.
+is production-grade foundation with a passing live authorized-source official
+API gate, blocked/source-limited live ecommerce acquisition evidence, missing
+live extraction-quality lower-gate evidence, and one live quality-corpus drift
+failure.

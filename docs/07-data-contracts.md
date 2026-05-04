@@ -123,6 +123,18 @@ Acquisition and authorized-source contracts:
   anchors, content hashes, policy refs, command/event/outbox refs, and replay
   refs.
 
+Live authorized-source validation:
+
+- `veracrawl-authorized-source run-live` emits the same canonical
+  `AuthorizedSourceAccessRecord` and `ProductionGateReport` contracts, plus
+  runner-local live fetch and redacted artifact JSON outputs. Those runner-local
+  outputs are evidence artifacts for validation; they are not framework-native
+  state and are not required by VeraCrawl core.
+- Live official API artifacts must include redacted previews, raw body content
+  hashes, source anchors, credential audit refs, policy refs,
+  command/event/outbox refs, and replay refs before their 071 lower gate can
+  pass.
+
 Release gate contracts:
 
 - `ProductionGateReport`: per-gate report for discovery, acquisition,

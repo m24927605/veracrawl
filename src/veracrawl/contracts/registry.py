@@ -5342,6 +5342,7 @@ for _production_grade_fixture, _negative in {
     "production-acquisition-escalation-success": False,
     "production-acquisition-source-limited": False,
     "production-authorized-source-success": False,
+    "production-authorized-source-live-official-api": False,
     "production-deep-crawl-success": False,
     "production-extraction-quality-success": False,
     "production-operations-success": False,

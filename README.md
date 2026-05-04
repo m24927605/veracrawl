@@ -1289,6 +1289,11 @@ uv run --python python3.12 --extra dev veracrawl-authorized-source run \
   --profile production \
   --out .veracrawl-test-runs/production-authorized-source-success
 
+uv run --python python3.12 --extra dev veracrawl-authorized-source run-live \
+  tests/fixtures/production-authorized-source-live-official-api \
+  --profile production \
+  --out .veracrawl-real-runs/production-authorized-source-live-official-api
+
 uv run --python python3.12 --extra dev veracrawl-deep-crawl-production run \
   tests/fixtures/production-deep-crawl-success \
   --profile production \
@@ -1327,6 +1332,12 @@ discovery planning, acquisition escalation, authorized source access, deep
 crawl, extraction quality, and operations reliability are present and passing.
 Missing lower gates, non-passing lower gates, false-ready conditions, missing
 policy/command/event/outbox refs, and missing replay refs block release.
+
+`veracrawl-authorized-source run-live` is the live 071 authorized-source path.
+It fetches public official API evidence outside core, blocks private/non-global
+hosts, enforces response-size budgets, redacts persisted previews, records raw
+content hashes and source anchors, and emits a lower `ProductionGateReport`
+that can be supplied to the aggregate 075 gate.
 
 Run persistence and queue runtime fixtures:
 
