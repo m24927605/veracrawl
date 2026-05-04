@@ -44,6 +44,20 @@
 - [x] T022 Record validation outputs in this file.
 - [x] T023 Commit and fast-forward merge 066.
 
+## Phase 6: Amazon Browser DOM Evidence Follow-Up
+
+- [x] T024 Add product availability browser fallback and browser-source-required
+  runtime mode without importing concrete browser engines into core.
+- [x] T025 Add generic TWD text price and limited-stock availability extraction
+  patterns for source-backed product pages.
+- [x] T026 Add focused runtime tests for HTTP-missing browser recovery and forced
+  browser DOM field evidence.
+- [x] T027 Add CLI flags `--browser-fallback` and `--browser-source-required`.
+- [x] T028 Run hosted OpenAI live benchmark with browser fallback.
+- [x] T029 Run hosted OpenAI live benchmark with browser DOM source required and
+  inspect Amazon field evidence.
+- [x] T030 Record failed live attempt, fix, rerun result, and validations.
+
 ## Validation Results
 
 - Initial live probe on 2026-05-04:
@@ -115,3 +129,72 @@
   `VERACRAWL_POSTGRES_DOCKER=1 VERACRAWL_REDIS_DOCKER=1 VERACRAWL_S3_DOCKER=1 VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev --extra postgres --extra queue-redis --extra object-s3 pytest`
   reported `1282 passed in 269.33s`.
 - `git diff --check` passed with no whitespace errors.
+- Amazon browser follow-up focused tests:
+  `uv run --python python3.12 --extra dev pytest tests/unit/test_product_availability_runtime.py -q`
+  reported `8 passed`.
+- Amazon browser follow-up ruff:
+  `uv run --python python3.12 --extra dev ruff check src/veracrawl/benchmarks/product_availability.py src/veracrawl/cli/product_availability_benchmark.py tests/unit/test_product_availability_runtime.py`
+  passed.
+- Amazon browser follow-up mypy:
+  `uv run --python python3.12 --extra dev mypy src/veracrawl/benchmarks/product_availability.py src/veracrawl/cli/product_availability_benchmark.py tests/unit/test_product_availability_runtime.py`
+  passed with no issues.
+- Hosted OpenAI live browser fallback run:
+  `uv run --python python3.12 --extra dev --extra browser-playwright veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --model-provider openai --openai-model gpt-5.4-mini --browser-fallback --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai-browser-fallback`
+  reported `completion_result=needs_review`,
+  `operator_status=product_availability_partial_sources_blocked`,
+  `site_count=3`, `passing_site_count=2`, `blocked_site_count=1`,
+  `field_evidence_count=6`, `price_evidence_count=2`,
+  `availability_evidence_count=2`, and 8 model/agent/tool/context traces.
+  Amazon passed from source-backed HTTP HTML after the generic limited-stock
+  extractor matched `Only 9 left in stock - order soon.`; this showed the
+  earlier Amazon availability problem was also an extractor-pattern gap, not
+  only a browser-rendering gap.
+- First hosted OpenAI live browser-source-required run failed before producing a
+  benchmark report:
+  `uv run --python python3.12 --extra dev --extra browser-playwright veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --model-provider openai --openai-model gpt-5.4-mini --browser-source-required --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai-browser-source-required`
+  raised Playwright `Page.wait_for_function: Timeout 30000ms exceeded` while
+  waiting for a required identity fragment. Fixed by making product availability
+  browser observation not depend on a forced fragment wait and by mapping browser
+  adapter exceptions to typed source-limited outcomes instead of crashing.
+- Hosted OpenAI live browser-source-required rerun:
+  `uv run --python python3.12 --extra dev --extra browser-playwright veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --model-provider openai --openai-model gpt-5.4-mini --browser-source-required --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai-browser-source-required`
+  reported `completion_result=needs_review`,
+  `operator_status=product_availability_partial_sources_blocked`,
+  `site_count=3`, `passing_site_count=1`, `blocked_site_count=2`,
+  `field_evidence_count=3`, `price_evidence_count=1`,
+  `availability_evidence_count=1`, and 4 OpenAI model/agent/tool/context traces.
+  Amazon passed with browser DOM field artifact
+  `artifact:us-top-ecommerce-product-availability:us-amazon-sandisk-256gb-extreme:browser-render:dom:71df7966373c`,
+  browser DOM content hash
+  `71df7966373c5ebe11788c884b7f1393079739f0e3d6e38f4154050dfc79a030`,
+  price `TWD1,876.17`, amount `1876.17`, currency `TWD`, and availability
+  `limited` from raw text `Only 9 left in stock - order soon.`. The accepted
+  Amazon fields also carried OpenAI `gpt-5.4-mini` model call traces, native
+  agent action traces, tool call traces, context bundle traces, source anchors,
+  verification decisions, command/event/outbox refs, and replay refs. Walmart
+  browser-source-required failed product identity match in this run, and eBay
+  remained source-access denied; neither was fabricated as successful.
+- Post-follow-up focused 066 suite:
+  `uv run --python python3.12 --extra dev pytest tests/contract/test_product_availability_contracts.py tests/contract/test_product_availability_contract_registry.py tests/contract/test_product_availability_import_boundaries.py tests/unit/test_product_availability_runtime.py tests/unit/test_product_availability_replay.py tests/integration/test_product_availability_fixtures.py -q`
+  reported `27 passed`.
+- Post-follow-up registry validation:
+  `uv run --python python3.12 --extra dev veracrawl-contracts validate`
+  reported `ok=true` with no registry errors.
+- Post-follow-up full ruff:
+  `uv run --python python3.12 --extra dev ruff check .` passed.
+- Post-follow-up full mypy:
+  `uv run --python python3.12 --extra dev mypy src tests` passed with no issues
+  across 694 source files.
+- Post-follow-up full pytest:
+  `uv run --python python3.12 --extra dev pytest -q` exited with code 0 and
+  reached `[100%]` with no failures in the emitted output.
+- Post-follow-up Docker-backed operational focused pytest:
+  `VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev --extra postgres --extra queue-redis --extra object-s3 pytest tests/integration/test_operational_infrastructure_live.py -q`
+  reported `1 passed`.
+- Post-follow-up `git diff --check` first failed on trailing whitespace in
+  `specs/066-product-price-availability-benchmark/plan.md`; the whitespace was
+  fixed and the rerun passed with no output.
+- After the final diagnostic wording cleanup, `uv run --python python3.12 --extra dev pytest tests/unit/test_product_availability_runtime.py -q`
+  reported `8 passed`, `uv run --python python3.12 --extra dev ruff check src/veracrawl/benchmarks/product_availability.py`
+  passed, and `uv run --python python3.12 --extra dev mypy src/veracrawl/benchmarks/product_availability.py`
+  passed with no issues.

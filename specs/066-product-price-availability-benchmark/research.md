@@ -24,6 +24,15 @@ Live probes on 2026-05-04 showed:
 The fixture therefore expects source-backed extraction on Amazon and Walmart and
 typed needs-review/access-denied handling for eBay when live HTTP blocks.
 
+## Decision: Browser DOM Evidence Is A Source Mode, Not A Site Scraper
+
+The follow-up Amazon run proved that the same generic product availability
+runtime can require read-only browser DOM artifacts for accepted fields. This is
+implemented as an optional source mode behind the existing browser adapter port,
+not as Amazon-specific selectors or hidden endpoint calls. Browser-rendered DOM
+text still must pass product identity, price, availability, evidence, model/agent
+trace, command/event/outbox, and replay gates before any field is accepted.
+
 ## Decision: Preserve Observed Currency
 
 The benchmark does not force USD because public ecommerce pages may localize
@@ -43,3 +52,6 @@ accepts fields only when source anchors and artifacts support them.
 - eBay may block item-page HTTP access. The benchmark must report this honestly.
 - Ecommerce pages include many related prices. The extractor prioritizes
   structured product data and visible price markers after identity checks.
+- Browser rendering may expose a blocked page or non-product page on some
+  ecommerce targets. Browser source required mode records those cases as typed
+  non-pass instead of falling back to invented fields.

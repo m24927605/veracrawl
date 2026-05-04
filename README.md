@@ -1109,12 +1109,27 @@ uv run --python python3.12 --extra dev veracrawl-product-availability-benchmark 
   --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai
 ```
 
+Require accepted product fields to come from read-only browser-rendered DOM
+artifacts:
+
+```sh
+set -a; source ~/.env; set +a
+uv run --python python3.12 --extra dev --extra browser-playwright \
+  veracrawl-product-availability-benchmark run \
+  tests/fixtures/us-top-ecommerce-product-availability \
+  --profile target \
+  --model-provider openai \
+  --openai-model gpt-5.4-mini \
+  --browser-source-required \
+  --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai-browser-source-required
+```
+
 This benchmark asks whether VeraCrawl can extract source-backed price and
 availability for a specified product on Amazon, Walmart, and eBay. It records
-Amazon and Walmart fields only when backed by source anchors, artifacts, content
-hashes, AI traces, evidence/verification refs, and replay refs. If a source such
-as eBay blocks public item-page access, the result is typed `needs_review` or
-failure with no fabricated price or inventory.
+Amazon and Walmart fields only when backed by source anchors, HTTP or browser
+DOM artifacts, content hashes, AI traces, evidence/verification refs, and replay
+refs. If a source such as eBay blocks public item-page access, the result is
+typed `needs_review` or failure with no fabricated price or inventory.
 
 Run the Taiwan top ecommerce product price and availability benchmark:
 

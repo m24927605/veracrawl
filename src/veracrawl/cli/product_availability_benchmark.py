@@ -22,6 +22,7 @@ from veracrawl.benchmarks.product_availability import (
     run_product_availability_benchmark,
 )
 from veracrawl.benchmarks.real_world import RobotsFetchResult
+from veracrawl.contracts.browser import BrowserSandboxPolicy
 from veracrawl.contracts.enums import CompletenessResult
 from veracrawl.contracts.product_availability import (
     ProductAvailabilityBenchmarkManifest,
@@ -29,6 +30,7 @@ from veracrawl.contracts.product_availability import (
 )
 from veracrawl.fetch.network_acquisition import build_network_request
 from veracrawl.ports.agent_runtime import AgentRuntimePort, ModelProviderPort
+from veracrawl.ports.browser import BrowserSourceAdapterPort
 from veracrawl.ports.network import NetworkSourceAdapterPort
 from veracrawl.runtime_support.persistence_store import ReferencePersistenceStore
 
@@ -91,6 +93,21 @@ def _fetch_robots(target: ProductAvailabilityTargetSpec) -> RobotsFetchResult:
         raise OSError(str(exc)) from exc
 
 
+def _browser_adapter_factory(
+    fixture_id: str,
+    target: ProductAvailabilityTargetSpec,
+    sandbox: BrowserSandboxPolicy,
+) -> BrowserSourceAdapterPort:
+    adapter_module = importlib.import_module("veracrawl.adapters.browser.playwright")
+    adapter = adapter_module.PlaywrightBrowserObservationAdapter(
+        fixture_id=fixture_id,
+        target_url=target.target_url,
+        sandbox_policy=sandbox,
+        wait_for_text_fragments=(),
+    )
+    return cast(BrowserSourceAdapterPort, adapter)
+
+
 def _model_binding(
     manifest: ProductAvailabilityBenchmarkManifest,
     *,
@@ -140,6 +157,8 @@ def run_fixture(
     out: Path,
     model_provider: str = "local",
     openai_model: str | None = None,
+    browser_fallback: bool = False,
+    browser_source_required: bool = False,
 ) -> ProductAvailabilityBenchmarkResult:
     manifest = ProductAvailabilityBenchmarkManifest.model_validate(
         _load_json_like(fixture_dir / "manifest.yaml")
@@ -163,6 +182,12 @@ def run_fixture(
             openai_model=openai_model,
         ),
         agent_binding=_agent_binding(manifest),
+        browser_adapter_factory=(
+            _browser_adapter_factory
+            if browser_fallback or browser_source_required
+            else None
+        ),
+        browser_source_required=browser_source_required,
     )
     report = result.report
     if report.completion_result != manifest.expected_completion_result:
@@ -240,6 +265,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="OpenAI model id when --model-provider openai is used.",
     )
+    run.add_argument(
+        "--browser-fallback",
+        action="store_true",
+        help=(
+            "Escalate HTTP-missing product identity, price, or availability to a "
+            "read-only Playwright DOM observation adapter."
+        ),
+    )
+    run.add_argument(
+        "--browser-source-required",
+        action="store_true",
+        help=(
+            "Require accepted product field evidence to come from a read-only "
+            "browser DOM observation."
+        ),
+    )
     return parser
 
 
@@ -254,6 +295,8 @@ def main(argv: list[str] | None = None) -> int:
                 out=Path(args.out),
                 model_provider=args.model_provider,
                 openai_model=args.openai_model,
+                browser_fallback=args.browser_fallback,
+                browser_source_required=args.browser_source_required,
             )
         except (OSError, ValueError, RuntimeError) as exc:
             print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))

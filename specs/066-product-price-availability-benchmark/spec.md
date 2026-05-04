@@ -82,11 +82,34 @@ and `context_bundle_traces.json`.
    **Then** the value is accepted only if source anchors and content hashes
    support it.
 
+### User Story 4 - Require Browser DOM Source Evidence When Needed (Priority: P2)
+
+The benchmark can require read-only browser-rendered DOM evidence for product
+fields when HTTP-only evidence is insufficient or when an operator wants to
+prove JavaScript-rendered source evidence.
+
+**Independent Test**: Run the CLI with `--browser-source-required` and inspect
+that accepted field evidence points to `browser-render:dom` artifact refs while
+model/agent/tool/context traces remain framework-neutral.
+
+**Acceptance Scenarios**:
+
+1. **Given** a product target whose browser DOM exposes price and availability,
+   **When** browser source is required, **Then** accepted field evidence is
+   anchored to the browser DOM artifact/content hash, not model output.
+2. **Given** browser rendering fails, blocks, or renders a page without the
+   required product identity, **When** browser source is required, **Then** the
+   target is recorded as a typed non-pass without falling back to fabricated
+   inventory.
+
 ## Edge Cases
 
 - Robots disallows a product URL: site result fails with robots-denied.
 - Live HTTP returns access denied, anti-bot, or unavailable source page: site
   result is blocked with no extracted price/availability.
+- Browser rendering times out, blocks subresources, or renders a non-product
+  page: site result is typed non-pass unless HTTP source evidence is explicitly
+  allowed for the run.
 - Price appears in multiple places: choose the first source-backed candidate
   near product structured data or visible price markers, and record raw text.
 - Availability is unknown or contradictory: return `unknown` or needs-review,
@@ -105,7 +128,8 @@ and `context_bundle_traces.json`.
 - **FR-002**: System MUST support public product-page targets for Amazon,
   Walmart, and eBay under explicit origin allowlists and robots preflight.
 - **FR-003**: System MUST extract normalized product identity match, price, and
-  availability only from source-backed HTML artifacts.
+  availability only from source-backed HTTP HTML or read-only browser DOM
+  artifacts.
 - **FR-004**: System MUST include source anchor refs, artifact refs, content hash
   refs, canonical URL refs, evidence/verification refs, command/event/outbox
   refs, and replay refs for passing fields.
@@ -121,6 +145,9 @@ and `context_bundle_traces.json`.
   tests, integration tests, import-boundary tests, replay tests, registry
   validation, live runs, hosted OpenAI validation, full pytest, Docker-backed
   pytest, and task-log validation results.
+- **FR-009**: System MUST support a browser source required mode that uses the
+  existing browser port/adapter boundary, preserves sandbox/policy artifacts,
+  and keeps VeraCrawl core free of concrete browser engine imports.
 
 ### VeraCrawl Contract Requirements
 
@@ -175,6 +202,10 @@ and `context_bundle_traces.json`.
   hash, evidence/verification, command/event/outbox, and replay refs.
 - **SC-005**: All validation results are recorded in `tasks.md` with exact
   commands and actual pass/fail/needs-review status.
+- **SC-006**: A live Amazon product run with browser source required records
+  accepted price and availability evidence whose field artifact refs point to a
+  browser DOM artifact and whose model traces use the framework-neutral
+  `ModelProviderPort`.
 
 ## Assumptions
 

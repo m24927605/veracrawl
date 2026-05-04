@@ -11,6 +11,7 @@ from html.parser import HTMLParser
 from urllib import robotparser
 
 from veracrawl.benchmarks.real_world import RobotsFetchResult
+from veracrawl.browser.observation import execute_browser_observation_acquisition
 from veracrawl.contracts.agent import (
     AgentActionTrace,
     AgentRunRequest,
@@ -21,15 +22,18 @@ from veracrawl.contracts.agent import (
     ModelResponse,
     ToolCallTrace,
 )
+from veracrawl.contracts.browser import BrowserSandboxPolicy
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.enums import (
     AgentRole,
+    BrowserSideEffectClass,
     CompletenessResult,
     ProductAvailabilityDecisionType,
     ProductAvailabilityFailureType,
     ProductAvailabilityStatus,
     ToolCallStatus,
 )
+from veracrawl.contracts.network import LiveHttpAcquisitionReport
 from veracrawl.contracts.product_availability import (
     ProductAvailabilityBenchmarkManifest,
     ProductAvailabilityBenchmarkReport,
@@ -41,11 +45,16 @@ from veracrawl.control.production_persistence import ProductionPersistenceStore
 from veracrawl.fetch.live_http import execute_live_http_acquisition
 from veracrawl.fetch.network_acquisition import is_private_network_url, url_origin
 from veracrawl.ports.agent_runtime import AgentRuntimePort, ModelProviderPort
+from veracrawl.ports.browser import BrowserSourceAdapterPort
 from veracrawl.ports.network import NetworkSourceAdapterPort
 
 NetworkAdapterFactory = Callable[
     [str, ProductAvailabilityTargetSpec],
     NetworkSourceAdapterPort,
+]
+BrowserAdapterFactory = Callable[
+    [str, ProductAvailabilityTargetSpec, BrowserSandboxPolicy],
+    BrowserSourceAdapterPort,
 ]
 RobotsFetcher = Callable[[ProductAvailabilityTargetSpec], RobotsFetchResult]
 _ContextPayloadSetter = Callable[[str, str], None]
@@ -104,6 +113,22 @@ class _DecisionBundle:
     context_bundle_trace: ContextBundleTrace
 
 
+@dataclass(frozen=True)
+class _SourceSelection:
+    body: str
+    artifact_refs: list[Ref]
+    content_hash_refs: list[Ref]
+    canonical_url_refs: list[Ref]
+    source_observation_refs: list[Ref]
+    field_artifact_ref: Ref
+    field_content_hash_ref: Ref
+    policy_decision_refs: list[Ref]
+    command_record_refs: list[Ref]
+    event_cursor_refs: list[Ref]
+    outbox_refs: list[Ref]
+    recovered_by_browser: bool = False
+
+
 class _TitleParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -145,6 +170,8 @@ def run_product_availability_benchmark(
     robots_fetcher: RobotsFetcher,
     model_binding: ProductAvailabilityModelBinding,
     agent_binding: ProductAvailabilityAgentBinding,
+    browser_adapter_factory: BrowserAdapterFactory | None = None,
+    browser_source_required: bool = False,
 ) -> ProductAvailabilityBenchmarkResult:
     if profile not in manifest.profile_refs:
         raise ValueError(f"fixture {manifest.id} does not support profile {profile}")
@@ -225,11 +252,62 @@ def run_product_availability_benchmark(
             )
             continue
 
-        body = network_result.body_text
+        source = _http_source_selection(live_report=live_report, body=network_result.body_text)
+        body = source.body
+        required_terms = set(manifest.required_identity_terms + target.required_identity_terms)
         identity_terms = _matched_identity_terms(target, manifest, body)
+        price = _extract_price(body)
+        availability = _extract_availability(body)
+        if (
+            browser_adapter_factory is not None
+            and not manifest.negative_case
+            and (
+                browser_source_required
+                or _needs_browser_source_recovery(
+                    identity_terms=identity_terms,
+                    required_terms=required_terms,
+                    price=price,
+                    availability=availability,
+                )
+            )
+        ):
+            browser_source = _browser_source_selection(
+                manifest=manifest,
+                target=target,
+                target_run_ref=target_run_ref,
+                live_source=source,
+                browser_adapter_factory=browser_adapter_factory,
+            )
+            if browser_source is not None:
+                source = browser_source
+                body = source.body
+                identity_terms = _matched_identity_terms(target, manifest, body)
+                price = _extract_price(body)
+                availability = _extract_availability(body)
+            elif browser_source_required:
+                site_results.append(
+                    _failure_site_result(
+                        manifest=manifest,
+                        target=target,
+                        failure=ProductAvailabilityFailureType.SOURCE_ACCESS_DENIED,
+                        missing_field="browser_dom_source",
+                        diagnostics=[
+                            "required browser render did not produce source-backed DOM evidence"
+                        ],
+                        live_http_report_ref=live_report.id,
+                        network_response_ref=network_result.response.id,
+                        policy_decision_refs=source.policy_decision_refs,
+                        command_record_refs=source.command_record_refs,
+                        event_cursor_refs=source.event_cursor_refs,
+                        outbox_refs=source.outbox_refs,
+                        artifact_refs=source.artifact_refs,
+                        content_hash_refs=source.content_hash_refs,
+                        canonical_url_refs=source.canonical_url_refs,
+                    )
+                )
+                continue
         if manifest.scenario == "product-availability-wrong-identity":
             identity_terms = []
-        required_terms = set(manifest.required_identity_terms + target.required_identity_terms)
         if len(identity_terms) < len(required_terms):
             failure = ProductAvailabilityFailureType.PRODUCT_IDENTITY_MISMATCH
             missing_field = "required_identity_terms"
@@ -250,19 +328,17 @@ def run_product_availability_benchmark(
                     diagnostics=diagnostics,
                     live_http_report_ref=live_report.id,
                     network_response_ref=network_result.response.id,
-                    policy_decision_refs=live_report.policy_decision_refs,
-                    command_record_refs=live_report.command_record_refs,
-                    event_cursor_refs=live_report.event_cursor_refs,
-                    outbox_refs=live_report.outbox_refs,
-                    artifact_refs=live_report.artifact_refs,
-                    content_hash_refs=live_report.content_hash_refs,
-                    canonical_url_refs=live_report.canonical_url_refs,
+                    policy_decision_refs=source.policy_decision_refs,
+                    command_record_refs=source.command_record_refs,
+                    event_cursor_refs=source.event_cursor_refs,
+                    outbox_refs=source.outbox_refs,
+                    artifact_refs=source.artifact_refs,
+                    content_hash_refs=source.content_hash_refs,
+                    canonical_url_refs=source.canonical_url_refs,
                 )
             )
             continue
 
-        price = _extract_price(body)
-        availability = _extract_availability(body)
         if manifest.scenario == "product-availability-missing-price":
             price = None
         if manifest.scenario == "product-availability-missing-availability":
@@ -276,16 +352,18 @@ def run_product_availability_benchmark(
                     target=target,
                     failure=failure,
                     missing_field=missing_field,
-                    diagnostics=[f"{missing_field} was not source-backed in live HTML"],
+                    diagnostics=[
+                        f"{missing_field} was not source-backed in accepted source artifact"
+                    ],
                     live_http_report_ref=live_report.id,
                     network_response_ref=network_result.response.id,
-                    policy_decision_refs=live_report.policy_decision_refs,
-                    command_record_refs=live_report.command_record_refs,
-                    event_cursor_refs=live_report.event_cursor_refs,
-                    outbox_refs=live_report.outbox_refs,
-                    artifact_refs=live_report.artifact_refs,
-                    content_hash_refs=live_report.content_hash_refs,
-                    canonical_url_refs=live_report.canonical_url_refs,
+                    policy_decision_refs=source.policy_decision_refs,
+                    command_record_refs=source.command_record_refs,
+                    event_cursor_refs=source.event_cursor_refs,
+                    outbox_refs=source.outbox_refs,
+                    artifact_refs=source.artifact_refs,
+                    content_hash_refs=source.content_hash_refs,
+                    canonical_url_refs=source.canonical_url_refs,
                 )
             )
             continue
@@ -304,13 +382,13 @@ def run_product_availability_benchmark(
                     diagnostics=[f"negative scenario failed intentionally: {failure.value}"],
                     live_http_report_ref=live_report.id,
                     network_response_ref=network_result.response.id,
-                    policy_decision_refs=live_report.policy_decision_refs,
-                    command_record_refs=live_report.command_record_refs,
-                    event_cursor_refs=live_report.event_cursor_refs,
-                    outbox_refs=live_report.outbox_refs,
-                    artifact_refs=live_report.artifact_refs,
-                    content_hash_refs=live_report.content_hash_refs,
-                    canonical_url_refs=live_report.canonical_url_refs,
+                    policy_decision_refs=source.policy_decision_refs,
+                    command_record_refs=source.command_record_refs,
+                    event_cursor_refs=source.event_cursor_refs,
+                    outbox_refs=source.outbox_refs,
+                    artifact_refs=source.artifact_refs,
+                    content_hash_refs=source.content_hash_refs,
+                    canonical_url_refs=source.canonical_url_refs,
                 )
             )
             continue
@@ -325,13 +403,13 @@ def run_product_availability_benchmark(
                     diagnostics=["model provider or agent runtime adapter unavailable"],
                     live_http_report_ref=live_report.id,
                     network_response_ref=network_result.response.id,
-                    policy_decision_refs=live_report.policy_decision_refs,
-                    command_record_refs=live_report.command_record_refs,
-                    event_cursor_refs=live_report.event_cursor_refs,
-                    outbox_refs=live_report.outbox_refs,
-                    artifact_refs=live_report.artifact_refs,
-                    content_hash_refs=live_report.content_hash_refs,
-                    canonical_url_refs=live_report.canonical_url_refs,
+                    policy_decision_refs=source.policy_decision_refs,
+                    command_record_refs=source.command_record_refs,
+                    event_cursor_refs=source.event_cursor_refs,
+                    outbox_refs=source.outbox_refs,
+                    artifact_refs=source.artifact_refs,
+                    content_hash_refs=source.content_hash_refs,
+                    canonical_url_refs=source.canonical_url_refs,
                 )
             )
             continue
@@ -341,8 +419,8 @@ def run_product_availability_benchmark(
                 manifest=manifest,
                 target=target,
                 live_http_report_ref=live_report.id,
-                artifact_refs=live_report.artifact_refs,
-                content_hash_refs=live_report.content_hash_refs,
+                artifact_refs=source.artifact_refs,
+                content_hash_refs=source.content_hash_refs,
                 decision_type=decision,
                 model_binding=model_binding,
                 agent_binding=agent_binding,
@@ -369,13 +447,13 @@ def run_product_availability_benchmark(
             availability=availability,
             live_http_report_ref=live_report.id,
             network_response_ref=network_result.response.id,
-            artifact_ref=live_report.artifact_refs[0],
-            content_hash_ref=live_report.content_hash_refs[0],
-            canonical_url_ref=live_report.canonical_url_refs[0],
-            policy_decision_refs=live_report.policy_decision_refs,
-            command_record_refs=live_report.command_record_refs,
-            event_cursor_refs=live_report.event_cursor_refs,
-            outbox_refs=live_report.outbox_refs,
+            artifact_ref=source.field_artifact_ref,
+            content_hash_ref=source.field_content_hash_ref,
+            canonical_url_ref=source.canonical_url_refs[0],
+            policy_decision_refs=source.policy_decision_refs,
+            command_record_refs=source.command_record_refs,
+            event_cursor_refs=source.event_cursor_refs,
+            outbox_refs=source.outbox_refs,
             decision_bundles=decision_bundles,
         )
         field_evidence.extend(site_field_evidence)
@@ -388,20 +466,20 @@ def run_product_availability_benchmark(
                 status_code=network_result.response.status_code,
                 content_type=network_result.response.content_type or "application/octet-stream",
                 body_size_bytes=network_result.response.body_size_bytes,
-                content_digest=network_result.response.content_digest or "",
-                source_observation_refs=live_report.source_observation_refs,
-                artifact_refs=live_report.artifact_refs,
-                content_hash_refs=live_report.content_hash_refs,
-                canonical_url_refs=live_report.canonical_url_refs,
+                content_digest=source.field_content_hash_ref,
+                source_observation_refs=source.source_observation_refs,
+                artifact_refs=source.artifact_refs,
+                content_hash_refs=source.content_hash_refs,
+                canonical_url_refs=source.canonical_url_refs,
                 identity_terms=identity_terms,
                 evidence=site_field_evidence,
                 price=price,
                 availability=availability,
                 decision_bundles=decision_bundles,
-                policy_decision_refs=live_report.policy_decision_refs,
-                command_record_refs=live_report.command_record_refs,
-                event_cursor_refs=live_report.event_cursor_refs,
-                outbox_refs=live_report.outbox_refs,
+                policy_decision_refs=source.policy_decision_refs,
+                command_record_refs=source.command_record_refs,
+                event_cursor_refs=source.event_cursor_refs,
+                outbox_refs=source.outbox_refs,
             )
         )
 
@@ -483,6 +561,124 @@ def _check_robots(
     return _RobotsCheck(policy_ref=f"{policy_ref}:allow:{robots.status_code}")
 
 
+def _http_source_selection(
+    *,
+    live_report: LiveHttpAcquisitionReport,
+    body: str,
+) -> _SourceSelection:
+    artifact_refs = list(live_report.artifact_refs)
+    content_hash_refs = list(live_report.content_hash_refs)
+    canonical_url_refs = list(live_report.canonical_url_refs)
+    return _SourceSelection(
+        body=body,
+        artifact_refs=artifact_refs,
+        content_hash_refs=content_hash_refs,
+        canonical_url_refs=canonical_url_refs,
+        source_observation_refs=list(live_report.source_observation_refs),
+        field_artifact_ref=artifact_refs[0],
+        field_content_hash_ref=content_hash_refs[0],
+        policy_decision_refs=list(live_report.policy_decision_refs),
+        command_record_refs=list(live_report.command_record_refs),
+        event_cursor_refs=list(live_report.event_cursor_refs),
+        outbox_refs=list(live_report.outbox_refs),
+    )
+
+
+def _needs_browser_source_recovery(
+    *,
+    identity_terms: list[str],
+    required_terms: set[str],
+    price: _FieldCandidate | None,
+    availability: _FieldCandidate | None,
+) -> bool:
+    return len(identity_terms) < len(required_terms) or price is None or availability is None
+
+
+def _browser_source_selection(
+    *,
+    manifest: ProductAvailabilityBenchmarkManifest,
+    target: ProductAvailabilityTargetSpec,
+    target_run_ref: str,
+    live_source: _SourceSelection,
+    browser_adapter_factory: BrowserAdapterFactory,
+) -> _SourceSelection | None:
+    browser_fixture_ref = f"{target_run_ref}:browser-render"
+    sandbox = _product_browser_sandbox_policy(fixture_id=browser_fixture_ref, target=target)
+    try:
+        browser_outcome = execute_browser_observation_acquisition(
+            fixture_id=browser_fixture_ref,
+            scenario="browser-readonly",
+            target_url=target.target_url,
+            adapter=browser_adapter_factory(browser_fixture_ref, target, sandbox),
+            sandbox_policy=sandbox,
+            side_effect_class=BrowserSideEffectClass.READ_ONLY,
+        )
+    except Exception:
+        return None
+    if (
+        browser_outcome.report.completion_result != CompletenessResult.PASS
+        or browser_outcome.browser_result is None
+        or not browser_outcome.browser_result.dom_text
+        or browser_outcome.browser_result.dom_content_hash is None
+    ):
+        return None
+
+    browser = browser_outcome.browser_result
+    browser_content_hash_ref = browser.dom_content_hash
+    if browser_content_hash_ref is None:
+        return None
+    browser_step_ref = browser.step.id
+    artifact_refs = sorted(set(live_source.artifact_refs + browser.artifact_refs))
+    content_hash_refs = sorted(set(live_source.content_hash_refs + [browser_content_hash_ref]))
+    policy_decision_refs = sorted(
+        set(live_source.policy_decision_refs + browser_outcome.report.policy_decision_refs)
+    )
+    command_record_refs = sorted(
+        set(live_source.command_record_refs + browser_outcome.report.command_record_refs)
+    )
+    event_cursor_refs = sorted(
+        set(live_source.event_cursor_refs + browser_outcome.report.event_cursor_refs)
+    )
+    outbox_refs = sorted(set(live_source.outbox_refs + browser_outcome.report.outbox_refs))
+    return _SourceSelection(
+        body=browser.dom_text,
+        artifact_refs=artifact_refs,
+        content_hash_refs=content_hash_refs,
+        canonical_url_refs=live_source.canonical_url_refs,
+        source_observation_refs=sorted(
+            set(live_source.source_observation_refs + [browser_step_ref])
+        ),
+        field_artifact_ref=browser.step.dom_artifact_ref or browser.artifact_refs[0],
+        field_content_hash_ref=browser_content_hash_ref,
+        policy_decision_refs=policy_decision_refs,
+        command_record_refs=command_record_refs,
+        event_cursor_refs=event_cursor_refs,
+        outbox_refs=outbox_refs,
+        recovered_by_browser=True,
+    )
+
+
+def _product_browser_sandbox_policy(
+    *,
+    fixture_id: str,
+    target: ProductAvailabilityTargetSpec,
+) -> BrowserSandboxPolicy:
+    return BrowserSandboxPolicy(
+        id=f"browser-sandbox:{fixture_id}",
+        allowed_origin_refs=[f"origin:{target.allowed_origin}"],
+        egress_allowlist=[target.allowed_origin],
+        private_network_denylist=["private", "link_local", "multicast", "unspecified"],
+        max_runtime_ms=target.timeout_ms,
+        max_dom_bytes=target.size_budget_bytes * 2,
+        max_screenshot_bytes=target.size_budget_bytes * 2,
+        max_network_log_bytes=target.size_budget_bytes,
+        allowed_side_effect_classes=[BrowserSideEffectClass.READ_ONLY],
+        capture_dom=True,
+        capture_screenshot=True,
+        capture_network_log=True,
+    )
+
+
 def _matched_identity_terms(
     target: ProductAvailabilityTargetSpec,
     manifest: ProductAvailabilityBenchmarkManifest,
@@ -518,6 +714,8 @@ def _extract_price(body: str) -> _FieldCandidate | None:
         r'<span class="a-offscreen">\s*([^<]*?(?:TWD|US\s*\$|\$)[^<]*?\d[^<]*?)\s*</span>',
         r'data-pricetopay-label="\{priceToPay\}"[^>]*>\s*([^<]*?\d[^<]*?)\s*</span>',
         r'"priceString"\s*:\s*"(\$[0-9][0-9,]*(?:\.[0-9]{2})?)"',
+        r'(TWD\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?)',
+        r'(NT\s*\$[0-9][0-9,]*(?:\.[0-9]{1,2})?)',
         r'(US\s*\$[0-9][0-9,]*(?:\.[0-9]{2})?)',
         r'(\$[0-9][0-9,]*(?:\.[0-9]{2})?)',
     ]
@@ -612,6 +810,13 @@ def _extract_availability(body: str) -> _FieldCandidate | None:
     patterns = [
         (r'"availabilityStatus"\s*:\s*"IN_STOCK"', ProductAvailabilityStatus.IN_STOCK),
         (r'"availabilityStatus"\s*:\s*"OUT_OF_STOCK"', ProductAvailabilityStatus.OUT_OF_STOCK),
+        (
+            r'\bOnly\s+\d+\s+left\s+in\s+stock\b[^.\n]*\.?',
+            ProductAvailabilityStatus.LIMITED,
+        ),
+        (r'\b\d+\s+left\s+in\s+stock\b', ProductAvailabilityStatus.LIMITED),
+        (r'\bIn Stock\b', ProductAvailabilityStatus.IN_STOCK),
+        (r'\bAdd to Cart\b', ProductAvailabilityStatus.IN_STOCK),
         (
             r'class="[^"]*primary-availability-message[^"]*"[^>]*>\s*In Stock\s*<',
             ProductAvailabilityStatus.IN_STOCK,
@@ -729,6 +934,8 @@ def _normalize_availability(value: str) -> ProductAvailabilityStatus | None:
         for text in ("加入購物車", "直接購買", "立即購買", "可訂購", "現貨", "有庫存")
     ):
         return ProductAvailabilityStatus.IN_STOCK
+    if "left in stock" in folded:
+        return ProductAvailabilityStatus.LIMITED
     if "instock" in folded or "in_stock" in folded or "in stock" in folded:
         return ProductAvailabilityStatus.IN_STOCK
     if "outofstock" in folded or "out_of_stock" in folded or "out of stock" in folded:

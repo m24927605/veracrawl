@@ -20,6 +20,18 @@ veracrawl-product-availability-benchmark run \
   --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai
 ```
 
+Browser DOM source required run:
+
+```text
+veracrawl-product-availability-benchmark run \
+  tests/fixtures/us-top-ecommerce-product-availability \
+  --profile target \
+  --model-provider openai \
+  --openai-model gpt-5.4-mini \
+  --browser-source-required \
+  --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai-browser-source-required
+```
+
 Expected aggregate for the live corpus:
 
 ```json
@@ -50,6 +62,11 @@ Each passing field must include:
 - command/event/outbox refs
 - replay bundle ref
 
+The `artifact_ref` can point to the HTTP raw artifact or, when browser fallback
+or browser source required mode is used, to a read-only browser DOM artifact.
+The field value still must come from source text bound to `content_hash_ref`;
+LLM output never satisfies the source evidence fields.
+
 ## Blocked Source Contract
 
 When a site blocks access or does not expose price/availability:
@@ -65,4 +82,5 @@ When a site blocks access or does not expose price/availability:
 Core code must not import OpenAI SDKs, agent frameworks, browser stealth
 tooling, site-specific scraper modules, or hidden ecommerce APIs. Concrete model
 access lives behind `ModelProviderPort`; concrete HTTP access lives behind
-network adapters.
+network adapters; concrete browser rendering lives behind the browser adapter
+port.

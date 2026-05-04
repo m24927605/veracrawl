@@ -6000,6 +6000,9 @@ Executable product availability benchmark rules:
 - pass requires robots-gated live HTTP, product identity match, source-backed
   price evidence, source-backed availability evidence, model/agent/tool/context
   traces, evidence/verification refs, command/event/outbox refs, and replay refs.
+  Accepted field evidence may use the HTTP artifact or a read-only browser DOM
+  artifact when the benchmark is configured for browser fallback or browser
+  source required mode.
 - needs-review is allowed when at least one declared top ecommerce source passes
   and another source blocks access or does not expose source-backed fields.
 - Taiwan product-page fixtures reuse these contracts. Meta tags such as
@@ -6010,6 +6013,9 @@ Executable product availability benchmark rules:
   `artifact_ref`, or `content_hash_ref`.
 - blocked source outcomes must include typed failure refs and cannot carry
   fabricated price, currency, availability, inventory count, or publication refs.
+- browser source required mode must keep browser engines behind the browser
+  adapter port and must record browser DOM artifact refs/content hashes for any
+  accepted field evidence.
 
 ## Target Crawl Runtime Contracts
 

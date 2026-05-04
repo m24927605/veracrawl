@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from veracrawl.adapters.browser.deterministic import DeterministicBrowserObservationAdapter
 from veracrawl.benchmarks.product_availability import (
     ProductAvailabilityAgentBinding,
     ProductAvailabilityBenchmarkResult,
@@ -160,6 +161,8 @@ def _run(
     tmp_path: Path,
     scenario: str = "success",
     body: str | None = None,
+    browser_body: str | None = None,
+    browser_source_required: bool = False,
 ) -> ProductAvailabilityBenchmarkResult:
     manifest = _manifest(scenario)
     return run_product_availability_benchmark(
@@ -170,6 +173,19 @@ def _run(
         robots_fetcher=lambda _target: RobotsFetchResult(status_code=200, body_text=""),
         model_binding=_model_binding(),
         agent_binding=_agent_binding(),
+        browser_adapter_factory=(
+            (
+                lambda fixture, target, sandbox: DeterministicBrowserObservationAdapter(
+                    fixture_id=fixture,
+                    target_url=target.target_url,
+                    sandbox_policy=sandbox,
+                    rendered_text=browser_body,
+                )
+            )
+            if browser_body is not None
+            else None
+        ),
+        browser_source_required=browser_source_required,
     )
 
 
@@ -243,6 +259,56 @@ def test_product_availability_extracts_chinese_availability_fallback(
     assert result.report.completion_result == CompletenessResult.PASS
     assert result.site_results[0].price_currency == "TWD"
     assert result.site_results[0].availability_status == "in_stock"
+
+
+def test_product_availability_recovers_amazon_like_browser_dom_availability(
+    tmp_path: Path,
+) -> None:
+    http_body = """
+    <html><body>SanDisk 256GB Extreme microSDXC Memory Card TWD1,876.17</body></html>
+    """
+    browser_body = """
+    SanDisk 256GB Extreme microSDXC Memory Card
+    TWD1,876.17
+    Only 8 left in stock - order soon.
+    Ships from Amazon
+    Add to Cart
+    """
+    result = _run(tmp_path, body=http_body, browser_body=browser_body)
+
+    site = result.site_results[0]
+    availability = next(item for item in result.field_evidence if item.field_name == "availability")
+    assert result.report.completion_result == CompletenessResult.PASS
+    assert site.price_currency == "TWD"
+    assert site.availability_status == "limited"
+    assert "Only 8 left in stock" in (site.availability_raw_text or "")
+    assert ":browser-render:dom:" in availability.artifact_ref
+    assert any(":browser-render:" in ref for ref in site.source_observation_refs)
+    assert len(result.model_call_traces) == 4
+
+
+def test_product_availability_can_require_browser_dom_source_evidence(
+    tmp_path: Path,
+) -> None:
+    http_body = _product_body()
+    browser_body = """
+    SanDisk 256GB Extreme microSDXC Memory Card
+    TWD1,876.17
+    Only 8 left in stock - order soon.
+    """
+    result = _run(
+        tmp_path,
+        body=http_body,
+        browser_body=browser_body,
+        browser_source_required=True,
+    )
+
+    site = result.site_results[0]
+    price = next(item for item in result.field_evidence if item.field_name == "price")
+    assert result.report.completion_result == CompletenessResult.PASS
+    assert site.price_raw_text == "TWD1,876.17"
+    assert site.availability_status == "limited"
+    assert ":browser-render:dom:" in price.artifact_ref
 
 
 def test_product_availability_javascript_shell_without_identity_needs_review(

@@ -7,22 +7,25 @@
 
 Implement a product-page benchmark for extracting source-backed price and
 availability for a specified product on Amazon, Walmart, and eBay. The runtime
-will reuse live HTTP adapters and framework-neutral model/agent ports, produce
-field evidence contracts, and return `needs_review` when a top ecommerce source
-blocks access instead of fabricating values.
+will reuse live HTTP adapters, optional read-only browser DOM source evidence,
+and framework-neutral model/agent ports, produce field evidence contracts, and
+return `needs_review` when a top ecommerce source blocks access instead of
+fabricating values.
 
 ## Technical Context
 
 **Language/Version**: Python 3.12  
-**Primary Dependencies**: Existing VeraCrawl live HTTP, model/agent ports,
-OpenAI Responses adapter, native agent runtime, Pydantic contracts  
+**Primary Dependencies**: Existing VeraCrawl live HTTP, browser observation
+port, model/agent ports, OpenAI Responses adapter, native agent runtime,
+Pydantic contracts
 **Storage**: Local run artifacts under `.veracrawl-real-runs/`  
 **Testing**: pytest, ruff, mypy, registry validation, live CLI validation,
 Docker-backed pytest  
 **Target Platform**: CLI/library benchmark runner  
 **Project Type**: Python package + CLI  
-**Performance Goals**: One robots request and one product-page request per site;
-four AI decisions per extractable site  
+**Performance Goals**: One robots request and one product-page request per site,
+optional browser observation when configured, four AI decisions per extractable
+site
 **Constraints**: No login/cart/checkout, no CAPTCHA/WAF bypass, no site-specific
 scraper modules, no core model SDK or agent framework coupling  
 **Scale/Scope**: Three public product-page targets for one specified product  
@@ -32,8 +35,8 @@ policy, review_replay
 ProductAvailabilityTargetSpec, ProductAvailabilityFieldEvidence,
 ProductAvailabilitySiteResult, ProductAvailabilityBenchmarkReport,
 ModelCallTrace, AgentActionTrace, ToolCallTrace, ContextBundleTrace  
-**Replay/Artifact Impact**: field evidence and site reports require artifact,
-content hash, command/event/outbox, and replay refs  
+**Replay/Artifact Impact**: field evidence and site reports require HTTP or
+browser DOM artifact, content hash, command/event/outbox, and replay refs
 **Security/Policy Impact**: robots, origin scope, private-network denial,
 prompt-context redaction, no direct publication
 

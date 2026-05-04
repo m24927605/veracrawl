@@ -2135,6 +2135,12 @@ US top ecommerce product price and availability benchmark acceptance:
 veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --out .veracrawl-real-runs/us-top-ecommerce-product-availability
 ```
 
+US top ecommerce browser DOM source evidence acceptance:
+
+```text
+veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --model-provider openai --openai-model gpt-5.4-mini --browser-source-required --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai-browser-source-required
+```
+
 Taiwan top ecommerce product price and availability benchmark acceptance:
 
 ```text
@@ -2145,7 +2151,7 @@ Required product availability fixtures:
 
 | Fixture | Required acceptance |
 | --- | --- |
-| us-top-ecommerce-product-availability | Amazon and Walmart source-backed product price/availability fields pass; eBay access denial or unavailable source evidence is recorded as blocked/needs-review with no fabricated price or inventory |
+| us-top-ecommerce-product-availability | Amazon and Walmart source-backed product price/availability fields pass when HTTP source evidence is available; Amazon browser DOM source evidence must also be demonstrable with `--browser-source-required`; eBay access denial or unavailable source evidence is recorded as blocked/needs-review with no fabricated price or inventory |
 | taiwan-top-ecommerce-product-availability | momo and PChome 24h source-backed product price/availability fields pass; Shopee Taiwan JavaScript shell or API source limitation is recorded as blocked/needs-review with no bypass and no fabricated price or inventory |
 | product-availability-wrong-identity | wrong product identity fails |
 | product-availability-missing-price | missing source-backed price fails |

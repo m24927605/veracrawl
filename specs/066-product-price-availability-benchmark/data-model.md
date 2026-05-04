@@ -54,6 +54,8 @@ Fields:
 Validation:
 
 - Passing field evidence requires source refs and replay refs.
+- `artifact_ref` may refer to an HTTP artifact or read-only browser DOM artifact
+  depending on the run mode.
 - Price evidence requires raw text and either amount or normalized value.
 - Availability evidence requires a normalized availability status.
 
