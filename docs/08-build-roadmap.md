@@ -121,6 +121,16 @@ beyond the recorded public homepage and declared product-page experiments.
 Specs 068-075 are the finite production-grade closure specs required before
 VeraCrawl may claim full production-grade web crawler capability.
 
+Current production-grade claim status: specs 068-075 are implemented, but the
+2026-05-04 live production evidence run is blocked. The aggregate 075 release
+gate returned `production_grade_release_blocked` because the live run did not
+include passing authorized-source-access and extraction-quality lower gate
+reports, acquisition escalation was source-limited, US/Taiwan ecommerce product
+availability had blocked sources, and one real-world quality target drifted.
+VeraCrawl must continue to describe itself as a production-grade foundation,
+not a fully production-grade crawler, until a later live evidence run passes all
+required lower gates without blocked release evidence.
+
 ## Phase 0: Contracts And Boundaries
 
 Deliverables:
