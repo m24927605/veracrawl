@@ -1284,6 +1284,14 @@ uv run --python python3.12 --extra dev veracrawl-acquisition-escalation run \
   --profile production \
   --out .veracrawl-test-runs/production-acquisition-escalation-success
 
+uv run --python python3.12 --extra dev veracrawl-acquisition-escalation run-live \
+  tests/fixtures/production-acquisition-escalation-live-evidence \
+  --profile production \
+  --out .veracrawl-real-runs/production-acquisition-escalation-live-evidence \
+  --input-report .veracrawl-real-runs/top-ecommerce-ai-agent-corpus-openai/run_report.json \
+  --input-report .veracrawl-real-runs/top-ecommerce-ai-agent-corpus-openai/real_world/run_report.json \
+  --input-report .veracrawl-real-runs/browser-quality-playwright/browser_quality_report.json
+
 uv run --python python3.12 --extra dev veracrawl-authorized-source run \
   tests/fixtures/production-authorized-source-success \
   --profile production \
@@ -1303,6 +1311,16 @@ uv run --python python3.12 --extra dev veracrawl-production-quality-gate run \
   tests/fixtures/production-extraction-quality-success \
   --profile production \
   --out .veracrawl-test-runs/production-extraction-quality-success
+
+uv run --python python3.12 --extra dev veracrawl-production-quality-gate run-live \
+  tests/fixtures/production-extraction-quality-live-evidence \
+  --profile production \
+  --out .veracrawl-real-runs/production-extraction-quality-live-evidence \
+  --input-report .veracrawl-real-runs/field-oracle-quality-corpus/field_oracle_report.json \
+  --input-report .veracrawl-real-runs/precision-recall-quality/precision_recall_report.json \
+  --input-report .veracrawl-real-runs/quality-release-ready/quality_release_report.json \
+  --input-report .veracrawl-real-runs/repair-success-quality/repair_quality_report.json \
+  --input-report .veracrawl-real-runs/real-world-quality-corpus/quality_report.json
 
 uv run --python python3.12 --extra dev veracrawl-production-ops-gate run \
   tests/fixtures/production-operations-success \
@@ -1338,6 +1356,12 @@ It fetches public official API evidence outside core, blocks private/non-global
 hosts, enforces response-size budgets, redacts persisted previews, records raw
 content hashes and source anchors, and emits a lower `ProductionGateReport`
 that can be supplied to the aggregate 075 gate.
+
+`veracrawl-acquisition-escalation run-live` is the live 070 acquisition path.
+It parses AI/HTTP, live HTTP, and Playwright browser reports and emits
+source-backed acquisition attempts. `veracrawl-production-quality-gate run-live`
+is the live 073 quality path; it parses actual quality reports and blocks on
+threshold, source-anchor, hash, publication, or replay gaps.
 
 Run persistence and queue runtime fixtures:
 

@@ -1,0 +1,9 @@
+{
+  "minimum_quality_input_report_count": 5,
+  "minimum_precision": 0.98,
+  "minimum_recall": 0.90,
+  "minimum_f1": 0.94,
+  "minimum_critical_field_precision": 0.99,
+  "minimum_field_count": 200,
+  "minimum_real_world_targets": 40
+}

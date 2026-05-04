@@ -104,10 +104,30 @@ Artifact directory:
 - Post-071 validation passed: registry validation, full ruff, focused
   production-grade/live authorized-source tests, full mypy, full pytest, and
   Docker-backed focused infrastructure pytest.
+- Follow-up 070 and 073 live evidence runs passed. The final aggregate run at
+  `.veracrawl-real-runs/production-grade-release-20260504-162133/production-gates/075-release-ready-live`
+  supplied parsed reports for 069, 070 live acquisition, 071 live official API,
+  072 deep crawl, 073 live extraction quality, and 074 operations reliability.
+  It returned `completion_result=pass`,
+  `operator_status=production_grade_release_completed`, and
+  `release_blocker_count=0`.
+- Final registry validation passed:
+  `uv run --python python3.12 --extra dev veracrawl-contracts validate`.
+- Final full ruff passed:
+  `uv run --python python3.12 --extra dev ruff check .`.
+- Final focused production-grade/live tests passed:
+  `uv run --python python3.12 --extra dev pytest tests/unit/test_acquisition_live_runtime.py tests/unit/test_extraction_quality_live_runtime.py tests/unit/test_authorized_source_live_runtime.py tests/contract/test_production_grade_contract_registry.py tests/contract/test_production_grade_contracts.py tests/unit/test_production_grade_runtime.py tests/integration/test_production_grade_fixtures.py -q`
+  returned 33 passing tests.
+- Final full mypy passed:
+  `uv run --python python3.12 --extra dev mypy src tests` returned
+  `Success: no issues found in 694 source files`.
+- Final full pytest passed:
+  `uv run --python python3.12 --extra dev pytest -q`.
+- Final Docker-backed focused infrastructure pytest passed:
+  `VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev --extra postgres --extra queue-redis --extra object-s3 pytest tests/integration/test_operational_infrastructure_live.py -q`.
 
-Conclusion: specs 068-075 are implemented, but this live evidence run does not
-support claiming VeraCrawl is fully production-grade. The current honest status
-is production-grade foundation with a passing live authorized-source official
-API gate, blocked/source-limited live ecommerce acquisition evidence, missing
-live extraction-quality lower-gate evidence, and one live quality-corpus drift
-failure.
+Conclusion: specs 068-075 are implemented and the aggregate 075 gate passes for
+the recorded live validation corpus. This does not mean every target website is
+crawlable; source-limited ecommerce product availability cases such as eBay and
+Shopee remain recorded as blocked/needs-review and must not be bypassed or
+reported as crawlable.

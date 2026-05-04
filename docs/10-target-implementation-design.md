@@ -1909,6 +1909,11 @@ Production-grade crawler closure runtime:
   `veracrawl-authorized-source`, `veracrawl-deep-crawl-production`,
   `veracrawl-production-quality-gate`, `veracrawl-production-ops-gate`, and
   `veracrawl-production-grade-release-gate`.
+- `veracrawl-acquisition-escalation run-live` aggregates live AI/HTTP,
+  underlying live HTTP, and browser-quality reports into source-backed
+  acquisition attempts for the 070 lower gate. Browser evidence must include
+  DOM/screenshot artifacts, recovered fragments, content hashes, policy refs,
+  command/event/outbox refs, and replay refs.
 - `veracrawl-authorized-source run-live` performs live public official API
   evidence acquisition for the 071 lower gate. It uses a concrete
   standard-library HTTP adapter layer outside core, denies private/non-global
@@ -1916,6 +1921,11 @@ Production-grade crawler closure runtime:
   raw source body, and emits source anchors, credential audit refs,
   command/event/outbox refs, policy refs, replay refs, and a parsed
   `ProductionGateReport`.
+- `veracrawl-production-quality-gate run-live` aggregates parsed field oracle,
+  precision/recall, quality release, repair, and real-world quality reports into
+  the 073 lower gate. It blocks on non-passing inputs, missing source anchors,
+  missing hashes, missing replay, low precision/recall/F1, low critical-field
+  precision, unsafe repair bypass, and non-ready quality release decisions.
 - Specs 069-074 produce lower `ProductionGateReport` artifacts. Spec 075 must
   parse those actual reports through the CLI `--input-report` path; passing six
   arbitrary string refs is intentionally insufficient.

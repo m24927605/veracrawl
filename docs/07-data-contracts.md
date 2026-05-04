@@ -125,6 +125,10 @@ Acquisition and authorized-source contracts:
 
 Live authorized-source validation:
 
+- `veracrawl-acquisition-escalation run-live` emits canonical
+  `AcquisitionAttemptRecord` and `ProductionGateReport` contracts from parsed
+  live AI/HTTP, live HTTP, and browser-quality reports. Runner-local acquisition
+  summaries are validation artifacts; core stores only neutral refs.
 - `veracrawl-authorized-source run-live` emits the same canonical
   `AuthorizedSourceAccessRecord` and `ProductionGateReport` contracts, plus
   runner-local live fetch and redacted artifact JSON outputs. Those runner-local
@@ -134,6 +138,11 @@ Live authorized-source validation:
   hashes, source anchors, credential audit refs, policy refs,
   command/event/outbox refs, and replay refs before their 071 lower gate can
   pass.
+- `veracrawl-production-quality-gate run-live` emits canonical
+  `ProductionGateReport` contracts from parsed field oracle, precision/recall,
+  repair, real-world quality, and quality release reports. It must preserve
+  input report refs, source anchors, hashes, publication gates, policy refs,
+  command/event/outbox refs, and replay refs.
 
 Release gate contracts:
 

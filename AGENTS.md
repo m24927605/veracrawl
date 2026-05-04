@@ -136,4 +136,8 @@ live/authorized/browser/deep-crawl/quality/ops lower reports.
 For 071, prefer `veracrawl-authorized-source run-live` when producing release
 evidence: it must use official API or explicitly authorized read access, never
 CAPTCHA solving, WAF evasion, login-wall bypass, or raw secret persistence.
+For 070 and 073, prefer `run-live` lower gates when making production-grade
+claims. A passing aggregate 075 gate applies to the recorded validation corpus;
+blocked ecommerce sources still remain blocked/needs-review unless solved by
+official APIs or explicitly authorized sources.
 <!-- SPECKIT END -->

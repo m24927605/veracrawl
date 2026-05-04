@@ -1,0 +1,9 @@
+{
+  "fixture_id": "production-extraction-quality-live-evidence",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_extraction_quality_completed",
+  "minimum_quality_input_report_count": 5,
+  "requires_source_anchors": true,
+  "requires_content_hashes": true,
+  "requires_publication_gate_refs": true
+}

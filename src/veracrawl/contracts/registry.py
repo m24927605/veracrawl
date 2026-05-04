@@ -5340,11 +5340,13 @@ for _product_availability_fixture, _negative in {
 for _production_grade_fixture, _negative in {
     "production-discovery-planning-success": False,
     "production-acquisition-escalation-success": False,
+    "production-acquisition-escalation-live-evidence": False,
     "production-acquisition-source-limited": False,
     "production-authorized-source-success": False,
     "production-authorized-source-live-official-api": False,
     "production-deep-crawl-success": False,
     "production-extraction-quality-success": False,
+    "production-extraction-quality-live-evidence": False,
     "production-operations-success": False,
     "production-grade-release-ready": False,
     "production-grade-release-missing-gate": True,

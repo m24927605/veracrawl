@@ -121,17 +121,16 @@ beyond the recorded public homepage and declared product-page experiments.
 Specs 068-075 are the finite production-grade closure specs required before
 VeraCrawl may claim full production-grade web crawler capability.
 
-Current production-grade claim status: specs 068-075 are implemented, but the
-2026-05-04 live production evidence run is blocked. The aggregate 075 release
-gate returned `production_grade_release_blocked`. A follow-up 071 live official
-API run passed with PyPI and npm official API evidence, so
-authorized-source-access is no longer missing from the aggregate evidence set.
-The remaining blockers are missing live extraction-quality lower-gate evidence,
-source-limited acquisition escalation, US/Taiwan ecommerce product availability
-blocked sources, and one real-world quality target drift. VeraCrawl must
-continue to describe itself as a production-grade foundation, not a fully
-production-grade crawler, until a later live evidence run passes all required
-lower gates without blocked release evidence.
+Current production-grade claim status: specs 068-075 are implemented and the
+2026-05-04 follow-up live production evidence run passed the aggregate 075 gate
+with parsed reports for 069, 070 live acquisition, 071 live official API,
+072 deep crawl, 073 live extraction quality, and 074 operations reliability.
+This supports claiming production-grade capability for the recorded validation
+corpus. It does not mean every target website is crawlable: US/Taiwan ecommerce
+product availability experiments still record blocked or source-limited cases
+for Amazon availability evidence, eBay access, and Shopee Taiwan access, and
+those must remain operator-visible needs-review/blocked outcomes unless solved
+through official APIs or explicitly authorized sources.
 
 ## Phase 0: Contracts And Boundaries
 

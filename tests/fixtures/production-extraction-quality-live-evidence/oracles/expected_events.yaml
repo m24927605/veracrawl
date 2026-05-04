@@ -1,0 +1,6 @@
+{
+  "required_event_types": [
+    "production_grade_closure_manifest_recorded",
+    "production_gate_report_recorded"
+  ]
+}

@@ -65,7 +65,13 @@ def test_production_grade_commands_events_and_fixtures_registered() -> None:
     assert fixture.expected_replay_ref
     assert not fixture.negative_case
     assert not FIXTURE_ORACLES[
+        "production-acquisition-escalation-live-evidence"
+    ].negative_case
+    assert not FIXTURE_ORACLES[
         "production-authorized-source-live-official-api"
+    ].negative_case
+    assert not FIXTURE_ORACLES[
+        "production-extraction-quality-live-evidence"
     ].negative_case
     assert FIXTURE_ORACLES["production-grade-release-missing-gate"].negative_case
 

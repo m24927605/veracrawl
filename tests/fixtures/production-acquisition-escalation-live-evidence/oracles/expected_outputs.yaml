@@ -1,0 +1,9 @@
+{
+  "fixture_id": "production-acquisition-escalation-live-evidence",
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_acquisition_escalation_completed",
+  "minimum_acquisition_input_report_count": 3,
+  "requires_http_artifacts": true,
+  "requires_browser_artifacts": true,
+  "requires_source_anchors": true
+}

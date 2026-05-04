@@ -8,9 +8,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from veracrawl.benchmarks.acquisition_live import (
+    LiveAcquisitionGateResult,
+    run_live_acquisition_gate,
+)
 from veracrawl.benchmarks.authorized_source_live import (
     LiveAuthorizedSourceGateResult,
     run_live_authorized_source_gate,
+)
+from veracrawl.benchmarks.extraction_quality_live import (
+    LiveExtractionQualityGateResult,
+    run_live_extraction_quality_gate,
 )
 from veracrawl.benchmarks.production_grade import (
     ProductionGradeGateResult,
@@ -86,6 +94,60 @@ def run_live_authorized_source_fixture(
     result = run_live_authorized_source_gate(manifest=manifest, profile=profile)
     _write_outputs(out, result.gate_result)
     _write_live_authorized_source_outputs(out, result)
+    report = result.gate_result.report
+    if report.completion_result != manifest.expected_completion_result:
+        raise ValueError(
+            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
+        )
+    if report.operator_status != manifest.expected_operator_status:
+        raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
+    return result
+
+
+def run_live_acquisition_fixture(
+    fixture_dir: Path,
+    *,
+    profile: str,
+    out: Path,
+    input_reports: list[Path],
+) -> LiveAcquisitionGateResult:
+    manifest = ProductionGradeClosureManifest.model_validate(
+        _load_json_like(fixture_dir / "manifest.yaml")
+    )
+    result = run_live_acquisition_gate(
+        manifest=manifest,
+        profile=profile,
+        input_report_paths=input_reports,
+    )
+    _write_outputs(out, result.gate_result)
+    _write_live_acquisition_outputs(out, result)
+    report = result.gate_result.report
+    if report.completion_result != manifest.expected_completion_result:
+        raise ValueError(
+            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
+        )
+    if report.operator_status != manifest.expected_operator_status:
+        raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
+    return result
+
+
+def run_live_extraction_quality_fixture(
+    fixture_dir: Path,
+    *,
+    profile: str,
+    out: Path,
+    input_reports: list[Path],
+) -> LiveExtractionQualityGateResult:
+    manifest = ProductionGradeClosureManifest.model_validate(
+        _load_json_like(fixture_dir / "manifest.yaml")
+    )
+    result = run_live_extraction_quality_gate(
+        manifest=manifest,
+        profile=profile,
+        input_report_paths=input_reports,
+    )
+    _write_outputs(out, result.gate_result)
+    _write_live_extraction_quality_outputs(out, result)
     report = result.gate_result.report
     if report.completion_result != manifest.expected_completion_result:
         raise ValueError(
@@ -268,6 +330,86 @@ def _write_live_authorized_source_outputs(
     )
 
 
+def _write_live_acquisition_outputs(
+    out: Path,
+    result: LiveAcquisitionGateResult,
+) -> None:
+    (out / "acquisition_input_reports.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.input_reports],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "acquisition_evidence_summary.json").write_text(
+        json.dumps(
+            result.evidence_summary.model_dump(mode="json"),
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    summary_path = out / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary.update(
+        {
+            "live_acquisition": True,
+            "acquisition_input_report_count": len(result.input_reports),
+            "artifact_ref_count": result.evidence_summary.artifact_ref_count,
+            "source_anchor_ref_count": result.evidence_summary.source_anchor_ref_count,
+            "content_hash_ref_count": result.evidence_summary.content_hash_ref_count,
+            "replay_bundle_ref_count": result.evidence_summary.replay_bundle_ref_count,
+        }
+    )
+    summary_path.write_text(
+        json.dumps(summary, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_live_extraction_quality_outputs(
+    out: Path,
+    result: LiveExtractionQualityGateResult,
+) -> None:
+    (out / "quality_input_reports.json").write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in result.input_reports],
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (out / "quality_evidence_summary.json").write_text(
+        json.dumps(
+            result.evidence_summary.model_dump(mode="json"),
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    summary_path = out / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary.update(
+        {
+            "live_extraction_quality": True,
+            "quality_input_report_count": len(result.input_reports),
+            "artifact_ref_count": result.evidence_summary.artifact_ref_count,
+            "source_anchor_ref_count": result.evidence_summary.source_anchor_ref_count,
+            "content_hash_ref_count": result.evidence_summary.content_hash_ref_count,
+            "replay_bundle_ref_count": result.evidence_summary.replay_bundle_ref_count,
+        }
+    )
+    summary_path.write_text(
+        json.dumps(summary, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def _load_gate_report(path: Path) -> ProductionGateReport:
     return ProductionGateReport.model_validate(_load_json_like(path))
 
@@ -296,6 +438,7 @@ def build_parser(default_gate: str | None) -> argparse.ArgumentParser:
     run_live.add_argument("fixture_dir")
     run_live.add_argument("--profile", default="production")
     run_live.add_argument("--out", required=True)
+    run_live.add_argument("--input-report", action="append", default=[])
     return parser
 
 
@@ -335,17 +478,81 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "run-live":
         gate_type = default_gate
-        if gate_type != "authorized_source_access":
+        if gate_type not in {
+            "acquisition_escalation",
+            "authorized_source_access",
+            "extraction_quality",
+        }:
             print(
                 json.dumps(
                     {
                         "ok": False,
-                        "error": "run-live is only supported by veracrawl-authorized-source",
+                        "error": (
+                            "run-live is only supported by veracrawl-acquisition-escalation, "
+                            "veracrawl-authorized-source, and "
+                            "veracrawl-production-quality-gate"
+                        ),
                     },
                     sort_keys=True,
                 )
             )
             return 1
+        if gate_type == "acquisition_escalation":
+            try:
+                acquisition_result = run_live_acquisition_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    input_reports=[Path(path) for path in args.input_report],
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            report = acquisition_result.gate_result.report
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "gate_type": report.gate_type,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "acquisition_input_report_count": len(
+                            acquisition_result.input_reports
+                        ),
+                        "release_blocker_count": len(report.release_blocker_refs),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if gate_type == "extraction_quality":
+            try:
+                quality_result = run_live_extraction_quality_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    input_reports=[Path(path) for path in args.input_report],
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            report = quality_result.gate_result.report
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "gate_type": report.gate_type,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "quality_input_report_count": len(quality_result.input_reports),
+                        "release_blocker_count": len(report.release_blocker_refs),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
         try:
             live_result = run_live_authorized_source_fixture(
                 Path(args.fixture_dir),

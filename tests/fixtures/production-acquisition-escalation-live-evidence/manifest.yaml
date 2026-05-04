@@ -1,0 +1,46 @@
+{
+  "id": "production-acquisition-escalation-live-evidence",
+  "scenario": "production-acquisition-escalation-live-evidence",
+  "gate_type": "acquisition_escalation",
+  "profile_refs": ["production"],
+  "objective": "Aggregate live HTTP, AI-assisted HTTP, and Playwright browser-rendered acquisition evidence into a passing acquisition-escalation lower gate while preserving source limitations as explicit non-pass inputs when present.",
+  "crawl_bound": {
+    "id": "crawl-bound:production-acquisition-escalation-live-evidence",
+    "max_depth": 2,
+    "max_pages": 40,
+    "max_runtime_ms": 180000,
+    "rate_limit_per_minute": 40,
+    "browser_budget_ms": 90000
+  },
+  "source_profiles": [
+    {
+      "id": "source:live-http-ai-acquisition",
+      "site_name": "Live HTTP And AI Acquisition Evidence",
+      "allowed_origin": "https://acquisition-evidence.example.test",
+      "entry_point_url": "https://acquisition-evidence.example.test/http-ai",
+      "discovery_methods": ["live_http", "ai_agent_planning"],
+      "required_evidence_types": ["artifact", "content_hash", "source_anchor"],
+      "robots_policy_ref": "policy:live-http-ai-acquisition:robots",
+      "scope_policy_ref": "policy:live-http-ai-acquisition:scope"
+    },
+    {
+      "id": "source:live-browser-acquisition",
+      "site_name": "Live Browser Acquisition Evidence",
+      "allowed_origin": "https://browser-acquisition.example.test",
+      "entry_point_url": "https://browser-acquisition.example.test/rendered",
+      "discovery_methods": ["browser_render", "js_recovery"],
+      "required_evidence_types": ["dom", "screenshot", "source_anchor"],
+      "robots_policy_ref": "policy:live-browser-acquisition:robots",
+      "scope_policy_ref": "policy:live-browser-acquisition:scope",
+      "browser_required": true
+    }
+  ],
+  "required_capability_refs": [
+    "capability:acquisition_escalation:http_acquisition",
+    "capability:acquisition_escalation:browser_render_escalation",
+    "capability:acquisition_escalation:source_limitation_accounting"
+  ],
+  "expected_completion_result": "pass",
+  "expected_operator_status": "production_acquisition_escalation_completed",
+  "negative_case": false
+}

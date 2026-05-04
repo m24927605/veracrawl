@@ -1,0 +1,6 @@
+{
+  "minimum_acquisition_input_report_count": 3,
+  "minimum_http_artifact_count": 6,
+  "minimum_browser_target_count": 8,
+  "minimum_browser_recovered_fragment_count": 8
+}
