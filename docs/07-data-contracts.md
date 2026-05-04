@@ -5885,6 +5885,49 @@ Executable real-world AI agent benchmark rules:
   observations, 24 AI decision traces, six extraction candidates, and hosted
   OpenAI trace validation when the CLI is run with `--model-provider openai`.
 
+## Product Availability Benchmark Contracts
+
+```yaml
+ProductAvailabilityTargetSpec:
+  id: string
+  site_name: string
+  target_url: string
+  robots_url: string
+  allowed_origin: string
+  required_identity_terms: list
+  rejected_identity_terms: list
+  expected_site_result: pass | fail | needs_review
+```
+
+```yaml
+ProductAvailabilityFieldEvidence:
+  field_name: identity | price | availability
+  raw_text: string
+  normalized_value: string
+  amount: number
+  currency: string
+  source_anchor_ref: string
+  artifact_ref: string
+  content_hash_ref: string
+  model_call_trace_ref: string
+  agent_action_trace_ref: string
+  evidence_packet_ref: string
+  verification_decision_ref: string
+  replay_bundle_ref: string
+```
+
+Executable product availability benchmark rules:
+
+- pass requires robots-gated live HTTP, product identity match, source-backed
+  price evidence, source-backed availability evidence, model/agent/tool/context
+  traces, evidence/verification refs, command/event/outbox refs, and replay refs.
+- needs-review is allowed when at least one declared top ecommerce source passes
+  and another source blocks access or does not expose source-backed fields.
+- LLM output is advisory only and cannot satisfy `source_anchor_ref`,
+  `artifact_ref`, or `content_hash_ref`.
+- blocked source outcomes must include typed failure refs and cannot carry
+  fabricated price, currency, availability, inventory count, or publication refs.
+
 ## Target Crawl Runtime Contracts
 
 ```yaml

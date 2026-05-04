@@ -2129,6 +2129,29 @@ Top ecommerce live AI benchmark acceptance additionally requires:
   homepage entry points and does not claim full category/product deep crawl
   production readiness
 
+US top ecommerce product price and availability benchmark acceptance:
+
+```text
+veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --out .veracrawl-real-runs/us-top-ecommerce-product-availability
+```
+
+Required product availability fixtures:
+
+| Fixture | Required acceptance |
+| --- | --- |
+| us-top-ecommerce-product-availability | Amazon and Walmart source-backed product price/availability fields pass; eBay access denial or unavailable source evidence is recorded as blocked/needs-review with no fabricated price or inventory |
+| product-availability-wrong-identity | wrong product identity fails |
+| product-availability-missing-price | missing source-backed price fails |
+| product-availability-missing-availability | missing source-backed availability fails |
+| product-availability-llm-output-as-evidence | model output as source evidence fails |
+| product-availability-missing-replay | missing replay refs fail |
+
+Acceptance requires contract, registry, import-boundary, unit, replay,
+integration fixture, live CLI, hosted OpenAI CLI, full pytest, and
+Docker-backed pytest validation. Passing fields require source anchors,
+artifacts, content hashes, model/agent/tool/context traces,
+evidence/verification refs, command/event/outbox refs, and replay refs.
+
 Expanded real-world public quality corpus acceptance:
 
 ```text

@@ -1724,6 +1724,11 @@ Real-world AI agent benchmark gate:
   this implementation path without adding site-specific scraper modules,
   selectors, hidden endpoints, credential flows, browser bypass, or core
   framework coupling.
+- row 066 adds `veracrawl-product-availability-benchmark` for declared public
+  product-page targets. The runtime keeps target URLs and identity terms in
+  manifests, reuses live HTTP and model/agent ports, extracts only source-backed
+  price and availability field evidence, and returns needs-review when a source
+  blocks item-page access instead of bypassing or fabricating values.
 
 Expanded real-world public quality corpus gate:
 

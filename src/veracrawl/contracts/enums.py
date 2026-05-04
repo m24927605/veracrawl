@@ -648,6 +648,36 @@ class RealWorldAIAgentBenchmarkFailureType(StrEnum):
     ADAPTER_UNAVAILABLE = "real_world_ai_adapter_unavailable"
 
 
+class ProductAvailabilityDecisionType(StrEnum):
+    PRODUCT_IDENTITY = "product_identity"
+    PRICE_CANDIDATE = "price_candidate"
+    AVAILABILITY_CANDIDATE = "availability_candidate"
+    VERIFICATION = "verification"
+
+
+class ProductAvailabilityStatus(StrEnum):
+    IN_STOCK = "in_stock"
+    OUT_OF_STOCK = "out_of_stock"
+    LIMITED = "limited"
+    UNAVAILABLE = "unavailable"
+    UNKNOWN = "unknown"
+
+
+class ProductAvailabilityFailureType(StrEnum):
+    ROBOTS_DENIED = "product_availability_robots_denied"
+    NETWORK_UNAVAILABLE = "product_availability_network_unavailable"
+    LIVE_HTTP_FAILED = "product_availability_live_http_failed"
+    SOURCE_ACCESS_DENIED = "product_availability_source_access_denied"
+    PRODUCT_IDENTITY_MISMATCH = "product_availability_identity_mismatch"
+    PRICE_NOT_FOUND = "product_availability_price_not_found"
+    AVAILABILITY_NOT_FOUND = "product_availability_availability_not_found"
+    LLM_OUTPUT_AS_EVIDENCE = "product_availability_llm_output_as_evidence"
+    MISSING_AI_TRACE = "product_availability_missing_ai_trace"
+    MISSING_EVIDENCE_REFS = "product_availability_missing_evidence_refs"
+    MISSING_REPLAY_REFS = "product_availability_missing_replay_refs"
+    ADAPTER_UNAVAILABLE = "product_availability_adapter_unavailable"
+
+
 class SecurityActionSurface(StrEnum):
     NETWORK = "network"
     PROMPT = "prompt"

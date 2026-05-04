@@ -253,6 +253,13 @@ from veracrawl.contracts.product_acceptance import (
     ProductAcceptanceGateReport,
     ProductWorkflowReadinessRecord,
 )
+from veracrawl.contracts.product_availability import (
+    ProductAvailabilityBenchmarkManifest,
+    ProductAvailabilityBenchmarkReport,
+    ProductAvailabilityFieldEvidence,
+    ProductAvailabilitySiteResult,
+    ProductAvailabilityTargetSpec,
+)
 from veracrawl.contracts.publication import (
     OutputManifest,
     OutputTypeCoverageFixtureManifest,
@@ -557,6 +564,11 @@ __all__ = [
     "PrecisionRecallSliceMetric",
     "ProductAcceptanceFixtureManifest",
     "ProductAcceptanceGateReport",
+    "ProductAvailabilityBenchmarkManifest",
+    "ProductAvailabilityBenchmarkReport",
+    "ProductAvailabilityFieldEvidence",
+    "ProductAvailabilitySiteResult",
+    "ProductAvailabilityTargetSpec",
     "ProductWorkflowReadinessRecord",
     "ProductionBenchmarkReleaseFixtureManifest",
     "ProductionBenchmarkReleaseReport",

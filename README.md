@@ -1087,6 +1087,35 @@ results prove policy-gated live acquisition plus real AI/model/agent trace
 participation for those public entry points, not full category/product deep
 crawl production readiness across the complete sites.
 
+Run the United States top ecommerce product price and availability benchmark:
+
+```sh
+uv run --python python3.12 --extra dev veracrawl-product-availability-benchmark run \
+  tests/fixtures/us-top-ecommerce-product-availability \
+  --profile target \
+  --out .veracrawl-real-runs/us-top-ecommerce-product-availability
+```
+
+Run the same product benchmark with a hosted OpenAI model through the
+framework-neutral model provider port:
+
+```sh
+set -a; source ~/.env; set +a
+uv run --python python3.12 --extra dev veracrawl-product-availability-benchmark run \
+  tests/fixtures/us-top-ecommerce-product-availability \
+  --profile target \
+  --model-provider openai \
+  --openai-model gpt-5.4-mini \
+  --out .veracrawl-real-runs/us-top-ecommerce-product-availability-openai
+```
+
+This benchmark asks whether VeraCrawl can extract source-backed price and
+availability for a specified product on Amazon, Walmart, and eBay. It records
+Amazon and Walmart fields only when backed by source anchors, artifacts, content
+hashes, AI traces, evidence/verification refs, and replay refs. If a source such
+as eBay blocks public item-page access, the result is typed `needs_review` or
+failure with no fabricated price or inventory.
+
 Run the expanded real-world public quality corpus:
 
 ```sh

@@ -92,6 +92,7 @@ class FixtureOracleRegistration(TimestampedModel):
     expected_quality_metrics_ref: str | None = None
     expected_repair_quality_ref: str | None = None
     expected_quality_release_ref: str | None = None
+    expected_product_availability_ref: str | None = None
     expected_credentialed_session_ref: str | None = None
     expected_live_normalization_ref: str | None = None
     expected_schema_extraction_ref: str | None = None
@@ -561,6 +562,41 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         OwnerService.TESTS,
         "real_world_ai_agent",
         tests=["tests/integration/test_real_world_ai_agent_fixtures.py"],
+    ),
+    "ProductAvailabilityTargetSpec": _contract(
+        "ProductAvailabilityTargetSpec",
+        OwnerService.OPS,
+        "product_availability",
+        tests=["tests/contract/test_product_availability_contracts.py"],
+    ),
+    "ProductAvailabilityFieldEvidence": _contract(
+        "ProductAvailabilityFieldEvidence",
+        OwnerService.EXTRACT,
+        "product_availability",
+        mutation_allowed=True,
+        tests=["tests/contract/test_product_availability_contracts.py"],
+    ),
+    "ProductAvailabilitySiteResult": _contract(
+        "ProductAvailabilitySiteResult",
+        OwnerService.OPS,
+        "product_availability",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_product_availability_contracts.py"],
+    ),
+    "ProductAvailabilityBenchmarkReport": _contract(
+        "ProductAvailabilityBenchmarkReport",
+        OwnerService.OPS,
+        "product_availability",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_product_availability_contracts.py"],
+    ),
+    "ProductAvailabilityBenchmarkManifest": _contract(
+        "ProductAvailabilityBenchmarkManifest",
+        OwnerService.TESTS,
+        "product_availability",
+        tests=["tests/integration/test_product_availability_fixtures.py"],
     ),
     "DRRestoreFixtureManifest": _contract(
         "DRRestoreFixtureManifest",
@@ -3602,6 +3638,49 @@ COMMAND_TYPES.update(
                 "real_world_ai_agent_benchmark_manifest_recorded"
             ],
         ),
+        "record_product_availability_field_evidence": CommandTypeRegistration(
+            command_type="record_product_availability_field_evidence",
+            owner_service=OwnerService.EXTRACT,
+            target_aggregate_type="ProductAvailabilityFieldEvidence",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["product_availability_field_evidence_recorded"],
+        ),
+        "record_product_availability_site_result": CommandTypeRegistration(
+            command_type="record_product_availability_site_result",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="ProductAvailabilitySiteResult",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["product_availability_site_result_recorded"],
+        ),
+        "record_product_availability_benchmark_report": CommandTypeRegistration(
+            command_type="record_product_availability_benchmark_report",
+            owner_service=OwnerService.OPS,
+            target_aggregate_type="ProductAvailabilityBenchmarkReport",
+            payload_schema_ref="BaseCommandPayload",
+            required_policy_decision_types=[
+                "source_adapter",
+                "prompt_taint",
+                "runtime_verification",
+            ],
+            emitted_event_types=["product_availability_benchmark_reported"],
+        ),
+        "record_product_availability_benchmark_manifest": CommandTypeRegistration(
+            command_type="record_product_availability_benchmark_manifest",
+            owner_service=OwnerService.TESTS,
+            target_aggregate_type="ProductAvailabilityBenchmarkManifest",
+            payload_schema_ref="BaseCommandPayload",
+            emitted_event_types=["product_availability_benchmark_manifest_recorded"],
+        ),
         "record_export_target_spec": CommandTypeRegistration(
             command_type="record_export_target_spec",
             owner_service=OwnerService.EXPORT,
@@ -4124,6 +4203,10 @@ EVENT_TYPES.update(
             "real_world_ai_agent_extraction_candidate_recorded",
             "real_world_ai_agent_benchmark_reported",
             "real_world_ai_agent_benchmark_manifest_recorded",
+            "product_availability_field_evidence_recorded",
+            "product_availability_site_result_recorded",
+            "product_availability_benchmark_reported",
+            "product_availability_benchmark_manifest_recorded",
             "export_target_recorded",
             "export_dispatched",
             "export_delivered",
@@ -4998,6 +5081,26 @@ for _real_world_ai_fixture, _negative in {
         expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_events_ref=f"{_base}/oracles/expected_events.yaml",
         expected_real_world_ai_agent_benchmark_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
+        thresholds_ref=f"{_base}/oracles/thresholds.yaml",
+        negative_case=_negative,
+    )
+
+for _product_availability_fixture, _negative in {
+    "us-top-ecommerce-product-availability": False,
+    "product-availability-wrong-identity": True,
+    "product-availability-missing-price": True,
+    "product-availability-missing-availability": True,
+    "product-availability-llm-output-as-evidence": True,
+    "product-availability-missing-replay": True,
+}.items():
+    _base = f"tests/fixtures/{_product_availability_fixture}"
+    FIXTURE_ORACLES[_product_availability_fixture] = FixtureOracleRegistration(
+        fixture_id=_product_availability_fixture,
+        manifest_ref=f"{_base}/manifest.yaml",
+        expected_outputs_ref=f"{_base}/oracles/expected_outputs.yaml",
+        expected_events_ref=f"{_base}/oracles/expected_events.yaml",
+        expected_product_availability_ref=f"{_base}/oracles/expected_outputs.yaml",
         expected_replay_ref=f"{_base}/oracles/expected_replay.yaml",
         thresholds_ref=f"{_base}/oracles/thresholds.yaml",
         negative_case=_negative,
@@ -6776,6 +6879,32 @@ TARGET_CONTRACT_AREAS: dict[str, TargetContractAreaCoverageRegistration] = {
             "RealWorldAIAgentBenchmarkRunReport",
             "RealWorldBenchmarkRunReport",
             "RealWorldBenchmarkSiteObservation",
+            "ModelRequest",
+            "ModelResponse",
+            "ModelCallTrace",
+            "AgentRunRequest",
+            "AgentRunResult",
+            "AgentActionTrace",
+            "ToolCallTrace",
+            "ContextBundleTrace",
+            "CommandResult",
+            "EventCursorRecord",
+            "OutboxRecord",
+            "ReplayBundleManifest",
+        ],
+    ),
+    "product_availability_benchmark_gate": _target_area(
+        "product_availability_benchmark_gate",
+        OwnerService.OPS,
+        "materialized",
+        materialized=[
+            "ProductAvailabilityBenchmarkManifest",
+            "ProductAvailabilityTargetSpec",
+            "ProductAvailabilityFieldEvidence",
+            "ProductAvailabilitySiteResult",
+            "ProductAvailabilityBenchmarkReport",
+            "LiveHttpAcquisitionReport",
+            "NetworkResponse",
             "ModelRequest",
             "ModelResponse",
             "ModelCallTrace",

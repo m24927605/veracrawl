@@ -1,0 +1,8 @@
+{
+  "fixture_id": "us-top-ecommerce-product-availability",
+  "expected_completion_result": "needs_review",
+  "expected_operator_status": "product_availability_partial_sources_blocked",
+  "minimum_passing_sites": 2,
+  "expected_blocked_sites": 1,
+  "minimum_field_evidence_count": 6
+}

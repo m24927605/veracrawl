@@ -119,17 +119,18 @@ For all Spec Kit plans and implementation tasks:
 
 <!-- SPECKIT START -->
 Current active Spec Kit plan:
-`specs/065-top-ecommerce-live-ai-benchmark/plan.md`.
-Use it with `specs/065-top-ecommerce-live-ai-benchmark/spec.md`,
-`specs/065-top-ecommerce-live-ai-benchmark/research.md`,
-`specs/065-top-ecommerce-live-ai-benchmark/data-model.md`,
-`specs/065-top-ecommerce-live-ai-benchmark/contracts/`, and
-`specs/065-top-ecommerce-live-ai-benchmark/quickstart.md` for the Taiwan and
-United States top ecommerce live AI benchmark. This benchmark is a targeted
-market validation corpus composed through rows 055 and 056; it must not become
-a single-site scraper, must not bypass robots/policy gates, and must not claim
-deep category/product production readiness beyond the recorded homepage/public
-entry experiment. Production quality specs remain governed by
+`specs/066-product-price-availability-benchmark/plan.md`.
+Use it with `specs/066-product-price-availability-benchmark/spec.md`,
+`specs/066-product-price-availability-benchmark/research.md`,
+`specs/066-product-price-availability-benchmark/data-model.md`,
+`specs/066-product-price-availability-benchmark/contracts/`, and
+`specs/066-product-price-availability-benchmark/quickstart.md` for the United
+States top ecommerce product price and availability benchmark. This benchmark
+is a targeted product-page validation corpus composed through live HTTP and
+framework-neutral model/agent ports; it must not become site-specific scraper
+code, must not bypass robots/policy gates, must not use login/cart/CAPTCHA/WAF
+bypass, and must honestly record blocked sources instead of fabricating price or
+inventory. Production quality specs remain governed by
 `specs/057-production-quality-benchmark-roadmap/spec.md`,
 `specs/038-production-runtime-closure/spec.md`, and
 `docs/08-build-roadmap.md`.

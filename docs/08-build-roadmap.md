@@ -71,7 +71,7 @@ create additional production implementation specs unless this section and
 
 | Spec | Name | Purpose | Blocking dependencies | Completion gate |
 | --- | --- | --- | --- | --- |
-| 038 | Production Runtime Spec Roadmap | Control the remaining production spec set and prevent ad hoc spec expansion. | 037 | Specs 039-065 are defined with purpose, dependency, and completion gate. |
+| 038 | Production Runtime Spec Roadmap | Control the remaining production spec set and prevent ad hoc spec expansion. | 037 | Specs 039-066 are defined with purpose, dependency, and completion gate. |
 | 039 | Production Run Control API | Make objectives, projects/sites, plans, approvals, run lifecycle, budgets, and policy snapshots executable beyond fixtures. | 038 | Implemented by `veracrawl-run-control`: a run can be created, approved, blocked, resumed, cancelled, and replayed through canonical commands/events. |
 | 040 | Production Persistence Runtime Wiring | Wire target runtime through production Postgres/object/queue ports without coupling core to clients. | 039 | Implemented by `veracrawl-production-persistence`: row 039 canonical state, artifacts, events, outbox, idempotency, and queue leases survive adapter reopen and replay through port-shaped persistence wiring. |
 | 041 | Live HTTP Acquisition Runtime | Implement policy-gated live HTTP acquisition with redirects, canonical URLs, headers, content hashes, snapshots, and replay refs. | 039, 040 | Implemented by `veracrawl-live-http`: authorized local HTTP acquisition composes row 039/040 refs, adapter-owned HTTP, network/source acquisition refs, target source observations, artifacts, canonical URL refs, and typed unsafe/fake-acquisition failures without direct-source bypass. |
@@ -99,16 +99,17 @@ create additional production implementation specs unless this section and
 | 063 | Repair Success Rate Benchmark | Measure crawl, extraction, verification, drift, and replay repair success under seeded failures without owner-service bypass or policy weakening. | 050, 061, 062 | Implemented by `veracrawl-repair-quality-benchmark`: seeded crawl planning, fetch/browser, normalization, extraction, verification, publication, drift, and replay repair cases pass only with repair success rate >= 0.80 for repairable cases, unsafe bypass rate = 0, unresolved critical repair rate = 0, framework-neutral model/agent/tool/context traces, owner-service command refs, before/after evidence, rollback/escalation refs, policy refs, command/event/outbox refs, and replay refs; low success rate, unsafe bypass, owner-service bypass, model-only evidence, missing trace, missing rollback, unresolved critical repair, and missing replay fail with typed diagnostics. |
 | 064 | Cost Latency Stability Release Gate | Aggregate quality, cost, latency, throughput, token/call usage, retry behavior, and multi-run stability into the production crawl quality release decision. | 058-063 | Implemented by `veracrawl-quality-release-gate`: quality report refs from 058-063, at least three stability runs, cost budget, p95 latency, throughput, retry rate, token/call usage, stability variance, policy refs, command/event/outbox refs, SLO metric refs, audit refs, release decision refs, and replay refs gate the final quality release decision; missing prior gates, cost budget violations, latency SLO violations, retry violations, stability regressions, insufficient runs, replay gaps, false-ready status, and missing command/event refs fail with typed diagnostics. |
 | 065 | Top Ecommerce Live AI Benchmark | Run a targeted market validation corpus against selected Taiwan and United States major ecommerce public entry points with hosted LLM/agent traces. | 055, 056, 064 | Implemented by `veracrawl-real-benchmark` and `veracrawl-real-ai-benchmark`: `top-ecommerce-public-corpus` and `top-ecommerce-ai-agent-corpus` cover Shopee Taiwan, momo Shopping, PChome 24h, Amazon US, Walmart US, and eBay US homepages with robots preflight, origin allowlists, live HTTP evidence, OpenAI model traces through `ModelProviderPort`, native agent traces through `AgentRuntimePort`, source anchors, extraction candidates, evidence/verification gate refs, command/event/outbox refs, and replay refs; robots denial, source drift, hosted-model failure, missing traces, LLM-as-evidence, or replay gaps fail visibly. |
+| 066 | US Top Ecommerce Product Price Availability Benchmark | Test whether a specified product's price and availability can be extracted from Amazon, Walmart, and eBay with source evidence and AI traces. | 055, 056, 065 | Implemented by `veracrawl-product-availability-benchmark`: a manifest-declared product-page corpus for SanDisk 256GB Extreme microSDXC runs robots-gated live HTTP plus framework-neutral model/agent decisions for product identity, price candidate, availability candidate, and verification; passing fields require source anchors, artifacts, content hashes, evidence/verification refs, command/event/outbox refs, and replay refs, while source access denial, missing price, missing availability, LLM-as-evidence, missing traces, and missing replay fail or produce honest needs-review without fabricated inventory. |
 
 Activation rule: when a planned spec is activated, preserve its number and
 directory, run the Spec Kit clarify/plan/tasks/analyze/implement workflow, record
 real validation in `tasks.md`, and merge it before moving to the next blocking
 spec.
 
-Spec 065 is an explicitly amended market validation benchmark. It does not
-reopen the finite production-quality release sequence in spec 057 and does not
-claim deep category/product production readiness beyond the recorded public
-homepage experiment.
+Specs 065 and 066 are explicitly amended market validation benchmarks. They do
+not reopen the finite production-quality release sequence in spec 057 and do not
+claim deep category/product search traversal production readiness beyond the
+recorded public homepage and declared product-page experiments.
 
 ## Phase 0: Contracts And Boundaries
 

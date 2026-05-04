@@ -1,0 +1,73 @@
+{
+  "id": "us-top-ecommerce-product-availability",
+  "scenario": "us-top-ecommerce-product-availability",
+  "profile_refs": ["target"],
+  "product_name": "SanDisk 256GB Extreme microSDXC UHS-I Memory Card with Adapter",
+  "brand": "SanDisk",
+  "required_identity_terms": ["SanDisk", "256GB", "Extreme", "microSDXC"],
+  "rejected_identity_terms": [],
+  "provider_names": ["Local model runtime"],
+  "framework_names": ["VeraCrawl Native Runtime"],
+  "expected_completion_result": "needs_review",
+  "expected_operator_status": "product_availability_partial_sources_blocked",
+  "negative_case": false,
+  "required_ref_types": [
+    "live_http",
+    "model_call_trace",
+    "agent_action_trace",
+    "tool_call_trace",
+    "context_bundle_trace",
+    "source_anchor",
+    "field_evidence",
+    "evidence_verification_gate",
+    "command_event_outbox",
+    "replay"
+  ],
+  "target_specs": [
+    {
+      "id": "us-amazon-sandisk-256gb-extreme",
+      "site_name": "Amazon",
+      "target_url": "https://www.amazon.com/SanDisk-256GB-Extreme-microSDXC-Memory/dp/B09X7CRKRZ",
+      "robots_url": "https://www.amazon.com/robots.txt",
+      "allowed_origin": "https://www.amazon.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "required_identity_terms": ["SanDisk", "256GB", "Extreme", "microSDXC"],
+      "rejected_identity_terms": [],
+      "allowed_robots_status_codes": [200],
+      "timeout_ms": 30000,
+      "size_budget_bytes": 2500000,
+      "expected_site_result": "pass"
+    },
+    {
+      "id": "us-walmart-sandisk-256gb-extreme",
+      "site_name": "Walmart",
+      "target_url": "https://www.walmart.com/ip/264401664",
+      "robots_url": "https://www.walmart.com/robots.txt",
+      "allowed_origin": "https://www.walmart.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "required_identity_terms": ["SanDisk", "256GB", "Extreme", "MicroSD"],
+      "rejected_identity_terms": [],
+      "allowed_robots_status_codes": [200],
+      "timeout_ms": 30000,
+      "size_budget_bytes": 2500000,
+      "expected_site_result": "pass"
+    },
+    {
+      "id": "us-ebay-sandisk-256gb-extreme",
+      "site_name": "eBay",
+      "target_url": "https://www.ebay.com/itm/376700011585",
+      "robots_url": "https://www.ebay.com/robots.txt",
+      "allowed_origin": "https://www.ebay.com",
+      "expected_status_code": 200,
+      "expected_content_type": "text/html",
+      "required_identity_terms": ["SanDisk", "256GB", "Extreme"],
+      "rejected_identity_terms": [],
+      "allowed_robots_status_codes": [200],
+      "timeout_ms": 30000,
+      "size_budget_bytes": 2500000,
+      "expected_site_result": "needs_review"
+    }
+  ]
+}

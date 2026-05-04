@@ -1,0 +1,7 @@
+{
+  "required_event_types": [
+    "product_availability_field_evidence_recorded",
+    "product_availability_site_result_recorded",
+    "product_availability_benchmark_reported"
+  ]
+}
