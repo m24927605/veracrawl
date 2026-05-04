@@ -276,6 +276,27 @@ def test_product_availability_extracts_delivery_eta_and_sortable_offer(
     assert result.offer_records[0].total_price_sort_amount == 1879.0
 
 
+def test_product_availability_uses_price_currency_for_bare_shipping_symbol(
+    tmp_path: Path,
+) -> None:
+    body = """
+    <html><head><title>SanDisk 256GB Extreme microSDXC</title>
+    <meta name="product:price:amount" content="1,879">
+    <meta name="product:price:currency" content="TWD">
+    <meta name="product:availability" content="in stock">
+    </head><body>
+    SanDisk 256GB Extreme microSDXC 記憶卡 可訂購 24小時到貨 運費$75
+    </body></html>
+    """
+    result = _run(tmp_path, body=body)
+    site = result.site_results[0]
+
+    assert site.shipping_fee_amount == 75.0
+    assert site.shipping_fee_currency == "TWD"
+    assert site.total_price_amount == 1954.0
+    assert result.offer_records[0].total_price_sort_amount == 1954.0
+
+
 def test_product_availability_extracts_chinese_availability_fallback(
     tmp_path: Path,
 ) -> None:

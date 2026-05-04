@@ -959,8 +959,11 @@ def _extract_shipping_fee(
                 "shipping_currency",
             ),
         )
-        candidate = _price_candidate_from_raw(f"{currency or fallback_currency or ''} {amount}")
-        return _with_fallback_currency(candidate, fallback_currency)
+        candidate = _shipping_candidate_from_raw(
+            f"{currency or fallback_currency or ''} {amount}",
+            fallback_currency,
+        )
+        return candidate
 
     source_text = _source_text(body)
     free_shipping = re.search(
@@ -988,8 +991,7 @@ def _extract_shipping_fee(
         match = re.search(pattern, source_text, flags=re.IGNORECASE)
         if not match:
             continue
-        candidate = _price_candidate_from_raw(match.group(0))
-        candidate = _with_fallback_currency(candidate, fallback_currency)
+        candidate = _shipping_candidate_from_raw(match.group(0), fallback_currency)
         if candidate is not None:
             return candidate
     return None
@@ -1111,6 +1113,33 @@ def _with_fallback_currency(
         amount=candidate.amount,
         currency=fallback_currency,
     )
+
+
+def _shipping_candidate_from_raw(
+    raw: str,
+    fallback_currency: str | None,
+) -> _FieldCandidate | None:
+    candidate = _price_candidate_from_raw(raw)
+    if candidate is None:
+        return None
+    folded = raw.upper().replace("\xa0", " ")
+    has_explicit_currency = bool(
+        re.search(r"\b[A-Z]{3}\b", folded)
+        or "US $" in folded
+        or "US$" in folded
+        or "NT$" in folded
+        or "NT $" in folded
+        or "新台幣" in raw
+        or "台幣" in raw
+    )
+    if fallback_currency is not None and not has_explicit_currency:
+        return _FieldCandidate(
+            raw_text=candidate.raw_text,
+            normalized_value=f"{fallback_currency} {candidate.amount}",
+            amount=candidate.amount,
+            currency=fallback_currency,
+        )
+    return _with_fallback_currency(candidate, fallback_currency)
 
 
 def _delivery_candidate_from_raw(raw: str) -> _DeliveryCandidate | None:

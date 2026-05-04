@@ -48,3 +48,24 @@
 - Docker-backed pytest passed after explicit opt-in:
   `VERACRAWL_INFRASTRUCTURE_DOCKER=1 uv run --python python3.12 --extra dev --extra postgres --extra queue-redis --extra object-s3 pytest tests/integration/test_operational_infrastructure_live.py -q -rs`
   returned 1 passing test.
+
+## Live Ecommerce Offer Projection Results
+
+- First Taiwan live run exposed a real extraction bug: momo `運費$75` was
+  parsed as USD because the generic money parser treated bare `$` as USD. This
+  was fixed so shipping fee extraction uses the product price currency when a
+  shipping fee has a bare currency symbol and no explicit currency code.
+- Post-fix Taiwan live run:
+  `uv run --python python3.12 --extra dev veracrawl-product-availability-benchmark run tests/fixtures/taiwan-top-ecommerce-product-availability --profile target --out .veracrawl-real-runs/078-taiwan-offer-projection-http-fixed`
+  returned `needs_review`, 2 sortable offers, 1 blocked offer. momo produced
+  price `1879 TWD`, availability `out_of_stock`, ETA `1-1 days`, shipping fee
+  `75 TWD`, total price `1954 TWD`. PChome produced price `1999 TWD`,
+  availability `in_stock`, ETA `1-1 days`, free shipping, total price
+  `1999 TWD`. Shopee remained blocked with JavaScript shell/source limitation.
+- Post-fix US live run:
+  `uv run --python python3.12 --extra dev veracrawl-product-availability-benchmark run tests/fixtures/us-top-ecommerce-product-availability --profile target --out .veracrawl-real-runs/078-us-offer-projection-http-fixed`
+  returned `needs_review`, 2 sortable offers, 1 blocked offer. Walmart produced
+  source-backed price/availability and ETA `2-2 days`; Amazon produced
+  source-backed price/availability and free-shipping evidence but no
+  source-backed delivery ETA. eBay remained blocked with missing network
+  artifact/source limitation.
