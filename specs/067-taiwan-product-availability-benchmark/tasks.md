@@ -50,6 +50,17 @@
   `product:price:currency=TWD`, and `product:availability=in stock`. PChome 24h
   product page returned JSON-LD Product/Offer with `price=1999`,
   `priceCurrency=TWD`, and `availability=http://schema.org/InStock`.
+- Shopee Taiwan read-only browser render follow-up on 2026-05-04:
+  Playwright/Chromium rendered a Shopee error page instead of source-backed
+  product DOM. The rendered text said `頁面無法顯示` and
+  `發生錯誤！請登入並再試一次或回到主頁。`. DOM inspection found no `SanDisk`,
+  `Extreme`, `microSDXC`, `256GB`, price candidate, or availability term. The
+  browser-triggered `/api/v4/pdp/get_rw` response returned `error=90309999`,
+  `is_login=false`, and `action_type=2`. Artifacts are stored under
+  `.veracrawl-real-runs/shopee-browser-render-probe/`. Shopee remains
+  `needs_review` / `product_availability_source_access_denied` for this fixture;
+  no login, CAPTCHA/WAF bypass, stealth/proxy, or fabricated price/inventory was
+  used.
 - Spec Kit prerequisite check passed:
   `./.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
   returned the 067 feature directory with `research.md`, `data-model.md`,

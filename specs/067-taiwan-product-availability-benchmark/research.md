@@ -26,6 +26,14 @@ names vary slightly by seller and distributor, but required identity terms
   shell; product API probes returned HTTP 403. Treat as source limitation /
   needs-review unless browser/API support later provides authorized source
   evidence.
+- Shopee Taiwan browser render follow-up with read-only Playwright/Chromium on
+  2026-05-04 rendered a Shopee error page, not the product page. The DOM text
+  said `頁面無法顯示` and `發生錯誤！請登入並再試一次或回到主頁。`.
+  Rendered DOM did not contain `SanDisk`, `Extreme`, `microSDXC`, `256GB`,
+  price candidates, or availability terms. The browser-triggered
+  `/api/v4/pdp/get_rw` response returned `error=90309999`, `is_login=false`,
+  and `action_type=2`. This remains source-limited and must not be bypassed or
+  treated as product evidence.
 - momo mobile product page returned public product meta tags including
   `product:price:amount`, `product:price:currency`, and
   `product:availability`.
