@@ -18,6 +18,7 @@ from veracrawl.ops.optimization_integration import (
     integrate_cost_cache_budget_optimization,
     integrate_drift_recovery_feedback,
     optimization_regression_release_gate,
+    optimization_regression_release_gate_from_reports,
 )
 from veracrawl.optimization.runtime import (
     RuntimeFieldSource,
@@ -117,18 +118,18 @@ def test_owner_integration_replay_passes_for_complete_refs() -> None:
         retry_class="repairable",
         repair_outcome="review_required",
     )
-    gate = optimization_regression_release_gate(
+    gate = optimization_regression_release_gate_from_reports(
         fixture_id="owner-optimization-integration-success",
-        lower_integration_refs=[
-            scheduler.id,
-            normalize.id,
-            extract.id,
-            dedupe.id,
-            publication.id,
-            cost.id,
-            drift.id,
+        lower_integrations=[
+            scheduler,
+            normalize,
+            extract,
+            dedupe,
+            publication,
+            cost,
+            drift,
         ],
-        metric_slice_refs=[_metric().id],
+        metric_slices=[_metric()],
     )
 
     assert scheduler_integration_replay_passes(scheduler)

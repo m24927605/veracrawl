@@ -89,3 +89,56 @@ def test_regression_gate_failure_requires_typed_diagnostics() -> None:
     )
 
     assert gate.completion_result == CompletenessResult.FAIL
+
+
+def test_regression_gate_pass_requires_lower_report_kind_coverage() -> None:
+    with pytest.raises(ValueError, match="missing lower integration kinds"):
+        OptimizationRegressionReleaseGate(
+            id="regression-gate:false-ready",
+            fixture_id="owner-optimization-missing-lower-ref",
+            lower_integration_refs=["scheduler:ok", "normalize:ok"],
+            metric_slice_refs=["metric:owner"],
+            diagnostics=[],
+            completion_result=CompletenessResult.PASS,
+            policy_decision_refs=["policy:allow"],
+            command_record_refs=["command:gate"],
+            event_cursor_refs=["event:gate"],
+            outbox_refs=["outbox:gate"],
+            replay_bundle_ref="replay:gate",
+        )
+
+
+def test_regression_gate_pass_requires_structured_lower_report_refs() -> None:
+    kinds = [
+        "scheduler",
+        "normalize",
+        "extract_verify",
+        "dedupe_identity",
+        "ranking_publication",
+        "cost_cache_budget",
+        "drift_recovery",
+    ]
+    with pytest.raises(ValueError, match="missing lower report refs"):
+        OptimizationRegressionReleaseGate(
+            id="regression-gate:false-ready-refs",
+            fixture_id="owner-optimization-missing-lower-ref",
+            required_lower_integration_kinds=kinds,
+            present_lower_integration_kinds=kinds,
+            lower_integration_refs=[
+                "scheduler:ok",
+                "normalize:ok",
+                "extract:ok",
+                "dedupe:ok",
+                "ranking:ok",
+                "cost:ok",
+                "drift:ok",
+            ],
+            metric_slice_refs=["metric:owner"],
+            diagnostics=[],
+            completion_result=CompletenessResult.PASS,
+            policy_decision_refs=["policy:allow"],
+            command_record_refs=["command:gate"],
+            event_cursor_refs=["event:gate"],
+            outbox_refs=["outbox:gate"],
+            replay_bundle_ref="replay:gate",
+        )

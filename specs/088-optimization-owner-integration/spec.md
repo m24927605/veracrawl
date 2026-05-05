@@ -327,6 +327,10 @@ quality metrics, or cost metrics are missing or regressed.
   and regression gating.
 - Replay validation lives in
   `src/veracrawl/review_replay/crawler_optimization_owner_integration.py`.
-- Validation passed: targeted owner integration pytest suite, `ruff check`,
-  targeted `mypy`, full `pytest` with 1402 passed and 5 skipped, and
+- Spec 096 release gating was hardened so passing reports must be built from
+  typed lower integration records with complete lower-kind coverage, replay
+  refs, metric slices, and regression checks; raw string-only lower refs fail.
+- Validation passed: targeted owner integration pytest suite, Spec 096
+  representative release evidence tests, `ruff check`, targeted `mypy`, full
+  `pytest` with 1404 passed and 5 skipped, and
   `git diff --check`.

@@ -51,6 +51,14 @@
 - [x] T024 Run `git diff --check`
 - [x] T025 Record implementation closure and validation results in `specs/088-optimization-owner-integration/spec.md` and this `tasks.md`
 
+## Phase 8: Spec 096 Release Evidence Hardening
+
+- [x] T026 [US4] Extend `OptimizationRegressionReleaseGate` with required/present lower integration kinds, failed lower refs, replay gaps, and metric regression refs in `src/veracrawl/contracts/crawler_optimization.py`
+- [x] T027 [US4] Add typed lower-report aggregation in `src/veracrawl/ops/optimization_integration.py` so passing gates are built from 089-095 integration records, not arbitrary string refs
+- [x] T028 [US4] Extend replay validation in `src/veracrawl/review_replay/crawler_optimization_owner_integration.py` to fail on missing lower kinds, failed lower reports, replay gaps, and metric regressions
+- [x] T029 [US4] Add release-gate hardening tests proving actual lower reports pass, raw string-only lower refs fail, and forged lower-kind coverage without structured report refs fails
+- [x] T030 [US4] Record Spec 096 hardening closure in `specs/096-optimization-regression-release-gate/spec.md`
+
 ## Dependencies & Execution Order
 
 - Phase 1 must complete before code integration.
@@ -72,13 +80,13 @@ with typed enqueue/block/retire/stop outcomes and replay refs.
   `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
 - Targeted tests:
   `uv run --extra dev pytest tests/contract/test_crawler_optimization_owner_integration_contracts.py tests/contract/test_crawler_optimization_owner_integration_registry.py tests/contract/test_crawler_optimization_owner_integration_import_boundaries.py tests/unit/test_crawler_optimization_owner_integration.py tests/unit/test_crawler_optimization_owner_integration_replay.py`
-  passed with 14 tests.
+  passed with 16 tests after Spec 096 release evidence hardening.
 - Lint:
   `uv run --extra dev ruff check`
 - Type check:
   `uv run --extra dev mypy src/veracrawl/scheduler/optimization_integration.py src/veracrawl/normalize/optimization_integration.py src/veracrawl/extract/optimization_integration.py src/veracrawl/graph/optimization_integration.py src/veracrawl/publish/optimization_integration.py src/veracrawl/ops/optimization_integration.py src/veracrawl/review_replay/crawler_optimization_owner_integration.py src/veracrawl/contracts/crawler_optimization.py`
 - Full regression:
   `uv run --extra dev pytest`
-  passed with 1402 passed, 5 skipped.
+  passed with 1404 passed, 5 skipped after Spec 096 hardening.
 - Diff check:
   `git diff --check`

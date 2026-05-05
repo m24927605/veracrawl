@@ -206,6 +206,8 @@ def missing_regression_release_gate_replay_refs(
 ) -> list[str]:
     missing = _missing(
         {
+            "required_lower_integration_kinds": gate.required_lower_integration_kinds,
+            "present_lower_integration_kinds": gate.present_lower_integration_kinds,
             "lower_integration_refs": gate.lower_integration_refs,
             "metric_slice_refs": gate.metric_slice_refs,
             "policy_decision_refs": gate.policy_decision_refs,
@@ -215,7 +217,15 @@ def missing_regression_release_gate_replay_refs(
             "replay_bundle_ref": gate.replay_bundle_ref,
         }
     )
-    return sorted(set(missing + gate.missing_lower_integration_refs))
+    return sorted(
+        set(
+            missing
+            + gate.missing_lower_integration_refs
+            + gate.failed_lower_integration_refs
+            + gate.replay_gap_refs
+            + gate.metric_regression_refs
+        )
+    )
 
 
 def regression_release_gate_replay_passes(gate: OptimizationRegressionReleaseGate) -> bool:

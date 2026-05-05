@@ -19,6 +19,7 @@ from veracrawl.ops.optimization_integration import (
     integrate_cost_cache_budget_optimization,
     integrate_drift_recovery_feedback,
     optimization_regression_release_gate,
+    optimization_regression_release_gate_from_reports,
 )
 from veracrawl.optimization.runtime import (
     RuntimeFieldSource,
@@ -206,6 +207,11 @@ def test_ops_cost_cache_drift_and_regression_gates() -> None:
         ],
         metric_slice_refs=[metric.id],
     )
+    evidence_gate_pass = optimization_regression_release_gate_from_reports(
+        fixture_id="owner-optimization-integration-success",
+        lower_integrations=_lower_integrations(cost_pass=cost_pass, drift_pass=drift_pass),
+        metric_slices=[metric],
+    )
     gate_fail = optimization_regression_release_gate(
         fixture_id="owner-optimization-missing-lower-ref",
         lower_integration_refs=["scheduler:ok"],
@@ -218,7 +224,8 @@ def test_ops_cost_cache_drift_and_regression_gates() -> None:
     assert cost_fail.completion_result == CompletenessResult.FAIL
     assert drift_pass.completion_result == CompletenessResult.PASS
     assert drift_fail.completion_result == CompletenessResult.FAIL
-    assert gate_pass.completion_result == CompletenessResult.PASS
+    assert gate_pass.completion_result == CompletenessResult.FAIL
+    assert evidence_gate_pass.completion_result == CompletenessResult.PASS
     assert gate_fail.completion_result == CompletenessResult.FAIL
 
 
@@ -264,6 +271,74 @@ def _metric() -> OptimizationMetricSlice:
         llm_token_savings_rate=0.43,
         metric_evidence_refs=["metric-evidence:owner"],
     )
+
+
+def _lower_integrations(
+    *,
+    cost_pass: object,
+    drift_pass: object,
+) -> list[object]:
+    frontier = runtime_frontier_optimization(
+        fixture_id="owner-optimization-integration-success",
+        run_ref="run:owner",
+        objective_ref="objective:owner",
+        profile=_profile(),
+        candidates=[
+            RuntimeUrlCandidate(
+                candidate_url="https://example.com/listing",
+                source_anchor_ref="anchor:listing",
+                page_type="listing",
+                url_pattern_score=0.9,
+                anchor_text_score=0.9,
+                page_title_score=0.9,
+                semantic_similarity_score=0.9,
+                domain_authority_score=0.8,
+                freshness_score=0.8,
+                historical_success_score=0.9,
+                page_type_score=0.9,
+            )
+        ],
+    )
+    dom = runtime_dom_extraction_context(
+        fixture_id="owner-optimization-integration-success",
+        normalized_document_ref="normalized:owner",
+        source_url="https://example.com/listing",
+        html_body=_html(),
+        fields=[
+            RuntimeFieldSource(
+                field_name="title",
+                raw_value="Owner Product",
+                normalized_value="Owner Product",
+                source_kind="css_selector",
+                confidence=0.96,
+            )
+        ],
+    )
+    ranking = runtime_dedupe_ranking_decision(
+        fixture_id="owner-optimization-integration-success",
+        objective_ref="objective:owner",
+        inputs=[
+            RuntimeRankingInput(
+                item_ref="candidate:a",
+                canonical_url="https://example.com/item?id=1",
+                text="Owner Product red",
+                variant_key="product:red",
+            )
+        ],
+    )
+    return [
+        integrate_scheduler_optimization(
+            fixture_id="owner-optimization-integration-success",
+            run_ref="run:owner",
+            frontier_decisions=frontier.decisions,
+        ),
+        integrate_normalize_optimization(dom),
+        integrate_extract_verify_optimization(dom),
+        integrate_dedupe_identity_optimization(ranking),
+        integrate_ranking_publication_optimization(ranking),
+        cost_pass,
+        drift_pass,
+    ]
 
 
 def _report() -> CrawlerOptimizationReport:

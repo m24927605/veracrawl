@@ -35,6 +35,15 @@ uv run --extra dev pytest \
   tests/unit/test_crawler_optimization_owner_integration_replay.py
 ```
 
+## Validate Spec 096 Release Evidence
+
+```bash
+uv run --extra dev pytest \
+  tests/unit/test_crawler_optimization_owner_integration_replay.py::test_owner_integration_replay_passes_for_complete_refs \
+  tests/contract/test_crawler_optimization_owner_integration_contracts.py::test_regression_gate_pass_requires_lower_report_kind_coverage \
+  tests/contract/test_crawler_optimization_owner_integration_contracts.py::test_regression_gate_pass_requires_structured_lower_report_refs
+```
+
 ## Run Project Validation
 
 ```bash

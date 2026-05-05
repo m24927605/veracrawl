@@ -1454,9 +1454,14 @@ class DriftRecoveryFeedbackIntegration(TimestampedModel):
 class OptimizationRegressionReleaseGate(TimestampedModel):
     id: str
     fixture_id: str
+    required_lower_integration_kinds: list[str] = Field(default_factory=list)
+    present_lower_integration_kinds: list[str] = Field(default_factory=list)
     lower_integration_refs: list[Ref] = Field(default_factory=list)
     missing_lower_integration_refs: list[Ref] = Field(default_factory=list)
+    failed_lower_integration_refs: list[Ref] = Field(default_factory=list)
+    replay_gap_refs: list[Ref] = Field(default_factory=list)
     metric_slice_refs: list[Ref] = Field(default_factory=list)
+    metric_regression_refs: list[Ref] = Field(default_factory=list)
     false_ready_guard_refs: list[Ref] = Field(default_factory=list)
     diagnostics: list[str] = Field(default_factory=list)
     completion_result: CompletenessResult
@@ -1470,8 +1475,31 @@ class OptimizationRegressionReleaseGate(TimestampedModel):
     @model_validator(mode="after")
     def validate_regression_release_gate(self) -> OptimizationRegressionReleaseGate:
         if self.completion_result == CompletenessResult.PASS:
+            missing_kinds = sorted(
+                set(self.required_lower_integration_kinds)
+                - set(self.present_lower_integration_kinds)
+            )
+            expected_prefixes = {
+                "scheduler": "scheduler-optimization-integration:",
+                "normalize": "normalize-optimization-integration:",
+                "extract_verify": "extract-verify-optimization-integration:",
+                "dedupe_identity": "dedupe-identity-optimization-integration:",
+                "ranking_publication": "ranking-publication-optimization-integration:",
+                "cost_cache_budget": "cost-cache-budget-optimization-integration:",
+                "drift_recovery": "drift-recovery-feedback-integration:",
+            }
+            missing_report_refs = [
+                kind
+                for kind, prefix in expected_prefixes.items()
+                if kind in self.required_lower_integration_kinds
+                and not any(ref.startswith(prefix) for ref in self.lower_integration_refs)
+            ]
             missing = _missing_refs(
                 {
+                    "required_lower_integration_kinds": (
+                        self.required_lower_integration_kinds
+                    ),
+                    "present_lower_integration_kinds": self.present_lower_integration_kinds,
                     "lower_integration_refs": self.lower_integration_refs,
                     "metric_slice_refs": self.metric_slice_refs,
                     "policy_decision_refs": self.policy_decision_refs,
@@ -1483,15 +1511,30 @@ class OptimizationRegressionReleaseGate(TimestampedModel):
             )
             if (
                 missing
+                or missing_kinds
+                or missing_report_refs
                 or self.failure_type
                 or self.missing_lower_integration_refs
+                or self.failed_lower_integration_refs
+                or self.replay_gap_refs
+                or self.metric_regression_refs
                 or self.false_ready_guard_refs
             ):
-                raise ValueError(f"passing regression gate missing refs: {missing}")
+                raise ValueError(
+                    "passing regression gate missing refs: "
+                    f"{missing}; missing lower integration kinds: {missing_kinds}; "
+                    f"missing lower report refs: {missing_report_refs}"
+                )
         elif not (
             self.failure_type
             and self.diagnostics
-            and (self.missing_lower_integration_refs or self.false_ready_guard_refs)
+            and (
+                self.missing_lower_integration_refs
+                or self.failed_lower_integration_refs
+                or self.replay_gap_refs
+                or self.metric_regression_refs
+                or self.false_ready_guard_refs
+            )
         ):
             raise ValueError("non-pass regression gate requires typed diagnostics")
         return self
