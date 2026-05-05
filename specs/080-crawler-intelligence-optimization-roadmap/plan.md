@@ -7,9 +7,10 @@
 
 Define and implement a finite post-079 optimization roadmap for crawler
 intelligence. The roadmap establishes the activation sequence, contract
-families, owner-service boundaries, and acceptance gates for specs 081-086; the
-implementation materializes those gates through shared contracts, deterministic
-runtime checks, CLI reports, fixtures, registry entries, and replay helpers.
+families, owner-service boundaries, and acceptance gates for specs 081-087; the
+implementation materializes those gates and the spec 087 runtime wiring through
+shared contracts, deterministic runtime checks, CLI reports, fixtures, registry
+entries, and replay helpers.
 
 ## Technical Context
 
@@ -92,6 +93,8 @@ specs/085-recommendation-ranking-runtime/
 └── spec.md
 specs/086-cost-recovery-evaluation-gates/
 └── spec.md
+specs/087-crawler-optimization-runtime-wiring/
+└── spec.md
 ```
 
 ### Source Code
@@ -122,8 +125,8 @@ tests/fixtures/
 
 ## Implementation Closure
 
-- `src/veracrawl/contracts/crawler_optimization.py` defines all 081-086 data
-  contracts.
+- `src/veracrawl/contracts/crawler_optimization.py` defines all 081-087
+  optimization and runtime wiring contracts.
 - `src/veracrawl/benchmarks/crawler_optimization.py` implements focused
   frontier scoring, DOM pruning/ranking, extractor fallback, canonicalization,
   SimHash/MinHash identity, duplicate suppression, recommendation ranking, and
@@ -136,9 +139,9 @@ tests/fixtures/
   cases.
 
 **Structure Decision**: Spec 080 remains the roadmap/control artifact. Specs
-081-086 are implemented through shared contracts, runtime gate, CLI, fixtures,
-and tests; future extensions should keep their own plan/tasks artifacts before
-additional runtime changes.
+081-087 are implemented through shared contracts, runtime gate, runtime wiring,
+CLI, fixtures, and tests; future extensions should keep their own plan/tasks
+artifacts before additional runtime changes.
 
 ## Complexity Tracking
 

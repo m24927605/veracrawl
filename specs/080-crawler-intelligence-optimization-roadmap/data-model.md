@@ -13,8 +13,8 @@
   - `policy_decision_refs`
   - `replay_bundle_ref`
 - **Validation Rules**:
-  - Must include specs 081-086.
-  - Must state that specs 081-086 do not replace or weaken specs 069-075.
+  - Must include specs 081-087.
+  - Must state that specs 081-087 do not replace or weaken specs 069-075.
   - Must carry refs to docs/08 and specs/038/068 when those roadmap docs are
     updated.
 
@@ -76,4 +76,5 @@ validated -> superseded
 - `activated` requires an implementation spec plan/tasks set.
 - `validated` requires passing contract, fixture, negative, replay, and
   benchmark tests for that spec.
-- `optimization_release_ready` requires spec 086 aggregate pass.
+- `optimization_release_ready` requires spec 086 aggregate pass plus spec 087
+  runtime wiring evidence before owner services consume optimization decisions.

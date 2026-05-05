@@ -870,6 +870,219 @@ class CrawlerOptimizationReport(TimestampedModel):
         return self
 
 
+class RuntimeOptimizationSignalSet(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    objective_ref: Ref
+    candidate_url: str
+    source_anchor_ref: Ref | None = None
+    source_signal_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    allowed: bool = True
+    blocked_reason_refs: list[Ref] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_runtime_signals(self) -> RuntimeOptimizationSignalSet:
+        if not _is_http_url(self.candidate_url):
+            raise ValueError("runtime optimization candidate_url must be absolute http(s)")
+        missing = _missing_refs(
+            {
+                "run_ref": self.run_ref,
+                "objective_ref": self.objective_ref,
+                "policy_decision_refs": self.policy_decision_refs,
+            }
+        )
+        if missing:
+            raise ValueError(f"runtime signal set missing refs: {missing}")
+        if self.allowed:
+            missing_allowed = _missing_refs(
+                {
+                    "source_anchor_ref": self.source_anchor_ref,
+                    "source_signal_refs": self.source_signal_refs,
+                }
+            )
+            if missing_allowed:
+                raise ValueError(f"allowed runtime signal set missing refs: {missing_allowed}")
+        elif not self.blocked_reason_refs:
+            raise ValueError("blocked runtime signal set requires blocked_reason_refs")
+        return self
+
+
+class RuntimeFrontierOptimizationDecision(TimestampedModel):
+    id: str
+    fixture_id: str
+    signal_set_ref: Ref
+    candidate_url: str
+    scheduler_action: str
+    scheduler_priority: int = 0
+    frontier_score_ref: Ref | None = None
+    blocked_reason_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+
+    @model_validator(mode="after")
+    def validate_frontier_decision(self) -> RuntimeFrontierOptimizationDecision:
+        if not _is_http_url(self.candidate_url):
+            raise ValueError("runtime frontier candidate_url must be absolute http(s)")
+        if self.scheduler_action not in {"enqueue", "block", "retire", "review"}:
+            raise ValueError("unsupported runtime frontier scheduler_action")
+        if self.scheduler_priority < 0:
+            raise ValueError("scheduler_priority cannot be negative")
+        if self.scheduler_action == "enqueue" and (
+            not self.frontier_score_ref or self.scheduler_priority < 1
+        ):
+            raise ValueError("enqueue frontier decision requires score ref and positive priority")
+        if self.scheduler_action == "block" and not self.blocked_reason_refs:
+            raise ValueError("blocked frontier decision requires blocked_reason_refs")
+        missing = _missing_refs(
+            {
+                "signal_set_ref": self.signal_set_ref,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+        )
+        if missing:
+            raise ValueError(f"runtime frontier decision missing refs: {missing}")
+        return self
+
+
+class RuntimeDomExtractionContext(TimestampedModel):
+    id: str
+    fixture_id: str
+    normalized_document_ref: Ref
+    dom_context_ref: Ref
+    extractor_plan_ref: Ref
+    extractor_attempt_refs: list[Ref] = Field(default_factory=list)
+    field_confidence_refs: list[Ref] = Field(default_factory=list)
+    abstention_decision_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+
+    @model_validator(mode="after")
+    def validate_dom_extraction_context(self) -> RuntimeDomExtractionContext:
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "normalized_document_ref": self.normalized_document_ref,
+                    "dom_context_ref": self.dom_context_ref,
+                    "extractor_plan_ref": self.extractor_plan_ref,
+                    "extractor_attempt_refs": self.extractor_attempt_refs,
+                    "field_confidence_refs": self.field_confidence_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing:
+                raise ValueError(f"runtime DOM extraction context missing refs: {missing}")
+        return self
+
+
+class RuntimeDedupeRankingDecision(TimestampedModel):
+    id: str
+    fixture_id: str
+    input_candidate_refs: list[Ref] = Field(default_factory=list)
+    canonicalization_refs: list[Ref] = Field(default_factory=list)
+    fingerprint_refs: list[Ref] = Field(default_factory=list)
+    identity_decision_refs: list[Ref] = Field(default_factory=list)
+    duplicate_suppression_ref: Ref
+    ranking_score_refs: list[Ref] = Field(default_factory=list)
+    ranked_output_set_ref: Ref
+    retained_refs: list[Ref] = Field(default_factory=list)
+    suppressed_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+
+    @model_validator(mode="after")
+    def validate_dedupe_ranking(self) -> RuntimeDedupeRankingDecision:
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "input_candidate_refs": self.input_candidate_refs,
+                    "canonicalization_refs": self.canonicalization_refs,
+                    "fingerprint_refs": self.fingerprint_refs,
+                    "identity_decision_refs": self.identity_decision_refs,
+                    "duplicate_suppression_ref": self.duplicate_suppression_ref,
+                    "ranking_score_refs": self.ranking_score_refs,
+                    "ranked_output_set_ref": self.ranked_output_set_ref,
+                    "retained_refs": self.retained_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing:
+                raise ValueError(f"runtime dedupe ranking decision missing refs: {missing}")
+            if not set(self.retained_refs).issubset(set(self.input_candidate_refs)):
+                raise ValueError("retained refs must come from input candidates")
+            if set(self.retained_refs) & set(self.suppressed_refs):
+                raise ValueError("candidate cannot be both retained and suppressed")
+        return self
+
+
+class RuntimeOptimizationAggregate(TimestampedModel):
+    id: str
+    fixture_id: str
+    lower_decision_refs: list[Ref] = Field(default_factory=list)
+    metric_slice_refs: list[Ref] = Field(default_factory=list)
+    optimization_report_ref: Ref | None = None
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_refs: list[Ref] = Field(default_factory=list)
+    failure_report_refs: list[Ref] = Field(default_factory=list)
+    missing_ref_fields: list[str] = Field(default_factory=list)
+    failure_type: CrawlerOptimizationFailureType | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+    completion_result: CompletenessResult
+
+    @model_validator(mode="after")
+    def validate_runtime_aggregate(self) -> RuntimeOptimizationAggregate:
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "lower_decision_refs": self.lower_decision_refs,
+                    "metric_slice_refs": self.metric_slice_refs,
+                    "optimization_report_ref": self.optimization_report_ref,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_refs": self.replay_bundle_refs,
+                }
+            )
+            if missing or self.failure_type or self.failure_report_refs:
+                raise ValueError(f"passing runtime aggregate missing refs: {missing}")
+        elif not (
+            self.failure_type
+            and (self.failure_report_refs or self.missing_ref_fields)
+            and self.diagnostics
+        ):
+            raise ValueError("non-pass runtime aggregate requires typed diagnostics")
+        return self
+
+
 class CrawlerOptimizationManifest(TimestampedModel):
     id: str
     scenario: str

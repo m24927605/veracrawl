@@ -2,7 +2,7 @@
 
 ## Decision 1: Use A Roadmap Control Spec Before Implementation Specs
 
-**Decision**: Create spec 080 as a finite optimization roadmap and specs 081-086
+**Decision**: Create spec 080 as a finite optimization roadmap and specs 081-087
 as planned implementation specs.
 
 **Rationale**: Existing roadmap rules prevent ad hoc production specs. A control
@@ -12,8 +12,8 @@ production-grade closure structure.
 **Alternatives considered**:
 
 - Add one large implementation spec: rejected because frontier, DOM,
-  extraction, dedupe, ranking, and ops gates have different owner services and
-  acceptance tests.
+  extraction, dedupe, ranking, ops gates, and runtime wiring have different
+  owner services and acceptance tests.
 - Add ad hoc specs without roadmap amendment: rejected because it violates the
   current Spec Kit governance.
 

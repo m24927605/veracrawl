@@ -1,8 +1,9 @@
 # Quickstart: Crawler Intelligence Optimization Roadmap
 
-This roadmap is now implemented as a deterministic optimization gate for specs
-081-086. The gate validates crawler intelligence algorithms without narrowing
-VeraCrawl into a single-site scraper or bypassing policy/replay requirements.
+This roadmap is now implemented as a deterministic optimization gate and
+runtime wiring layer for specs 081-087. The gate validates crawler intelligence
+algorithms without narrowing VeraCrawl into a single-site scraper or bypassing
+policy/replay requirements.
 
 ## Validate The Roadmap
 
@@ -16,12 +17,13 @@ test -f specs/083-extractor-fallback-confidence/spec.md
 test -f specs/084-canonical-dedupe-identity/spec.md
 test -f specs/085-recommendation-ranking-runtime/spec.md
 test -f specs/086-cost-recovery-evaluation-gates/spec.md
+test -f specs/087-crawler-optimization-runtime-wiring/spec.md
 ```
 
 2. Confirm roadmap docs reference the optimization set:
 
 ```bash
-rg -n "080|081|082|083|084|085|086" docs/08-build-roadmap.md specs/038-production-runtime-closure/spec.md specs/068-production-grade-crawler-closure-roadmap/spec.md AGENTS.md
+rg -n "080|081|082|083|084|085|086|087" docs/08-build-roadmap.md specs/038-production-runtime-closure/spec.md specs/068-production-grade-crawler-closure-roadmap/spec.md AGENTS.md
 ```
 
 3. Confirm no spec claims these are new production-grade closure gates:
@@ -32,7 +34,8 @@ rg -n "post-closure optimization|not additional production-grade closure" specs/
 
 ## Activation Flow For A Lower Spec
 
-Specs 081-086 are currently implemented through the shared optimization gate.
+Specs 081-087 are currently implemented through the shared optimization gate
+and runtime wiring layer.
 When extending one of them:
 
 1. Preserve the reserved spec number and directory.

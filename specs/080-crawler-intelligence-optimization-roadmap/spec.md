@@ -11,7 +11,8 @@ This spec fixes the post-079 crawler intelligence optimization roadmap. It
 captures the next bounded set of production follow-up specs for VeraCrawl's
 general-purpose crawling intelligence: frontier scoring, DOM understanding,
 extraction fallback and confidence, canonical dedupe and identity, ranking, and
-cost/recovery/evaluation gates.
+cost/recovery/evaluation gates, plus runtime wiring for owner-service
+consumption.
 
 These specs improve production-grade crawler quality after the closure gate.
 They do not replace specs 069-075, do not weaken the aggregate production-grade
@@ -52,10 +53,11 @@ release rules, and do not create a single-site or ecommerce-only product path.
 | 084 | Canonical Dedupe And Identity Runtime | Add URL canonicalization policy, parameter normalization, content/template duplicate detection, SimHash/MinHash clusters, embedding similarity advisory clusters, and entity/product/article identity records with variant handling. | 072, 073, 081, 083 | Duplicate loops, tracking/session parameters, same-page/template duplicates, same-product/article clusters, and variant splits are replayably classified with reduced duplicate pollution. |
 | 085 | Recommendation Ranking Runtime | Add generic ranking score records for results/offers/documents using intent match, evidence quality, source reliability, freshness, availability, price, delivery, ratings, confidence, and source-limited penalties, with heuristic ranking first and learning-to-rank only after labels exist. | 078, 079, 083, 084 | Ranked outputs are deterministic, evidence-backed, explainable, and improve offline ranking metrics without fabricating missing fields. |
 | 086 | Cost Recovery Evaluation Runtime | Aggregate token/browser/fetch/storage cost controls, cache hit metrics, retry and repair outcomes, drift signals, benchmark metrics, regression gates, and optimization release readiness across specs 081-085. | 074, 081-085 | Optimization release passes only when quality, duplicate rate, cost per successful result, latency, repair success, and replay completeness meet thresholds. |
+| 087 | Crawler Optimization Runtime Wiring | Wire the optimization contracts and gate outputs into runtime-safe services for frontier scheduling, DOM/extraction context, canonical dedupe, ranking, and ops aggregation. | 080-086 | Owner services can consume optimization decisions through typed runtime contracts, commands, events, replay refs, and adapter-free service APIs without importing benchmark code. |
 
 ## Roadmap Rules
 
-- **RR-001**: Specs 081-086 are the approved optimization follow-up specs. They
+- **RR-001**: Specs 081-087 are the approved optimization follow-up specs. They
   are not additional production-grade closure specs and must not change the
   aggregate 075 gate without an explicit release-gate amendment.
 - **RR-002**: These specs may improve production-grade claims for new validated
@@ -162,7 +164,7 @@ offline ranking metrics.
 
 ### Functional Requirements
 
-- **FR-001**: System MUST define specs 081-086 with purpose, dependencies,
+- **FR-001**: System MUST define specs 081-087 with purpose, dependencies,
   requirements, completion gates, and non-goals.
 - **FR-002**: System MUST define optimization metrics for crawl precision,
   recall, extraction accuracy, duplicate rate, crawl success rate, cost per
@@ -219,7 +221,7 @@ offline ranking metrics.
 
 ## Success Criteria
 
-- **SC-001**: Specs 081-086 exist with clear purpose, dependency, functional
+- **SC-001**: Specs 081-087 exist with clear purpose, dependency, functional
   requirements, completion gates, and non-goals.
 - **SC-002**: `docs/08-build-roadmap.md`,
   `specs/038-production-runtime-closure/spec.md`, and
@@ -243,8 +245,9 @@ offline ranking metrics.
 
 ## Implementation Closure
 
-- Specs 081-086 were implemented as a shared, general-purpose optimization gate
-  rather than a single-site scraper or vertical-only pipeline.
+- Specs 081-087 were implemented as a shared, general-purpose optimization gate
+  and runtime wiring layer rather than a single-site scraper or vertical-only
+  pipeline.
 - Runtime materialization lives in `src/veracrawl/contracts/`,
   `src/veracrawl/benchmarks/`, `src/veracrawl/cli/`, and
   `src/veracrawl/review_replay/` with registry, fixture, contract, unit,

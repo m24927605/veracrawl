@@ -4,7 +4,7 @@
 
 | Command | Owner | Purpose | Required Refs |
 | --- | --- | --- | --- |
-| `record_crawler_optimization_roadmap` | control | Record spec 080 and approved specs 081-086 | roadmap ref, policy refs, command/event/outbox refs, replay ref |
+| `record_crawler_optimization_roadmap` | control | Record spec 080 and approved specs 081-087 | roadmap ref, policy refs, command/event/outbox refs, replay ref |
 | `record_optimization_metric_set` | ops | Record canonical optimization metric definitions and thresholds | metric refs, slice refs, policy refs, replay ref |
 | `record_optimization_capability_report` | ops | Record aggregate optimization readiness over lower reports | lower report refs, blocker refs, false-ready guard refs, replay ref |
 

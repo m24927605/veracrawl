@@ -1,6 +1,6 @@
 # Tasks: Crawler Intelligence Optimization Roadmap
 
-**Feature**: 080 crawler intelligence optimization roadmap and specs 081-086  
+**Feature**: 080 crawler intelligence optimization roadmap and specs 081-087
 **Branch**: `080-crawler-intelligence-optimization`
 
 ## Completed
@@ -20,9 +20,12 @@
   metrics.
 - [x] T007 Implement aggregate optimization report, negative fixture mapping,
   replay helper, CLI, registry entries, and fixture oracles.
-- [x] T008 Add contract, registry, unit, replay, import-boundary, and
+- [x] T008 Add runtime wiring contracts, adapter-free services, replay helpers,
+  registry entries, and runtime wiring tests.
+- [x] T009 Add contract, registry, unit, replay, import-boundary, and
   integration fixture tests.
-- [x] T009 Run targeted tests, lint, mypy, and CLI smoke validation.
+- [x] T010 Run targeted tests, lint, mypy, full pytest, CLI smoke validation,
+  and diff checks.
 
 ## Validation
 
