@@ -146,15 +146,21 @@ may appear only as source-backed `ProductDiscoveryCandidate` outputs and derived
 product availability targets. Do not answer query-driven shopping tasks by
 manually assembling product URLs outside VeraCrawl.
 Spec 080 now fixes the post-079 crawler intelligence optimization roadmap:
-`specs/080-crawler-intelligence-optimization-roadmap/spec.md`. Specs 081-087
+`specs/080-crawler-intelligence-optimization-roadmap/spec.md`. Specs 081-096
 cover focused frontier scoring, DOM page understanding/element ranking,
 extractor fallback/confidence, canonical dedupe/identity, recommendation
-ranking, cost/recovery/evaluation gates, and runtime wiring. Treat them as
-optimization follow-ups, not additional production-grade closure gates; they
-must preserve source-backed evidence, policy, owner-service boundaries, and
-replay.
+ranking, cost/recovery/evaluation gates, runtime wiring, and owner-service
+integration. Treat them as optimization follow-ups, not additional
+production-grade closure gates; they must preserve source-backed evidence,
+policy, owner-service boundaries, and replay.
 Spec 087 wires the spec 080-086 optimization contracts into runtime services:
 `specs/087-crawler-optimization-runtime-wiring/plan.md`. It must keep runtime
 code adapter-free and must not import benchmark modules from core optimization
 services.
+Spec 088 fixes the post-087 optimization owner-service integration roadmap:
+`specs/088-optimization-owner-integration/plan.md`. Specs 089-096 wire
+optimization decisions into scheduler, normalize, extract/verify,
+dedupe/identity, publish/ranking, cost/cache/budget, drift/recovery feedback,
+and regression release gates. Keep these integrations adapter-free,
+benchmark-free, framework-neutral, source-backed, policy-gated, and replayable.
 <!-- SPECKIT END -->

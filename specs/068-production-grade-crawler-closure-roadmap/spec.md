@@ -48,12 +48,12 @@ authorized credentialed sources.
 
 ## Post-Closure Optimization Amendment
 
-Specs 080-087 are approved as post-079 crawler intelligence optimization
+Specs 080-096 are approved as post-079 crawler intelligence optimization
 follow-ups in `specs/080-crawler-intelligence-optimization-roadmap/spec.md`.
 They improve frontier scoring, DOM understanding, extraction fallback and
 confidence, canonical dedupe and identity, recommendation ranking, and
-cost/recovery/evaluation gates, and wire those optimization contracts into
-runtime-safe services.
+cost/recovery/evaluation gates, wire those optimization contracts into
+runtime-safe services, and activate them through owner-service integrations.
 
 These specs are not additional production-grade closure specs. They do not
 replace specs 069-075, do not weaken the aggregate 075 release gate, and do not
@@ -99,5 +99,5 @@ artifacts from specs 069-074. Future production-grade closure specs beyond
   include the same closure roadmap.
 - **SC-003**: Future implementation is constrained to the closure roadmap until
   amended.
-- **SC-004**: Specs 080-087 are explicitly documented as post-closure
+- **SC-004**: Specs 080-096 are explicitly documented as post-closure
   optimization follow-ups, not new production-grade closure gates.

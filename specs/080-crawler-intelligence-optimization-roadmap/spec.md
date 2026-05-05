@@ -10,9 +10,8 @@
 This spec fixes the post-079 crawler intelligence optimization roadmap. It
 captures the next bounded set of production follow-up specs for VeraCrawl's
 general-purpose crawling intelligence: frontier scoring, DOM understanding,
-extraction fallback and confidence, canonical dedupe and identity, ranking, and
-cost/recovery/evaluation gates, plus runtime wiring for owner-service
-consumption.
+extraction fallback and confidence, canonical dedupe and identity, ranking,
+cost/recovery/evaluation gates, runtime wiring, and owner-service integration.
 
 These specs improve production-grade crawler quality after the closure gate.
 They do not replace specs 069-075, do not weaken the aggregate production-grade
@@ -54,10 +53,19 @@ release rules, and do not create a single-site or ecommerce-only product path.
 | 085 | Recommendation Ranking Runtime | Add generic ranking score records for results/offers/documents using intent match, evidence quality, source reliability, freshness, availability, price, delivery, ratings, confidence, and source-limited penalties, with heuristic ranking first and learning-to-rank only after labels exist. | 078, 079, 083, 084 | Ranked outputs are deterministic, evidence-backed, explainable, and improve offline ranking metrics without fabricating missing fields. |
 | 086 | Cost Recovery Evaluation Runtime | Aggregate token/browser/fetch/storage cost controls, cache hit metrics, retry and repair outcomes, drift signals, benchmark metrics, regression gates, and optimization release readiness across specs 081-085. | 074, 081-085 | Optimization release passes only when quality, duplicate rate, cost per successful result, latency, repair success, and replay completeness meet thresholds. |
 | 087 | Crawler Optimization Runtime Wiring | Wire the optimization contracts and gate outputs into runtime-safe services for frontier scheduling, DOM/extraction context, canonical dedupe, ranking, and ops aggregation. | 080-086 | Owner services can consume optimization decisions through typed runtime contracts, commands, events, replay refs, and adapter-free service APIs without importing benchmark code. |
+| 088 | Optimization Runtime Activation Roadmap | Fix the finite post-087 owner-service integration spec set for scheduler, normalize, extract/verify, graph/dedupe, publish/ranking, ops cost/cache, drift/recovery, and regression release gates. | 080-087 | Specs 089-096 are defined and implemented through typed owner-service integration contracts without changing the 069-075 release gate. |
+| 089 | Priority Frontier Scheduler Integration | Connect runtime frontier optimization decisions to scheduler enqueue, block, retire, and stop records. | 081, 087, 088 | Scheduler adoption is replayable, policy-gated, and benchmark-free. |
+| 090 | DOM Intelligence Normalize Integration | Connect DOM context and element ranking outputs to normalize/browser owner refs. | 082, 087, 088 | DOM adoption preserves anchors, artifacts, and context reduction metrics. |
+| 091 | Extraction Fallback Verification Integration | Connect fallback attempts, confidence, abstention, and unsupported-evidence rejection to extract/verify boundaries. | 083, 090 | Source-backed fields become publication-eligible and unsupported evidence is rejected. |
+| 092 | Canonical Dedupe Identity Integration | Connect canonicalization, fingerprints, identity, duplicate suppression, and variant retention to owner refs. | 084, 089, 091 | Dedupe suppresses duplicates while preserving variants and evidence. |
+| 093 | Recommendation Ranking Publication Integration | Connect ranking scores and ranked output refs to publish/projection boundaries. | 085, 091, 092 | Ranking preserves verification status and does not fabricate optional fields. |
+| 094 | Optimization Cost Cache Budget Runtime | Connect cost, cache, budget, freshness, and metric refs to ops gates. | 086, 089-093 | Stale cache, budget overrun, missing metrics, and replay gaps fail. |
+| 095 | Drift Recovery Feedback Runtime | Connect drift, retry, repair, and memory advisory feedback to future optimization signals. | 083, 086, 091, 094 | Feedback remains advisory and fails unsafe recovery or owner bypass. |
+| 096 | Optimization Regression Release Gate | Aggregate 089-095 evidence into an optimization regression release gate. | 089-095 | Gate passes only with lower refs, metrics, replay refs, and no regressions. |
 
 ## Roadmap Rules
 
-- **RR-001**: Specs 081-087 are the approved optimization follow-up specs. They
+- **RR-001**: Specs 081-096 are the approved optimization follow-up specs. They
   are not additional production-grade closure specs and must not change the
   aggregate 075 gate without an explicit release-gate amendment.
 - **RR-002**: These specs may improve production-grade claims for new validated
@@ -164,7 +172,7 @@ offline ranking metrics.
 
 ### Functional Requirements
 
-- **FR-001**: System MUST define specs 081-087 with purpose, dependencies,
+- **FR-001**: System MUST define specs 081-096 with purpose, dependencies,
   requirements, completion gates, and non-goals.
 - **FR-002**: System MUST define optimization metrics for crawl precision,
   recall, extraction accuracy, duplicate rate, crawl success rate, cost per
@@ -221,7 +229,7 @@ offline ranking metrics.
 
 ## Success Criteria
 
-- **SC-001**: Specs 081-087 exist with clear purpose, dependency, functional
+- **SC-001**: Specs 081-096 exist with clear purpose, dependency, functional
   requirements, completion gates, and non-goals.
 - **SC-002**: `docs/08-build-roadmap.md`,
   `specs/038-production-runtime-closure/spec.md`, and
@@ -245,9 +253,9 @@ offline ranking metrics.
 
 ## Implementation Closure
 
-- Specs 081-087 were implemented as a shared, general-purpose optimization gate
-  and runtime wiring layer rather than a single-site scraper or vertical-only
-  pipeline.
+- Specs 081-096 were implemented as a shared, general-purpose optimization gate,
+  runtime wiring layer, and owner-service integration layer rather than a
+  single-site scraper or vertical-only pipeline.
 - Runtime materialization lives in `src/veracrawl/contracts/`,
   `src/veracrawl/benchmarks/`, `src/veracrawl/cli/`, and
   `src/veracrawl/review_replay/` with registry, fixture, contract, unit,

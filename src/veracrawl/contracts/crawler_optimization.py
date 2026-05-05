@@ -1083,6 +1083,420 @@ class RuntimeOptimizationAggregate(TimestampedModel):
         return self
 
 
+class OptimizationOwnerIntegrationRoadmap(TimestampedModel):
+    id: str
+    fixture_id: str
+    spec_refs: list[Ref] = Field(default_factory=list)
+    dependency_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+
+    @model_validator(mode="after")
+    def validate_owner_integration_roadmap(self) -> OptimizationOwnerIntegrationRoadmap:
+        required_specs = {f"spec:{number:03d}" for number in range(89, 97)}
+        if not required_specs.issubset(set(self.spec_refs)):
+            raise ValueError("owner integration roadmap must include specs 089-096")
+        missing = _missing_refs(
+            {
+                "dependency_refs": self.dependency_refs,
+                "policy_decision_refs": self.policy_decision_refs,
+                "command_record_refs": self.command_record_refs,
+                "event_cursor_refs": self.event_cursor_refs,
+                "outbox_refs": self.outbox_refs,
+                "replay_bundle_ref": self.replay_bundle_ref,
+            }
+        )
+        if missing:
+            raise ValueError(f"owner integration roadmap missing refs: {missing}")
+        return self
+
+
+class SchedulerOptimizationIntegration(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    frontier_decision_refs: list[Ref] = Field(default_factory=list)
+    enqueue_refs: list[Ref] = Field(default_factory=list)
+    blocked_refs: list[Ref] = Field(default_factory=list)
+    retired_refs: list[Ref] = Field(default_factory=list)
+    stop_reason_refs: list[Ref] = Field(default_factory=list)
+    scheduler_priority_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+    failure_type: CrawlerOptimizationFailureType | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_scheduler_integration(self) -> SchedulerOptimizationIntegration:
+        if self.completion_result == CompletenessResult.PASS:
+            outcomes = (
+                self.enqueue_refs
+                + self.blocked_refs
+                + self.retired_refs
+                + self.stop_reason_refs
+            )
+            missing = _missing_refs(
+                {
+                    "run_ref": self.run_ref,
+                    "frontier_decision_refs": self.frontier_decision_refs,
+                    "outcomes": outcomes,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type:
+                raise ValueError(f"passing scheduler integration missing refs: {missing}")
+            if self.enqueue_refs and not self.scheduler_priority_refs:
+                raise ValueError("enqueue scheduler integration requires priority refs")
+            if (self.blocked_refs or self.retired_refs) and not self.stop_reason_refs:
+                raise ValueError("blocked or retired scheduler integration requires stop reasons")
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass scheduler integration requires typed diagnostics")
+        return self
+
+
+class NormalizeOptimizationIntegration(TimestampedModel):
+    id: str
+    fixture_id: str
+    normalized_document_ref: Ref
+    dom_context_ref: Ref
+    retained_node_refs: list[Ref] = Field(default_factory=list)
+    page_zone_refs: list[Ref] = Field(default_factory=list)
+    interactive_element_refs: list[Ref] = Field(default_factory=list)
+    context_reduction_ratio: float
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+    failure_type: CrawlerOptimizationFailureType | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_normalize_integration(self) -> NormalizeOptimizationIntegration:
+        _check_score("context_reduction_ratio", self.context_reduction_ratio)
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "normalized_document_ref": self.normalized_document_ref,
+                    "dom_context_ref": self.dom_context_ref,
+                    "retained_node_refs": self.retained_node_refs,
+                    "artifact_refs": self.artifact_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type:
+                raise ValueError(f"passing normalize integration missing refs: {missing}")
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass normalize integration requires typed diagnostics")
+        return self
+
+
+class ExtractVerifyOptimizationIntegration(TimestampedModel):
+    id: str
+    fixture_id: str
+    normalized_document_ref: Ref
+    extractor_plan_ref: Ref
+    accepted_attempt_refs: list[Ref] = Field(default_factory=list)
+    rejected_attempt_refs: list[Ref] = Field(default_factory=list)
+    field_confidence_refs: list[Ref] = Field(default_factory=list)
+    abstention_refs: list[Ref] = Field(default_factory=list)
+    review_refs: list[Ref] = Field(default_factory=list)
+    publication_eligible_field_refs: list[Ref] = Field(default_factory=list)
+    llm_only_rejected_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+    failure_type: CrawlerOptimizationFailureType | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_extract_verify_integration(self) -> ExtractVerifyOptimizationIntegration:
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "normalized_document_ref": self.normalized_document_ref,
+                    "extractor_plan_ref": self.extractor_plan_ref,
+                    "field_confidence_refs": self.field_confidence_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type:
+                raise ValueError(f"passing extract/verify integration missing refs: {missing}")
+            if not (
+                self.accepted_attempt_refs
+                or self.rejected_attempt_refs
+                or self.abstention_refs
+            ):
+                raise ValueError("extract/verify integration requires field outcomes")
+            if self.llm_only_rejected_refs and not (self.rejected_attempt_refs or self.review_refs):
+                raise ValueError("LLM-only refs must be rejected or routed to review")
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass extract/verify integration requires typed diagnostics")
+        return self
+
+
+class DedupeIdentityOptimizationIntegration(TimestampedModel):
+    id: str
+    fixture_id: str
+    canonicalization_refs: list[Ref] = Field(default_factory=list)
+    fingerprint_refs: list[Ref] = Field(default_factory=list)
+    identity_decision_refs: list[Ref] = Field(default_factory=list)
+    duplicate_suppression_ref: Ref
+    retained_refs: list[Ref] = Field(default_factory=list)
+    suppressed_refs: list[Ref] = Field(default_factory=list)
+    variant_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+    failure_type: CrawlerOptimizationFailureType | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_dedupe_identity_integration(self) -> DedupeIdentityOptimizationIntegration:
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "canonicalization_refs": self.canonicalization_refs,
+                    "fingerprint_refs": self.fingerprint_refs,
+                    "identity_decision_refs": self.identity_decision_refs,
+                    "duplicate_suppression_ref": self.duplicate_suppression_ref,
+                    "retained_refs": self.retained_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type:
+                raise ValueError(f"passing dedupe integration missing refs: {missing}")
+            if set(self.retained_refs) & set(self.suppressed_refs):
+                raise ValueError("dedupe integration cannot retain and suppress the same ref")
+            if not set(self.variant_refs).issubset(set(self.retained_refs)):
+                raise ValueError("variant refs must be retained")
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass dedupe integration requires typed diagnostics")
+        return self
+
+
+class RankingPublicationOptimizationIntegration(TimestampedModel):
+    id: str
+    fixture_id: str
+    ranked_output_set_ref: Ref
+    ranking_score_refs: list[Ref] = Field(default_factory=list)
+    retained_output_refs: list[Ref] = Field(default_factory=list)
+    verification_status_refs: list[Ref] = Field(default_factory=list)
+    publication_gate_refs: list[Ref] = Field(default_factory=list)
+    missing_optional_feature_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    completion_result: CompletenessResult = CompletenessResult.PASS
+    failure_type: CrawlerOptimizationFailureType | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_ranking_publication_integration(
+        self,
+    ) -> RankingPublicationOptimizationIntegration:
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "ranked_output_set_ref": self.ranked_output_set_ref,
+                    "ranking_score_refs": self.ranking_score_refs,
+                    "retained_output_refs": self.retained_output_refs,
+                    "verification_status_refs": self.verification_status_refs,
+                    "publication_gate_refs": self.publication_gate_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type:
+                raise ValueError(f"passing ranking integration missing refs: {missing}")
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass ranking integration requires typed diagnostics")
+        return self
+
+
+class CostCacheBudgetOptimizationIntegration(TimestampedModel):
+    id: str
+    fixture_id: str
+    fetch_cost: float
+    browser_cost: float
+    token_cost: float
+    cache_hit_refs: list[Ref] = Field(default_factory=list)
+    stale_cache_refs: list[Ref] = Field(default_factory=list)
+    metric_slice_refs: list[Ref] = Field(default_factory=list)
+    budget_exhausted: bool = False
+    diagnostics: list[str] = Field(default_factory=list)
+    completion_result: CompletenessResult
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_type: CrawlerOptimizationFailureType | None = None
+
+    @model_validator(mode="after")
+    def validate_cost_cache_budget_integration(
+        self,
+    ) -> CostCacheBudgetOptimizationIntegration:
+        if self.fetch_cost < 0 or self.browser_cost < 0 or self.token_cost < 0:
+            raise ValueError("cost values must be non-negative")
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "metric_slice_refs": self.metric_slice_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type:
+                raise ValueError(f"passing cost/cache integration missing refs: {missing}")
+            if self.stale_cache_refs or self.budget_exhausted:
+                raise ValueError(
+                    "passing cost/cache integration cannot have stale cache or budget exhaustion"
+                )
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass cost/cache integration requires typed diagnostics")
+        return self
+
+
+class DriftRecoveryFeedbackIntegration(TimestampedModel):
+    id: str
+    fixture_id: str
+    drift_type: str
+    affected_ref: Ref
+    retry_class: str
+    repair_outcome: str
+    memory_advisory_refs: list[Ref] = Field(default_factory=list)
+    unsafe_recovery_refs: list[Ref] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)
+    completion_result: CompletenessResult
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_type: CrawlerOptimizationFailureType | None = None
+
+    @model_validator(mode="after")
+    def validate_drift_recovery_feedback(self) -> DriftRecoveryFeedbackIntegration:
+        allowed_drift = {
+            "selector_drift",
+            "template_drift",
+            "field_validation_drift",
+            "stale_cache",
+            "timeout_retry",
+            "source_limited",
+        }
+        if self.drift_type not in allowed_drift:
+            raise ValueError("unsupported drift type")
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "affected_ref": self.affected_ref,
+                    "retry_class": self.retry_class,
+                    "repair_outcome": self.repair_outcome,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type:
+                raise ValueError(f"passing drift/recovery integration missing refs: {missing}")
+            if self.unsafe_recovery_refs:
+                raise ValueError(
+                    "passing drift/recovery integration cannot include unsafe recovery"
+                )
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass drift/recovery integration requires typed diagnostics")
+        return self
+
+
+class OptimizationRegressionReleaseGate(TimestampedModel):
+    id: str
+    fixture_id: str
+    lower_integration_refs: list[Ref] = Field(default_factory=list)
+    missing_lower_integration_refs: list[Ref] = Field(default_factory=list)
+    metric_slice_refs: list[Ref] = Field(default_factory=list)
+    false_ready_guard_refs: list[Ref] = Field(default_factory=list)
+    diagnostics: list[str] = Field(default_factory=list)
+    completion_result: CompletenessResult
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    failure_type: CrawlerOptimizationFailureType | None = None
+
+    @model_validator(mode="after")
+    def validate_regression_release_gate(self) -> OptimizationRegressionReleaseGate:
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "lower_integration_refs": self.lower_integration_refs,
+                    "metric_slice_refs": self.metric_slice_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if (
+                missing
+                or self.failure_type
+                or self.missing_lower_integration_refs
+                or self.false_ready_guard_refs
+            ):
+                raise ValueError(f"passing regression gate missing refs: {missing}")
+        elif not (
+            self.failure_type
+            and self.diagnostics
+            and (self.missing_lower_integration_refs or self.false_ready_guard_refs)
+        ):
+            raise ValueError("non-pass regression gate requires typed diagnostics")
+        return self
+
+
 class CrawlerOptimizationManifest(TimestampedModel):
     id: str
     scenario: str
