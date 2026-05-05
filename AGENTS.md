@@ -145,4 +145,11 @@ start from query text plus allowed search/listing entry pages only; product URLs
 may appear only as source-backed `ProductDiscoveryCandidate` outputs and derived
 product availability targets. Do not answer query-driven shopping tasks by
 manually assembling product URLs outside VeraCrawl.
+Spec 080 now fixes the post-079 crawler intelligence optimization roadmap:
+`specs/080-crawler-intelligence-optimization-roadmap/spec.md`. Specs 081-086
+cover focused frontier scoring, DOM page understanding/element ranking,
+extractor fallback/confidence, canonical dedupe/identity, recommendation
+ranking, and cost/recovery/evaluation gates. Treat them as optimization
+follow-ups, not additional production-grade closure gates; they must preserve
+source-backed evidence, policy, owner-service boundaries, and replay.
 <!-- SPECKIT END -->

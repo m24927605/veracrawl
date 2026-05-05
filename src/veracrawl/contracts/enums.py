@@ -698,6 +698,18 @@ class ProductDiscoveryFailureType(StrEnum):
     ADAPTER_UNAVAILABLE = "product_discovery_adapter_unavailable"
 
 
+class CrawlerOptimizationFailureType(StrEnum):
+    MISSING_FRONTIER_SCORE = "crawler_optimization_missing_frontier_score"
+    MISSING_DOM_UNDERSTANDING = "crawler_optimization_missing_dom_understanding"
+    EXTRACTOR_CONFIDENCE_GAP = "crawler_optimization_extractor_confidence_gap"
+    DUPLICATE_IDENTITY_UNRESOLVED = "crawler_optimization_duplicate_identity_unresolved"
+    RANKING_QUALITY_REGRESSION = "crawler_optimization_ranking_quality_regression"
+    COST_BUDGET_EXCEEDED = "crawler_optimization_cost_budget_exceeded"
+    UNSAFE_RECOVERY_ACTION = "crawler_optimization_unsafe_recovery_action"
+    LLM_OUTPUT_AS_EVIDENCE = "crawler_optimization_llm_output_as_evidence"
+    MISSING_REPLAY_REFS = "crawler_optimization_missing_replay_refs"
+
+
 class SecurityActionSurface(StrEnum):
     NETWORK = "network"
     PROMPT = "prompt"

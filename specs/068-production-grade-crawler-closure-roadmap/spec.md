@@ -46,6 +46,20 @@ authorized credentialed sources.
 | 074 | Production Reliability Operations And Cost Runtime | Prove long-running worker, queue, persistence, object store, retry, recovery, observability, cost, latency, and SLO behavior under production-like runs. | 052, 053, 064, 072, 073 | Multi-run production workloads pass SLO/cost/reliability gates with replayable recovery and operator visibility. |
 | 075 | Production Grade Web Crawler Release Gate | Aggregate 069-074 into one release gate that decides whether VeraCrawl may claim production-grade crawler capability. | 069-074 | Production-grade status is blocked unless discovery, browser/API acquisition, deep crawl, extraction quality, operations, and safety gates all pass. |
 
+## Post-Closure Optimization Amendment
+
+Specs 080-086 are approved as post-079 crawler intelligence optimization
+follow-ups in `specs/080-crawler-intelligence-optimization-roadmap/spec.md`.
+They improve frontier scoring, DOM understanding, extraction fallback and
+confidence, canonical dedupe and identity, recommendation ranking, and
+cost/recovery/evaluation gates.
+
+These specs are not additional production-grade closure specs. They do not
+replace specs 069-075, do not weaken the aggregate 075 release gate, and do not
+allow production-grade status to pass without parsed lower `ProductionGateReport`
+artifacts from specs 069-074. Future production-grade closure specs beyond
+069-075 still require amending this spec and `docs/08-build-roadmap.md` first.
+
 ## Roadmap Rules
 
 - **RR-001**: Production-grade closure specs are fixed to 069-075 unless this
@@ -61,6 +75,9 @@ authorized credentialed sources.
   tests, live validation, and `tasks.md` validation logs.
 - **RR-006**: Implementation proceeds in spec order. A later closure spec cannot
   be marked complete while an earlier blocking closure spec is incomplete.
+- **RR-007**: Post-closure optimization specs may supplement future quality
+  claims, but they must not be used to bypass missing or non-passing 069-075
+  lower gates.
 
 ## Non-Goals
 
@@ -81,3 +98,5 @@ authorized credentialed sources.
   include the same closure roadmap.
 - **SC-003**: Future implementation is constrained to the closure roadmap until
   amended.
+- **SC-004**: Specs 080-086 are explicitly documented as post-closure
+  optimization follow-ups, not new production-grade closure gates.

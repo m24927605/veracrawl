@@ -87,6 +87,7 @@ def test_target_contract_area_coverage_is_explicit() -> None:
         "real_world_ai_agent_benchmark_gate",
         "product_availability_benchmark_gate",
         "product_discovery_benchmark_gate",
+        "crawler_intelligence_optimization_gate",
         "real_world_quality_corpus_gate",
         "repair_success_rate_benchmark",
         "cost_latency_stability_quality_release_gate",

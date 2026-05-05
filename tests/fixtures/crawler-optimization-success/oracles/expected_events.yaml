@@ -1,0 +1,1 @@
+{"expected_events": ["frontier_score_breakdown_recorded", "dom_context_bundle_recorded", "duplicate_suppression_recorded", "ranked_output_set_recorded", "crawler_optimization_reported"], "fixture_id": "crawler-optimization-success"}
