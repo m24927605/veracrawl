@@ -94,6 +94,7 @@ P0-5 拆為以下 atomic sub-steps，每個獨立 commit + codex task review：
 | plan | p0-5-logging.md | 3 | ❌ | 9 important + 3 minor (still no critical)：propagate=False vs caplog 矛盾、structured fields 不在 record.attr、entry-point 數應為 68 不是 30、AST 檢查太弱、cli_token 邏輯誤、bind_runtime_context 缺設計、結構化 error print 分類不清、correlation 覆蓋與 Why 矛盾、boundary 漏列 11 個套件 — **3 連敗，停 plan review，改走 TDD** |
 | task | bd9b249 (P0-5 sub-step 1: redaction processor) | 1 | ❌ | 3 important：top-level only redaction（缺 recursive）、漏 password/private_key/x-api-key/session_id/csrf 等 sensitive key、STATUS.md scope 過大宣稱 |
 | task | bd9b249..9517030 fix-up | 2 | ❌ | 1 important：depth cap 是 fail-open，sensitive 值在深層仍會洩漏；應 fail-closed 用 placeholder 取代整個 sub-tree |
+| task | 9517030..254ed97 fix-up | 3 | ❌ | 1 important：fail-closed 後仍可能漏 primitive — 簡化為 cap 處全部替換 REDACTED_DEEP（含 primitive） |
 
 iter 1 主要問題：
 1. **critical**：redirect 只擋 HTTPS→HTTP downgrade，未對 redirect target 重跑 egress / private-network / DNS-rebind policy

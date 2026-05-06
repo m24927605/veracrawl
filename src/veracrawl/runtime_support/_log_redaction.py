@@ -56,14 +56,15 @@ def _redact_value(value: Any, depth: int) -> Any:
     - List / tuple: recurse into each element.
     - Other types: returned unchanged.
 
-    Depth is capped at ``_MAX_DEPTH``. **Fail closed**: any container reached
-    beyond the cap is replaced with ``REDACTED_DEEP`` so a sensitive value
-    cannot escape merely because it sat below the recursion limit.
+    Depth is capped at ``_MAX_DEPTH``. **Fail closed**: at or beyond the cap,
+    every value (containers and primitives alike) is replaced with
+    ``REDACTED_DEEP``. Replacing primitives too removes any theoretical path
+    by which a sensitive value could reach the cap and survive — even if a
+    future refactor changed the dict-branch short-circuit. Practical events
+    rarely exceed depth 5; over-redaction beyond depth 12 is acceptable.
     """
     if depth >= _MAX_DEPTH:
-        if isinstance(value, (dict, list, tuple)):
-            return REDACTED_DEEP
-        return value
+        return REDACTED_DEEP
     if isinstance(value, dict):
         return {
             k: (

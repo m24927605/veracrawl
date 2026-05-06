@@ -257,21 +257,39 @@ def test_processor_redacts_at_exact_depth_cap_with_marker() -> None:
     assert "leak" not in repr(result)
 
 
-def test_processor_passes_primitives_at_depth_cap() -> None:
-    """Primitives at the cap boundary stay (no leak risk; no container)."""
+def test_processor_replaces_primitives_at_depth_cap() -> None:
+    """Primitives reached at/beyond the cap are also replaced (fail closed).
+
+    Over-redaction is acceptable past depth 12; under-redaction is not.
+    """
     proc = RedactSensitiveProcessor()
-    deep: Any = "string-value"
+    primitive = "deep-primitive-value"
+    deep: Any = primitive
     for _ in range(13):
-        deep = {"nest": deep}
+        deep = {"normal": deep}
+
     result = proc(None, "info", {"top": deep})
-    # The deep primitive itself does not need to be replaced; only containers do.
     serialized = repr(result)
-    # The primitive may or may not appear depending on where the cap hits a
-    # container. What matters: no exception, and any container truncation is
-    # via REDACTED_DEEP.
-    assert isinstance(result, dict)
-    if "string-value" not in serialized:
-        assert REDACTED_DEEP in serialized
+    assert primitive not in serialized
+    assert REDACTED_DEEP in serialized
+
+
+def test_processor_replaces_sensitive_primitive_at_depth_cap() -> None:
+    """Codex-flagged regression: a sensitive value at the cap must not leak.
+
+    Even if some future refactor changed the dict-branch short-circuit so a
+    sensitive primitive could be reached at the cap, the cap itself must
+    still fail closed.
+    """
+    proc = RedactSensitiveProcessor()
+    secret = "this-must-never-appear-in-logs"
+    # Walk down to the cap via plain "normal" wrappers, leaf is the secret.
+    deep: Any = secret
+    for _ in range(13):
+        deep = {"normal": deep}
+
+    result = proc(None, "info", {"top": deep})
+    assert secret not in repr(result)
 
 
 def test_processor_preserves_benign_keys() -> None:
