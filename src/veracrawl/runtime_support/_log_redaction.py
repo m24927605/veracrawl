@@ -37,6 +37,7 @@ _SENSITIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 REDACTED = "<redacted>"
+REDACTED_DEEP = "<redacted-too-deep>"
 
 # Hard cap on recursion depth to bound work on pathologically deep structures
 # (e.g. accidental cycles in user payloads). Practical event_dicts are <= 5.
@@ -54,9 +55,14 @@ def _redact_value(value: Any, depth: int) -> Any:
     - Dict: redact value if its key is sensitive; otherwise recurse into value.
     - List / tuple: recurse into each element.
     - Other types: returned unchanged.
-    Depth is capped to avoid runaway recursion on cyclic / pathological input.
+
+    Depth is capped at ``_MAX_DEPTH``. **Fail closed**: any container reached
+    beyond the cap is replaced with ``REDACTED_DEEP`` so a sensitive value
+    cannot escape merely because it sat below the recursion limit.
     """
     if depth >= _MAX_DEPTH:
+        if isinstance(value, (dict, list, tuple)):
+            return REDACTED_DEEP
         return value
     if isinstance(value, dict):
         return {

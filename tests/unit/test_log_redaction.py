@@ -8,6 +8,7 @@ import pytest
 
 from veracrawl.runtime_support._log_redaction import (
     REDACTED,
+    REDACTED_DEEP,
     RedactSensitiveProcessor,
     is_sensitive_key,
 )
@@ -220,21 +221,57 @@ def test_processor_handles_tuples() -> None:
     assert result["items"][1]["name"] == "y"
 
 
-def test_processor_caps_recursion_on_pathologically_deep_structure() -> None:
+def test_processor_fails_closed_at_depth_cap() -> None:
+    """Beyond the recursion cap, sensitive values must NOT survive in plaintext.
+
+    Earlier behavior returned the original container unchanged once depth >=
+    cap, which left any embedded secret readable. The contract is "fail
+    closed": a container reached past the cap is replaced with a marker.
+    """
     proc = RedactSensitiveProcessor()
-    # Build a structure 20 levels deep with a sensitive key at the bottom.
-    # Cap is 12, so the deepest leaf will NOT be redacted (depth >= cap).
-    deep: dict[str, Any] = {"body": "should-not-redact-too-deep"}
+    secret = "should-never-leak-EVEN-IF-DEEP"
+    # Build a structure 20 levels deep with a sensitive value at the bottom.
+    deep: Any = {"api_key": secret, "other_secret": secret}
     for _ in range(20):
         deep = {"nest": deep}
+
     result = proc(None, "info", {"top": deep})
-    # Walk down to verify no crash and predictable behavior.
-    cur: Any = result["top"]
-    for _ in range(20):
-        cur = cur["nest"]
-    # At depth > cap, redaction is skipped. The point is "no crash"; the
-    # exact value at the leaf is implementation-defined (here: untouched).
-    assert "body" in cur
+
+    # Walk through serialized representation: secret must not appear anywhere.
+    serialized = repr(result)
+    assert secret not in serialized, "sensitive value leaked past depth cap"
+    # And the deep marker must appear (some node was truncated).
+    assert REDACTED_DEEP in serialized
+
+
+def test_processor_redacts_at_exact_depth_cap_with_marker() -> None:
+    """A container appearing at the cap boundary is replaced wholesale."""
+    proc = RedactSensitiveProcessor()
+    # 13 levels of nesting puts the innermost dict at depth 13 (cap=12).
+    inner = {"api_key": "leak"}
+    deep: Any = inner
+    for _ in range(13):
+        deep = {"nest": deep}
+
+    result = proc(None, "info", {"top": deep})
+    assert "leak" not in repr(result)
+
+
+def test_processor_passes_primitives_at_depth_cap() -> None:
+    """Primitives at the cap boundary stay (no leak risk; no container)."""
+    proc = RedactSensitiveProcessor()
+    deep: Any = "string-value"
+    for _ in range(13):
+        deep = {"nest": deep}
+    result = proc(None, "info", {"top": deep})
+    # The deep primitive itself does not need to be replaced; only containers do.
+    serialized = repr(result)
+    # The primitive may or may not appear depending on where the cap hits a
+    # container. What matters: no exception, and any container truncation is
+    # via REDACTED_DEEP.
+    assert isinstance(result, dict)
+    if "string-value" not in serialized:
+        assert REDACTED_DEEP in serialized
 
 
 def test_processor_preserves_benign_keys() -> None:
