@@ -6,7 +6,7 @@
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | NOT_STARTED | - | - | - | - |
 | P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
-| P0-5 | Structured logging | BLOCKED | 2026-05-06 | - | - | 3 連敗，等候用戶決策 |
+| P0-5 | Structured logging | IN_PROGRESS (TDD) | 2026-05-06 | - | - | 用戶決定跳過 plan review，直接 TDD；plan v3 為 working draft |
 | P0-6 | CI workflow | NOT_STARTED | - | - | - | - |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
 | P0-8 | Runtime mode (prod vs fixture) | NOT_STARTED | - | - | - | - |
