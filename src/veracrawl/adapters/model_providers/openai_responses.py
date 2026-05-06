@@ -1,4 +1,22 @@
-"""OpenAI Responses API model provider adapter."""
+"""OpenAI Responses API model provider adapter.
+
+Safety contract: error paths must NEVER include response bodies, prompt
+content, or context payloads in raised exceptions. The OpenAI Responses
+API frequently echoes portions of the request (model name, tool spec,
+sometimes user content) inside error response bodies; including those
+bytes in a ``RuntimeError`` propagates them into logs, stack traces, and
+crash reports — that is exactly the leak class the project tracks as
+``RAW_RESPONSE_LEAK``.
+
+Errors are surfaced as :class:`ModelProviderError`, which carries:
+
+- ``status_code``: the HTTP status (int)
+- ``error_code``: a stable category enum value (e.g. ``AUTH_FAILED``)
+  that callers can dispatch on without parsing prose
+- ``request_id``: the upstream ``x-request-id`` header value (or
+  ``None`` if missing) — the safe debugging anchor for cross-referencing
+  with OpenAI dashboards
+"""
 
 from __future__ import annotations
 
@@ -6,13 +24,77 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, Final
 
 from veracrawl.contracts.agent import ModelRequest, ModelResponse
 from veracrawl.contracts.common import stable_hash
 
-_DEFAULT_MODEL = "gpt-5.4-mini"
-_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses"
+_RESPONSES_ENDPOINT: Final[str] = "https://api.openai.com/v1/responses"
+_REQUEST_ID_HEADER: Final[str] = "x-request-id"
+
+
+class ModelProviderError(RuntimeError):
+    """Adapter-level failure with structured fields and no body content.
+
+    Subclasses ``RuntimeError`` so existing callers that catch
+    ``RuntimeError`` continue to work, but the exception's string form
+    deliberately contains only the status code, error category, and
+    upstream request id. It never embeds the response body, the request
+    prompt, or the context payload.
+    """
+
+    def __init__(
+        self,
+        *,
+        status_code: int,
+        error_code: str,
+        request_id: str | None,
+    ) -> None:
+        self.status_code = status_code
+        self.error_code = error_code
+        self.request_id = request_id
+        request_id_repr = request_id if request_id is not None else "<none>"
+        super().__init__(
+            f"OpenAI Responses API error: status={status_code} "
+            f"code={error_code} request_id={request_id_repr}"
+        )
+
+
+def _classify_status(status: int) -> str:
+    if status in (401, 403):
+        return "AUTH_FAILED"
+    if status == 429:
+        return "RATE_LIMITED"
+    if status == 404:
+        return "NOT_FOUND"
+    if status in (400, 422):
+        return "BAD_REQUEST"
+    if 500 <= status < 600:
+        return "SERVER_ERROR"
+    return "ADAPTER_FAILURE"
+
+
+def _request_id_from_headers(headers: Any) -> str | None:
+    """Read x-request-id from the various header objects urllib may surface."""
+    if headers is None:
+        return None
+    # urllib.error.HTTPError.headers is an HTTPMessage; supports .get().
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        value = getter(_REQUEST_ID_HEADER)
+        if isinstance(value, str):
+            return value
+        # HTTPMessage returns None for missing keys; some test fakes return ''.
+        if value:
+            return str(value)
+    # Fallback: dict-style access.
+    if isinstance(headers, dict):
+        value = headers.get(_REQUEST_ID_HEADER) or headers.get(
+            _REQUEST_ID_HEADER.title()
+        )
+        if isinstance(value, str):
+            return value
+    return None
 
 
 class OpenAIResponsesModelProviderRuntimeAdapter:
@@ -22,7 +104,7 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
         self,
         *,
         api_key: str,
-        model_id: str = _DEFAULT_MODEL,
+        model_id: str,
         endpoint: str = _RESPONSES_ENDPOINT,
     ) -> None:
         self.model_id = model_id
@@ -43,7 +125,9 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
             request.id,
             f"context_bundle_ref={request.context_bundle_id}",
         )
-        response = self._create_response(request=request, context_payload=context_payload)
+        response = self._create_response(
+            request=request, context_payload=context_payload
+        )
         response_id = str(response.get("id", f"response:{request.id}"))
         output_text = _extract_output_text(response)
         self._token_usage[request.id] = _extract_usage(response)
@@ -102,10 +186,24 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
             with urllib.request.urlopen(http_request, timeout=60) as response:
                 data = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenAI Responses API failed: {exc.code} {error_body}") from exc
+            # Drain and discard the response body. We deliberately do NOT
+            # parse, log, or stringify it — see module docstring.
+            try:
+                exc.read()
+            except Exception:  # noqa: BLE001
+                pass
+            request_id = _request_id_from_headers(getattr(exc, "headers", None))
+            raise ModelProviderError(
+                status_code=int(exc.code),
+                error_code=_classify_status(int(exc.code)),
+                request_id=request_id,
+            ) from None
         if not isinstance(data, dict):
-            raise RuntimeError("OpenAI Responses API returned a non-object response")
+            raise ModelProviderError(
+                status_code=200,
+                error_code="ADAPTER_FAILURE",
+                request_id=None,
+            )
         return data
 
 
@@ -116,10 +214,18 @@ def build_model_provider(
 ) -> OpenAIResponsesModelProviderRuntimeAdapter:
     resolved_key = api_key or os.getenv("OPENAI_API_KEY")
     if not resolved_key:
-        raise RuntimeError("OPENAI_API_KEY is required for OpenAI Responses API adapter")
+        raise RuntimeError(
+            "OPENAI_API_KEY is required for OpenAI Responses API adapter"
+        )
+    resolved_model = model_id or os.getenv("VERACRAWL_OPENAI_MODEL")
+    if not resolved_model:
+        raise RuntimeError(
+            "model_id is required for OpenAI Responses API adapter "
+            "(pass model_id=... or set VERACRAWL_OPENAI_MODEL)"
+        )
     return OpenAIResponsesModelProviderRuntimeAdapter(
         api_key=resolved_key,
-        model_id=model_id or os.getenv("VERACRAWL_OPENAI_MODEL") or _DEFAULT_MODEL,
+        model_id=resolved_model,
     )
 
 
