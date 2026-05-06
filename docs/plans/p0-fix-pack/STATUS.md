@@ -9,7 +9,7 @@
 | P0-5 | Structured logging | IN_PROGRESS (sub-step 5/8) | 2026-05-06 | - | sub-steps 1-4: 7 commits | redaction + logging.py + 62 個 CLI 全部包 bootstrap；剩 sub-step 5（內部模組 logger 使用）+ 6-8（boundary tests） |
 | P0-6 | CI workflow | DONE | 2026-05-06 | 2026-05-06 | (this commit) | ci.yml + nightly.yml + dependabot.yml + live marker registered |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
-| P0-8 | Runtime mode (prod vs fixture) | NOT_STARTED | - | - | - | - |
+| P0-8 | Runtime mode (prod vs fixture) | IN_PROGRESS (sub-step 1/2) | 2026-05-06 | - | (this commit) | RuntimeMode enum + with_runtime_mode + ProductionRuntimeNotImplemented；4 個 gate 接線屬 sub-step 2 |
 
 ## Status 值
 
