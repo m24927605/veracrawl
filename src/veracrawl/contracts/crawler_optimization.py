@@ -30,6 +30,12 @@ def _missing_refs(values: Mapping[str, object]) -> list[str]:
     return [name for name, value in values.items() if not value]
 
 
+OPTIMIZATION_OBJECTIVE_SCORE_FORMULA_REF = (
+    "optimization-score-v1-weighted-accuracy-time-cost"
+)
+OPTIMIZATION_OBJECTIVE_SCORE_TOLERANCE = 1e-9
+
+
 class FrontierScoringProfile(TimestampedModel):
     id: str
     profile_refs: list[str] = Field(default_factory=list)
@@ -1537,6 +1543,235 @@ class OptimizationRegressionReleaseGate(TimestampedModel):
             )
         ):
             raise ValueError("non-pass regression gate requires typed diagnostics")
+        return self
+
+
+class OptimizationObjectiveScore(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    profile_ref: Ref
+    score_formula_ref: Ref = OPTIMIZATION_OBJECTIVE_SCORE_FORMULA_REF
+    score_threshold: float = 0.82
+    extraction_accuracy: float
+    intent_match_precision: float
+    crawl_success_rate: float
+    dedupe_quality: float
+    freshness: float
+    normalized_latency: float
+    normalized_cost: float
+    optimization_score: float
+    metric_slice_refs: list[Ref] = Field(default_factory=list)
+    algorithm_recommendation_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+    completion_result: CompletenessResult
+    failure_type: CrawlerOptimizationFailureType | None = None
+
+    @model_validator(mode="after")
+    def validate_objective_score(self) -> OptimizationObjectiveScore:
+        for name in [
+            "score_threshold",
+            "extraction_accuracy",
+            "intent_match_precision",
+            "crawl_success_rate",
+            "dedupe_quality",
+            "freshness",
+            "normalized_latency",
+            "normalized_cost",
+        ]:
+            _check_score(name, getattr(self, name))
+        if self.optimization_score < -0.05 or self.optimization_score > 1:
+            raise ValueError("optimization_score must be between -0.05 and 1")
+        if self.score_formula_ref != OPTIMIZATION_OBJECTIVE_SCORE_FORMULA_REF:
+            raise ValueError("unsupported optimization objective score formula")
+        expected_score = (
+            0.35 * self.extraction_accuracy
+            + 0.25 * self.intent_match_precision
+            + 0.15 * self.crawl_success_rate
+            + 0.10 * self.dedupe_quality
+            + 0.10 * self.freshness
+            - 0.03 * self.normalized_latency
+            - 0.02 * self.normalized_cost
+        )
+        if abs(self.optimization_score - expected_score) > (
+            OPTIMIZATION_OBJECTIVE_SCORE_TOLERANCE
+        ):
+            raise ValueError("optimization objective score formula mismatch")
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "run_ref": self.run_ref,
+                    "profile_ref": self.profile_ref,
+                    "score_formula_ref": self.score_formula_ref,
+                    "metric_slice_refs": self.metric_slice_refs,
+                    "algorithm_recommendation_refs": self.algorithm_recommendation_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "artifact_refs": self.artifact_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type or self.optimization_score < self.score_threshold:
+                raise ValueError(
+                    "passing optimization objective score missing refs or below "
+                    f"threshold: {missing}"
+                )
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass objective score requires typed diagnostics")
+        return self
+
+
+class AgentDecisionLoopEvidence(TimestampedModel):
+    id: str
+    fixture_id: str
+    run_ref: Ref
+    objective_score_ref: Ref
+    observe_ref: Ref | None = None
+    think_ref: Ref | None = None
+    act_ref: Ref | None = None
+    verify_ref: Ref | None = None
+    confidence: float
+    confidence_threshold: float = 0.82
+    stop_condition_ref: Ref | None = None
+    deterministic_decision_refs: list[Ref] = Field(default_factory=list)
+    llm_fallback_used: bool = False
+    llm_fallback_reason_refs: list[Ref] = Field(default_factory=list)
+    llm_output_evidence_refs: list[Ref] = Field(default_factory=list)
+    model_trace_refs: list[Ref] = Field(default_factory=list)
+    tool_trace_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+    completion_result: CompletenessResult
+    failure_type: CrawlerOptimizationFailureType | None = None
+
+    @model_validator(mode="after")
+    def validate_decision_loop(self) -> AgentDecisionLoopEvidence:
+        _check_score("confidence", self.confidence)
+        _check_score("confidence_threshold", self.confidence_threshold)
+        if self.llm_fallback_used and not (
+            self.llm_fallback_reason_refs and self.model_trace_refs
+        ):
+            raise ValueError("LLM fallback requires reason and model trace refs")
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "run_ref": self.run_ref,
+                    "objective_score_ref": self.objective_score_ref,
+                    "observe_ref": self.observe_ref,
+                    "think_ref": self.think_ref,
+                    "act_ref": self.act_ref,
+                    "verify_ref": self.verify_ref,
+                    "stop_condition_ref": self.stop_condition_ref,
+                    "deterministic_decision_refs": self.deterministic_decision_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "artifact_refs": self.artifact_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if missing or self.failure_type or self.confidence < self.confidence_threshold:
+                raise ValueError(
+                    "passing agent decision loop evidence missing refs or below "
+                    f"threshold: {missing}"
+                )
+            if self.llm_output_evidence_refs:
+                raise ValueError("LLM output cannot be agent decision source evidence")
+        elif not (self.failure_type and self.diagnostics):
+            raise ValueError("non-pass agent decision loop requires typed diagnostics")
+        return self
+
+
+class OptimizationObjectiveReleaseGate(TimestampedModel):
+    id: str
+    fixture_id: str
+    claim_scope_ref: Ref
+    required_lower_gate_refs: list[Ref] = Field(default_factory=list)
+    present_lower_gate_refs: list[Ref] = Field(default_factory=list)
+    failed_lower_gate_refs: list[Ref] = Field(default_factory=list)
+    objective_score_refs: list[Ref] = Field(default_factory=list)
+    failed_objective_score_refs: list[Ref] = Field(default_factory=list)
+    agent_decision_loop_refs: list[Ref] = Field(default_factory=list)
+    failed_agent_decision_loop_refs: list[Ref] = Field(default_factory=list)
+    metric_slice_refs: list[Ref] = Field(default_factory=list)
+    algorithm_recommendation_refs: list[Ref] = Field(default_factory=list)
+    policy_decision_refs: list[Ref] = Field(default_factory=list)
+    command_record_refs: list[Ref] = Field(default_factory=list)
+    event_cursor_refs: list[Ref] = Field(default_factory=list)
+    outbox_refs: list[Ref] = Field(default_factory=list)
+    artifact_refs: list[Ref] = Field(default_factory=list)
+    replay_bundle_ref: Ref | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+    completion_result: CompletenessResult
+    failure_type: CrawlerOptimizationFailureType | None = None
+
+    @model_validator(mode="after")
+    def validate_objective_release_gate(self) -> OptimizationObjectiveReleaseGate:
+        missing_lower = sorted(
+            set(self.required_lower_gate_refs) - set(self.present_lower_gate_refs)
+        )
+        non_096_lower_refs = [
+            ref
+            for ref in self.present_lower_gate_refs
+            if not ref.startswith("optimization-regression-release-gate:")
+        ]
+        if self.completion_result == CompletenessResult.PASS:
+            missing = _missing_refs(
+                {
+                    "claim_scope_ref": self.claim_scope_ref,
+                    "required_lower_gate_refs": self.required_lower_gate_refs,
+                    "present_lower_gate_refs": self.present_lower_gate_refs,
+                    "objective_score_refs": self.objective_score_refs,
+                    "agent_decision_loop_refs": self.agent_decision_loop_refs,
+                    "metric_slice_refs": self.metric_slice_refs,
+                    "algorithm_recommendation_refs": self.algorithm_recommendation_refs,
+                    "policy_decision_refs": self.policy_decision_refs,
+                    "command_record_refs": self.command_record_refs,
+                    "event_cursor_refs": self.event_cursor_refs,
+                    "outbox_refs": self.outbox_refs,
+                    "artifact_refs": self.artifact_refs,
+                    "replay_bundle_ref": self.replay_bundle_ref,
+                }
+            )
+            if (
+                missing
+                or missing_lower
+                or non_096_lower_refs
+                or self.failure_type
+                or self.failed_lower_gate_refs
+                or self.failed_objective_score_refs
+                or self.failed_agent_decision_loop_refs
+            ):
+                raise ValueError(
+                    "passing optimization objective release gate missing refs: "
+                    f"{missing}; missing lower gates: {missing_lower}; "
+                    f"non-096 lower refs: {non_096_lower_refs}"
+                )
+        elif not (
+            self.failure_type
+            and self.diagnostics
+            and (
+                missing_lower
+                or self.failed_lower_gate_refs
+                or self.failed_objective_score_refs
+                or self.failed_agent_decision_loop_refs
+            )
+        ):
+            raise ValueError("non-pass objective release gate requires typed diagnostics")
         return self
 
 

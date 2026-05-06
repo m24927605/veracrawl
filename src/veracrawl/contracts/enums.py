@@ -708,6 +708,10 @@ class CrawlerOptimizationFailureType(StrEnum):
     UNSAFE_RECOVERY_ACTION = "crawler_optimization_unsafe_recovery_action"
     LLM_OUTPUT_AS_EVIDENCE = "crawler_optimization_llm_output_as_evidence"
     MISSING_REPLAY_REFS = "crawler_optimization_missing_replay_refs"
+    OBJECTIVE_SCORE_GAP = "crawler_optimization_objective_score_gap"
+    OBJECTIVE_FORMULA_MISMATCH = "crawler_optimization_objective_formula_mismatch"
+    AGENT_DECISION_LOOP_GAP = "crawler_optimization_agent_decision_loop_gap"
+    OBJECTIVE_LOWER_GATE_GAP = "crawler_optimization_objective_lower_gate_gap"
 
 
 class SecurityActionSurface(StrEnum):
