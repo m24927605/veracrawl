@@ -110,6 +110,7 @@ Future Codex runs and release audits need the optimization roadmap to name 097 a
 - **FR-010**: System MUST add command and event registry entries for recording objective-score reports, agent decision-loop evidence, and objective release gates.
 - **FR-011**: System MUST add negative fixture/oracle refs for low score, formula mismatch, missing replay refs, missing policy refs, missing lower gate refs, missing observe/think/act/verify refs, low confidence, missing stop condition, and LLM-only evidence.
 - **FR-012**: System MUST update roadmap docs and AGENTS guidance so 097 is visible as the end-to-end optimization objective gate after specs 080-096.
+- **FR-013**: System MUST provide a deterministic CLI evidence command that materializes 096 lower regression gate evidence, 097 objective score, 097 agent loop evidence, 097 objective release gate, and an audit summary in one run without live network, browser, model SDK, storage, queue, or adapter dependencies.
 
 ### VeraCrawl Contract Requirements *(mandatory for crawler/platform changes)*
 
@@ -146,6 +147,7 @@ Future Codex runs and release audits need the optimization roadmap to name 097 a
 - **SC-005**: Import-boundary tests prove new runtime code does not import concrete model SDKs, browser libraries, storage clients, queue clients, benchmark modules, or agent framework packages.
 - **SC-006**: Roadmap docs name specs 080-097 and describe 097 as the end-to-end optimization objective/agent release gate after 096.
 - **SC-007**: Targeted tests, contract validation, lint/type checks where available, and the feasible full test suite pass before local commit.
+- **SC-008**: `veracrawl-crawler-optimization run-objective-gate` or its module equivalent writes `optimization_regression_release_gate.json`, `optimization_objective_score.json`, `agent_decision_loop_evidence.json`, `optimization_objective_release_gate.json`, and `summary.json` for deterministic evidence runs.
 
 ## Assumptions
 
@@ -174,3 +176,11 @@ Future Codex runs and release audits need the optimization roadmap to name 097 a
 - Validation passed on 2026-05-06: targeted objective gate suite
   `21 passed`, `ruff check`, `mypy` on objective modules/contracts/registry,
   full `pytest` `1425 passed, 5 skipped`, and `git diff --check`.
+- Extended implementation with deterministic objective evidence runner support:
+  `veracrawl-crawler-optimization run-objective-gate` materializes 096 and 097
+  JSON evidence artifacts and a summary from local fixtures.
+- Evidence runner validation passed on 2026-05-06: targeted objective/evidence
+  suite `25 passed`, CLI command wrote 096/097 evidence artifacts to
+  `/private/tmp/veracrawl-optimization-objective-gate-success`, `ruff check`,
+  `mypy` on six affected files, full `pytest` `1429 passed, 5 skipped`, and
+  `git diff --check`.

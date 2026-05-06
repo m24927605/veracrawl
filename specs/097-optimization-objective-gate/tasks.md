@@ -47,6 +47,14 @@
 - [x] T023 Record implementation closure and validation results in `specs/097-optimization-objective-gate/spec.md` and this `tasks.md`
 - [x] T024 Perform objective completion audit against the user prompt and record concrete evidence before local commit
 
+## Phase 7: Deterministic Evidence Runner
+
+- [x] T025 [US3] Implement deterministic objective evidence runner in `src/veracrawl/optimization/objective_evidence.py`
+- [x] T026 [US3] Add `run-objective-gate` command to `src/veracrawl/cli/crawler_optimization.py`
+- [x] T027 [US3] Add objective evidence runner unit tests in `tests/unit/test_crawler_optimization_objective_evidence.py`
+- [x] T028 [US3] Add CLI integration test in `tests/integration/test_crawler_optimization_objective_gate_cli.py`
+- [x] T029 [US3] Update 097 closure and audit records for deterministic evidence command validation
+
 ## Dependencies & Execution Order
 
 - Phase 1 must complete before runtime implementation.
@@ -81,3 +89,22 @@ threshold.
 - Diff check:
   `git diff --check`
   passed.
+
+- Deterministic evidence command:
+  `uv run veracrawl-crawler-optimization run-objective-gate tests/fixtures/crawler-optimization-success --out .veracrawl-test-runs/optimization-objective-gate-success`
+  passed against `/private/tmp/veracrawl-optimization-objective-gate-success`
+  with `optimization_score` 0.9000999999999999, threshold 0.82, 7 lower
+  integrations, 096 regression gate pass, 097 objective score pass, 097 agent
+  loop pass, and 097 release gate pass.
+
+- Evidence runner targeted tests:
+  `uv run --extra dev pytest tests/unit/test_crawler_optimization_objective_evidence.py tests/integration/test_crawler_optimization_objective_gate_cli.py tests/contract/test_crawler_optimization_objective_gate_import_boundaries.py tests/unit/test_crawler_optimization_objective_gate.py tests/unit/test_crawler_optimization_objective_gate_replay.py tests/contract/test_crawler_optimization_objective_gate_contracts.py tests/contract/test_crawler_optimization_objective_gate_registry.py`
+  passed with 25 tests.
+
+- Evidence runner type check:
+  `uv run --extra dev mypy src/veracrawl/optimization/objective_gate.py src/veracrawl/optimization/objective_evidence.py src/veracrawl/review_replay/crawler_optimization_objective_gate.py src/veracrawl/cli/crawler_optimization.py src/veracrawl/contracts/crawler_optimization.py src/veracrawl/contracts/registry.py`
+  passed with no issues.
+
+- Full regression after evidence runner:
+  `uv run --extra dev pytest`
+  passed with 1429 passed, 5 skipped.

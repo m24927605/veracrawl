@@ -22,6 +22,7 @@ fixtures, tests, release gates, and local commit only.
 | Agent observe/think/act/verify loop, confidence threshold, stop conditions, LLM fallback boundary | `AgentDecisionLoopEvidence` contract and `build_agent_decision_loop_evidence`; tests for bounded fallback, missing phase, low confidence, missing stop, LLM output as evidence | Complete |
 | Deterministic objective formula | `compute_optimization_score` implements the supplied weighted formula; contract validates formula ref and computed score | Complete |
 | Release/evaluation gate proving faster, more accurate, cheaper | `OptimizationObjectiveReleaseGate` and `optimization_objective_release_gate` require lower 096 gate pass, objective score pass, agent loop pass, metrics, policy, command/event/outbox, artifact, and replay refs | Complete |
+| One-run deterministic release evidence command | `veracrawl-crawler-optimization run-objective-gate tests/fixtures/crawler-optimization-success --out /private/tmp/veracrawl-optimization-objective-gate-success` wrote 096 and 097 JSON evidence artifacts plus summary | Complete |
 | Owner-service integration contracts/events/commands/replay refs | Registry commands/events: `record_optimization_objective_score`, `record_agent_decision_loop_evidence`, `record_optimization_objective_release_gate`; replay helper validates required refs | Complete |
 | Benchmark/fixture/negative case/regression tests | Registry fixture oracles include positive and negative objective/agent/release cases; targeted suite has 21 tests | Complete |
 | Validate with actual tests and metrics | Targeted pytest: 21 passed; ruff: passed; mypy: no issues; full pytest: 1425 passed, 5 skipped; diff check: passed | Complete |
@@ -48,6 +49,17 @@ uv run --extra dev pytest
 
 git diff --check
 -> passed
+
+uv run veracrawl-crawler-optimization run-objective-gate tests/fixtures/crawler-optimization-success --out /private/tmp/veracrawl-optimization-objective-gate-success
+-> ok true, optimization_score 0.9000999999999999, score_threshold 0.82,
+   lower_integration_count 7, 096 regression gate pass, 097 objective score
+   pass, 097 agent loop pass, 097 release gate pass
+
+uv run --extra dev pytest tests/unit/test_crawler_optimization_objective_evidence.py tests/integration/test_crawler_optimization_objective_gate_cli.py tests/contract/test_crawler_optimization_objective_gate_import_boundaries.py tests/unit/test_crawler_optimization_objective_gate.py tests/unit/test_crawler_optimization_objective_gate_replay.py tests/contract/test_crawler_optimization_objective_gate_contracts.py tests/contract/test_crawler_optimization_objective_gate_registry.py
+-> 25 passed
+
+uv run --extra dev pytest
+-> 1429 passed, 5 skipped
 ```
 
 ## Residual Risk

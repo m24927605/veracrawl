@@ -6,6 +6,7 @@ from pathlib import Path
 def test_objective_gate_core_avoids_benchmark_adapter_and_framework_imports() -> None:
     checked = [
         Path("src/veracrawl/optimization/objective_gate.py"),
+        Path("src/veracrawl/optimization/objective_evidence.py"),
         Path("src/veracrawl/review_replay/crawler_optimization_objective_gate.py"),
     ]
     forbidden = [

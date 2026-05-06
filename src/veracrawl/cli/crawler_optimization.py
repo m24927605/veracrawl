@@ -14,6 +14,11 @@ from veracrawl.benchmarks.crawler_optimization import (
 )
 from veracrawl.contracts.crawler_optimization import CrawlerOptimizationManifest
 from veracrawl.contracts.enums import CompletenessResult
+from veracrawl.optimization.objective_evidence import (
+    OptimizationObjectiveEvidenceRun,
+    objective_evidence_summary,
+    run_deterministic_objective_evidence,
+)
 from veracrawl.runtime_support.persistence_store import ReferencePersistenceStore
 
 
@@ -97,6 +102,57 @@ def _write_outputs(out: Path, result: CrawlerOptimizationBenchmarkResult) -> Non
     _write_json(out / "summary.json", _summary(result))
 
 
+def run_objective_gate(
+    fixture_dir: Path,
+    *,
+    out: Path,
+) -> OptimizationObjectiveEvidenceRun:
+    manifest = CrawlerOptimizationManifest.model_validate(
+        _load_json_like(fixture_dir / "manifest.yaml")
+    )
+    if manifest.expected_completion_result != CompletenessResult.PASS:
+        raise ValueError("objective gate evidence requires a passing optimization fixture")
+    result = run_deterministic_objective_evidence(
+        fixture_id="optimization-objective-gate-success",
+        run_ref=f"run:{manifest.id}",
+        profile_ref="profile:optimization",
+        claim_scope_ref=f"claim:optimization-objective:{manifest.id}",
+    )
+    _write_objective_gate_outputs(out, result)
+    if result.objective_release_gate.completion_result != CompletenessResult.PASS:
+        raise ValueError("optimization objective release gate did not pass")
+    return result
+
+
+def _write_objective_gate_outputs(
+    out: Path,
+    result: OptimizationObjectiveEvidenceRun,
+) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    _write_json(out / "metric_slice.json", result.metric.model_dump(mode="json"))
+    _write_json(
+        out / "lower_optimization_integrations.json",
+        [item.model_dump(mode="json") for item in result.lower_integrations],
+    )
+    _write_json(
+        out / "optimization_regression_release_gate.json",
+        result.regression_gate.model_dump(mode="json"),
+    )
+    _write_json(
+        out / "optimization_objective_score.json",
+        result.objective_score.model_dump(mode="json"),
+    )
+    _write_json(
+        out / "agent_decision_loop_evidence.json",
+        result.agent_decision_loop.model_dump(mode="json"),
+    )
+    _write_json(
+        out / "optimization_objective_release_gate.json",
+        result.objective_release_gate.model_dump(mode="json"),
+    )
+    _write_json(out / "summary.json", objective_evidence_summary(result))
+
+
 def _summary(result: CrawlerOptimizationBenchmarkResult) -> dict[str, object]:
     report = result.report
     return {
@@ -135,6 +191,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("fixture_dir")
     run.add_argument("--profile", default="optimization")
     run.add_argument("--out", required=True)
+    objective_gate = sub.add_parser("run-objective-gate")
+    objective_gate.add_argument("fixture_dir")
+    objective_gate.add_argument("--out", required=True)
     return parser
 
 
@@ -148,6 +207,14 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
             return 1
         print(json.dumps(_summary(result), sort_keys=True))
+        return 0
+    if args.command == "run-objective-gate":
+        try:
+            objective_result = run_objective_gate(Path(args.fixture_dir), out=Path(args.out))
+        except (OSError, RuntimeError, ValueError) as exc:
+            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+            return 1
+        print(json.dumps(objective_evidence_summary(objective_result), sort_keys=True))
         return 0
     return 2
 

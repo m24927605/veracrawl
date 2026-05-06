@@ -8,6 +8,24 @@
 | `record_agent_decision_loop_evidence` | agents/ops | Record observe/think/act/verify evidence for optimization-affecting agent decisions | phase refs, confidence threshold, stop condition, deterministic refs, policy refs, trace refs, command/event/outbox refs, artifact refs, replay ref |
 | `record_optimization_objective_release_gate` | ops | Record final objective release gate over lower regression gates, objective scores, and agent evidence | 096 lower gate refs, objective score refs, agent loop refs, metric refs, algorithm refs, policy refs, command/event/outbox refs, artifact refs, replay ref |
 
+## CLI Evidence Command
+
+```text
+veracrawl-crawler-optimization run-objective-gate <fixture_dir> --out <dir>
+```
+
+The command must write:
+
+- `optimization_regression_release_gate.json`
+- `optimization_objective_score.json`
+- `agent_decision_loop_evidence.json`
+- `optimization_objective_release_gate.json`
+- `metric_slice.json`
+- `summary.json`
+
+The command is deterministic and local-fixture only. It does not call live
+network, browser engines, LLM/model SDKs, concrete storage, queues, or adapters.
+
 ## Event Types
 
 | Event | Payload | Required Before/After State |

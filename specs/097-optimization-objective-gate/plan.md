@@ -99,20 +99,24 @@ specs/097-optimization-objective-gate/
 src/veracrawl/contracts/crawler_optimization.py
 src/veracrawl/contracts/registry.py
 src/veracrawl/optimization/objective_gate.py
+src/veracrawl/optimization/objective_evidence.py
 src/veracrawl/review_replay/crawler_optimization_objective_gate.py
+src/veracrawl/cli/crawler_optimization.py
 tests/contract/test_crawler_optimization_objective_gate_contracts.py
 tests/contract/test_crawler_optimization_objective_gate_registry.py
 tests/contract/test_crawler_optimization_objective_gate_import_boundaries.py
 tests/unit/test_crawler_optimization_objective_gate.py
 tests/unit/test_crawler_optimization_objective_gate_replay.py
+tests/integration/test_crawler_optimization_objective_gate_cli.py
 ```
 
-**Structure Decision**: Add a cohesive objective-gate runtime module under
-`veracrawl.optimization` and a replay validator under `review_replay`. Shared
-contracts stay in `contracts`. The new modules may depend on existing
-optimization contracts and 096 ops integration contracts but must not import
-benchmarks, adapters, browser engines, model SDKs, queue clients, storage
-clients, or agent frameworks.
+**Structure Decision**: Add cohesive objective-gate runtime and deterministic
+evidence-runner modules under `veracrawl.optimization`, a replay validator under
+`review_replay`, and a thin CLI command under `veracrawl.cli`. Shared contracts
+stay in `contracts`. Core objective modules may depend on existing optimization
+contracts and 096 ops integration contracts but must not import benchmarks,
+adapters, browser engines, model SDKs, queue clients, storage clients, or agent
+frameworks.
 
 ## Phase 0: Research
 
