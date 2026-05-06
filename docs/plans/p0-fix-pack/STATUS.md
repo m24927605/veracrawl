@@ -6,7 +6,7 @@
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | 4c9bce1 | RAW_RESPONSE_LEAK + bogus model name fixed; httpx/structured-output/retry deferred |
 | P0-4 | Tool Gateway gating | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | (this commit) | policy-aware allowlist + per-actor quota + audit log；legacy mode 保留向後相容 |
-| P0-5 | Structured logging | IN_PROGRESS (sub-step 5/8) | 2026-05-06 | - | sub-steps 1-4: 7 commits | redaction + logging.py + 62 個 CLI 全部包 bootstrap；剩 sub-step 5（內部模組 logger 使用）+ 6-8（boundary tests） |
+| P0-5 | Structured logging | DONE (substantively) | 2026-05-06 | 2026-05-06 | sub-steps 1-4 + boundary | infrastructure complete; boundary test 強制 internal 不能 raw import logging/structlog；P1 follow-up：CLI 非合約 print 遷移、3 個內部模組 logger demo |
 | P0-6 | CI workflow | DONE | 2026-05-06 | 2026-05-06 | (this commit) | ci.yml + nightly.yml + dependabot.yml + live marker registered |
 | P0-7 | Break optimization cycle | DONE | 2026-05-06 | 2026-05-06 | (this commit) | 2 types 移至 contracts/optimization_runtime.py；6 個下游 import 改 contracts；boundary test 強制 |
 | P0-8 | Runtime mode (prod vs fixture) | DONE | 2026-05-06 | 2026-05-06 | cd02719 + (this commit) | foundation + 4 個 gate 接線完成；9 個 production-mode regression test |
