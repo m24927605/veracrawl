@@ -4,9 +4,9 @@
 |----|-------|--------|---------|-----------|---------|-------|
 | P0-1 | HTTP client (urllib → httpx) | BLOCKED | 2026-05-06 | - | - | 3 連敗，等候用戶決策 |
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
-| P0-3 | OpenAI adapter fix | NOT_STARTED | - | - | - | - |
+| P0-3 | OpenAI adapter fix | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | 4c9bce1 | RAW_RESPONSE_LEAK + bogus model name fixed; httpx/structured-output/retry deferred |
 | P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
-| P0-5 | Structured logging | IN_PROGRESS (sub-step 3/8) | 2026-05-06 | - | sub-step 1: 4 commits + sub-step 2: 1 commit | logging.py 核心完成（configure / get_logger / with_correlation_id / bootstrap_cli_logging）；下一步：CLI 代表性遷移 |
+| P0-5 | Structured logging | IN_PROGRESS (sub-step 5/8) | 2026-05-06 | - | sub-steps 1-4: 7 commits | redaction + logging.py + 62 個 CLI 全部包 bootstrap；剩 sub-step 5（內部模組 logger 使用）+ 6-8（boundary tests） |
 | P0-6 | CI workflow | NOT_STARTED | - | - | - | - |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
 | P0-8 | Runtime mode (prod vs fixture) | NOT_STARTED | - | - | - | - |
