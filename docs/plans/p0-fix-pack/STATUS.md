@@ -2,7 +2,7 @@
 
 | ID | Title | Status | Started | Completed | Commits | Notes |
 |----|-------|--------|---------|-----------|---------|-------|
-| P0-1 | HTTP client (urllib → httpx) | BLOCKED | 2026-05-06 | - | - | 3 連敗，等候用戶決策 |
+| P0-1 | HTTP client (urllib → httpx) | DONE | 2026-05-06 | 2026-05-07 | (this commit) | urllib → httpx；retry/Retry-After；per-hop redirect SSRF (opt-in via config)；real Chrome UA；NetworkAdapterError(ValueError) with failure_type；20 個新 unit test |
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | DONE (substantively) | 2026-05-06 | 2026-05-07 | 4c9bce1 + (this commit) | RAW_RESPONSE_LEAK + bogus model + urllib→httpx + retry/Retry-After + max_output_tokens raised；structured output schema wiring 列 P1 |
 | P0-4 | Tool Gateway gating | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | (this commit) | policy-aware allowlist + per-actor quota + audit log；legacy mode 保留向後相容 |

@@ -1213,6 +1213,7 @@ class NetworkFailureType(StrEnum):
     UNSAFE_BROWSER_SIDE_EFFECT = "unsafe_browser_side_effect"
     ADAPTER_FAILURE = "adapter_failure"
     MISSING_NETWORK_ARTIFACT = "missing_network_artifact"
+    RETRY_EXHAUSTED = "retry_exhausted"
 
 
 class LiveHttpAcquisitionFailureType(StrEnum):
