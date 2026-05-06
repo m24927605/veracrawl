@@ -2,12 +2,18 @@
 
 | | |
 |---|---|
-| Status | DRAFT (pre-review) |
-| Owner | _to fill_ |
+| Status | **SUPERSEDED** by `docs/plans/production-authorized-source-crawler/design.md` |
+| Reason | Phase 2 anti-bot direction (curl_cffi TLS impersonation, Cloudflare 5s challenge handling, stealth fingerprint expansion) violates `docs/09-target-capability-model.md` §Safety Boundary which forbids "WAF evasion, stealth automation, ban-avoidance proxy tactics". Codex review iteration 1 surfaced 5 critical + 11 important findings; the redesign starts from a charter-compliant frame. |
 | Date | 2026-05-07 |
 | Supersedes | _none_ |
-| Related plans | `docs/plans/p0-fix-pack/` (security & infra baseline, complete) |
+| Related plans | `docs/plans/p0-fix-pack/` (security & infra baseline) |
 | Anchor docs | `docs/02-production-architecture.md`, `docs/06-agent-system-design.md`, `docs/07-data-contracts.md`, `docs/08-build-roadmap.md`, `docs/09-target-capability-model.md` |
+
+> **DO NOT IMPLEMENT FROM THIS FILE.** It is kept for traceability so the
+> codex review record (5 critical + 11 important + 2 minor findings) and
+> the architectural lessons remain reachable. The successor design at
+> `docs/plans/production-authorized-source-crawler/design.md` is the
+> active source of truth.
 
 ---
 
