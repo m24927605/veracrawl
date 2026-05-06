@@ -6,7 +6,7 @@
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | NOT_STARTED | - | - | - | - |
 | P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
-| P0-5 | Structured logging | PLAN_REVIEW | 2026-05-06 | - | - | iter 1 ❌ → v2 written |
+| P0-5 | Structured logging | BLOCKED | 2026-05-06 | - | - | 3 連敗，等候用戶決策 |
 | P0-6 | CI workflow | NOT_STARTED | - | - | - | - |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
 | P0-8 | Runtime mode (prod vs fixture) | NOT_STARTED | - | - | - | - |
@@ -22,9 +22,21 @@
 
 ## 全局狀態
 
-- **目前活躍項**：P0-1（BLOCKED）
-- **連續失敗次數**：3（plan review）
+- **目前活躍項**：P0-1（BLOCKED）、P0-5（BLOCKED）
+- **連續失敗次數**：P0-1=3、P0-5=3
 - **最後一次更新**：2026-05-06
+
+## 共同 Pattern 觀察（兩個 P0 plan 都 3 連敗）
+
+| 維度 | P0-1（HTTP client） | P0-5（structured logging） |
+|---|---|---|
+| iter 1 | 1 critical + 10 important + 1 minor | 0 critical + 6 important + 3 minor |
+| iter 2 | 3 critical + 8 important + 2 minor | 0 critical + 8 important + 3 minor |
+| iter 3 | 2 critical + 6 important + 2 minor | 0 critical + 9 important + 3 minor |
+| 趨勢 | 議題從契約 / SSRF 收斂到 details | 始終是 details，design 從未被質疑 |
+| 關鍵差異 | P0-1 確有 critical 設計問題（SSRF / 失敗傳播）| P0-5 design 健全；codex 在挑寫作精度 |
+
+**觀察**：codex plan review 的標準極高，每輪都會找到「缺漏的覆蓋」、「邊角 case」、「術語誤用」等。短期內難以一次過審。
 
 ## 阻塞 / 待人類決策
 
@@ -66,6 +78,7 @@ iter 3 主要新問題：
 | plan | p0-1-http-client.md | 3 | ❌ | 2 critical (retry-semantics 矛盾, initial-URL SSRF) + 6 important + 2 minor — **3 連敗，停止重新評估** |
 | plan | p0-5-logging.md | 1 | ❌ | 6 important + 3 minor (no critical)：129 prints 全在 cli/、structlog factory 與 caplog 不容、idempotency、thread contextvar 錯誤聲明、entry-point 缺清單、無 redaction policy、import boundary 設計衝突 |
 | plan | p0-5-logging.md | 2 | ❌ | 8 important + 3 minor (still no critical)：BoundLogger 型別矛盾、idempotency level 不真實生效、reset 動 root handlers 影響 caplog、bootstrap 缺 cid AST 檢查、prog binding leakage、runtime entry inventory 不夠具體、CLI scope/commit 訊息語義不清、import boundary 太寬、ANSI test 不可行 |
+| plan | p0-5-logging.md | 3 | ❌ | 9 important + 3 minor (still no critical)：propagate=False vs caplog 矛盾、structured fields 不在 record.attr、entry-point 數應為 68 不是 30、AST 檢查太弱、cli_token 邏輯誤、bind_runtime_context 缺設計、結構化 error print 分類不清、correlation 覆蓋與 Why 矛盾、boundary 漏列 11 個套件 — **3 連敗** |
 
 iter 1 主要問題：
 1. **critical**：redirect 只擋 HTTPS→HTTP downgrade，未對 redirect target 重跑 egress / private-network / DNS-rebind policy
