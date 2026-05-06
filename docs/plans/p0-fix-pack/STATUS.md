@@ -6,7 +6,7 @@
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | NOT_STARTED | - | - | - | - |
 | P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
-| P0-5 | Structured logging | IN_PROGRESS (sub-step 2/8) | 2026-05-06 | - | sub-step 1: ✅ 4 commits | sub-step 1 (redaction) approved; sub-step 2 next: logging.py + structlog |
+| P0-5 | Structured logging | IN_PROGRESS (sub-step 3/8) | 2026-05-06 | - | sub-step 1: 4 commits + sub-step 2: 1 commit | logging.py 核心完成（configure / get_logger / with_correlation_id / bootstrap_cli_logging）；下一步：CLI 代表性遷移 |
 | P0-6 | CI workflow | NOT_STARTED | - | - | - | - |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
 | P0-8 | Runtime mode (prod vs fixture) | NOT_STARTED | - | - | - | - |
@@ -75,7 +75,7 @@ P0-5 拆為以下 atomic sub-steps，每個獨立 commit + codex task review：
 
 1. **redaction processor** — ✅ DONE（commits `bd9b249`, `9517030`, `254ed97`, `787eb8f`；codex task review 4 輪後 approved）
    - follow-up minor：`test_processor_replaces_sensitive_primitive_at_depth_cap` 增加 `REDACTED_DEEP in serialized` 斷言
-2. structlog dependency + `logging.py` 核心（configure_logging / get_logger / with_correlation_id）
+2. **structlog dependency + `logging.py` 核心** — ✅ DONE（一次 commit；用戶決策跳過 codex task review per commit）
 3. `bootstrap_cli_logging` context manager + 1 個代表性 CLI 遷移
 4. 其他 67 個 CLI entry points 注入 bootstrap
 5. 3 個內部模組（stdlib_http / tool_gateway / observability）展示 get_logger 用法

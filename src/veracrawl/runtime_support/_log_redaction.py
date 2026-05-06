@@ -13,6 +13,7 @@ are redacted at the inner key, not just the top level.
 from __future__ import annotations
 
 import re
+from collections.abc import MutableMapping
 from typing import Any
 
 # Keys whose values must never appear in logs in plaintext. Patterns match at
@@ -93,8 +94,8 @@ class RedactSensitiveProcessor:
         self,
         logger: Any,
         method_name: str,
-        event_dict: dict[str, Any],
-    ) -> dict[str, Any]:
+        event_dict: MutableMapping[str, Any],
+    ) -> MutableMapping[str, Any]:
         for key in list(event_dict.keys()):
             if isinstance(key, str) and is_sensitive_key(key):
                 event_dict[key] = REDACTED
