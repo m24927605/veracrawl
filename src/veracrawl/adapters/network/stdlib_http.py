@@ -46,6 +46,7 @@ from veracrawl.contracts.enums import (
     NetworkFailureType,
     SourceAdapterResultType,
 )
+from veracrawl.contracts.errors import FatalError, PolicyViolation, RetryableError
 from veracrawl.contracts.network import NetworkRequest, NetworkResponse, RedirectHop
 from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapterResult
 from veracrawl.ports.network import NetworkClientResult
@@ -68,9 +69,11 @@ class NetworkAdapterError(ValueError):
     Inherits :class:`ValueError` so the existing
     ``except ValueError`` handler in
     ``fetch.network_acquisition.execute_http_network_acquisition`` continues
-    to match without modification. The ``failure_type`` attribute lets
-    callers that want category-aware dispatch read the
-    :class:`NetworkFailureType` directly without parsing prose.
+    to match without modification. Category-specific subclasses below
+    additionally mix in one of the markers from
+    :mod:`veracrawl.contracts.errors` (``RetryableError`` /
+    ``FatalError`` / ``PolicyViolation``) so callers can dispatch on
+    category without inspecting ``failure_type``.
     """
 
     def __init__(self, failure_type: NetworkFailureType, detail: str) -> None:
@@ -79,11 +82,85 @@ class NetworkAdapterError(ValueError):
         super().__init__(f"{failure_type.value}: {detail}")
 
 
-class NetworkAdapterTimeoutError(NetworkAdapterError):
-    """Backwards-compat name for the most common transport failure."""
+class NetworkTimeoutError(NetworkAdapterError, RetryableError):
+    """Transport-level timeout. Caller may retry under same policy."""
 
     def __init__(self, detail: str = "network request timed out") -> None:
         super().__init__(NetworkFailureType.NETWORK_TIMEOUT, detail)
+
+
+# Backwards-compat alias: existing imports of ``NetworkAdapterTimeoutError``
+# continue to resolve. The ``Timeout`` form was the original name shipped
+# by the urllib adapter; ``NetworkTimeoutError`` is the unified name.
+NetworkAdapterTimeoutError = NetworkTimeoutError
+
+
+class RetryExhaustedError(NetworkAdapterError, FatalError):
+    """All retry attempts consumed without success."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.RETRY_EXHAUSTED, detail)
+
+
+class RedirectDeniedError(NetworkAdapterError, PolicyViolation):
+    """Redirect target violated egress / SSRF / scheme policy."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.REDIRECT_DENIED, detail)
+
+
+class EgressDeniedError(NetworkAdapterError, PolicyViolation):
+    """Target origin not in the configured egress allowlist."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.EGRESS_DENIED, detail)
+
+
+class PrivateNetworkDeniedError(NetworkAdapterError, PolicyViolation):
+    """Target host resolves to a private / loopback / link-local address."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.PRIVATE_NETWORK_DENIED, detail)
+
+
+class AdapterFailureError(NetworkAdapterError, FatalError):
+    """Generic non-retryable adapter failure (DNS, refused, TLS, etc.)."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.ADAPTER_FAILURE, detail)
+
+
+_NETWORK_FAILURE_TYPE_TO_CLASS: dict[NetworkFailureType, type[NetworkAdapterError]] = {
+    NetworkFailureType.NETWORK_TIMEOUT: NetworkTimeoutError,
+    NetworkFailureType.RETRY_EXHAUSTED: RetryExhaustedError,
+    NetworkFailureType.REDIRECT_DENIED: RedirectDeniedError,
+    NetworkFailureType.EGRESS_DENIED: EgressDeniedError,
+    NetworkFailureType.PRIVATE_NETWORK_DENIED: PrivateNetworkDeniedError,
+    NetworkFailureType.ADAPTER_FAILURE: AdapterFailureError,
+}
+
+
+def classify_network_failure(
+    failure_type: NetworkFailureType, detail: str
+) -> NetworkAdapterError:
+    """Pick the marker-bearing subclass for ``failure_type``.
+
+    Falls back to the generic :class:`NetworkAdapterError` for failure
+    types that don't have a dedicated subclass yet (e.g.
+    SIZE_BUDGET_EXCEEDED, ROBOTS_BLOCKED, RATE_BUDGET_EXCEEDED). Those
+    subclasses can be added incrementally without disturbing existing
+    callers — the helper continues to return a base
+    ``NetworkAdapterError`` for unmapped values.
+    """
+    cls = _NETWORK_FAILURE_TYPE_TO_CLASS.get(failure_type)
+    if cls is None:
+        return NetworkAdapterError(failure_type, detail)
+    # Specific subclasses take only ``detail`` (failure_type is implied
+    # by the class). The dispatch table is keyed so cls is one of the
+    # six known subclasses; mypy's view is the broader base type, so
+    # the call-arg / arg-type signatures of the parent are reported
+    # despite this being correct against every entry in the dict.
+    return cls(detail)  # type: ignore[arg-type,call-arg]
 
 
 @dataclass(frozen=True)
@@ -269,10 +346,7 @@ class StdlibHttpSourceAdapter:
                 return response
             location = response.headers.get("location")
             if not location:
-                raise NetworkAdapterError(
-                    NetworkFailureType.REDIRECT_DENIED,
-                    "redirect missing Location header",
-                )
+                raise RedirectDeniedError("redirect missing Location header")
             next_url = urljoin(current_url, location)
             self._validate_redirect_target(from_url=current_url, to_url=next_url)
             self._redirect_hops.append(
@@ -287,9 +361,8 @@ class StdlibHttpSourceAdapter:
                 )
             )
             current_url = next_url
-        raise NetworkAdapterError(
-            NetworkFailureType.REDIRECT_DENIED,
-            f"redirect loop > max_redirects={self._config.max_redirects}",
+        raise RedirectDeniedError(
+            f"redirect loop > max_redirects={self._config.max_redirects}"
         )
 
     def _send_with_retry(self, url: str) -> httpx.Response:
@@ -305,7 +378,7 @@ class StdlibHttpSourceAdapter:
                     failure is not NetworkFailureType.NETWORK_TIMEOUT
                     or attempt >= self._config.max_attempts
                 ):
-                    raise NetworkAdapterError(
+                    raise classify_network_failure(
                         failure, f"{type(exc).__name__}: {exc}"
                     ) from exc
                 self._sleep(_backoff_seconds(attempt, jitter=self._jitter))
@@ -326,12 +399,11 @@ class StdlibHttpSourceAdapter:
             return response
 
         if last_response is not None:
-            raise NetworkAdapterError(
-                NetworkFailureType.RETRY_EXHAUSTED,
+            raise RetryExhaustedError(
                 f"max_attempts={self._config.max_attempts} "
-                f"last_status={last_response.status_code}",
+                f"last_status={last_response.status_code}"
             )
-        raise NetworkAdapterError(
+        raise classify_network_failure(
             last_failure, f"max_attempts={self._config.max_attempts}"
         )
 
@@ -339,26 +411,18 @@ class StdlibHttpSourceAdapter:
         from_scheme = urlparse(from_url).scheme
         to_parsed = urlparse(to_url)
         if to_parsed.scheme not in {"http", "https"}:
-            raise NetworkAdapterError(
-                NetworkFailureType.REDIRECT_DENIED,
-                f"unsupported redirect scheme: {to_parsed.scheme!r}",
+            raise RedirectDeniedError(
+                f"unsupported redirect scheme: {to_parsed.scheme!r}"
             )
         if from_scheme == "https" and to_parsed.scheme == "http":
-            raise NetworkAdapterError(
-                NetworkFailureType.REDIRECT_DENIED,
-                "protocol_downgrade_https_to_http",
-            )
+            raise RedirectDeniedError("protocol_downgrade_https_to_http")
         if self._config.egress_allowlist:
             target_origin = _origin(to_url)
             if target_origin not in self._config.egress_allowlist:
-                raise NetworkAdapterError(
-                    NetworkFailureType.EGRESS_DENIED,
-                    f"redirect off allowlist: {target_origin}",
-                )
+                raise EgressDeniedError(f"redirect off allowlist: {target_origin}")
         if not self._config.allow_private_network and _is_private_network_url(to_url):
-            raise NetworkAdapterError(
-                NetworkFailureType.PRIVATE_NETWORK_DENIED,
-                f"redirect to private host: {to_parsed.hostname}",
+            raise PrivateNetworkDeniedError(
+                f"redirect to private host: {to_parsed.hostname}"
             )
 
 

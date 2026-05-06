@@ -35,6 +35,7 @@ import httpx
 
 from veracrawl.contracts.agent import ModelRequest, ModelResponse
 from veracrawl.contracts.common import stable_hash
+from veracrawl.contracts.errors import FatalError, RetryableError
 
 _RESPONSES_ENDPOINT: Final[str] = "https://api.openai.com/v1/responses"
 _REQUEST_ID_HEADER: Final[str] = "x-request-id"
@@ -47,7 +48,15 @@ _DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=10.0)
 
 
 class ModelProviderError(RuntimeError):
-    """Adapter-level failure with structured fields and no body content."""
+    """Adapter-level failure with structured fields and no body content.
+
+    Inherits :class:`RuntimeError` so existing
+    ``except RuntimeError`` handlers continue to match. Category-specific
+    subclasses below additionally mix in one of the markers from
+    :mod:`veracrawl.contracts.errors` (``RetryableError`` /
+    ``FatalError`` / ``PolicyViolation``) so callers can dispatch on
+    category without inspecting ``error_code``.
+    """
 
     def __init__(
         self,
@@ -64,6 +73,55 @@ class ModelProviderError(RuntimeError):
             f"OpenAI Responses API error: status={status_code} "
             f"code={error_code} request_id={request_id_repr}"
         )
+
+
+class ProviderAuthFailed(ModelProviderError, FatalError):
+    """401 / 403 — credential bad or revoked. Do not retry."""
+
+
+class ProviderRateLimited(ModelProviderError, RetryableError):
+    """429 — caller may retry under same policy after Retry-After."""
+
+
+class ProviderServerError(ModelProviderError, RetryableError):
+    """5xx — transient upstream error. Caller may retry."""
+
+
+class ProviderBadRequest(ModelProviderError, FatalError):
+    """400 / 422 — request shape rejected. Retrying without changes will not help."""
+
+
+class ProviderNotFound(ModelProviderError, FatalError):
+    """404 — model id or endpoint not found."""
+
+
+class ProviderAdapterFailure(ModelProviderError, FatalError):
+    """Catch-all for transport / decode failures the adapter could not classify."""
+
+
+_ERROR_CODE_TO_CLASS: dict[str, type[ModelProviderError]] = {
+    "AUTH_FAILED": ProviderAuthFailed,
+    "RATE_LIMITED": ProviderRateLimited,
+    "SERVER_ERROR": ProviderServerError,
+    "BAD_REQUEST": ProviderBadRequest,
+    "NOT_FOUND": ProviderNotFound,
+    "ADAPTER_FAILURE": ProviderAdapterFailure,
+}
+
+
+def classify_provider_error(
+    *,
+    status_code: int,
+    error_code: str,
+    request_id: str | None,
+) -> ModelProviderError:
+    """Return the marker-bearing subclass for ``error_code``.
+
+    Falls back to the generic :class:`ModelProviderError` for codes
+    without a dedicated subclass; new codes can be added incrementally.
+    """
+    cls = _ERROR_CODE_TO_CLASS.get(error_code, ModelProviderError)
+    return cls(status_code=status_code, error_code=error_code, request_id=request_id)
 
 
 def _classify_status(status: int) -> str:
@@ -213,7 +271,7 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
                 )
             except httpx.HTTPError as exc:
                 if attempt >= self._max_attempts or not _is_retryable_transport(exc):
-                    raise ModelProviderError(
+                    raise classify_provider_error(
                         status_code=0,
                         error_code="ADAPTER_FAILURE",
                         request_id=None,
@@ -240,7 +298,7 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
             if http_response.is_success:
                 data = http_response.json()
                 if not isinstance(data, dict):
-                    raise ModelProviderError(
+                    raise classify_provider_error(
                         status_code=http_response.status_code,
                         error_code="ADAPTER_FAILURE",
                         request_id=_request_id_from(http_response.headers),
@@ -250,7 +308,7 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
             # Fatal 4xx (non-429) — do not retry.
             request_id = _request_id_from(http_response.headers)
             http_response.read()
-            raise ModelProviderError(
+            raise classify_provider_error(
                 status_code=http_response.status_code,
                 error_code=_classify_status(http_response.status_code),
                 request_id=request_id,
@@ -258,12 +316,12 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
 
         # Retry exhausted on a retryable response (or transport error).
         if last_response is not None:
-            raise ModelProviderError(
+            raise classify_provider_error(
                 status_code=last_response.status_code,
                 error_code=_classify_status(last_response.status_code),
                 request_id=_request_id_from(last_response.headers),
             )
-        raise ModelProviderError(
+        raise classify_provider_error(
             status_code=0,
             error_code="ADAPTER_FAILURE",
             request_id=None,
