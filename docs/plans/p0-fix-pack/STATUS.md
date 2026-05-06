@@ -2,7 +2,7 @@
 
 | ID | Title | Status | Started | Completed | Commits | Notes |
 |----|-------|--------|---------|-----------|---------|-------|
-| P0-1 | HTTP client (urllib → httpx) | PLAN_REVIEW | 2026-05-06 | - | - | iter 1 ❌ → v2 written |
+| P0-1 | HTTP client (urllib → httpx) | BLOCKED | 2026-05-06 | - | - | 3 連敗，等候用戶決策 |
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | NOT_STARTED | - | - | - | - |
 | P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
@@ -22,13 +22,40 @@
 
 ## 全局狀態
 
-- **目前活躍項**：無
-- **連續失敗次數**：0
-- **最後一次更新**：2026-05-06（首次建立）
+- **目前活躍項**：P0-1（BLOCKED）
+- **連續失敗次數**：3（plan review）
+- **最後一次更新**：2026-05-06
 
 ## 阻塞 / 待人類決策
 
-無。
+**P0-1 計畫 codex 連續 3 輪未通過。** 依用戶 CLAUDE.md 規範必須停下來重新評估。
+
+iter 3 主要新問題：
+1. **critical**：v3 將所有 retryable 失敗（含 transport timeout）retry 耗盡後映射至 `RETRY_EXHAUSTED`，但 unit test 6/7 期望 `NETWORK_TIMEOUT` → 自相矛盾
+2. **critical**：SSRF 防護只覆蓋 redirect target；初始 request URL 未在 adapter 內 re-validate（雖然 acquisition 層有 `network_policy_failure` 檢查，但 adapter 不應假設上游必跑）
+3. retry pseudocode 用 `response if 'response' in locals() else None` 會跨 iteration 讀到 stale response
+4. `execute_source_acquisition` 改不吞 `NetworkAdapterError` 影響非 HTTP adapter（browser / structured source 等）— 需 call-site 分析
+5. failure_report 沒帶 attempt_evidences / redirect_hops 部分結果
+6. `RETRY_EXHAUSTED` enum 需在 `_failure_report` 的 operator_status mapping 加對應字串
+7. redirect policy 未涵蓋：relative Location、malformed、missing scheme/host、credentialed URL、非 http(s) scheme、跨 redirect 的 header 處理（Authorization 是否帶過去）
+8. DNS rebinding test / streaming size-budget test 在純 `httpx.MockTransport` 不可行（需 DNS injection / 自訂 streaming response）
+
+觀察：每輪 codex 都解 12+ 議題但又揭露新層次。問題核心是 P0-1 的範圍太大，跨：
+- adapter 層（HTTP client）
+- contract 層（NetworkResponse / FailureType / AttemptEvidence）
+- ports 層（NetworkClientResult）
+- fetch 層（acquisition.py 的失敗傳播）
+- test infrastructure（DNS / streaming injection）
+
+**建議用戶選擇**：
+- (a) 繼續 iter 4-5（風險：仍可能不過；context 持續累積）
+- (b) **將 P0-1 拆為 4 個子項**並各自走 plan review：
+  - P0-1a｜HTTP client 替換（urllib → httpx + UA + timeout，不含 SSRF / retry）
+  - P0-1b｜Retry / Retry-After 處理
+  - P0-1c｜Per-hop SSRF 加固（redirect + initial URL + DNS resolve）
+  - P0-1d｜Size budget streaming + evidence
+- (c) 跳過 plan review（接受當前 v3 為 working draft），直接進 TDD 實作；codex task review 抓殘留
+- (d) 暫停 P0-1，先處理較簡單的 P0（P0-5 logging / P0-6 CI / P0-8 runtime mode），累積 codex review pattern 經驗後再回頭做 P0-1
 
 ## Codex Review 紀錄
 
@@ -36,6 +63,7 @@
 |------|------|-----------|------|----------|
 | plan | p0-1-http-client.md | 1 | ❌ | 1 critical (per-hop SSRF) + 10 important + 1 minor |
 | plan | p0-1-http-client.md | 2 | ❌ | 3 critical (failure-prop, allowlist-wiring, 4xx) + 8 important + 2 minor |
+| plan | p0-1-http-client.md | 3 | ❌ | 2 critical (retry-semantics 矛盾, initial-URL SSRF) + 6 important + 2 minor — **3 連敗，停止重新評估** |
 
 iter 1 主要問題：
 1. **critical**：redirect 只擋 HTTPS→HTTP downgrade，未對 redirect target 重跑 egress / private-network / DNS-rebind policy
