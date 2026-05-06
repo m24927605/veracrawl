@@ -6,7 +6,7 @@
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | NOT_STARTED | - | - | - | - |
 | P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
-| P0-5 | Structured logging | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | bd9b249 (initial) | sub-step 1: redaction processor (recursive + expanded keys) |
+| P0-5 | Structured logging | IN_PROGRESS (sub-step 2/8) | 2026-05-06 | - | sub-step 1: ✅ 4 commits | sub-step 1 (redaction) approved; sub-step 2 next: logging.py + structlog |
 | P0-6 | CI workflow | NOT_STARTED | - | - | - | - |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
 | P0-8 | Runtime mode (prod vs fixture) | NOT_STARTED | - | - | - | - |
@@ -73,7 +73,8 @@ iter 3 主要新問題：
 
 P0-5 拆為以下 atomic sub-steps，每個獨立 commit + codex task review：
 
-1. **redaction processor**（已 commit `bd9b249`，task review iter 1 ❌；fix-up 待 commit）
+1. **redaction processor** — ✅ DONE（commits `bd9b249`, `9517030`, `254ed97`, `787eb8f`；codex task review 4 輪後 approved）
+   - follow-up minor：`test_processor_replaces_sensitive_primitive_at_depth_cap` 增加 `REDACTED_DEEP in serialized` 斷言
 2. structlog dependency + `logging.py` 核心（configure_logging / get_logger / with_correlation_id）
 3. `bootstrap_cli_logging` context manager + 1 個代表性 CLI 遷移
 4. 其他 67 個 CLI entry points 注入 bootstrap
@@ -95,6 +96,7 @@ P0-5 拆為以下 atomic sub-steps，每個獨立 commit + codex task review：
 | task | bd9b249 (P0-5 sub-step 1: redaction processor) | 1 | ❌ | 3 important：top-level only redaction（缺 recursive）、漏 password/private_key/x-api-key/session_id/csrf 等 sensitive key、STATUS.md scope 過大宣稱 |
 | task | bd9b249..9517030 fix-up | 2 | ❌ | 1 important：depth cap 是 fail-open，sensitive 值在深層仍會洩漏；應 fail-closed 用 placeholder 取代整個 sub-tree |
 | task | 9517030..254ed97 fix-up | 3 | ❌ | 1 important：fail-closed 後仍可能漏 primitive — 簡化為 cap 處全部替換 REDACTED_DEEP（含 primitive） |
+| task | 254ed97..787eb8f fix-up | 4 | ✅ | **approved**！只剩 1 minor：建議 regression test 增加 `REDACTED_DEEP in serialized` 斷言（記為 P0-5 sub-step 1 follow-up） |
 
 iter 1 主要問題：
 1. **critical**：redirect 只擋 HTTPS→HTTP downgrade，未對 redirect target 重跑 egress / private-network / DNS-rebind policy
