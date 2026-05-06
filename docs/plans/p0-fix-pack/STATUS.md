@@ -5,7 +5,7 @@
 | P0-1 | HTTP client (urllib → httpx) | BLOCKED | 2026-05-06 | - | - | 3 連敗，等候用戶決策 |
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | 4c9bce1 | RAW_RESPONSE_LEAK + bogus model name fixed; httpx/structured-output/retry deferred |
-| P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
+| P0-4 | Tool Gateway gating | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | (this commit) | policy-aware allowlist + per-actor quota + audit log；legacy mode 保留向後相容 |
 | P0-5 | Structured logging | IN_PROGRESS (sub-step 5/8) | 2026-05-06 | - | sub-steps 1-4: 7 commits | redaction + logging.py + 62 個 CLI 全部包 bootstrap；剩 sub-step 5（內部模組 logger 使用）+ 6-8（boundary tests） |
 | P0-6 | CI workflow | NOT_STARTED | - | - | - | - |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
