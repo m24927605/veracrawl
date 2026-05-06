@@ -3,7 +3,7 @@
 | ID | Title | Status | Started | Completed | Commits | Notes |
 |----|-------|--------|---------|-----------|---------|-------|
 | P0-1 | HTTP client (urllib → httpx) | DONE | 2026-05-06 | 2026-05-07 | (this commit) | urllib → httpx；retry/Retry-After；per-hop redirect SSRF (opt-in via config)；real Chrome UA；NetworkAdapterError(ValueError) with failure_type；20 個新 unit test |
-| P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
+| P0-2 | Playwright stealth + context reuse | DONE (substantively) | 2026-05-07 | 2026-05-07 | (this commit) | real Chrome UA + 5 stealth init scripts + wait_until/post_load_idle 可注入；context reuse 屬 P1 follow-up |
 | P0-3 | OpenAI adapter fix | DONE (substantively) | 2026-05-06 | 2026-05-07 | 4c9bce1 + (this commit) | RAW_RESPONSE_LEAK + bogus model + urllib→httpx + retry/Retry-After + max_output_tokens raised；structured output schema wiring 列 P1 |
 | P0-4 | Tool Gateway gating | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | (this commit) | policy-aware allowlist + per-actor quota + audit log；legacy mode 保留向後相容 |
 | P0-5 | Structured logging | DONE (substantively) | 2026-05-06 | 2026-05-06 | sub-steps 1-4 + boundary | infrastructure complete; boundary test 強制 internal 不能 raw import logging/structlog；P1 follow-up：CLI 非合約 print 遷移、3 個內部模組 logger demo |

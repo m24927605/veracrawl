@@ -1,7 +1,23 @@
 """Playwright browser observation adapter.
 
-The Playwright dependency is intentionally isolated in this adapter module.
-VeraCrawl core imports only the browser port and contracts.
+Headless-Chromium fingerprints are well-known to bot detection vendors;
+the previous default user-agent (a synthetic in-house fixture string)
+and the absence of init-script patches caused immediate ``403`` blocks
+on any site running Cloudflare-class protections. This adapter now:
+
+- defaults to a real Chrome user-agent (configurable);
+- applies a minimal stealth init-script set to navigator.webdriver,
+  navigator.plugins, navigator.languages, window.chrome.runtime, and
+  the Permissions API on each new context;
+- defaults wait_until to ``domcontentloaded`` instead of ``load`` so SPA
+  pages do not sit waiting on tracking-pixel resources that never resolve;
+- exposes ``post_load_idle_ms`` as a constructor kwarg (was hard-coded
+  to ``250``) so callers can wait long enough for lazy-loaded content
+  on slow targets.
+
+Playwright itself is still optional — it is loaded lazily inside
+``_load_sync_playwright`` so the adapter module can be imported without
+the browser-playwright extra installed.
 """
 
 from __future__ import annotations
@@ -9,8 +25,9 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Final
 
+from veracrawl.adapters.browser._stealth import DEFAULT_STEALTH_INIT_SCRIPTS
 from veracrawl.contracts.browser import BrowserInteractionStep, BrowserSandboxPolicy
 from veracrawl.contracts.common import Ref, stable_hash
 from veracrawl.contracts.enums import (
@@ -24,6 +41,12 @@ from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapt
 from veracrawl.fetch.network_acquisition import url_origin
 from veracrawl.ports.browser import BrowserObservationResult
 
+_DEFAULT_CHROME_UA: Final[str] = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
 
 class PlaywrightBrowserObservationAdapter:
     def __init__(
@@ -34,12 +57,24 @@ class PlaywrightBrowserObservationAdapter:
         sandbox_policy: BrowserSandboxPolicy,
         side_effect_class: BrowserSideEffectClass = BrowserSideEffectClass.READ_ONLY,
         wait_for_text_fragments: Sequence[str] = (),
+        user_agent: str = _DEFAULT_CHROME_UA,
+        wait_until: str = "domcontentloaded",
+        post_load_idle_ms: int = 250,
+        stealth_init_scripts: Sequence[str] | None = None,
     ) -> None:
         self.fixture_id = fixture_id
         self.target_url = target_url
         self.sandbox_policy = sandbox_policy
         self.side_effect_class = side_effect_class
         self.wait_for_text_fragments = list(wait_for_text_fragments)
+        self.user_agent = user_agent
+        self.wait_until = wait_until
+        self.post_load_idle_ms = post_load_idle_ms
+        self.stealth_init_scripts: list[str] = (
+            list(stealth_init_scripts)
+            if stealth_init_scripts is not None
+            else list(DEFAULT_STEALTH_INIT_SCRIPTS)
+        )
         self._last_result: BrowserObservationResult | None = None
 
     @property
@@ -65,8 +100,12 @@ class PlaywrightBrowserObservationAdapter:
             context = browser.new_context(
                 java_script_enabled=True,
                 ignore_https_errors=False,
-                user_agent="VeraCrawl-browser-quality/1",
+                user_agent=self.user_agent,
+                locale="en-US",
+                extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
             )
+            for script in self.stealth_init_scripts:
+                context.add_init_script(script)
 
             def route_handler(route: Any) -> None:
                 nonlocal network_request_count, blocked_request_count
@@ -82,18 +121,23 @@ class PlaywrightBrowserObservationAdapter:
             context.route("**/*", route_handler)
             page = context.new_page()
             page.on("console", lambda message: console_logs.append(message.text))
-            page.goto(target_url, wait_until="load", timeout=sandbox_policy.max_runtime_ms)
+            page.goto(
+                target_url,
+                wait_until=self.wait_until,
+                timeout=sandbox_policy.max_runtime_ms,
+            )
             for fragment in self.wait_for_text_fragments:
                 page.wait_for_function(
                     "(fragment) => document.body && document.body.innerText.includes(fragment)",
                     arg=fragment,
                     timeout=sandbox_policy.max_runtime_ms,
                 )
-            page.wait_for_timeout(250)
+            if self.post_load_idle_ms > 0:
+                page.wait_for_timeout(self.post_load_idle_ms)
             dom_html = page.content()
             try:
                 dom_text = page.locator("body").inner_text(timeout=1000)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 dom_text = dom_html
             screenshot = page.screenshot(full_page=True)
             context.close()
@@ -167,7 +211,7 @@ class PlaywrightBrowserObservationAdapter:
 
 def _load_sync_playwright() -> Any:
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError(
             "Playwright is required for the live browser adapter; install the "
