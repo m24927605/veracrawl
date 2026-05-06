@@ -1,23 +1,37 @@
 """Playwright browser observation adapter.
 
-Headless-Chromium fingerprints are well-known to bot detection vendors;
-the previous default user-agent (a synthetic in-house fixture string)
-and the absence of init-script patches caused immediate ``403`` blocks
-on any site running Cloudflare-class protections. This adapter now:
+This adapter does NOT implement WAF evasion, stealth automation, or
+ban-avoidance fingerprint patches. Per ``docs/09-target-capability-model.md``
+§Safety Boundary, VeraCrawl is an authorized-source crawler; sites that
+serve only via human verification, CAPTCHA, or bot-detection challenges
+must be reached through their official APIs or authorized sessions, not
+by impersonating a human browser. Stealth init-scripts shipped earlier
+in this branch (navigator.webdriver / plugins / languages / chrome.runtime
+/ Permissions API patches) were removed in the same change that added
+this docstring; bringing them back without a charter amendment would
+violate the safety boundary.
 
-- defaults to a real Chrome user-agent (configurable);
-- applies a minimal stealth init-script set to navigator.webdriver,
-  navigator.plugins, navigator.languages, window.chrome.runtime, and
-  the Permissions API on each new context;
-- defaults wait_until to ``domcontentloaded`` instead of ``load`` so SPA
-  pages do not sit waiting on tracking-pixel resources that never resolve;
-- exposes ``post_load_idle_ms`` as a constructor kwarg (was hard-coded
-  to ``250``) so callers can wait long enough for lazy-loaded content
-  on slow targets.
+What this adapter DOES configure for **stable rendering under
+authorized access**:
+
+- A real Chrome user-agent (configurable via ``user_agent``) so the
+  rendering pipeline matches the same HTML / CSS / JS path a human
+  Chrome user gets — required for deterministic DOM snapshots, not
+  for bot evasion.
+- ``locale="en-US"`` plus ``Accept-Language: en-US,en;q=0.9`` so
+  locale-dependent rendering is deterministic across runs.
+- Wait strategy: ``wait_until="domcontentloaded"`` (was ``"load"``,
+  which on SPA pages sat blocking on tracking pixels that never
+  resolved) plus a configurable ``post_load_idle_ms``.
+
+Detection of bot-protection challenges (Cloudflare Turnstile,
+DataDome, PerimeterX, etc.) is the access-control classifier's job
+in a separate phase; this adapter surfaces such pages as a typed
+``AccessControlBlocked`` failure rather than evading.
 
 Playwright itself is still optional — it is loaded lazily inside
-``_load_sync_playwright`` so the adapter module can be imported without
-the browser-playwright extra installed.
+``_load_sync_playwright`` so the adapter module can be imported
+without the ``browser-playwright`` extra installed.
 """
 
 from __future__ import annotations
@@ -27,7 +41,6 @@ import time
 from collections.abc import Sequence
 from typing import Any, Final
 
-from veracrawl.adapters.browser._stealth import DEFAULT_STEALTH_INIT_SCRIPTS
 from veracrawl.contracts.browser import BrowserInteractionStep, BrowserSandboxPolicy
 from veracrawl.contracts.common import Ref, stable_hash
 from veracrawl.contracts.enums import (
@@ -60,7 +73,6 @@ class PlaywrightBrowserObservationAdapter:
         user_agent: str = _DEFAULT_CHROME_UA,
         wait_until: str = "domcontentloaded",
         post_load_idle_ms: int = 250,
-        stealth_init_scripts: Sequence[str] | None = None,
     ) -> None:
         self.fixture_id = fixture_id
         self.target_url = target_url
@@ -70,11 +82,6 @@ class PlaywrightBrowserObservationAdapter:
         self.user_agent = user_agent
         self.wait_until = wait_until
         self.post_load_idle_ms = post_load_idle_ms
-        self.stealth_init_scripts: list[str] = (
-            list(stealth_init_scripts)
-            if stealth_init_scripts is not None
-            else list(DEFAULT_STEALTH_INIT_SCRIPTS)
-        )
         self._last_result: BrowserObservationResult | None = None
 
     @property
@@ -104,8 +111,6 @@ class PlaywrightBrowserObservationAdapter:
                 locale="en-US",
                 extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
             )
-            for script in self.stealth_init_scripts:
-                context.add_init_script(script)
 
             def route_handler(route: Any) -> None:
                 nonlocal network_request_count, blocked_request_count

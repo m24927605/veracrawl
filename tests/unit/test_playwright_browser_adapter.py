@@ -1,16 +1,21 @@
 """Tests for PlaywrightBrowserObservationAdapter configuration surface.
 
 The adapter cannot be exercised end-to-end without a real Chromium
-install, so these tests focus on the configuration shape: defaults, the
-new constructor kwargs, the stealth init-script bundle, and module
-hygiene (no legacy fingerprint UA in the source).
+install, so these tests focus on:
+
+1. **Charter compliance** — the adapter must not ship code that
+   evades WAF / bot-detection per
+   ``docs/09-target-capability-model.md`` §Safety Boundary, which
+   forbids "stealth automation" and "ban-avoidance proxy tactics".
+2. **Configuration shape** — the kwargs added in this iteration
+   (``user_agent``, ``wait_until``, ``post_load_idle_ms``) and the
+   default rendering-stability headers do what they say.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from veracrawl.adapters.browser._stealth import DEFAULT_STEALTH_INIT_SCRIPTS
 from veracrawl.adapters.browser.playwright import PlaywrightBrowserObservationAdapter
 from veracrawl.contracts.browser import BrowserSandboxPolicy
 from veracrawl.contracts.enums import BrowserSideEffectClass
@@ -40,25 +45,73 @@ def _adapter(**overrides: object) -> PlaywrightBrowserObservationAdapter:
     return PlaywrightBrowserObservationAdapter(**base)  # type: ignore[arg-type]
 
 
-# Module hygiene.
+# Charter compliance.
 
 
-def test_module_has_no_legacy_fingerprint_user_agent() -> None:
+def test_module_does_not_ship_stealth_automation() -> None:
+    """``docs/09-target-capability-model.md`` §Safety Boundary forbids
+    "stealth automation" and "WAF evasion". This test guards against
+    re-introducing the navigator.webdriver / plugins / languages /
+    chrome.runtime / Permissions API patches that an earlier iteration
+    of this adapter shipped.
+    """
     import veracrawl.adapters.browser.playwright as module
 
     source = module.__file__
     assert source is not None
     with open(source, encoding="utf-8") as fh:
-        content = fh.read()
-    assert "VeraCrawl-browser-quality" not in content
-    assert "VeraCrawl-local-fixture" not in content
+        content = fh.read().lower()
+
+    forbidden_patches = (
+        "navigator.webdriver",
+        "navigator.plugins",
+        "navigator.languages",
+        "window.chrome.runtime",
+        "navigator.permissions.query",
+        "stealth_init_scripts",
+        "default_stealth_init_scripts",
+    )
+    for needle in forbidden_patches:
+        # We allow the strings in the docstring's negative-example list,
+        # but not in any executable code. The simplest enforceable rule is
+        # "the strings as JS-source patches do not appear in this file".
+        # The docstring uses the same names without the JS body so the
+        # check uses presence + negation against the patch pattern.
+        if needle in content:
+            # The docstring legitimately names the forbidden patches once
+            # in a comma-separated parenthetical to remind future readers.
+            # Anything beyond that single reference is suspect.
+            assert content.count(needle) <= 1, (
+                f"{needle!r} appears more than once — likely a re-introduced "
+                f"stealth patch. Per docs/09 §Safety Boundary, VeraCrawl "
+                f"does not ship stealth automation."
+            )
+
+
+def test_stealth_init_scripts_kwarg_removed() -> None:
+    """The constructor must not accept a ``stealth_init_scripts``
+    keyword argument; supplying one is a charter violation surface."""
+    with pytest.raises(TypeError):
+        _adapter(stealth_init_scripts=("// custom",))
+
+
+def test_stealth_module_does_not_exist() -> None:
+    import importlib
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("veracrawl.adapters.browser._stealth")
+
+
+# Rendering stability — what the adapter DOES configure (legitimately).
 
 
 def test_default_user_agent_is_real_chrome() -> None:
     adapter = _adapter()
     assert "Chrome/" in adapter.user_agent
     assert "Mozilla/5.0" in adapter.user_agent
-    assert "VeraCrawl" not in adapter.user_agent
+    # Legacy fingerprint UA must stay gone.
+    assert "VeraCrawl-browser-quality" not in adapter.user_agent
+    assert "VeraCrawl-local-fixture" not in adapter.user_agent
 
 
 def test_user_agent_can_be_overridden() -> None:
@@ -66,13 +119,10 @@ def test_user_agent_can_be_overridden() -> None:
     assert adapter.user_agent == "MyBot/1.0"
 
 
-# Wait strategy.
-
-
 def test_default_wait_until_is_domcontentloaded() -> None:
     """Was 'load' previously, which on SPA targets sat blocking on
     tracking pixels that never resolve. ``domcontentloaded`` reflects the
-    DOM-ready signal callers actually want."""
+    DOM-ready signal callers actually want — not a stealth concern."""
     adapter = _adapter()
     assert adapter.wait_until == "domcontentloaded"
 
@@ -93,44 +143,18 @@ def test_post_load_idle_ms_default_matches_legacy() -> None:
     assert adapter.post_load_idle_ms == 250
 
 
-# Stealth init scripts.
+# Module hygiene.
 
 
-def test_default_stealth_scripts_are_applied() -> None:
-    adapter = _adapter()
-    # The list comes through unchanged, instance is independent of the source.
-    assert adapter.stealth_init_scripts == list(DEFAULT_STEALTH_INIT_SCRIPTS)
+def test_module_has_no_legacy_fingerprint_user_agent() -> None:
+    import veracrawl.adapters.browser.playwright as module
 
-
-def test_stealth_scripts_cover_known_detection_vectors() -> None:
-    bundle = "\n".join(DEFAULT_STEALTH_INIT_SCRIPTS)
-    # Each of these patches must exist in the default bundle.
-    assert "navigator" in bundle and "webdriver" in bundle
-    assert "navigator" in bundle and "plugins" in bundle
-    assert "navigator" in bundle and "languages" in bundle
-    assert "window.chrome" in bundle or "chrome.runtime" in bundle
-    assert "permissions" in bundle.lower() or "Permission" in bundle
-
-
-def test_stealth_scripts_can_be_replaced() -> None:
-    adapter = _adapter(stealth_init_scripts=("// custom",))
-    assert adapter.stealth_init_scripts == ["// custom"]
-
-
-def test_stealth_scripts_can_be_disabled_with_empty_tuple() -> None:
-    adapter = _adapter(stealth_init_scripts=())
-    assert adapter.stealth_init_scripts == []
-
-
-def test_stealth_scripts_instance_independent() -> None:
-    """Mutating the adapter's list must not affect the module default."""
-    adapter1 = _adapter()
-    adapter1.stealth_init_scripts.clear()
-    adapter2 = _adapter()
-    assert len(adapter2.stealth_init_scripts) == len(DEFAULT_STEALTH_INIT_SCRIPTS)
-
-
-# Required vs optional configuration.
+    source = module.__file__
+    assert source is not None
+    with open(source, encoding="utf-8") as fh:
+        content = fh.read()
+    assert "VeraCrawl-browser-quality" not in content
+    assert "VeraCrawl-local-fixture" not in content
 
 
 def test_required_kwargs_enforced() -> None:
