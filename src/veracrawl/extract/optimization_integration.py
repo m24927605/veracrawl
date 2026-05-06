@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from veracrawl.contracts.crawler_optimization import ExtractVerifyOptimizationIntegration
-from veracrawl.optimization.runtime import RuntimeDomExtractionResult
+from veracrawl.contracts.optimization_runtime import RuntimeDomExtractionResult
 
 
 def integrate_extract_verify_optimization(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from veracrawl.contracts.crawler_optimization import DedupeIdentityOptimizationIntegration
-from veracrawl.optimization.runtime import RuntimeDedupeRankingResult
+from veracrawl.contracts.optimization_runtime import RuntimeDedupeRankingResult
 
 
 def integrate_dedupe_identity_optimization(

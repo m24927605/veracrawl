@@ -40,6 +40,20 @@ from veracrawl.contracts.crawler_optimization import (
     RuntimeOptimizationSignalSet,
 )
 from veracrawl.contracts.enums import CompletenessResult, CrawlerOptimizationFailureType
+from veracrawl.contracts.optimization_runtime import (
+    RuntimeDedupeRankingResult,
+    RuntimeDomExtractionResult,
+)
+
+# RuntimeDomExtractionResult and RuntimeDedupeRankingResult are now defined
+# in contracts/optimization_runtime.py to break a producer/consumer import
+# cycle. They are re-exported here so any existing
+# ``from veracrawl.optimization.runtime import RuntimeDomExtractionResult``
+# call site keeps resolving.
+__all__ = [
+    "RuntimeDedupeRankingResult",
+    "RuntimeDomExtractionResult",
+]
 
 
 @dataclass(frozen=True)
@@ -88,29 +102,8 @@ class RuntimeFrontierOptimizationResult:
     decisions: list[RuntimeFrontierOptimizationDecision]
 
 
-@dataclass(frozen=True)
-class RuntimeDomExtractionResult:
-    dom_nodes: list[DomNodeSummary]
-    page_zones: list[PageZoneClassification]
-    interactive_elements: list[InteractiveElementCandidate]
-    dom_context: DomContextBundle
-    extractor_plan: ExtractorFallbackPlan
-    extractor_attempts: list[ExtractorAttemptRecord]
-    field_confidences: list[FieldConfidenceScore]
-    abstentions: list[ExtractorAbstentionDecision]
-    runtime_context: RuntimeDomExtractionContext
-
-
-@dataclass(frozen=True)
-class RuntimeDedupeRankingResult:
-    canonicalization_decisions: list[CanonicalizationDecision]
-    fingerprints: list[ContentFingerprintRecord]
-    identity_decisions: list[IdentityResolutionDecision]
-    duplicate_suppression: DuplicateSuppressionRecord
-    ranking_profile: RankingProfile
-    ranking_scores: list[RankingScoreBreakdown]
-    ranked_output_set: RankedOutputSet
-    runtime_decision: RuntimeDedupeRankingDecision
+# (Definitions moved to contracts/optimization_runtime.py; re-exported above
+# at the top of this module.)
 
 
 _TRACKING_QUERY_PREFIXES = ("utm_",)

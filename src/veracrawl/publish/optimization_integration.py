@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.crawler_optimization import RankingPublicationOptimizationIntegration
-from veracrawl.optimization.runtime import RuntimeDedupeRankingResult
+from veracrawl.contracts.optimization_runtime import RuntimeDedupeRankingResult
 
 
 def integrate_ranking_publication_optimization(
