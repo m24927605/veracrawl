@@ -65,6 +65,7 @@ iter 3 主要新問題：
 | plan | p0-1-http-client.md | 2 | ❌ | 3 critical (failure-prop, allowlist-wiring, 4xx) + 8 important + 2 minor |
 | plan | p0-1-http-client.md | 3 | ❌ | 2 critical (retry-semantics 矛盾, initial-URL SSRF) + 6 important + 2 minor — **3 連敗，停止重新評估** |
 | plan | p0-5-logging.md | 1 | ❌ | 6 important + 3 minor (no critical)：129 prints 全在 cli/、structlog factory 與 caplog 不容、idempotency、thread contextvar 錯誤聲明、entry-point 缺清單、無 redaction policy、import boundary 設計衝突 |
+| plan | p0-5-logging.md | 2 | ❌ | 8 important + 3 minor (still no critical)：BoundLogger 型別矛盾、idempotency level 不真實生效、reset 動 root handlers 影響 caplog、bootstrap 缺 cid AST 檢查、prog binding leakage、runtime entry inventory 不夠具體、CLI scope/commit 訊息語義不清、import boundary 太寬、ANSI test 不可行 |
 
 iter 1 主要問題：
 1. **critical**：redirect 只擋 HTTPS→HTTP downgrade，未對 redirect target 重跑 egress / private-network / DNS-rebind policy

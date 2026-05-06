@@ -4,11 +4,11 @@
 
 | | |
 |---|---|
-| Iteration | v2 (after codex iteration 1 feedback) |
+| Iteration | v3 (after codex iterations 1, 2 feedback) |
 | Started | - |
 | Completed | - |
 | Commits | - |
-| Codex plan review | iter 1 ❌ (6 important + 3 minor; no critical) |
+| Codex plan review | iter 1 ❌ (6 important + 3 minor), iter 2 ❌ (8 important + 3 minor; **no critical in either**) |
 
 ## Why
 
@@ -56,9 +56,15 @@
 
 ## Design
 
-### 1. logging.py 模組（idempotent + caplog 相容）
+### 1. logging.py 模組（idempotent + caplog 相容 + scoped handler）
 
-關鍵設計（codex iter-1 important#2 + #3 + #8）：使用 **stdlib `logging.LoggerFactory`** 讓 structlog 透過 stdlib `Logger` 發 record，pytest `caplog` 可截獲。
+關鍵設計（codex iter-2 important#1, #2, #3, #5）：
+
+- 使用 **scoped logger `logging.getLogger("veracrawl")`**，**不動 root logger** → 不影響 pytest caplog（caplog 對 root 加自己的 handler）
+- 使用 **`structlog.stdlib.BoundLogger` 為 wrapper_class**（搭配 stdlib `LoggerFactory`），`get_logger` 回傳真正的 `structlog.stdlib.BoundLogger`，type 與測試對齊
+- `configure_logging()` 真實 idempotent：每次呼叫都 **重設 level + formatter**；早返機制改為「config 內容相同則跳過」（compare config dataclass）
+- `bootstrap_cli_logging` 用 **token-returning** 模式，呼叫端 `with` block 自動 reset cli context
+- `with_correlation_id` 與 `bootstrap_cli_logging` 都接受顯式 close → 可巢狀 / 重入
 
 ```python
 # src/veracrawl/runtime_support/logging.py
@@ -67,23 +73,36 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import Any, Callable, Iterator
 
 import structlog
 from structlog.stdlib import BoundLogger, LoggerFactory
 
 from veracrawl.runtime_support._log_redaction import RedactSensitiveProcessor
 
-_correlation_id_var: ContextVar[str | None] = ContextVar(
-    "veracrawl_correlation_id", default=None,
-)
+_VERACRAWL_LOGGER_NAME = "veracrawl"
+_VERACRAWL_HANDLER_TAG = "veracrawl-stream-handler"
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _VALID_FORMATS = {"json", "console"}
 
-_configured: bool = False
-_meta_logger = logging.getLogger("veracrawl._meta")  # 用於 fallback warnings
+_correlation_id_var: ContextVar[str | None] = ContextVar(
+    "veracrawl_correlation_id", default=None,
+)
+
+_meta_logger = logging.getLogger("veracrawl._meta")
+
+
+@dataclass(frozen=True)
+class _LoggingState:
+    level: int
+    log_format: str
+
+
+_current_state: _LoggingState | None = None
 
 
 def _correlation_id_processor(_, __, event_dict: dict[str, Any]) -> dict[str, Any]:
@@ -93,48 +112,23 @@ def _correlation_id_processor(_, __, event_dict: dict[str, Any]) -> dict[str, An
     return event_dict
 
 
-def configure_logging(
-    *,
-    level: str | None = None,
-    log_format: str | None = None,
-    force: bool = False,
-) -> None:
-    """設置 logger。可重複呼叫；後者覆蓋前者。
+def _resolve_level(value: str | None) -> int:
+    requested = (value or os.getenv("VERACRAWL_LOG_LEVEL", "INFO")).upper()
+    if requested not in _VALID_LEVELS:
+        _meta_logger.warning("invalid VERACRAWL_LOG_LEVEL=%r; falling back to INFO", requested)
+        requested = "INFO"
+    return getattr(logging, requested)
 
-    - `force=True` 完全 reset 既有設置（測試使用）。
-    - 其他情況下 idempotent：同樣 env 重複呼叫 == 一次。
-    """
-    global _configured
-    if _configured and not force:
-        return
 
-    requested_level = (level or os.getenv("VERACRAWL_LOG_LEVEL", "INFO")).upper()
-    if requested_level not in _VALID_LEVELS:
-        _meta_logger.warning(
-            "invalid VERACRAWL_LOG_LEVEL=%r; falling back to INFO", requested_level,
-        )
-        requested_level = "INFO"
-    log_level = getattr(logging, requested_level)
+def _resolve_format(value: str | None) -> str:
+    requested = (value or os.getenv("VERACRAWL_LOG_FORMAT", "json")).lower()
+    if requested not in _VALID_FORMATS:
+        _meta_logger.warning("invalid VERACRAWL_LOG_FORMAT=%r; falling back to json", requested)
+        requested = "json"
+    return requested
 
-    requested_format = (log_format or os.getenv("VERACRAWL_LOG_FORMAT", "json")).lower()
-    if requested_format not in _VALID_FORMATS:
-        _meta_logger.warning(
-            "invalid VERACRAWL_LOG_FORMAT=%r; falling back to json", requested_format,
-        )
-        requested_format = "json"
 
-    # Reset stdlib logger handlers（force 模式下）
-    root = logging.getLogger()
-    if force:
-        for h in list(root.handlers):
-            root.removeHandler(h)
-
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setLevel(log_level)
-    if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
-        root.addHandler(handler)
-    root.setLevel(log_level)
-
+def _build_processors(log_format: str) -> list[Callable]:
     processors: list[Callable] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
@@ -145,53 +139,115 @@ def configure_logging(
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]
-    if requested_format == "console":
-        processors.append(structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty()))
+    if log_format == "console":
+        # 強制 colors=False（pytest 環境 isatty=False 也會明確；prod tty 由 PY_COLORS 控制）
+        processors.append(structlog.dev.ConsoleRenderer(colors=False))
     else:
         processors.append(structlog.processors.JSONRenderer(sort_keys=True))
+    return processors
+
+
+def configure_logging(
+    *,
+    level: str | None = None,
+    log_format: str | None = None,
+) -> None:
+    """配置 veracrawl scoped logger。每次呼叫都重設 level / formatter（true idempotent）。
+
+    不動 root logger → 不影響 pytest caplog 等外部 handler。
+    """
+    global _current_state
+
+    log_level = _resolve_level(level)
+    fmt = _resolve_format(log_format)
+
+    new_state = _LoggingState(level=log_level, log_format=fmt)
+    if new_state == _current_state:
+        return  # 完全相同 → no-op
+
+    veracrawl_logger = logging.getLogger(_VERACRAWL_LOGGER_NAME)
+    veracrawl_logger.setLevel(log_level)
+    # 移除既有 veracrawl-tagged handler，避免重複
+    for h in list(veracrawl_logger.handlers):
+        if getattr(h, "_veracrawl_tag", None) == _VERACRAWL_HANDLER_TAG:
+            veracrawl_logger.removeHandler(h)
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(log_level)
+    handler._veracrawl_tag = _VERACRAWL_HANDLER_TAG  # type: ignore[attr-defined]
+    veracrawl_logger.addHandler(handler)
+    veracrawl_logger.propagate = False
 
     structlog.configure(
-        processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(log_level),
-        logger_factory=LoggerFactory(),                 # stdlib-backed → caplog OK
-        cache_logger_on_first_use=False,                # 避免 idempotency 問題
+        processors=_build_processors(fmt),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        logger_factory=LoggerFactory(),
+        cache_logger_on_first_use=False,
     )
 
-    _configured = True
+    _current_state = new_state
 
 
 def reset_logging() -> None:
-    """test fixture / lifecycle 用。"""
-    global _configured
-    _configured = False
+    """test fixture 用：清除 veracrawl logger handler、重設 structlog defaults。
+
+    **不動** root logger handlers，pytest caplog 不受影響。
+    """
+    global _current_state
+    veracrawl_logger = logging.getLogger(_VERACRAWL_LOGGER_NAME)
+    for h in list(veracrawl_logger.handlers):
+        if getattr(h, "_veracrawl_tag", None) == _VERACRAWL_HANDLER_TAG:
+            veracrawl_logger.removeHandler(h)
     structlog.reset_defaults()
-    root = logging.getLogger()
-    for h in list(root.handlers):
-        root.removeHandler(h)
+    _current_state = None
 
 
 def get_logger(name: str | None = None) -> BoundLogger:
-    return structlog.get_logger(name)
+    """`name` 必須以 `veracrawl` 開頭或為 None；強制掛在 scoped logger 樹下。"""
+    actual = name or _VERACRAWL_LOGGER_NAME
+    if not actual.startswith(_VERACRAWL_LOGGER_NAME):
+        actual = f"{_VERACRAWL_LOGGER_NAME}.{actual}"
+    return structlog.get_logger(actual)
 
 
-class with_correlation_id:
-    def __init__(self, cid: str):
-        self._cid = cid
-        self._token = None
-
-    def __enter__(self):
-        self._token = _correlation_id_var.set(self._cid)
-        return self._cid
-
-    def __exit__(self, *args):
-        _correlation_id_var.reset(self._token)
+@contextmanager
+def with_correlation_id(cid: str) -> Iterator[str]:
+    token = _correlation_id_var.set(cid)
+    try:
+        yield cid
+    finally:
+        _correlation_id_var.reset(token)
 
 
-def bootstrap_cli_logging(prog: str) -> None:
-    """所有 cli/*.py main() 開頭呼叫。注入 prog name 至 contextvars。"""
+@contextmanager
+def bootstrap_cli_logging(prog: str) -> Iterator[None]:
+    """所有 cli/*.py main() 用 `with bootstrap_cli_logging("..."):` 包覆。
+
+    - 配置 logger（idempotent；重複呼叫 no-op）
+    - 注入 cli=prog 至 contextvars，**離開區塊時自動 unbind**
+    - 每次 main() 進場都產生新 correlation_id（env VERACRAWL_RUN_ID 優先）
+    """
     configure_logging()
-    structlog.contextvars.bind_contextvars(cli=prog)
+    cid = os.getenv("VERACRAWL_RUN_ID") or _generate_run_id()
+    cli_token = structlog.contextvars.bind_contextvars(cli=prog).get("cli")
+    cid_token = _correlation_id_var.set(cid)
+    try:
+        yield
+    finally:
+        _correlation_id_var.reset(cid_token)
+        structlog.contextvars.unbind_contextvars("cli")
+
+
+def _generate_run_id() -> str:
+    import uuid
+    return str(uuid.uuid4())
 ```
+
+每個 CLI `main()` 改為 `with bootstrap_cli_logging("veracrawl-runtime"): ...` 包覆 — 解決 codex iter-2 important#5 的 leakage 問題：context 在 `with` 退出自動 unbind。
+
+**重要**（codex iter-1 important#4 / iter-2）：移除「contextvar 自動跨 thread 傳播」聲明。**規範**：
+
+> contextvar 跟隨**同 context** 的 async task。新 thread / `concurrent.futures.ThreadPoolExecutor` **不會**自動傳播；如需要，明確 capture 與 set。
 
 **重要**（codex iter-1 important#4）：移除「contextvar 自動跨 thread 傳播」聲明。**規範**：
 
@@ -275,22 +331,33 @@ acceptance 用 AST scan 檢查每個對應的 main() 第一行為 `bootstrap_cli
 
 ### 5. Correlation ID
 
-每個 CLI `main()` 開頭：
+`bootstrap_cli_logging`（§1）已內建 cid 注入（env `VERACRAWL_RUN_ID` 優先，否則 uuid4）。
+
+CLI main():
 
 ```python
 def main() -> int:
-    bootstrap_cli_logging(prog="veracrawl-runtime")
-    cid = os.getenv("VERACRAWL_RUN_ID") or str(uuid.uuid4())
-    with with_correlation_id(cid):
+    with bootstrap_cli_logging(prog="veracrawl-runtime"):
         return _run(...)
 ```
 
-每個 `runtime_support/*` 與 `agents/*` runtime entry 也對應一個 `with with_correlation_id(...)` boundary。具體 entry point 列表（要在 plan 中明確）：
+#### Runtime / Agent Entry-point 完整 Inventory（codex iter-2 important#6）
 
-- `agents/runtime.py:run_agent(...)` → 進 `run_id` 為 cid
-- `agents/orchestration.py:orchestrate(...)` → 進對應 run_id
-- `runtime_support/disaster_recovery.py:run_dr_drill(...)` → 進 drill_id
-- 其他 runtime entry：在 P0-5 實作時 grep 識別並加註
+每個 runtime entry 在進場以 `with with_correlation_id(...)` 包覆。明確列表：
+
+| 模組 / 函式 | Correlation source | 說明 |
+|---|---|---|
+| `agents/runtime.py:run_agent_run` | `agent_run.id` | agent 執行邊界 |
+| `agents/orchestration.py:orchestrate_step` | `orchestration_command.id` | step 級 |
+| `agents/real_adapter_runtime.py:execute_real_adapter_run` | `run.id` | live 路徑 |
+| `runtime_support/disaster_recovery.py:run_dr_drill_*` | drill_id（fixture / scenario）| 各 drill entry |
+| `runtime_support/observability.py:run_observability_*` | scenario fixture id | 觀測 gate |
+| `runtime_support/security_privacy.py:enforce_*` | request_id | security gate |
+| `runtime_support/infrastructure_gate.py:run_infrastructure_*` | scenario fixture id | infra gate |
+| `scheduler/*runtime*.py:run_scheduler_*` | run_id | scheduler 邊界 |
+| `target_runtime/runner.py:run_*` | run_id | target runner |
+
+注意：本 P0-5 在 plan 列出 **全部** entry point，但**只在 §3.4 三個代表性檔內**真正加 `with with_correlation_id(...)`（與其他內部模組遷移範圍對齊；其餘列 P1-LOG-CORRELATION-EXPANSION）。Acceptance 不要求所有 runtime entry 都遷移。
 
 ## Dependencies
 
@@ -310,47 +377,58 @@ pytest tests/
 
 ### 新增 unit tests（`tests/runtime_support/test_logging.py`）
 
-1. **JSON format 預設**
-   - configure → log → `caplog.records` 含 record，message 是 valid JSON
+每個 test 開頭呼叫 `reset_logging()`（fixture），確保隔離。
 
-2. **Console format**
-   - `configure_logging(log_format="console")` → 輸出 ANSI（用 `capfd.readouterr()` 驗 stderr 含 ANSI escape）
+1. **JSON format 預設**
+   - configure → `get_logger("veracrawl.test").info(event="x", k=1)` → `caplog.records` 含 record，message 是 valid JSON 含 `"event":"x"`、`"k":1`
+
+2. **Console format**（codex iter-2 minor#9）
+   - `configure_logging(log_format="console")` → log → 輸出**非 JSON 形態**（不以 `{` 開頭、含 event 字面值）
+   - 不斷言 ANSI（pytest capture 環境會關 colors）
 
 3. **Log level 過濾**
    - `level="ERROR"` → `logger.info(...)` 不出現於 caplog；`logger.error(...)` 出現
 
-4. **Idempotent**
-   - 連續 3 次 `configure_logging()` 不重複加 handler（檢查 `logging.getLogger().handlers` 長度）
+4. **Idempotent — 重複 configure 不疊 handler**
+   - 連續 3 次 `configure_logging(level="INFO")` → veracrawl logger handler 數量 = 1
 
-5. **`force=True` 重設**
-   - configure → reset → re-configure(level="DEBUG") → 新 level 生效
+5. **Idempotent — 改 level 真生效**（codex iter-2 important#2）
+   - `configure_logging(level="INFO")` → log info → 出現
+   - 同一程序內 `configure_logging(level="ERROR")` → log info → 不出現
+   - assert veracrawl logger.level 已更新至 ERROR
 
-6. **無效 env 值 fallback（codex iter-1 minor#9）**
-   - `configure_logging(level="INVALID")` → fallback INFO + meta_logger.warning
+6. **`reset_logging()` 不破 caplog**（codex iter-2 important#3）
+   - configure → log → caplog 收到
+   - reset_logging() → caplog handler 仍在 root（assert `any(isinstance(h, _pytest.logging.LogCaptureHandler) for h in logging.getLogger().handlers)`）
+   - re-configure → 仍能 log，仍被 caplog 抓到
+
+7. **無效 env 值 fallback**
+   - `configure_logging(level="INVALID")` → fallback INFO + `_meta_logger.warning` 出現於 caplog（找 record name="veracrawl._meta"）
    - `configure_logging(log_format="invalid")` → fallback json
 
-7. **correlation_id contextvar**
-   - `with with_correlation_id("abc"): logger.info("x")` → caplog record 含 `"correlation_id":"abc"`
-   - 退出後 logger.info → 不含
+8. **correlation_id contextvar**
+   - `with with_correlation_id("abc"): logger.info("x")` → record extra 含 `correlation_id="abc"`
+   - 退出後 logger.info → record 不含 correlation_id
 
-8. **巢狀 with_correlation_id**
+9. **巢狀 with_correlation_id**：外 a、內 b、退內回 a、退外清空
 
-9. **async 同 context 跟隨**
-   - `await asyncio.create_task(...)` 內 logger 帶外層 cid
+10. **async 同 context 跟隨**
+    - `await asyncio.create_task(...)` 內 logger 帶外層 cid
 
-10. **新 thread NOT 跟隨（明確規範）**
-    - `Thread(target=...)` 內 cid 為 None；測試斷言此行為，避免未來誤改
+11. **新 thread NOT 跟隨（明確規範；codex iter-1 important#4）**
+    - `with with_correlation_id("X"): t = Thread(target=worker); t.start(); t.join()` → worker 內 cid 為 None
+    - 註解：若需要跨 thread，要明確 capture（測試不斷言任何「自動」行為）
 
-11. **Redaction processor**
-    - `logger.info(event="x", api_key="secret", token="abc", body="...")` → caplog record 中對應 keys 為 `"<redacted>"`
+12. **Redaction processor**
+    - `logger.info(event="x", api_key="secret", token="abc", body="raw")` → record 對應 keys 為 `"<redacted>"`
     - `logger.info(event="x", count=5)` → 不影響非敏感 keys
 
-12. **Type sanity**
-    - `get_logger("veracrawl.test")` 回 `structlog.stdlib.BoundLogger` 子類別實例
+13. **Type sanity**
+    - `get_logger("veracrawl.test")` 回 `structlog.stdlib.BoundLogger` 實例（直接 isinstance 檢查；現在 `wrapper_class` 已對齊）
 
 ### CLI bootstrap test（`tests/cli/test_logging_bootstrap.py`）
 
-13. **每個 entry point main() 第一行為 `bootstrap_cli_logging`** — AST scan：
+13. **每個 entry point main() 用 `with bootstrap_cli_logging(...)` 包覆 body** — AST scan：
     ```python
     import ast, tomllib
     from pathlib import Path
@@ -361,23 +439,54 @@ pytest tests/
         offenders = []
         for name, target in scripts.items():
             module_path, func = target.split(":")
-            module_file = Path("src") / module_path.replace(".", "/") / ".py"  # 修正
             module_file = Path("src/" + module_path.replace(".", "/") + ".py")
             tree = ast.parse(module_file.read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == func:
-                    if not _first_call_is_bootstrap_logging(node):
+                    if not _has_bootstrap_with(node):
                         offenders.append(f"{module_file}:{func}")
         assert not offenders, f"missing bootstrap_cli_logging: {offenders}"
+
+    def _has_bootstrap_with(func: ast.FunctionDef) -> bool:
+        for stmt in func.body:
+            if isinstance(stmt, ast.With):
+                for item in stmt.items:
+                    call = item.context_expr
+                    if isinstance(call, ast.Call) and (
+                        (isinstance(call.func, ast.Name) and call.func.id == "bootstrap_cli_logging")
+                        or (isinstance(call.func, ast.Attribute) and call.func.attr == "bootstrap_cli_logging")
+                    ):
+                        return True
+        return False
     ```
+
+14. **CLI logs 帶 cli + correlation_id**（caplog）：
+    - mock argv 跑 `cli/runtime.py:main()`
+    - 內部 `get_logger("veracrawl.cli.runtime").info(event="run_started")`
+    - assert caplog record 中 `cli == "veracrawl-runtime"` 且 `correlation_id` 為 valid uuid（或 env 注入值）
+
+15. **`VERACRAWL_RUN_ID` env 覆蓋**：
+    - `monkeypatch.setenv("VERACRAWL_RUN_ID", "explicit-id")`
+    - 進 `bootstrap_cli_logging` → cid == "explicit-id"
+
+16. **重複進場 leakage 防護**：
+    - `with bootstrap_cli_logging("a"): logger.info("x")` → record cli=a
+    - 退出後 `with bootstrap_cli_logging("b"): logger.info("y")` → record cli=b（不是 "a,b"）
+    - 兩 with 中間 `logger.info("z")` → record 不含 cli
 
 ### Boundary tests（`tests/contract/`）
 
-14. **內部模組無 raw `import logging` / `import structlog`**（codex iter-1 minor#7）：
-    - 規範：app code 用 `from veracrawl.runtime_support.logging import get_logger`，**不直接** import logging / structlog
-    - 例外：`src/veracrawl/runtime_support/logging.py` 與 `_log_redaction.py` 自身
+17. **限制範圍的 logging import boundary**（codex iter-2 important#8）：
 
-15. **CLI 內非合約 print 已遷移（針對 §3.3 列出的 3 個檔）**：
+    | 路徑 | 規則 |
+    |---|---|
+    | `src/veracrawl/runtime_support/logging.py` / `_log_redaction.py` | 允許 `import logging` / `import structlog`（基礎建設自身） |
+    | `src/veracrawl/{adapters,agents,browser,fetch,extract,optimization,normalize,evidence,publish,graph,graph_memory,memory,scheduler,runtime_events,target_runtime}/*` | **禁止** raw import；必須走 `from veracrawl.runtime_support.logging import get_logger` |
+    | `src/veracrawl/cli/*` | **允許** `import logging`（stdlib 整合 / unittest 相容）；但禁止 `import structlog`（必須 get_logger） |
+    | `src/veracrawl/runtime_support/{observability,disaster_recovery,security_privacy,infrastructure_gate,...}` | **允許** raw `import logging`（rollback path） |
+    | `tests/` | 無限制 |
+
+18. **CLI 內非合約 print 已遷移（針對 §3.3 列出的 3 個檔）**：
     - grep `print(` 在這 3 個檔，必須**只**是 `print(json.dumps(...))` 形式
     - 其他形式 = 違規
 
@@ -389,16 +498,21 @@ pytest tests/
 ## Acceptance Criteria
 
 - [ ] `pyproject.toml` 含 `structlog>=24,<26`
-- [ ] `src/veracrawl/runtime_support/logging.py` 存在；export `configure_logging` / `reset_logging` / `get_logger` / `with_correlation_id` / `bootstrap_cli_logging`
+- [ ] `src/veracrawl/runtime_support/logging.py` 存在；export `configure_logging` / `reset_logging` / `get_logger` / `with_correlation_id` / `bootstrap_cli_logging`（context manager 形態）
 - [ ] `src/veracrawl/runtime_support/_log_redaction.py` 存在含 `RedactSensitiveProcessor`
-- [ ] §3.3 列出的 3 個 CLI（runtime / live_http / process）內非合約 print **= 0**（只剩 `print(json.dumps(...))` 形式）
-- [ ] 30 個 CLI entry point 的 main() 第一行為 `bootstrap_cli_logging(prog=...)`（AST scan boundary test 全綠）
+- [ ] §3.3 列出的 3 個 CLI（runtime / live_http / process）內非合約 print **= 0**（grep 後只剩 `print(json.dumps(...))` 形式）
+- [ ] 30 個 CLI entry point 的 main() body 為 `with bootstrap_cli_logging(...)` 包覆（AST scan boundary test 全綠）
 - [ ] §3.4 列出的 3 個內部模組（stdlib_http / tool_gateway / observability）至少有一處 `get_logger(...)` 使用
-- [ ] 14 個新 unit + bootstrap + boundary test 全綠
-- [ ] 既有測試全綠
-- [ ] `caplog` 能截獲 `get_logger(...).info(...)` 訊息
-- [ ] `grep -rn "import logging\|import structlog" src/veracrawl/` 命中**僅**在 `runtime_support/logging.py` + `runtime_support/_log_redaction.py`（其他模組透過 `from ... import get_logger`）
-- [ ] commit message 描述 why（「logging 基礎建設 + 代表性遷移；29 處 CLI prints 列 P1」）
+- [ ] 18 個新 unit + bootstrap + boundary test 全綠
+- [ ] 既有測試全綠（特別是 caplog 沒被破壞）
+- [ ] `caplog` 能截獲 `get_logger(...).info(...)` 訊息（unit test 6 / bootstrap test 14 證明）
+- [ ] **限制範圍的** import boundary（§Boundary test 17）全綠：
+  - `runtime_support/logging.py` + `_log_redaction.py`：允許
+  - 16 個內部模組：禁止 raw import
+  - `cli/`：允許 stdlib `import logging`，禁止 raw `import structlog`
+  - `runtime_support/{observability,...}`：允許（rollback path）
+  - `tests/`：無限制
+- [ ] commit message 寫明：「P0-5 ships logging infrastructure + 3 representative CLI migrations + 3 internal-module usage demos. Remaining 27 CLIs only get bootstrap injection; full non-contract print migration is P1-LOG-CLI-EXPANSION (estimate: <count from implementation grep> pending prints).」
 
 ## Rollback
 
