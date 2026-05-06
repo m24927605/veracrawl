@@ -387,73 +387,266 @@ re-classified under this hierarchy in a follow-up commit.
 
 ## 6. Phased delivery
 
-Each phase ends with a runnable system. Stopping at phase N is fine —
-it leaves a strictly better state than today.
+VeraCrawl is implemented by AI agents; throughput is not a planning
+constraint. Phases are **dependency-ordered capability cliffs**, not
+effort estimates. Each phase ends with a runnable system whose
+acceptance criteria can be machine-verified, so stopping at phase N
+leaves a strictly better state than today and the work to date is
+never thrown away.
 
-### Phase 1 — crawler safety net (1.5–2 weeks)
+The phase boundaries answer two questions:
 
-Ship: BrowserContext reuse + storage_state, robots.txt + crawl_delay,
-per-host token bucket, HAR capture, evidence headers (request +
-response, redacted), live test fixtures (#1–#3 above). 5 commits, 50+
-tests.
+1. *What does phase N+1 require from phase N?* (the dependency edge)
+2. *What capability does the system gain when phase N closes?* (the
+   cliff)
 
-After phase 1: VeraCrawl can crawl polite / cooperative sites at
-production rate without leaking sessions or losing fingerprints
-between fetches.
+If a phase's acceptance criteria pass while phase N+1 is in flight,
+that is fine — phases may run in parallel where their dependency
+graphs allow it (see §6.7 below).
 
-### Phase 2 — anti-bot & TLS (1 week)
+### Phase 1 — crawler safety net
 
-Ship: curl_cffi opt-in transport, additional stealth init scripts
-(canvas / WebGL / hardware), Cloudflare 5s challenge handling,
-DataDome / PerimeterX detection table, CAPTCHA escalation hook,
-proxy_url plumbing through `HttpClientConfig` + `ProxyPort`. 4
-commits, 30+ tests.
+**Inputs**: P0 fix-pack already on main (httpx transport, structured
+logging, RuntimeMode, scoped tool gateway).
 
-After phase 2: ≥80% of corpus targets unblock without proxy / solver.
-Surfaces `AccessControlBlocked` cleanly when not.
+**Capability cliff**: VeraCrawl can crawl polite / cooperative sites
+at production rate without leaking sessions or losing fingerprints
+between fetches; every attempt produces full evidence (HAR + headers,
+both redacted) and respects per-host crawl delay.
 
-### Phase 3 — adapter fallback chain (1 week)
+**Deliverables**:
 
-Ship: real `source_coverage_gate` decision loop (official → HTTP →
-browser), eBay token cache, Amazon pagination + token refresh, retry
-budget per chain step. 3 commits, 25+ tests.
+- BrowserContext reuse + per-run `storage_state.json` persistence in
+  `PlaywrightBrowserObservationAdapter`.
+- `RobotsPort` (default `UrllibRobotsParser`) — fetch once per host
+  per run, parse, enforce on initial URL and every redirect target,
+  feed `crawl_delay()` to the token bucket.
+- `RateLimiterPort` (default `InMemoryTokenBucket`) — per-host
+  bucket sized from `crawl_delay` or default 1 req / 2s, plus a
+  global concurrency cap.
+- HAR capture via Playwright tracing on every browser observation,
+  written to the artifact store as a sidecar.
+- Evidence: request and response headers (redacted via the
+  `RedactSensitiveProcessor` already shipped in P0-5), per-attempt
+  `elapsed_ms`, attempt_number, attached as
+  `NetworkAttemptEvidence` on `NetworkClientResult`.
+- Live tests #1–#3 in §4.10 (httpbin.org/headers,
+  httpbin.org/redirect-to, example.com).
 
-After phase 3: a single "fetch this product" call walks the chain
-and produces the cheapest viable evidence.
+**Acceptance**:
 
-### Phase 4 — LLM provider port v2 + extraction (1.5–2 weeks)
+- `pytest -m live -k phase1` 100% green on three consecutive nightly
+  runs.
+- Boundary test: redirect to a host outside the egress allowlist is
+  rejected at the adapter (existing per-hop check) **and** logged with
+  the `RobotsPort` decision when robots.txt forbids the path.
+- Property test: a 100-fetch run against a single fixture host respects
+  `crawl_delay=2s` to within 100ms of expected wall time.
+- HAR sidecar present on disk for every browser observation; HAR
+  contains zero `Authorization` / `Cookie` plaintext (regex check).
 
-Ship: `ModelProviderPort` v2 with messages / tools / structured
-output, OpenAI Responses adapter updated, Anthropic + Bedrock
-adapters added, prompt registry (`PromptRegistryPort`), token /
-cost outbox, real LLM-driven extraction in `schema_runtime.py`,
-field-oracle eval against ground-truth corpus. 6 commits, 60+ tests.
+### Phase 2 — anti-bot & TLS
 
-After phase 4: extraction is no longer dictionary lookup; it is a
-real LLM call with anchor-grounded citations and per-field
-confidence.
+**Inputs**: phase 1 (`HttpClientConfig`, `RateLimiterPort`,
+`RobotsPort` are stable).
 
-### Phase 5 — AI planning + recovery (1.5 weeks)
+**Capability cliff**: ≥80% of the V1 corpus unblocks without
+residential proxy or paid solver; the remaining ≤20% surface
+`AccessControlBlocked` with a typed reason that the deployment can
+hand off to its escalation backend.
 
-Ship: frontier scoring wired to LLM signals, agent loop that picks
-the next URL, recovery loop on typed failure, budget enforcement on
-every step. 4 commits, 40+ tests.
+**Deliverables**:
 
-After phase 5: the agent runtime drives the crawl rather than the
-caller.
+- `CurlCffiSourceAdapter` (opt-in transport behind a per-host
+  selector; default stays httpx).
+- Stealth bundle expansion: canvas noise, WebGL vendor / renderer,
+  hardware concurrency, device memory, timezone consistency, screen
+  resolution. Decision: vendor `playwright-stealth` vs hand-rolled
+  scripts is one of the open questions in §9 — both ship behind the
+  same `stealth_init_scripts` constructor kwarg already in place.
+- `AccessControlDetector` table covering Cloudflare 5s interstitial,
+  Cloudflare Turnstile, DataDome, PerimeterX, Akamai. On match the
+  adapter raises `AccessControlBlocked(vendor=..., url=..., evidence_ref=...)`.
+- `ProxyPort` plumbed through `HttpClientConfig`; default
+  `NoProxyAdapter` returns `None` so existing call sites unchanged.
 
-### Phase 6 — live regression + observability (1 week)
+**Acceptance**:
 
-Ship: 7 live integration tests in nightly CI, OTel observability
-adapter, presidio PII adapter, DR live drill. 4 commits, 15+ tests
-(half are `@pytest.mark.live`).
+- Live test #4 (Cloudflare-protected demo URL) yields either
+  successful navigation **or** `AccessControlBlocked` with
+  `vendor="cloudflare-turnstile"` and a non-empty evidence ref.
+- Per-host curl_cffi switch flips for at least one corpus target whose
+  httpx fingerprint was previously blocked, verified by before / after
+  status code in the live trace.
+- Stealth detection benchmark: a fixture page that probes every
+  stealth-checked surface returns "human-like" on ≥90% of probes.
 
-After phase 6: nightly CI fails when an external target's anti-bot
-posture shifts, when a provider regresses, or when latency / cost
-trends move beyond their bands.
+### Phase 3 — adapter fallback chain
 
-**Total**: 6 phases, ~6–8 calendar weeks for a single engineer, ~25
-focused commits.
+**Inputs**: phase 2 (escalation reasons are typed and the new TLS
+adapter exists).
+
+**Capability cliff**: a single "fetch this product" call walks
+official-API → HTTP → browser, picks the cheapest viable adapter,
+and produces unified evidence regardless of which adapter ultimately
+served the response.
+
+**Deliverables**:
+
+- `source_coverage_gate` rewritten as a real decision loop, not a
+  ref aggregator. Inputs: `AdapterEscalationPolicy`, prior attempt
+  evidence, run budget. Output: next adapter to try or terminal
+  failure.
+- eBay OAuth token cache (file-backed, TTL'd, locked for concurrent
+  runs); covers the 2× rate-limit burn the audit flagged.
+- Amazon SP-API pagination, token refresh on 401 once per run,
+  partial-batch tolerance (one row failing does not fail the batch).
+- Per-chain-step retry budget so a runaway browser fallback cannot
+  consume more than its share.
+
+**Acceptance**:
+
+- Property test: for any sequence of typed failures from adapter A,
+  the chain picks adapter B per `AdapterEscalationPolicy` and the
+  budget left is monotonically non-increasing.
+- Live test #5 (eBay browse-by-keyword) returns ≥1 product within
+  `RunBudget(calls=10, cost_usd=0.05)`.
+- Replay determinism: a recorded chain run replayed against the
+  fixture store reproduces the same final adapter and the same
+  evidence digest.
+
+### Phase 4 — LLM provider port v2 + extraction
+
+**Inputs**: P0-3 OpenAI adapter (already migrated to httpx + retry).
+
+**Capability cliff**: extraction is no longer dictionary lookup; it
+is a real LLM call with anchor-grounded citations, per-field
+confidence, and Pydantic-validated structured output. The agent
+runtime is provider-blind; swapping OpenAI for Anthropic happens
+through the adapter registry.
+
+**Deliverables**:
+
+- `ModelProviderPort` v2 (messages / tools / response_format /
+  streaming / token usage). The `set_context_payload` side-channel is
+  deprecated but kept for one release.
+- Updated OpenAI Responses adapter to fill the v2 surface.
+- New adapters: `AnthropicMessagesAdapter`, `BedrockConverseAdapter`.
+  Gemini is staged depending on §9 question (1).
+- `PromptRegistryPort` resolving `prompt_template_ref` to versioned
+  YAML files under `prompts/<role>/<name>.<vN>.yml`. Provider adapters
+  see only resolved messages, never raw template strings.
+- `TokenBudgetPort` backed by the project outbox; per-run
+  `TokenBudget` decremented by a `TokenUsageEvent` aggregator.
+  Exceeding budget raises `TokenBudgetExceeded` (subclass of
+  `PolicyViolation`).
+- `schema_runtime.py` rewritten to call the LLM with a context bundle
+  (DOM anchors + screenshot ref + URL) and return
+  `ExtractionCandidate` (field values + per-field
+  `FieldCitation` + per-field `confidence` + abstention reasons).
+- `field_oracle` regression suite comparing extraction output against
+  a ground-truth corpus (source decided in §9 question 4).
+
+**Acceptance**:
+
+- Provider-swap test: the same `AgentRunRequest` resolved against
+  OpenAI vs Anthropic produces results that pass the same field-
+  oracle confidence floor.
+- Structured output validation: a deliberately malformed mock
+  response does not bypass the Pydantic gate; the adapter raises
+  `StructuredOutputViolation`.
+- Token-budget property: a recorded run that exhausts the budget
+  raises `TokenBudgetExceeded` exactly once and the outbox event
+  total matches the budget cap.
+- Field-oracle: ≥95% of corpus products meet `confidence ≥ 0.8`
+  on price + title fields.
+
+### Phase 5 — AI planning + recovery
+
+**Inputs**: phase 4 (the agent loop has a real LLM that can return
+structured decisions).
+
+**Capability cliff**: the agent runtime — not the caller — drives
+the crawl. Given a goal and a corpus, the runtime picks URLs,
+escalates adapters, and recovers from typed failures, all under a
+declared budget.
+
+**Deliverables**:
+
+- Frontier scoring wired to LLM signals via the now-real provider
+  port; the existing `RuntimeFrontierOptimizationDecision`
+  dataclass becomes the agent's actual planning output.
+- Recovery loop: on a typed failure (NetworkFailureType /
+  AccessControlBlocked / extraction abstention), the agent re-plans
+  one of {different URL, escalate adapter, request review,
+  abandon}. Capped by `max_recovery_iterations` (default 3).
+- Budget enforcement on every loop iteration through the gateway.
+- `AgentRunResult` carries a typed `RecoveryTrace` describing the
+  decisions taken.
+
+**Acceptance**:
+
+- Property test: an `AgentRunRequest` with a budget of N calls and
+  a fixture host that fails on the first M attempts terminates with
+  the smallest M+k call count that satisfies the goal, where k ≤
+  `max_recovery_iterations`.
+- Replay determinism: the same input request + fixture store
+  reproduces the same `RecoveryTrace`.
+- A blocked Cloudflare path correctly escalates HTTP → Browser
+  exactly once before raising `AccessControlBlocked`.
+
+### Phase 6 — live regression + observability
+
+**Inputs**: phases 1-5 (everything that the live tests must
+exercise is implemented).
+
+**Capability cliff**: nightly CI fails when an external target's
+anti-bot posture shifts, when a provider regresses, or when latency
+/ cost trends move outside their bands. Production runtime gates
+(observability / DR / security_privacy) emit real telemetry.
+
+**Deliverables**:
+
+- 7 live integration tests in `tests/integration/live/` (per §4.10).
+- `OtelObservabilityAdapter` wiring `runtime_support/observability.py`
+  to OTLP export (production mode flips from `NotImplementedError` to
+  real SDK calls).
+- `PresidioPiiAdapter` wiring `runtime_support/security_privacy.py`
+  to a real PII scrubber for production mode.
+- Real DR drill (live test only) against a Postgres / Redis / S3
+  triple; fixture mode unchanged.
+
+**Acceptance**:
+
+- 100% green on the live regression suite for three consecutive
+  nightly runs.
+- OTel exporter actually receives spans on a local collector under
+  test; trace tree depth matches the agent loop depth in the run.
+- DR live test demonstrates RPO / RTO within target bands documented
+  in `docs/02-production-architecture.md`.
+
+### 6.7 Parallelism map
+
+The phases are dependency-ordered, but several do not strictly require
+the previous one to be complete before they begin:
+
+```
+Phase 1 ──────┬─► Phase 2 ──┬─► Phase 3 ─┐
+              │              │            │
+              └─► Phase 4 ───┴─► Phase 5 ─┴─► Phase 6
+```
+
+- Phase 4 (LLM provider v2 + extraction) only depends on the
+  contracts touched by P0-3, not on phase 1's transport changes —
+  agents may begin phase 4 in parallel with phase 1.
+- Phase 2 (anti-bot) and phase 3 (adapter chain) share only typed
+  failure classes; they can also be parallelized once those
+  classes land.
+- Phase 5 (AI planning) is the first hard serial dependency: it
+  requires phase 4's real LLM and phase 3's typed failures.
+- Phase 6 (live regression) is the only phase that requires every
+  other phase complete because its acceptance criteria exercise
+  every layer.
 
 ## 7. Acceptance criteria
 
