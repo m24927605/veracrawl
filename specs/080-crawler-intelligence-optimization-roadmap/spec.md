@@ -11,7 +11,8 @@ This spec fixes the post-079 crawler intelligence optimization roadmap. It
 captures the next bounded set of production follow-up specs for VeraCrawl's
 general-purpose crawling intelligence: frontier scoring, DOM understanding,
 extraction fallback and confidence, canonical dedupe and identity, ranking,
-cost/recovery/evaluation gates, runtime wiring, and owner-service integration.
+cost/recovery/evaluation gates, runtime wiring, owner-service integration, and
+the final objective/agent decision release gate.
 
 These specs improve production-grade crawler quality after the closure gate.
 They do not replace specs 069-075, do not weaken the aggregate production-grade
@@ -62,10 +63,11 @@ release rules, and do not create a single-site or ecommerce-only product path.
 | 094 | Optimization Cost Cache Budget Runtime | Connect cost, cache, budget, freshness, and metric refs to ops gates. | 086, 089-093 | Stale cache, budget overrun, missing metrics, and replay gaps fail. |
 | 095 | Drift Recovery Feedback Runtime | Connect drift, retry, repair, and memory advisory feedback to future optimization signals. | 083, 086, 091, 094 | Feedback remains advisory and fails unsafe recovery or owner bypass. |
 | 096 | Optimization Regression Release Gate | Aggregate 089-095 evidence into an optimization regression release gate. | 089-095 | Gate passes only with lower refs, metrics, replay refs, and no regressions. |
+| 097 | Optimization Objective Gate | Aggregate lower 096 regression gates, deterministic weighted OptimizationScore reports, and bounded observe/think/act/verify agent evidence into the final "faster, more accurate, cheaper" optimization claim. | 080-096 | Gate passes only with passing lower gates, score reports, agent loop evidence, policy refs, command/event/outbox refs, artifact refs, and replay refs for the recorded validation corpus. |
 
 ## Roadmap Rules
 
-- **RR-001**: Specs 081-096 are the approved optimization follow-up specs. They
+- **RR-001**: Specs 081-097 are the approved optimization follow-up specs. They
   are not additional production-grade closure specs and must not change the
   aggregate 075 gate without an explicit release-gate amendment.
 - **RR-002**: These specs may improve production-grade claims for new validated
@@ -172,7 +174,7 @@ offline ranking metrics.
 
 ### Functional Requirements
 
-- **FR-001**: System MUST define specs 081-096 with purpose, dependencies,
+- **FR-001**: System MUST define specs 081-097 with purpose, dependencies,
   requirements, completion gates, and non-goals.
 - **FR-002**: System MUST define optimization metrics for crawl precision,
   recall, extraction accuracy, duplicate rate, crawl success rate, cost per
@@ -229,7 +231,7 @@ offline ranking metrics.
 
 ## Success Criteria
 
-- **SC-001**: Specs 081-096 exist with clear purpose, dependency, functional
+- **SC-001**: Specs 081-097 exist with clear purpose, dependency, functional
   requirements, completion gates, and non-goals.
 - **SC-002**: `docs/08-build-roadmap.md`,
   `specs/038-production-runtime-closure/spec.md`, and
@@ -253,9 +255,9 @@ offline ranking metrics.
 
 ## Implementation Closure
 
-- Specs 081-096 were implemented as a shared, general-purpose optimization gate,
-  runtime wiring layer, and owner-service integration layer rather than a
-  single-site scraper or vertical-only pipeline.
+- Specs 081-097 were implemented as shared, general-purpose optimization gates,
+  runtime wiring, owner-service integration, and final objective/agent release
+  gating rather than a single-site scraper or vertical-only pipeline.
 - Runtime materialization lives in `src/veracrawl/contracts/`,
   `src/veracrawl/benchmarks/`, `src/veracrawl/cli/`, and
   `src/veracrawl/review_replay/` with registry, fixture, contract, unit,

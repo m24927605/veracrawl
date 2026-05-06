@@ -10,7 +10,7 @@
 This spec fixes the post-037 production runtime roadmap. It does not implement a
 runtime feature by itself. It defines the finite set of remaining specs required
 to move VeraCrawl from executable deterministic target-architecture foundations
-to a production-capable general-purpose AI agent crawler. Specs 068-096 extend
+to a production-capable general-purpose AI agent crawler. Specs 068-097 extend
 this control spec with the production-grade closure roadmap, ecommerce market
 follow-ups, and post-079 crawler intelligence optimization roadmap discovered
 after the first real ecommerce product benchmarks.
@@ -25,7 +25,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
   capability across source types, website patterns, schemas, evidence paths,
   graph/memory intelligence, and operations. It does not narrow VeraCrawl into a
   single-site scraper or workflow demo.
-- **Target/V1 boundary**: Specs 039-096 are production sequencing,
+- **Target/V1 boundary**: Specs 039-097 are production sequencing,
   production-grade closure, market follow-up, and optimization specs. They
   connect the already completed target architecture foundation to real source
   acquisition, processing, orchestration, AI adapters, persistence, benchmark,
@@ -44,7 +44,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 
 ## Roadmap Rules
 
-- **RR-001**: Specs 039-096 are the approved production runtime,
+- **RR-001**: Specs 039-097 are the approved production runtime,
   production-grade closure, market follow-up, and optimization specs.
 - **RR-002**: A later implementation spec may be activated only after all prior
   blocking specs listed in the roadmap are complete or explicitly marked
@@ -107,7 +107,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 | 077 | eBay Browse API Adapter | Add an official eBay Browse API path for source-backed product search, price, and availability when public item pages are access denied. | 066, 071, 076 | Official eBay API evidence can satisfy product fields when credentials and source anchors are available; missing credentials remain needs-review. |
 | 078 | Delivery ETA Offer Sorting Projection | Extend product crawl output so downstream comparison sites can sort source-backed offers by price, total price, delivery ETA, and availability without fabricating missing fields. | 066, 067, 076, 077 | Source-backed offer projection materializes sortable refs for price, total price, delivery, and availability while missing fields remain absent. |
 | 079 | Query Product Discovery And Offer Ranking | Start from a natural-language product query and allowed ecommerce search/listing entry pages, discover product candidate URLs from source-backed artifacts, then compose product availability extraction and offer ranking without manually supplied product URLs. | 066, 067, 078 | Query-driven product discovery emits source-backed candidates and ranked offers without manually supplied product URLs. |
-| 080 | Crawler Intelligence Optimization Roadmap | Fix the finite post-079 optimization spec set for frontier scoring, DOM understanding, extraction fallback/confidence, dedupe/identity, ranking, cost/recovery/evaluation gates, runtime wiring, and owner-service integration. | 075, 079 | Specs 081-096 are defined as post-closure optimization follow-ups without changing the 069-075 production-grade closure gate. |
+| 080 | Crawler Intelligence Optimization Roadmap | Fix the finite post-079 optimization spec set for frontier scoring, DOM understanding, extraction fallback/confidence, dedupe/identity, ranking, cost/recovery/evaluation gates, runtime wiring, owner-service integration, and final objective gating. | 075, 079 | Specs 081-097 are defined as post-closure optimization follow-ups without changing the 069-075 production-grade closure gate. |
 | 081 | Focused Frontier Scoring Runtime | Replace raw priority integers with replayable score breakdowns and best-first frontier decisions. | 072, 028, 051, 060, 080 | Score-backed frontier scheduling improves required-page coverage per unit cost with replayable priority, retire, retry, expand, and stop decisions. |
 | 082 | DOM Page Understanding And Element Ranking Runtime | Materialize pruned DOM, page zones, repeated blocks, element rankings, and LLM-ready context bundles. | 045, 070, 081 | DOM intelligence reduces model context size, preserves anchors, improves page/element classification, and blocks unsafe browser interactions. |
 | 083 | Extractor Fallback And Confidence Runtime | Add deterministic-first extractor fallback, field validators, confidence calibration, abstention, and drift signals. | 046, 047, 073, 082 | Source-backed field extraction passes oracle thresholds and abstains or routes to review when evidence is weak or contradictory. |
@@ -124,6 +124,7 @@ MUST be amended first; a new implementation spec MUST NOT be created ad hoc.
 | 094 | Optimization Cost Cache Budget Runtime | Wire cost, cache freshness, fetch/browser/token budget, and metrics into ops refs. | 086, 089-093 | Cost/cache integration fails stale cache, budget overrun, missing metrics, and replay gaps. |
 | 095 | Drift Recovery Feedback Runtime | Wire drift, retry, repair, and memory advisory refs into recovery feedback. | 083, 086, 091, 094 | Feedback is advisory, replayable, and blocked on unsafe recovery. |
 | 096 | Optimization Regression Release Gate | Aggregate 089-095 integration evidence into a release-blocking gate. | 089-095 | Gate passes only with complete lower integration refs, metrics, replay, and no regressions. |
+| 097 | Optimization Objective Gate | Aggregate 096 lower regression gates, deterministic weighted OptimizationScore reports, and bounded observe/think/act/verify agent decision-loop evidence. | 080-096 | Gate passes only when the recorded validation corpus has passing lower gates, objective score reports, agent loop evidence, policy refs, command/event/outbox refs, artifact refs, and replay refs. |
 
 ## Activation Policy
 
@@ -143,11 +144,11 @@ When a roadmap spec is activated:
 - This spec does not implement runtime code.
 - This spec does not claim production readiness.
 - This spec does not authorize creating additional production implementation
-  specs outside 039-096 without first amending this roadmap.
+  specs outside 039-097 without first amending this roadmap.
 
 ## Success Criteria
 
-- **SC-001**: Specs 039-096 exist as planned spec files with fixed purpose,
+- **SC-001**: Specs 039-097 exist as planned spec files with fixed purpose,
   dependency, and completion gate.
 - **SC-002**: `docs/08-build-roadmap.md` contains the same post-037 roadmap.
 - **SC-003**: `AGENTS.md` points future production work to this roadmap before
