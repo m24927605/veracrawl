@@ -26,6 +26,18 @@ from veracrawl.contracts.security_privacy import (
     SecurityPolicyCheck,
     SecurityPrivacyReport,
 )
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
+)
+
+_BACKEND = "security_privacy"
+
+
+def _fail_closed_in_production(gate: str) -> None:
+    if current_mode() is RuntimeMode.PRODUCTION:
+        raise ProductionRuntimeNotImplemented(backend=_BACKEND, gate=gate)
 
 
 @dataclass(frozen=True)
@@ -85,6 +97,7 @@ _FAILURES: dict[str, tuple[SecurityPrivacyFailureType, str, RecoveryActionType]]
 
 
 def run_security_privacy_gate(*, fixture_id: str, scenario: str) -> SecurityPrivacyGateResult:
+    _fail_closed_in_production("run_security_privacy_gate")
     if scenario == "security-privacy-policy-only":
         return _policy_only_result(fixture_id=fixture_id)
     if scenario in _FAILURES:

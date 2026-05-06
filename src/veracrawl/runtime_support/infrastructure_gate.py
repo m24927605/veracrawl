@@ -16,7 +16,19 @@ from veracrawl.contracts.infrastructure import (
     RuntimeInfrastructureSpec,
 )
 from veracrawl.persistence.adapter_conformance import PersistenceAdapterConformanceResult
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
+)
 from veracrawl.scale.broker_conformance import QueueBrokerConformanceResult
+
+_BACKEND = "infrastructure"
+
+
+def _fail_closed_in_production(gate: str) -> None:
+    if current_mode() is RuntimeMode.PRODUCTION:
+        raise ProductionRuntimeNotImplemented(backend=_BACKEND, gate=gate)
 
 
 @dataclass(frozen=True)
@@ -79,6 +91,7 @@ def run_runtime_infrastructure_gate(
     queue_broker: QueueBrokerConformanceResult | None,
     object_store: ObjectStoreConformanceResult | None,
 ) -> RuntimeInfrastructureGateResult:
+    _fail_closed_in_production("run_runtime_infrastructure_gate")
     if scenario in _FAILURES:
         failure, missing = _FAILURES[scenario]
         return _failure_result(
@@ -180,6 +193,7 @@ def run_runtime_infrastructure_runtime_unavailable_gate(
     fixture_id: str,
     spec: RuntimeInfrastructureSpec,
 ) -> RuntimeInfrastructureGateResult:
+    _fail_closed_in_production("run_runtime_infrastructure_runtime_unavailable_gate")
     report = RuntimeInfrastructureReport(
         id=f"runtime-infrastructure-report:{fixture_id}",
         run_ref=f"run:{fixture_id}",

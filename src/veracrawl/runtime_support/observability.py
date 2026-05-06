@@ -29,6 +29,19 @@ from veracrawl.contracts.ops import (
     RunbookAction,
     TraceSpan,
 )
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
+)
+
+_BACKEND = "observability"
+
+
+def _fail_closed_in_production(gate: str) -> None:
+    """Raise if running in production mode — these gates are fixture-only."""
+    if current_mode() is RuntimeMode.PRODUCTION:
+        raise ProductionRuntimeNotImplemented(backend=_BACKEND, gate=gate)
 
 
 @dataclass(frozen=True)
@@ -107,6 +120,7 @@ def run_operational_observability_gate(
     telemetry_backend_ref: Ref | None,
     collector_handoff_ref: Ref | None,
 ) -> OperationalObservabilityGateResult:
+    _fail_closed_in_production("run_operational_observability_gate")
     if scenario == "observability-runtime-unavailable":
         return run_operational_observability_runtime_unavailable_gate(fixture_id=fixture_id)
     if scenario == "observability-data-surface-only":
@@ -132,6 +146,7 @@ def run_operational_observability_runtime_unavailable_gate(
     *,
     fixture_id: str,
 ) -> OperationalObservabilityGateResult:
+    _fail_closed_in_production("run_operational_observability_runtime_unavailable_gate")
     report = ObservabilityReport(
         id=f"observability-report:{fixture_id}",
         run_ref=f"run:{fixture_id}",
@@ -160,6 +175,7 @@ def run_operational_observability_data_surface_only_gate(
     *,
     fixture_id: str,
 ) -> OperationalObservabilityGateResult:
+    _fail_closed_in_production("run_operational_observability_data_surface_only_gate")
     report = ObservabilityReport(
         id=f"observability-report:{fixture_id}",
         run_ref=f"run:{fixture_id}",

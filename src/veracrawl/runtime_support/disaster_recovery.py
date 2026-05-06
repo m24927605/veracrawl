@@ -26,6 +26,18 @@ from veracrawl.contracts.ops import (
     FailureRecord,
     RecoveryAction,
 )
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
+)
+
+_BACKEND = "disaster_recovery"
+
+
+def _fail_closed_in_production(gate: str) -> None:
+    if current_mode() is RuntimeMode.PRODUCTION:
+        raise ProductionRuntimeNotImplemented(backend=_BACKEND, gate=gate)
 
 
 @dataclass(frozen=True)
@@ -98,6 +110,7 @@ def dr_restore_plan(
     policy_decision_refs: list[Ref],
     approval_decision_refs: list[Ref],
 ) -> DRRestorePlan:
+    # Pure data constructor (no backend dependency); safe to call in any mode.
     validation_gate_refs = [
         f"dr-validation-gate:{fixture_id}:{phase.value}" for phase in _REQUIRED_PHASES
     ]
@@ -133,6 +146,7 @@ def run_operational_dr_gate(
     plan: DRRestorePlan,
     runtime_infrastructure_report: RuntimeInfrastructureReport | None,
 ) -> OperationalDRGateResult:
+    _fail_closed_in_production("run_operational_dr_gate")
     if scenario == "dr-restore-runtime-unavailable":
         return run_operational_dr_runtime_unavailable_gate(fixture_id=fixture_id, plan=plan)
     if scenario in _FAILURES:
@@ -161,6 +175,7 @@ def run_operational_dr_runtime_unavailable_gate(
     fixture_id: str,
     plan: DRRestorePlan,
 ) -> OperationalDRGateResult:
+    _fail_closed_in_production("run_operational_dr_runtime_unavailable_gate")
     run = DRRestoreRun(
         id=f"dr-restore-run:{fixture_id}",
         dr_restore_plan_id=plan.id,
