@@ -26,37 +26,31 @@ Do not let schedule concerns reduce the target product or architecture.
 - Sequencing is allowed only for technical dependency management, correctness, verification, risk isolation, and incremental integration.
 - V1/V2/V3 boundaries must not be justified by time pressure; they must be justified by dependency order, system coherence, and validation strategy.
 
-## Spec Kit Workflow
+## Plan-Driven Development
 
-This repository uses GitHub Spec Kit for spec-driven development.
-
-For non-trivial product, architecture, or code changes, follow the Spec Kit workflow before implementation.
-
-Use the command form available in the current agent environment:
-
-- Most Spec Kit integrations: `/speckit.constitution`, `/speckit.specify`, `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.analyze`, `/speckit.implement`
-- Codex skills mode: `$speckit-constitution`, `$speckit-specify`, `$speckit-clarify`, `$speckit-plan`, `$speckit-tasks`, `$speckit-analyze`, `$speckit-implement`
+Spec Kit has been removed from this repository. For non-trivial product, architecture, or code changes, follow the lightweight plan-driven workflow under `docs/plans/`.
 
 Workflow:
 
-1. Establish or update project principles with `/speckit.constitution` when the requested change affects engineering rules, product boundaries, safety policy, or long-term architecture.
-2. Create or update the feature specification with `/speckit.specify`.
-   - Describe what is being built and why.
-   - Do not choose the tech stack in the specification phase unless the user explicitly asks.
-   - Tie requirements back to the relevant VeraCrawl docs in `docs/`.
-3. Run `/speckit.clarify` when requirements, acceptance criteria, safety boundaries, user roles, data contracts, or output semantics are ambiguous.
-4. Create the technical implementation plan with `/speckit.plan`.
-   - Include architecture choices, package/module boundaries, data contracts, migration impact, testing strategy, and rollout sequence.
-   - For VeraCrawl V1 work, respect `docs/README.md`, `docs/01-product-definition.md`, `docs/02-production-architecture.md`, `docs/07-data-contracts.md`, and `docs/08-build-roadmap.md`.
-5. Generate executable tasks with `/speckit.tasks`.
-6. Run `/speckit.analyze` before implementation for cross-artifact consistency and coverage checks when available.
-7. Implement with `/speckit.implement`, or manually execute the generated task list if the command is unavailable.
+1. Create a plan directory under `docs/plans/<topic>/` (e.g. `docs/plans/p0-fix-pack/`).
+2. Write a self-contained plan document for each discrete change. Each plan must include: `Status`, `Why`, `Scope` (in/out), `Design`, `Dependencies`, `Test Strategy`, `Acceptance Criteria` (mechanically verifiable), `Rollback`, `Open Questions`.
+3. Tie requirements back to the VeraCrawl docs in `docs/` — do not duplicate doc content; reference it.
+4. Run the codex plan review gate before implementation:
+   ```
+   CODEX_REVIEW_ITERATION=1 ~/.claude/hooks/codex-review.sh plan <plan-file> --project-dir $PWD
+   ```
+5. Iterate the plan until codex approves (max 5 iterations); record iteration outcomes in the plan's status table.
+6. Implement TDD: red → green → refactor → single-purpose commit.
+7. Run the codex task review gate per commit:
+   ```
+   BASELINE=$(git rev-parse HEAD~1) && CODEX_REVIEW_ITERATION=1 \
+     ~/.claude/hooks/codex-review.sh task $BASELINE --project-dir $PWD
+   ```
+8. Update the plan's STATUS.md (or equivalent) with commit SHA + outcome.
 
-Spec Kit is initialized in this repo under `.specify/`, with Codex skills installed under `.agents/skills/`. If those directories are missing in a future checkout, reinitialize with `specify init --here --integration codex --integration-options="--skills"` before running non-trivial workflow steps.
+## When To Require A Plan
 
-## When To Require A Spec
-
-Use the Spec Kit workflow for:
+Use the plan-driven workflow for:
 
 - new product features
 - architecture changes
@@ -65,7 +59,7 @@ Use the Spec Kit workflow for:
 - safety, policy, credential, crawling, evidence, memory, graph, export, or replay behavior
 - changes that touch multiple modules or persistence boundaries
 
-Small mechanical fixes, typo fixes, formatting-only edits, or narrowly scoped documentation wording changes may be done directly, but mention that the full Spec Kit workflow was intentionally not used because the change is trivial.
+Small mechanical fixes, typo fixes, formatting-only edits, or narrowly scoped documentation wording changes may be done directly, but mention that the full plan workflow was intentionally not used because the change is trivial.
 
 ## VeraCrawl V1 Constraints
 
@@ -93,7 +87,7 @@ Do not confuse V1 acceptance with target architecture acceptance. V1-specific co
 
 VeraCrawl is a Python product unless the user explicitly changes this decision.
 
-For all Spec Kit plans and implementation tasks:
+For all plans and implementation tasks:
 
 - Use Python for V1 services, workers, contracts, policy checks, event handling, and agent runtime abstractions.
 - Keep the AI agent runtime framework-neutral and owned by VeraCrawl.
@@ -105,67 +99,9 @@ For all Spec Kit plans and implementation tasks:
 
 ## Implementation Discipline
 
-- Keep specs, plans, tasks, and code consistent. If implementation reveals a requirement mismatch, update the spec artifacts before continuing.
-- Treat specs and plans as source-of-truth intent; code should implement them, not drift away from them.
-- Keep task execution traceable to task IDs from `tasks.md`.
-- Do not mark tasks complete unless the implementation and verification are actually done.
+- Keep plans and code consistent. If implementation reveals a requirement mismatch, update the plan before continuing.
+- Treat plans as source-of-truth intent; code should implement them, not drift away from them.
+- Keep work traceable to plan acceptance criteria — each commit should map to one or more checked items.
+- Do not mark items complete in STATUS.md unless implementation and verification are actually done.
 - Run the relevant tests or checks before finalizing; if a check cannot be run, state why.
 - Preserve existing user changes. Do not revert unrelated work.
-
-## Spec Kit References
-
-- GitHub Spec Kit: https://github.com/github/spec-kit
-- Spec Kit documentation: https://github.github.io/spec-kit/
-
-<!-- SPECKIT START -->
-Current production-grade closure roadmap:
-`specs/068-production-grade-crawler-closure-roadmap/spec.md`.
-Use it with `docs/08-build-roadmap.md` and
-`specs/038-production-runtime-closure/spec.md`. Specs 069-075 are the finite
-production-grade closure specs for objective discovery/planning, unified
-HTTP/browser acquisition escalation, authorized API/session access, adaptive
-deep crawl, production extraction quality gates, reliability/operations/cost
-gates, and the final production-grade release gate. Do not invent additional
-production-grade specs without amending spec 068 and the roadmap first.
-Spec 075 must not pass from arbitrary string refs; it must parse actual
-`ProductionGateReport` artifacts from all six lower gates and each lower gate
-must be present and `pass`. Deterministic closure fixtures prove the release
-mechanics, but do not by themselves justify a full production-grade crawler
-claim unless the aggregate release gate is supplied with the relevant validated
-live/authorized/browser/deep-crawl/quality/ops lower reports.
-For 071, prefer `veracrawl-authorized-source run-live` when producing release
-evidence: it must use official API or explicitly authorized read access, never
-CAPTCHA solving, WAF evasion, login-wall bypass, or raw secret persistence.
-For 070 and 073, prefer `run-live` lower gates when making production-grade
-claims. A passing aggregate 075 gate applies to the recorded validation corpus;
-blocked ecommerce sources still remain blocked/needs-review unless solved by
-official APIs or explicitly authorized sources.
-Spec 079 closes the ecommerce manual product URL gap. Query-product tests must
-start from query text plus allowed search/listing entry pages only; product URLs
-may appear only as source-backed `ProductDiscoveryCandidate` outputs and derived
-product availability targets. Do not answer query-driven shopping tasks by
-manually assembling product URLs outside VeraCrawl.
-Spec 080 now fixes the post-079 crawler intelligence optimization roadmap:
-`specs/080-crawler-intelligence-optimization-roadmap/spec.md`. Specs 081-097
-cover focused frontier scoring, DOM page understanding/element ranking,
-extractor fallback/confidence, canonical dedupe/identity, recommendation
-ranking, cost/recovery/evaluation gates, runtime wiring, and owner-service
-integration plus the final objective/agent decision release gate. Treat them as optimization follow-ups, not additional
-production-grade closure gates; they must preserve source-backed evidence,
-policy, owner-service boundaries, and replay.
-Spec 087 wires the spec 080-086 optimization contracts into runtime services:
-`specs/087-crawler-optimization-runtime-wiring/plan.md`. It must keep runtime
-code adapter-free and must not import benchmark modules from core optimization
-services.
-Spec 088 fixes the post-087 optimization owner-service integration roadmap:
-`specs/088-optimization-owner-integration/plan.md`. Specs 089-096 wire
-optimization decisions into scheduler, normalize, extract/verify,
-dedupe/identity, publish/ranking, cost/cache/budget, drift/recovery feedback,
-and regression release gates. Keep these integrations adapter-free,
-benchmark-free, framework-neutral, source-backed, policy-gated, and replayable.
-Spec 097 closes the end-to-end optimization objective gap:
-`specs/097-optimization-objective-gate/spec.md`. It must aggregate lower 096
-regression gates, deterministic OptimizationScore reports, and bounded
-observe/think/act/verify agent decision-loop evidence before any "faster,
-more accurate, cheaper" optimization claim passes.
-<!-- SPECKIT END -->
