@@ -40,6 +40,7 @@ from veracrawl.runtime_support.infrastructure_gate import (
     run_runtime_infrastructure_runtime_unavailable_gate,
     runtime_infrastructure_spec,
 )
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.scale.broker_conformance import (
     OperationalQueueBrokerAdapter,
     run_queue_broker_conformance,
@@ -517,41 +518,42 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                postgres_dsn=args.postgres_dsn,
-                redis_url=args.redis_url,
-                s3_endpoint_url=args.s3_endpoint_url,
-                s3_bucket=args.s3_bucket,
-                s3_access_key_id=args.s3_access_key_id,
-                s3_secret_access_key=args.s3_secret_access_key,
+    with bootstrap_cli_logging("veracrawl-infrastructure"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    postgres_dsn=args.postgres_dsn,
+                    redis_url=args.redis_url,
+                    s3_endpoint_url=args.s3_endpoint_url,
+                    s3_bucket=args.s3_bucket,
+                    s3_access_key_id=args.s3_access_key_id,
+                    s3_secret_access_key=args.s3_secret_access_key,
+                )
+            except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "idempotency_deduped": report.idempotency_deduped,
+                        "live_adapter_families": [
+                            family.value for family in report.live_adapter_families
+                        ],
+                    },
+                    sort_keys=True,
+                )
             )
-        except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                    "idempotency_deduped": report.idempotency_deduped,
-                    "live_adapter_families": [
-                        family.value for family in report.live_adapter_families
-                    ],
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

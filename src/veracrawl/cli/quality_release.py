@@ -13,6 +13,7 @@ from veracrawl.benchmarks.quality_release import (
     run_quality_release_gate,
 )
 from veracrawl.contracts.quality_release import QualityReleaseManifest
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.runtime_support.persistence_store import ReferencePersistenceStore
 
 
@@ -42,13 +43,9 @@ def run_fixture(
     _write_outputs(out, result)
     report = result.report
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.release_decision != manifest.expected_release_decision:
-        raise ValueError(
-            f"fixture {manifest.id} decision mismatch: {report.release_decision}"
-        )
+        raise ValueError(f"fixture {manifest.id} decision mismatch: {report.release_decision}")
     if (
         manifest.expected_failure_type is not None
         and report.failure_type != manifest.expected_failure_type
@@ -118,30 +115,33 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            result = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (OSError, RuntimeError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        report = result.report
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "release_decision": report.release_decision.value,
-                    "observed_quality_gate_count": report.observed_quality_gate_count,
-                    "stability_run_count": report.stability_run_count,
-                },
-                sort_keys=True,
+    with bootstrap_cli_logging("veracrawl-quality-release"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                result = run_fixture(
+                    Path(args.fixture_dir), profile=args.profile, out=Path(args.out)
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            report = result.report
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "release_decision": report.release_decision.value,
+                        "observed_quality_gate_count": report.observed_quality_gate_count,
+                        "stability_run_count": report.stability_run_count,
+                    },
+                    sort_keys=True,
+                )
             )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

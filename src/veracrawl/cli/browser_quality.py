@@ -23,6 +23,7 @@ from veracrawl.contracts.enums import BrowserSideEffectClass
 from veracrawl.fetch.network_acquisition import build_network_request
 from veracrawl.ports.browser import BrowserSourceAdapterPort
 from veracrawl.ports.network import NetworkSourceAdapterPort
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.runtime_support.persistence_store import ReferencePersistenceStore
 
 
@@ -113,9 +114,7 @@ def run_fixture(
     _write_outputs(out, result)
     report = result.report
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
     if (
@@ -158,9 +157,7 @@ def _write_outputs(out: Path, result: BrowserQualityCorpusResult) -> None:
                 "completion_result": result.report.completion_result.value,
                 "operator_status": result.report.operator_status,
                 "target_count": result.report.target_count,
-                "browser_required_pass_count": (
-                    result.report.browser_required_pass_count
-                ),
+                "browser_required_pass_count": (result.report.browser_required_pass_count),
                 "recovered_fragment_count": result.report.recovered_fragment_count,
                 "http_only_missing_count": result.report.http_only_missing_count,
                 "dom_artifact_count": len(result.report.dom_artifact_refs),
@@ -187,36 +184,37 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            result = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                browser_adapter=args.browser_adapter,
+    with bootstrap_cli_logging("veracrawl-browser-quality"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                result = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    browser_adapter=args.browser_adapter,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            report = result.report
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "target_count": report.target_count,
+                        "browser_required_pass_count": report.browser_required_pass_count,
+                        "recovered_fragment_count": report.recovered_fragment_count,
+                    },
+                    sort_keys=True,
+                )
             )
-        except (OSError, RuntimeError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        report = result.report
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                    "target_count": report.target_count,
-                    "browser_required_pass_count": report.browser_required_pass_count,
-                    "recovered_fragment_count": report.recovered_fragment_count,
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

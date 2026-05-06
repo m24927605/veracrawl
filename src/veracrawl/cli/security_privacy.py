@@ -12,6 +12,7 @@ from pydantic import Field
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import CompletenessResult
 from veracrawl.contracts.security_privacy import SecurityPrivacyFixtureManifest
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.runtime_support.security_privacy import (
     SecurityPrivacyGateResult,
     run_security_privacy_gate,
@@ -109,9 +110,7 @@ def run_fixture(
         result=run_security_privacy_gate(fixture_id=manifest.id, scenario=manifest.scenario),
     )
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
     if (
@@ -138,14 +137,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        print(json.dumps(report.model_dump(mode="json"), sort_keys=True))
-        return 0
-    parser.error(f"unsupported command {args.command}")
-    return 2
+    with bootstrap_cli_logging("veracrawl-security-privacy"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
+            print(json.dumps(report.model_dump(mode="json"), sort_keys=True))
+            return 0
+        parser.error(f"unsupported command {args.command}")
+        return 2
 
 
 if __name__ == "__main__":

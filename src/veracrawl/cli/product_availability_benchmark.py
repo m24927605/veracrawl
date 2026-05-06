@@ -32,6 +32,7 @@ from veracrawl.fetch.network_acquisition import build_network_request
 from veracrawl.ports.agent_runtime import AgentRuntimePort, ModelProviderPort
 from veracrawl.ports.browser import BrowserSourceAdapterPort
 from veracrawl.ports.network import NetworkSourceAdapterPort
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.runtime_support.persistence_store import ReferencePersistenceStore
 
 _USER_AGENT = "VeraCrawl-real-benchmark/1"
@@ -289,25 +290,26 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            result = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                model_provider=args.model_provider,
-                openai_model=args.openai_model,
-                browser_fallback=args.browser_fallback,
-                browser_source_required=args.browser_source_required,
-            )
-        except (OSError, ValueError, RuntimeError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(json.dumps(_summary(result), sort_keys=True))
-        return 0
-    return 2
+    with bootstrap_cli_logging("veracrawl-product-availability-benchmark"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                result = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    model_provider=args.model_provider,
+                    openai_model=args.openai_model,
+                    browser_fallback=args.browser_fallback,
+                    browser_source_required=args.browser_source_required,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(json.dumps(_summary(result), sort_keys=True))
+            return 0
+        return 2
 
 
 def _summary(result: ProductAvailabilityBenchmarkResult) -> dict[str, object]:

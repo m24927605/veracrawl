@@ -23,6 +23,7 @@ from veracrawl.artifact_lifecycle.object_store_conformance import (
 from veracrawl.contracts.artifact import ObjectStoreAdapterSpec, ObjectStoreFixtureManifest
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import CompletenessResult, ObjectStoreAdapterKind
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 class ObjectStoreFixtureRunReport(TimestampedModel):
@@ -260,37 +261,38 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                endpoint_url=args.endpoint_url,
-                bucket=args.bucket,
-                access_key_id=args.access_key_id,
-                secret_access_key=args.secret_access_key,
+    with bootstrap_cli_logging("veracrawl-object-store"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    endpoint_url=args.endpoint_url,
+                    bucket=args.bucket,
+                    access_key_id=args.access_key_id,
+                    secret_access_key=args.secret_access_key,
+                )
+            except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "duplicate_deduped": report.duplicate_deduped,
+                        "object_count": report.object_count,
+                    },
+                    sort_keys=True,
+                )
             )
-        except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                    "duplicate_deduped": report.duplicate_deduped,
-                    "object_count": report.object_count,
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

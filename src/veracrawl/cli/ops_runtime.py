@@ -17,6 +17,7 @@ from veracrawl.ops.replay_observability_runtime import (
     OpsReplayObservabilityRuntimeResult,
     run_ops_replay_observability_runtime,
 )
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 class OpsReplayObservabilityFixtureRunReport(TimestampedModel):
@@ -105,9 +106,7 @@ def _to_run_report(
         completion_result=report.completion_result,
         operator_status=report.operator_status,
         result_publication_export_report_ref=report.result_publication_export_report_ref,
-        worker_orchestration_runtime_report_ref=(
-            report.worker_orchestration_runtime_report_ref
-        ),
+        worker_orchestration_runtime_report_ref=(report.worker_orchestration_runtime_report_ref),
         ops_console_report_ref=report.ops_console_report_ref,
         observability_report_ref=report.observability_report_ref,
         run_control_action_refs=report.run_control_action_refs,
@@ -165,9 +164,7 @@ def run_fixture(
         collector_handoff_ref=collector_handoff_ref,
     )
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
     if (
@@ -196,33 +193,34 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                telemetry_backend_ref=args.telemetry_backend_ref,
-                collector_handoff_ref=args.collector_handoff_ref,
+    with bootstrap_cli_logging("veracrawl-ops-runtime"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    telemetry_backend_ref=args.telemetry_backend_ref,
+                    collector_handoff_ref=args.collector_handoff_ref,
+                )
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                    },
+                    sort_keys=True,
+                )
             )
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ from veracrawl.runtime_support.disaster_recovery import (
     dr_restore_plan,
     run_operational_dr_gate,
 )
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 class OperationalDRFixtureRunReport(TimestampedModel):
@@ -272,24 +273,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        report = run_fixture(
-            Path(args.fixture_dir),
-            profile=args.profile,
-            out=Path(args.out),
-            postgres_dsn=args.postgres_dsn,
-            redis_url=args.redis_url,
-            s3_endpoint_url=args.s3_endpoint_url,
-            s3_bucket=args.s3_bucket,
-            s3_access_key_id=args.s3_access_key_id,
-            s3_secret_access_key=args.s3_secret_access_key,
-        )
-        print(json.dumps(report.model_dump(mode="json"), sort_keys=True))
-        return 0
-    parser.error(f"unsupported command {args.command}")
-    return 2
+    with bootstrap_cli_logging("veracrawl-dr"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            report = run_fixture(
+                Path(args.fixture_dir),
+                profile=args.profile,
+                out=Path(args.out),
+                postgres_dsn=args.postgres_dsn,
+                redis_url=args.redis_url,
+                s3_endpoint_url=args.s3_endpoint_url,
+                s3_bucket=args.s3_bucket,
+                s3_access_key_id=args.s3_access_key_id,
+                s3_secret_access_key=args.s3_secret_access_key,
+            )
+            print(json.dumps(report.model_dump(mode="json"), sort_keys=True))
+            return 0
+        parser.error(f"unsupported command {args.command}")
+        return 2
 
 
 if __name__ == "__main__":

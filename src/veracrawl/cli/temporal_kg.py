@@ -23,6 +23,7 @@ from veracrawl.graph.temporal_kg import (
     TemporalKGRuntimeResult,
     run_temporal_kg_runtime_gate,
 )
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 class TemporalKGFixtureRunReport(TimestampedModel):
@@ -136,12 +137,8 @@ def _to_run_report(
         missing_identity_evidence_refs=report.missing_identity_evidence_refs,
         missing_canonical_source_refs=report.missing_canonical_source_refs,
         missing_bitemporal_refs=report.missing_bitemporal_refs,
-        false_merge_without_adjudication_refs=(
-            report.false_merge_without_adjudication_refs
-        ),
-        false_split_without_supersession_refs=(
-            report.false_split_without_supersession_refs
-        ),
+        false_merge_without_adjudication_refs=(report.false_merge_without_adjudication_refs),
+        false_split_without_supersession_refs=(report.false_split_without_supersession_refs),
         missing_ref_fields=report.missing_ref_fields,
     )
 
@@ -159,9 +156,7 @@ def run_fixture(
         raise ValueError(f"fixture {manifest.id} does not support profile {profile}")
     report = run_temporal_kg_fixture(manifest, profile=profile)
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
     if (
@@ -188,27 +183,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                },
-                sort_keys=True,
+    with bootstrap_cli_logging("veracrawl-temporal-kg"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir), profile=args.profile, out=Path(args.out)
+                )
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                    },
+                    sort_keys=True,
+                )
             )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

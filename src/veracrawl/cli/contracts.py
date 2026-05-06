@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from veracrawl.contracts.registry import registry_json, validate_registry
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,13 +18,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "validate":
-        report = validate_registry()
-        print(registry_json())
-        return 0 if report.ok else 1
-    return 2
+    with bootstrap_cli_logging("veracrawl-contracts"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "validate":
+            report = validate_registry()
+            print(registry_json())
+            return 0 if report.ok else 1
+        return 2
 
 
 if __name__ == "__main__":

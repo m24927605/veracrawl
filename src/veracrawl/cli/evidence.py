@@ -25,6 +25,7 @@ from veracrawl.publish.gates import (
     publish_evidence_backed_output,
     reject_direct_candidate_publication,
 )
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.verify.review import review_verification_decision, verify_evidence_packet
 
 
@@ -113,9 +114,7 @@ def _build_evidence(
         subject_ref=candidate.id,
     )
     privacy_refs = [f"privacy-lifecycle:{manifest.id}:public"]
-    missing_fields = (
-        ["summary"] if manifest.scenario == "missing-anchor" else None
-    )
+    missing_fields = ["summary"] if manifest.scenario == "missing-anchor" else None
     built = build_field_evidence(
         fixture_id=manifest.id,
         candidate=candidate,
@@ -170,14 +169,10 @@ def _run_publication(
         review_policy=review_policy,
     )
     command_refs = (
-        []
-        if manifest.scenario == "replay-gap"
-        else [f"command-record:{manifest.id}:publish"]
+        [] if manifest.scenario == "replay-gap" else [f"command-record:{manifest.id}:publish"]
     )
     event_refs = (
-        []
-        if manifest.scenario == "replay-gap"
-        else [f"event-cursor:{manifest.id}:publish"]
+        [] if manifest.scenario == "replay-gap" else [f"event-cursor:{manifest.id}:publish"]
     )
     outbox_refs = [] if manifest.scenario == "replay-gap" else [f"outbox:{manifest.id}:publish"]
     replay_ref = None if manifest.scenario == "replay-gap" else f"replay-bundle:{manifest.id}"
@@ -375,8 +370,7 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> EvidenceFixtur
     report = run_evidence_fixture(manifest, profile=profile)
     if report.completion_result.value != manifest.expected_completion_result:
         raise ValueError(
-            f"fixture {manifest.id} completion mismatch: "
-            f"{report.completion_result.value}"
+            f"fixture {manifest.id} completion mismatch: {report.completion_result.value}"
         )
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
@@ -399,27 +393,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                },
-                sort_keys=True,
+    with bootstrap_cli_logging("veracrawl-evidence"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir), profile=args.profile, out=Path(args.out)
+                )
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                    },
+                    sort_keys=True,
+                )
             )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

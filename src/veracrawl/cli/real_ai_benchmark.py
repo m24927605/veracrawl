@@ -23,6 +23,7 @@ from veracrawl.cli import real_benchmark
 from veracrawl.contracts.enums import CompletenessResult
 from veracrawl.contracts.real_world_ai_agent import RealWorldAIAgentBenchmarkManifest
 from veracrawl.ports.agent_runtime import AgentRuntimePort, ModelProviderPort
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 def _load_json_like(path: Path) -> dict[str, Any]:
@@ -128,9 +129,7 @@ def run_fixture(
         openai_model=openai_model,
     )
     if model_provider == "openai":
-        manifest = manifest.model_copy(
-            update={"provider_names": [model_binding.provider_name]}
-        )
+        manifest = manifest.model_copy(update={"provider_names": [model_binding.provider_name]})
     result = run_real_world_ai_agent_benchmark(
         manifest=manifest,
         profile=profile,
@@ -140,9 +139,7 @@ def run_fixture(
     )
     report = result.report
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
     if (
@@ -218,23 +215,24 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            result = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                model_provider=args.model_provider,
-                openai_model=args.openai_model,
-            )
-        except (OSError, ValueError, RuntimeError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(json.dumps(_summary(result), sort_keys=True))
-        return 0
-    return 2
+    with bootstrap_cli_logging("veracrawl-real-ai-benchmark"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                result = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    model_provider=args.model_provider,
+                    openai_model=args.openai_model,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(json.dumps(_summary(result), sort_keys=True))
+            return 0
+        return 2
 
 
 def _summary(result: RealWorldAIAgentBenchmarkResult) -> dict[str, object]:

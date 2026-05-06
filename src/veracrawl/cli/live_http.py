@@ -21,6 +21,7 @@ from veracrawl.fetch.live_http import (
 )
 from veracrawl.fetch.network_acquisition import build_network_request, url_origin
 from veracrawl.ports.network import NetworkSourceAdapterPort
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.runtime_support.persistence_store import ReferencePersistenceStore
 
 
@@ -240,27 +241,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                },
-                sort_keys=True,
+    with bootstrap_cli_logging("veracrawl-live-http"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir), profile=args.profile, out=Path(args.out)
+                )
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                    },
+                    sort_keys=True,
+                )
             )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from veracrawl.benchmarks.real_world_quality import (
 )
 from veracrawl.cli import real_benchmark
 from veracrawl.contracts.real_world_quality import RealWorldQualityCorpusManifest
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.runtime_support.persistence_store import ReferencePersistenceStore
 
 
@@ -42,9 +43,7 @@ def run_fixture(
     report = result.report
     _write_outputs(out, result)
     if report.completion_result != manifest.expected_completion_result:
-        raise ValueError(
-            f"fixture {manifest.id} completion mismatch: {report.completion_result}"
-        )
+        raise ValueError(f"fixture {manifest.id} completion mismatch: {report.completion_result}")
     if report.operator_status != manifest.expected_operator_status:
         raise ValueError(f"fixture {manifest.id} status mismatch: {report.operator_status}")
     if (
@@ -93,10 +92,7 @@ def _write_outputs(out: Path, result: RealWorldQualityCorpusResult) -> None:
     )
     (real_world_dir / "site_observations.json").write_text(
         json.dumps(
-            [
-                item.model_dump(mode="json")
-                for item in result.real_world_result.observations
-            ],
+            [item.model_dump(mode="json") for item in result.real_world_result.observations],
             sort_keys=True,
             indent=2,
         )
@@ -136,32 +132,35 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            result = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        report = result.report
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                    "declared_target_count": report.declared_target_count,
-                    "passing_target_count": report.passing_target_count,
-                    "origin_count": report.origin_count,
-                    "pattern_family_count": report.pattern_family_count,
-                },
-                sort_keys=True,
+    with bootstrap_cli_logging("veracrawl-real-quality-corpus"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                result = run_fixture(
+                    Path(args.fixture_dir), profile=args.profile, out=Path(args.out)
+                )
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            report = result.report
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "declared_target_count": report.declared_target_count,
+                        "passing_target_count": report.passing_target_count,
+                        "origin_count": report.origin_count,
+                        "pattern_family_count": report.pattern_family_count,
+                    },
+                    sort_keys=True,
+                )
             )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

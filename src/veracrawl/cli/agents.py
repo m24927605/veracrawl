@@ -14,6 +14,7 @@ from veracrawl.agents.orchestration import MultiAgentRepairResult, run_multi_age
 from veracrawl.contracts.agent import MultiAgentFixtureManifest
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import CompletenessResult
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 class MultiAgentFixtureRunReport(TimestampedModel):
@@ -81,9 +82,7 @@ def _to_run_report(
         completion_result=report.completion_result,
         operator_status=report.operator_status,
         workflow_ref=report.workflow_ref,
-        agent_model_adapter_runtime_report_ref=(
-            report.agent_model_adapter_runtime_report_ref
-        ),
+        agent_model_adapter_runtime_report_ref=(report.agent_model_adapter_runtime_report_ref),
         live_evidence_verification_runtime_report_ref=(
             report.live_evidence_verification_runtime_report_ref
         ),
@@ -142,27 +141,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                },
-                sort_keys=True,
+    with bootstrap_cli_logging("veracrawl-agents"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir), profile=args.profile, out=Path(args.out)
+                )
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                    },
+                    sort_keys=True,
+                )
             )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

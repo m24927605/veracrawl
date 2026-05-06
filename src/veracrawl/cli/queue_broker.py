@@ -17,6 +17,7 @@ from pydantic import Field
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import CompletenessResult, QueueBrokerAdapterKind
 from veracrawl.contracts.scale import QueueBrokerAdapterSpec, QueueBrokerFixtureManifest
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 from veracrawl.scale.broker_conformance import (
     OperationalQueueBrokerAdapter,
     QueueBrokerConformanceResult,
@@ -132,9 +133,7 @@ def run_queue_broker_fixture(
     elif manifest.scenario.startswith("redis-broker-"):
         resolved_url = redis_url or os.getenv("VERACRAWL_REDIS_URL")
         if not resolved_url:
-            raise ValueError(
-                f"fixture {manifest.id} requires --redis-url or VERACRAWL_REDIS_URL"
-            )
+            raise ValueError(f"fixture {manifest.id} requires --redis-url or VERACRAWL_REDIS_URL")
         adapter, adapter_spec = _operational_redis_adapter(
             manifest.id,
             policy_refs,
@@ -235,35 +234,36 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                redis_url=args.redis_url,
+    with bootstrap_cli_logging("veracrawl-queue-broker"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    redis_url=args.redis_url,
+                )
+            except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "duplicate_deduped": report.duplicate_deduped,
+                        "queued_count": report.queued_count,
+                        "dead_letter_count": report.dead_letter_count,
+                    },
+                    sort_keys=True,
+                )
             )
-        except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                    "duplicate_deduped": report.duplicate_deduped,
-                    "queued_count": report.queued_count,
-                    "dead_letter_count": report.dead_letter_count,
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

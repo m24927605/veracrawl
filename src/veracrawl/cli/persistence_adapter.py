@@ -28,6 +28,7 @@ from veracrawl.persistence.adapter_conformance import (
     run_postgres_runtime_unavailable_conformance,
     run_sqlite_adapter_conformance,
 )
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 class PersistenceAdapterFixtureRunReport(TimestampedModel):
@@ -256,35 +257,36 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                postgres_dsn=args.postgres_dsn,
+    with bootstrap_cli_logging("veracrawl-persistence-adapter"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    postgres_dsn=args.postgres_dsn,
+                )
+            except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "event_count": report.event_count,
+                        "outbox_count": report.outbox_count,
+                        "duplicate_deduped": report.duplicate_deduped,
+                    },
+                    sort_keys=True,
+                )
             )
-        except (AttributeError, ImportError, OSError, RuntimeError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                    "event_count": report.event_count,
-                    "outbox_count": report.outbox_count,
-                    "duplicate_deduped": report.duplicate_deduped,
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

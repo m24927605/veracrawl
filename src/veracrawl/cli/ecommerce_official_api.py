@@ -20,6 +20,7 @@ from veracrawl.contracts.ecommerce_official_api import (
 )
 from veracrawl.contracts.enums import CompletenessResult
 from veracrawl.ports.ecommerce_official_api import EcommerceOfficialApiAdapterPort
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 def _load_json_like(path: Path) -> dict[str, Any]:
@@ -136,36 +137,37 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run-live":
-        try:
-            result = run_fixture(
-                Path(args.fixture_dir),
-                profile=args.profile,
-                out=Path(args.out),
-                dotenv=Path(args.dotenv) if args.dotenv else None,
-                require_pass=args.require_pass,
+    with bootstrap_cli_logging("veracrawl-ecommerce-official-api"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run-live":
+            try:
+                result = run_fixture(
+                    Path(args.fixture_dir),
+                    profile=args.profile,
+                    out=Path(args.out),
+                    dotenv=Path(args.dotenv) if args.dotenv else None,
+                    require_pass=args.require_pass,
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            report = result.report
+            print(
+                json.dumps(
+                    {
+                        "ok": report.completion_result == CompletenessResult.PASS,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                        "passing_site_count": len(report.passing_site_result_refs),
+                        "blocked_site_count": len(report.blocked_site_result_refs),
+                    },
+                    sort_keys=True,
+                )
             )
-        except (OSError, RuntimeError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        report = result.report
-        print(
-            json.dumps(
-                {
-                    "ok": report.completion_result == CompletenessResult.PASS,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                    "passing_site_count": len(report.passing_site_result_refs),
-                    "blocked_site_count": len(report.blocked_site_result_refs),
-                },
-                sort_keys=True,
-            )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import CompletenessResult
 from veracrawl.contracts.export import ExportFixtureManifest
 from veracrawl.export.runtime import ExportRuntimeResult, run_export_connector
+from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
 
 class ExportFixtureRunReport(TimestampedModel):
@@ -96,9 +97,7 @@ def _to_run_report(
 
 
 def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> ExportFixtureRunReport:
-    manifest = ExportFixtureManifest.model_validate(
-        _load_json_like(fixture_dir / "manifest.yaml")
-    )
+    manifest = ExportFixtureManifest.model_validate(_load_json_like(fixture_dir / "manifest.yaml"))
     if profile not in manifest.profile_refs:
         raise ValueError(f"fixture {manifest.id} does not support profile {profile}")
     report = run_export_fixture(manifest, profile=profile)
@@ -125,27 +124,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
-        try:
-            report = run_fixture(Path(args.fixture_dir), profile=args.profile, out=Path(args.out))
-        except (OSError, ValueError) as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
-            return 1
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "fixture_id": report.fixture_id,
-                    "completion_result": report.completion_result.value,
-                    "operator_status": report.operator_status,
-                },
-                sort_keys=True,
+    with bootstrap_cli_logging("veracrawl-export"):
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "run":
+            try:
+                report = run_fixture(
+                    Path(args.fixture_dir), profile=args.profile, out=Path(args.out)
+                )
+            except (OSError, ValueError) as exc:
+                print(json.dumps({"ok": False, "error": str(exc)}, sort_keys=True))
+                return 1
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "fixture_id": report.fixture_id,
+                        "completion_result": report.completion_result.value,
+                        "operator_status": report.operator_status,
+                    },
+                    sort_keys=True,
+                )
             )
-        )
-        return 0
-    return 2
+            return 0
+        return 2
 
 
 if __name__ == "__main__":
