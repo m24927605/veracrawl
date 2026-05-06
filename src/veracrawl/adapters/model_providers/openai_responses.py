@@ -12,36 +12,42 @@ Errors are surfaced as :class:`ModelProviderError`, which carries:
 
 - ``status_code``: the HTTP status (int)
 - ``error_code``: a stable category enum value (e.g. ``AUTH_FAILED``)
-  that callers can dispatch on without parsing prose
-- ``request_id``: the upstream ``x-request-id`` header value (or
-  ``None`` if missing) — the safe debugging anchor for cross-referencing
-  with OpenAI dashboards
+- ``request_id``: the upstream ``x-request-id`` header value (or ``None``)
+
+Retries: 429 and 5xx (500/502/503/504) responses are retried up to
+``max_attempts`` (default 3, total attempts including the first call)
+with exponential backoff plus jitter. ``Retry-After`` headers — both
+delta-seconds and HTTP-date forms — are honored, capped at 60s so a
+hostile upstream cannot stall the caller arbitrarily.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import urllib.error
-import urllib.request
+import random
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, Final
+
+import httpx
 
 from veracrawl.contracts.agent import ModelRequest, ModelResponse
 from veracrawl.contracts.common import stable_hash
 
 _RESPONSES_ENDPOINT: Final[str] = "https://api.openai.com/v1/responses"
 _REQUEST_ID_HEADER: Final[str] = "x-request-id"
+_RETRY_AFTER_HEADER: Final[str] = "retry-after"
+_DEFAULT_MAX_OUTPUT_TOKENS: Final[int] = 4096
+_DEFAULT_MAX_ATTEMPTS: Final[int] = 3
+_RETRY_AFTER_CAP_S: Final[float] = 60.0
+_RETRYABLE_STATUSES: Final[frozenset[int]] = frozenset({429, 500, 502, 503, 504})
+_DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=60.0, pool=10.0)
 
 
 class ModelProviderError(RuntimeError):
-    """Adapter-level failure with structured fields and no body content.
-
-    Subclasses ``RuntimeError`` so existing callers that catch
-    ``RuntimeError`` continue to work, but the exception's string form
-    deliberately contains only the status code, error category, and
-    upstream request id. It never embeds the response body, the request
-    prompt, or the context payload.
-    """
+    """Adapter-level failure with structured fields and no body content."""
 
     def __init__(
         self,
@@ -74,27 +80,36 @@ def _classify_status(status: int) -> str:
     return "ADAPTER_FAILURE"
 
 
-def _request_id_from_headers(headers: Any) -> str | None:
-    """Read x-request-id from the various header objects urllib may surface."""
+def _request_id_from(headers: Any) -> str | None:
     if headers is None:
         return None
-    # urllib.error.HTTPError.headers is an HTTPMessage; supports .get().
     getter = getattr(headers, "get", None)
     if callable(getter):
         value = getter(_REQUEST_ID_HEADER)
-        if isinstance(value, str):
-            return value
-        # HTTPMessage returns None for missing keys; some test fakes return ''.
-        if value:
-            return str(value)
-    # Fallback: dict-style access.
-    if isinstance(headers, dict):
-        value = headers.get(_REQUEST_ID_HEADER) or headers.get(
-            _REQUEST_ID_HEADER.title()
-        )
-        if isinstance(value, str):
+        if isinstance(value, str) and value:
             return value
     return None
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    raw = value.strip()
+    if raw.isdigit():
+        return float(raw)
+    try:
+        when = parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    delta = (when - datetime.now(UTC)).total_seconds()
+    return max(delta, 0.0)
+
+
+def _backoff_seconds(attempt: int, *, jitter: Callable[[], float]) -> float:
+    base: float = min(2 ** (attempt - 1), 30.0)
+    return base + float(jitter())
 
 
 class OpenAIResponsesModelProviderRuntimeAdapter:
@@ -106,13 +121,28 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
         api_key: str,
         model_id: str,
         endpoint: str = _RESPONSES_ENDPOINT,
+        max_output_tokens: int = _DEFAULT_MAX_OUTPUT_TOKENS,
+        max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
+        transport: httpx.BaseTransport | None = None,
+        sleep_fn: Callable[[float], None] = time.sleep,
+        jitter_fn: Callable[[], float] | None = None,
     ) -> None:
         self.model_id = model_id
         self.model_version = model_id
         self._api_key = api_key
         self._endpoint = endpoint
+        self._max_output_tokens = max_output_tokens
+        self._max_attempts = max(1, int(max_attempts))
+        self._sleep = sleep_fn
+        self._jitter: Callable[[], float] = (
+            jitter_fn if jitter_fn is not None else lambda: random.uniform(0, 1)
+        )
         self._context_payloads: dict[str, str] = {}
         self._token_usage: dict[str, dict[str, int]] = {}
+        client_kwargs: dict[str, Any] = {"timeout": _DEFAULT_TIMEOUT}
+        if transport is not None:
+            client_kwargs["transport"] = transport
+        self._client = httpx.Client(**client_kwargs)
 
     def set_context_payload(self, request_id: str, payload: str) -> None:
         self._context_payloads[request_id] = payload
@@ -166,45 +196,85 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
                         "artifact and anchor refs."
                     ),
                 },
-                {
-                    "role": "user",
-                    "content": context_payload,
-                },
+                {"role": "user", "content": context_payload},
             ],
-            "max_output_tokens": 256,
+            "max_output_tokens": self._max_output_tokens,
         }
-        http_request = urllib.request.Request(
-            self._endpoint,
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(http_request, timeout=60) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            # Drain and discard the response body. We deliberately do NOT
-            # parse, log, or stringify it — see module docstring.
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+        last_response: httpx.Response | None = None
+        for attempt in range(1, self._max_attempts + 1):
             try:
-                exc.read()
-            except Exception:  # noqa: BLE001
-                pass
-            request_id = _request_id_from_headers(getattr(exc, "headers", None))
+                http_response = self._client.post(
+                    self._endpoint, json=body, headers=headers
+                )
+            except httpx.HTTPError as exc:
+                if attempt >= self._max_attempts or not _is_retryable_transport(exc):
+                    raise ModelProviderError(
+                        status_code=0,
+                        error_code="ADAPTER_FAILURE",
+                        request_id=None,
+                    ) from None
+                self._sleep(_backoff_seconds(attempt, jitter=self._jitter))
+                continue
+
+            if http_response.status_code in _RETRYABLE_STATUSES:
+                last_response = http_response
+                if attempt >= self._max_attempts:
+                    break
+                wait = _parse_retry_after(
+                    http_response.headers.get(_RETRY_AFTER_HEADER)
+                )
+                if wait is None:
+                    wait = _backoff_seconds(attempt, jitter=self._jitter)
+                wait = min(wait, _RETRY_AFTER_CAP_S)
+                # Drain so the connection can be reused; the body is
+                # never inspected (RAW_RESPONSE_LEAK boundary).
+                http_response.read()
+                self._sleep(wait)
+                continue
+
+            if http_response.is_success:
+                data = http_response.json()
+                if not isinstance(data, dict):
+                    raise ModelProviderError(
+                        status_code=http_response.status_code,
+                        error_code="ADAPTER_FAILURE",
+                        request_id=_request_id_from(http_response.headers),
+                    )
+                return data
+
+            # Fatal 4xx (non-429) — do not retry.
+            request_id = _request_id_from(http_response.headers)
+            http_response.read()
             raise ModelProviderError(
-                status_code=int(exc.code),
-                error_code=_classify_status(int(exc.code)),
+                status_code=http_response.status_code,
+                error_code=_classify_status(http_response.status_code),
                 request_id=request_id,
-            ) from None
-        if not isinstance(data, dict):
-            raise ModelProviderError(
-                status_code=200,
-                error_code="ADAPTER_FAILURE",
-                request_id=None,
             )
-        return data
+
+        # Retry exhausted on a retryable response (or transport error).
+        if last_response is not None:
+            raise ModelProviderError(
+                status_code=last_response.status_code,
+                error_code=_classify_status(last_response.status_code),
+                request_id=_request_id_from(last_response.headers),
+            )
+        raise ModelProviderError(
+            status_code=0,
+            error_code="ADAPTER_FAILURE",
+            request_id=None,
+        )
+
+
+def _is_retryable_transport(exc: httpx.HTTPError) -> bool:
+    return isinstance(
+        exc,
+        httpx.ConnectError | httpx.ConnectTimeout | httpx.ReadTimeout | httpx.PoolTimeout,
+    )
 
 
 def build_model_provider(
