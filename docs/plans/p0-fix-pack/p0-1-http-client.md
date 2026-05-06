@@ -4,388 +4,411 @@
 
 | | |
 |---|---|
-| Iteration | v2 (after codex iteration 1 feedback) |
+| Iteration | v3 (after codex iterations 1, 2 feedback) |
 | Started | - |
 | Completed | - |
 | Commits | - |
-| Codex plan review | iter 1: ❌ 1 critical + 10 important + 1 minor (see STATUS.md log) |
+| Codex plan review | iter 1 ❌, iter 2 ❌ (see STATUS.md log) |
 | Codex task review | - |
 
 ## Why
 
 `src/veracrawl/adapters/network/stdlib_http.py` 是 `urllib` 包裝，多項生產級致命問題：
 
-- **無 connection pool** — 每 request 一條 TCP；無 keep-alive；無 HTTP/2
-- **L87 timeout 單一參數**（`request.timeout_ms`，呼叫端傳 1000ms）— 對 Amazon / Walmart 動輒 3–10s 直接 timeout
+- **無 connection pool / 無 keep-alive**
+- **L87 timeout 單一參數**（呼叫端傳 1000ms）— 對 e-commerce 站點動輒 3–10s 直接 timeout
 - **L84 寫死 UA `VeraCrawl-local-fixture/1`** — Cloudflare / Akamai 立即 403
-- **L30-61 `_RecordingRedirectHandler` 沿用 stdlib 預設**：無顯式 hop 上限、無 cross-origin policy 檢查、**無 per-hop egress / private-network 重新驗證 → SSRF 風險**
-- **無 proxy 支援**（`grep proxy fetch/ adapters/network/` = 0）
-- **L92-97 exception 處理**：所有失敗都 wrap 成 `ValueError`，呼叫端 (`fetch/network_acquisition.py:170`) 只 catch `ValueError`；無 retry / backoff / `Retry-After` 解析
-
-爬蟲 reviewer 結論：**「丟到 prod 第一個禮拜就會死光」**。
+- **L30-61 redirect handler 沿用 stdlib 預設** — 無 hop 上限、**無 per-hop egress / private-network 重新驗證 → SSRF 風險**
+- **無 proxy 支援**
+- **L92-97 exception 處理**：所有失敗 wrap 成 `ValueError`，呼叫端 (`fetch/network_acquisition.py:170`) 只 catch `ValueError`；無 retry / backoff / `Retry-After` 解析
+- **無 size budget enforcement**：當前讀完整 body 後才檢查 size，記憶體與 abuse 風險
 
 對齊 docs：
 - `docs/02-production-architecture.md`（網路採集層 / hexagonal 邊界）
 - `docs/07-data-contracts.md`（`NetworkRequest` / `NetworkResponse` / `NetworkFailureType` 契約）
 - `docs/08-build-roadmap.md`（V1 HTTP-first profile）
 
+爬蟲 reviewer 結論：**「丟到 prod 第一個禮拜就會死光」**。
+
 ## Scope
 
 **In scope:**
 
-- `src/veracrawl/adapters/network/stdlib_http.py` — 全檔重寫（保留 class 名 `StdlibHttpSourceAdapter`、保留構造 `__init__(self, request: NetworkRequest, *, config=None)`、保留 `execute(command)` 與 `last_result` 介面）
-- `src/veracrawl/contracts/network.py` — 新增 `NetworkAttemptEvidence` model（artifact 內容契約，不破既有 ref-based 結構）
-- `src/veracrawl/contracts/enums.py` `NetworkFailureType` — 新增缺失的 enum value（若 grep 後發現缺）
-- `src/veracrawl/fetch/network_acquisition.py:170, 186-198` — 擴展 exception → `NetworkFailureType` mapping
-- `src/veracrawl/fetch/live_http.py:79`、`src/veracrawl/fetch/network_acquisition.py:143` — 預設 `timeout_ms` 由 1000 → 30000
-- `pyproject.toml` — 新增 `httpx>=0.27,<1.0`、`tenacity>=9.0`、`pytest-httpserver`（test-only）
+- `src/veracrawl/adapters/network/stdlib_http.py` — 全檔重寫；保留現有公開介面（class 名 `StdlibHttpSourceAdapter`、構造 `__init__(self, request, *, config=None, transport=None, sleep_fn=time.sleep, clock_fn=time.monotonic)`、`execute(command)` 與 `last_result`）
+- `src/veracrawl/contracts/network.py`：
+  - 新增 `NetworkAttemptEvidence` model（inline，作為 list 元素，非 ref）
+  - **不擴 `NetworkRequest` / `NetworkResponse` 必填欄位**（避免破 PASS validators）；只在 `NetworkClientResult` 加 `attempt_evidences: list[NetworkAttemptEvidence]`
+- `src/veracrawl/contracts/enums.py` `NetworkFailureType`：
+  - 新增 `RETRY_EXHAUSTED`（codex iter-2 critical#3 / important#6）
+- `src/veracrawl/ports/network.py`：
+  - `NetworkClientResult` dataclass 新增 `attempt_evidences: list[NetworkAttemptEvidence]` field（dataclass 加 default `field(default_factory=list)`）
+- `src/veracrawl/fetch/network_acquisition.py`：
+  - 新增 factory `build_http_adapter_for_acquisition(request, *, egress_allowlist, allow_private_network, transport=None, sleep_fn=time.sleep)`
+  - `execute_http_network_acquisition` 改用 factory；保留所有現有參數
+  - 改寫 line 167-184 的 try/except：分流 `NetworkAdapterError`（依其 `failure_type` 直接成 `_failure_report`）vs 其他 `ValueError`（仍走 `ADAPTER_FAILURE`）
+- `src/veracrawl/fetch/acquisition.py` `execute_source_acquisition`（codex iter-2 critical#1）：
+  - 修改 try/except，**不吞** `NetworkAdapterError`（讓它穿透回 `execute_http_network_acquisition`，由那裡分類）；其他 `ValueError` 維持當前行為
+- `src/veracrawl/fetch/live_http.py:79`、`network_acquisition.py:143` — 預設 `timeout_ms` 由 1000 → 30000
+- `pyproject.toml` — 新增 `httpx>=0.27,<1.0`、`pytest-httpserver`（test only）；**不加 tenacity**（codex iter-2 minor#12）
 
-**Out of scope（明確排除以對應 codex feedback #7）：**
+**Out of scope（明確排除）:**
 
-- `VeraCrawl-real-benchmark` UA（在 `cli/product_availability_benchmark.py:37` robots check）— 屬 P1-5（robots UA 一致化）
-- `VeraCrawl-browser-quality` UA — 屬 P0-2（playwright stealth）
-- HTTP/2 / async / aiohttp — 屬 P1
-- 真實 proxy pool / rotation — 只開介面，不接後端
-- SOCKS5 proxy — 屬 P1
-- circuit breaker / global rate limiter — 屬 P1
+- 13 個既有 `StdlibHttpSourceAdapter(request)` call site（CLI / test）的 SSRF 加固 — 仍走 default-empty allowlist；屬 P1 後續遷移（**唯獨經由 `execute_http_network_acquisition` 路徑享 P0-1 SSRF 保護**）
+- `VeraCrawl-real-benchmark` UA（屬 P1-5 robots UA 一致化）
+- `VeraCrawl-browser-quality` UA（屬 P0-2）
+- HTTP/2 / async / aiohttp（**自 motivation 移除**；P1）
+- 真實 proxy pool / rotation
+- SOCKS5 proxy
+- circuit breaker / global rate limiter
+- 完整 DNS-rebinding transport-level 防護（P0 提供基本 resolve-time 檢查；transport-level 列 P1）
+- 4xx → `NetworkFailureType` 的應用層分類（**設計決策：P0-1 將 4xx 視為成功 HTTP 採集**，status 寫進 `NetworkResponse.status_code` 由上游分類；見 §3）
+- artifact store 注入（evidence 走 inline list；persistent store 列 P1）
 
 ## Design
 
-### 1. Adapter shape — **保留現有契約**
-
-當前簽名（codex feedback #2）：
-
-```python
-class StdlibHttpSourceAdapter:
-    def __init__(self, request: NetworkRequest) -> None: ...
-    @property
-    def last_result(self) -> NetworkClientResult | None: ...
-    def execute(self, command: SourceAdapterCommand) -> SourceAdapterResult: ...
-```
-
-13 個 call site（`grep -rn StdlibHttpSourceAdapter`）全部用 `StdlibHttpSourceAdapter(request)`。
-
-新增 **kwarg-only** 配置（不破壞既有呼叫）：
+### 1. Adapter shape — **保留現有契約 + 注入 testability seam**
 
 ```python
 @dataclass(frozen=True)
 class HttpClientConfig:
     connect_timeout_s: float = 10.0
     read_timeout_s: float = 30.0
-    max_attempts: int = 3                     # 總嘗試次數（含首次）
+    max_attempts: int = 3                          # 總嘗試數（含首次）
     max_redirects: int = 5
     user_agent: str = DEFAULT_CHROME_UA
-    proxy: str | None = None                  # http:// or https://；其他 scheme 拒絕
+    proxy: str | None = None                       # http:// or https://
     verify_tls: bool = True
-    egress_allowlist: frozenset[str] = frozenset()  # 用於 redirect 重檢
+    egress_allowlist: frozenset[str] = frozenset() # ["https://x.example", ...]
     allow_private_network: bool = False
     sensitive_header_keys: frozenset[str] = frozenset({
         "authorization", "cookie", "set-cookie", "proxy-authorization",
     })
+    retry_after_cap_s: float = 60.0
+
 
 class StdlibHttpSourceAdapter:
+    """保留 class 名稱（內部換 httpx 實作）。"""
+
     def __init__(
         self,
         request: NetworkRequest,
         *,
         config: HttpClientConfig | None = None,
-    ) -> None: ...
+        transport: httpx.BaseTransport | None = None,    # codex iter-2 important#7
+        sleep_fn: Callable[[float], None] = time.sleep,  # codex iter-2 important#8
+        clock_fn: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.request = request
+        self._config = config or _default_config_from_request(request)
+        self._sleep = sleep_fn
+        self._clock = clock_fn
+        self._client = self._build_client(transport)
+        self._last_result: NetworkClientResult | None = None
+        self._attempt_evidences: list[NetworkAttemptEvidence] = []
+        self._redirect_hops: list[RedirectHop] = []
+
+    @property
+    def last_result(self) -> NetworkClientResult | None:
+        return self._last_result
+
+    def execute(self, command: SourceAdapterCommand) -> SourceAdapterResult:
+        ...   # 失敗時仍 populate _last_result 部分內容（codex iter-2 important#5）
 ```
 
-`request.timeout_ms` 仍保留為 fallback：呼叫端傳 30000ms 對應 `read_timeout_s=30`。`config` 不傳時用預設值（為 P0-1 落地後的內部 callers 提供）。13 個既有 call site 不需要立即遷移。
+#### 1.1 Timeout 優先序（codex iter-2 important#9）
 
-### 2. 真實 Chrome UA（含維護策略）
+**規則**：`config` 若由呼叫端注入即為 canonical；不再用 `request.timeout_ms` 作 fallback。
+
+當 `config=None` 時 `_default_config_from_request(request)` 從 `request` 構造一個 default config：
+- `connect_timeout_s = 10.0`
+- `read_timeout_s = max(min(request.timeout_ms / 1000, 60.0), 1.0)`（夾在 [1, 60]）
+- 其他欄位走 `HttpClientConfig` 預設
+
+`request.timeout_ms` **不再**對顯式 `config` 生效。Acceptance 寫死「config 顯式注入時，request.timeout_ms 被忽略」。
+
+### 2. UA — 真實 Chrome（含維護策略）
 
 ```python
+_CHROME_MAJOR = 131  # review quarterly; track in P1 backlog as "CHROME_VERSION_BUMP"
+
 DEFAULT_CHROME_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/<MAJOR>.0.0.0 Safari/537.36"
+    f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    f"AppleWebKit/537.36 (KHTML, like Gecko) "
+    f"Chrome/{_CHROME_MAJOR}.0.0.0 Safari/537.36"
 )
 ```
 
-`<MAJOR>` 取自模組常數 `_CHROME_MAJOR_VERSION = 131`（commit message 註明維護週期：每季度 review，列入 P1-X CHROME_VERSION_BUMP backlog）。
+Acceptance 用 regex `^Mozilla/5\.0 .* Chrome/\d+\.\d+\.\d+\.\d+`（不寫死版本號）。
 
-**Acceptance 不檢查具體版本號**（codex feedback #11），只檢查：
-- 不以 `VeraCrawl-` 開頭
-- 符合 regex `^Mozilla/5\.0 .* Chrome/\d+\.\d+\.\d+\.\d+`
+### 3. 4xx 處理決策（**回應 codex iter-2 critical#3**）
 
-### 3. Retry / Backoff — 顯式迴圈（不依賴 tenacity decorator 行為）
+**設計決策：4xx 不在 adapter 層映射為 `NetworkFailureType`。**
 
-針對 codex feedback #5（httpx 不會 raise 429/5xx；tenacity 不自動讀 Retry-After；max_retries 語意模糊）：
+- 401 / 403 / 404 / 410 / 422 等 → 直接 return `httpx.Response` → adapter 將 status_code 寫進 `NetworkResponse.status_code` → 視為「成功 HTTP 採集」
+- 既有 `NetworkResponse` validator 對 status_code 200-399 才強制要求 `raw_artifact_ref / content_digest / content_type`；4xx/5xx 終態進來時 **若 retry 已耗盡** 仍當「採集 attempt 完成」回應，由上游應用層（policy / agent decision）決定如何分類
+- **5xx 終態 retry 耗盡** → `NetworkAdapterError(RETRY_EXHAUSTED, "5xx_unrecoverable:status=503")` raise 出去
+- **4xx 非 429** → 第一次出現即終止 retry 但 **仍回正常 response**（呼叫端拿到 status_code 自決定）
+
+理由：
+1. HTTP semantics 上 4xx 是 valid response，body 仍可能含結構化 error
+2. 既有 `NetworkResponse` 對 4xx/5xx 已允許無 raw_artifact（見 `contracts/network.py:88-90`）
+3. 應用層分類（404 → NOT_FOUND policy / 401 → AUTH_FAILED policy）已是其他模組責任
+
+| HTTP 狀態 | 行為 | adapter raise? |
+|---|---|---|
+| 2xx | 回 response | 否 |
+| 3xx | 進 redirect 處理（§4） | redirect 違規時 raise `REDIRECT_DENIED` |
+| 401/403/404/410/422 等致命 4xx | 回 response（status 帶出去） | 否 |
+| 429 | retry（§5） | retry 耗盡 raise `RETRY_EXHAUSTED` |
+| 500/502/503/504 | retry（§5） | retry 耗盡 raise `RETRY_EXHAUSTED` |
+| 其他 5xx（501、505 等） | 不 retry，回 response | 否 |
+
+### 4. Per-hop Redirect Policy（critical SSRF fix）
+
+httpx `follow_redirects=False`，自行迴圈，每跳重跑完整 policy + DNS resolve。詳見前一版 §4，以下是修訂：
+
+- `_validate_redirect_target` 失敗時：
+  - **先** populate `self._last_result = _partial_result(...)` 帶上目前累積的 `redirect_hops` 與 `attempt_evidences`（codex iter-2 important#5）
+  - **再** raise `NetworkAdapterError`
+- `egress_allowlist` 從 `self._config` 讀（factory 注入；見 §7）
+- redirect target 自身的 attempt_evidence 也記入（一個 hop 對應 ≥ 1 個 attempt）
+
+### 5. Retry / Backoff — 顯式迴圈（**移除 tenacity**）
 
 ```python
-def _execute_attempt(self, http_request, *, attempt: int) -> _AttemptResult:
-    """執行單次 attempt。回傳 _AttemptResult；不 raise transport 例外。
-    raise 只發生於：致命 4xx、redirect 違規、protocol downgrade、proxy 違規。"""
-    started = monotonic()
-    try:
-        response = self._client.send(http_request)
-    except httpx.ConnectError as e:
-        return _AttemptResult.transport_error(NetworkFailureType.NETWORK_TIMEOUT, str(e), elapsed_ms=int((monotonic()-started)*1000))
-    except httpx.ConnectTimeout as e:
-        return _AttemptResult.transport_error(NetworkFailureType.NETWORK_TIMEOUT, str(e), ...)
-    except httpx.ReadTimeout as e:
-        return _AttemptResult.transport_error(NetworkFailureType.NETWORK_TIMEOUT, str(e), ...)
-    except httpx.ProxyError as e:
-        # proxy 失敗 — 不 retry，致命
-        raise _AdapterError(NetworkFailureType.ADAPTER_FAILURE, f"proxy_failure: {type(e).__name__}") from e
-    return _AttemptResult.from_response(response, elapsed_ms=...)
-
-
-def _is_retryable_response(response: httpx.Response) -> bool:
-    return response.status_code in {429, 500, 502, 503, 504}
-
-
 def _retry_loop(self, http_request) -> httpx.Response:
-    last_failure_type = NetworkFailureType.NETWORK_TIMEOUT
-    for attempt in range(1, self._config.max_attempts + 1):
-        result = self._execute_attempt(http_request, attempt=attempt)
-        self._record_attempt_evidence(attempt, result)
+    last_failure_type: NetworkFailureType | None = None  # codex iter-2 important#6
 
-        if result.is_response and not _is_retryable_response(result.response):
-            return result.response  # 成功或致命 4xx 都直接回（致命 4xx 由上層分類）
-        if not result.is_response:
-            last_failure_type = result.failure_type
+    for attempt in range(1, self._config.max_attempts + 1):
+        evidence = self._begin_attempt(attempt, http_request)
+        try:
+            response = self._client.send(http_request, follow_redirects=False)
+        except httpx.HTTPError as exc:
+            failure = _classify_transport_error(exc)        # §10 mapping
+            self._end_attempt(evidence, failure_type=failure, exc_class=type(exc).__name__)
+            if not _is_retryable_failure(failure):
+                raise NetworkAdapterError(failure, f"{type(exc).__name__}: {exc}") from exc
+            last_failure_type = failure
+        else:
+            self._end_attempt(evidence, response=response)
+            if not _is_retryable_response(response):
+                return response
+            last_failure_type = _failure_for_status(response.status_code)
 
         if attempt >= self._config.max_attempts:
             break
 
-        wait_s = self._compute_wait(result, attempt)
-        sleep(wait_s)
+        wait_s = self._compute_wait(
+            response if 'response' in locals() else None,
+            attempt,
+        )
+        self._sleep(wait_s)
 
-    raise _AdapterError(last_failure_type, "retry exhausted")
+    raise NetworkAdapterError(
+        NetworkFailureType.RETRY_EXHAUSTED,
+        f"max_attempts={self._config.max_attempts} last_failure={last_failure_type}",
+    )
 
 
-def _compute_wait(self, result: _AttemptResult, attempt: int) -> float:
-    # 1. 若 response 有 Retry-After，優先（cap 至 60s）
-    if result.is_response:
-        retry_after = _parse_retry_after(result.response.headers.get("retry-after"))
+def _is_retryable_response(r: httpx.Response) -> bool:
+    return r.status_code in {429, 500, 502, 503, 504}
+
+def _is_retryable_failure(ft: NetworkFailureType) -> bool:
+    return ft == NetworkFailureType.NETWORK_TIMEOUT
+
+def _failure_for_status(status: int) -> NetworkFailureType:
+    return NetworkFailureType.RATE_BUDGET_EXCEEDED if status == 429 else NetworkFailureType.RETRY_EXHAUSTED
+
+
+def _compute_wait(self, response: httpx.Response | None, attempt: int) -> float:
+    """Pure function（已 inject clock；不直接呼叫 time）。可在 unit test 直接驗。"""
+    if response is not None:
+        retry_after = _parse_retry_after(response.headers.get("retry-after"), self._clock)
         if retry_after is not None:
-            return min(retry_after, 60.0)
-    # 2. fallback：exponential with jitter
-    base = min(2 ** (attempt - 1), 30)
+            return min(retry_after, self._config.retry_after_cap_s)
+    base = min(2 ** (attempt - 1), 30.0)
     return base + random.uniform(0, 1)
 
 
-def _parse_retry_after(value: str | None) -> float | None:
-    if not value:
-        return None
-    value = value.strip()
-    # 純秒數
-    if value.isdigit():
-        return float(value)
-    # HTTP-date
-    try:
-        dt = parsedate_to_datetime(value)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        delta = (dt - datetime.now(timezone.utc)).total_seconds()
-        return max(delta, 0.0)
-    except (TypeError, ValueError):
-        return None
+def _parse_retry_after(value: str | None, clock_fn: Callable[[], float]) -> float | None:
+    """clock_fn 用於測試決定論；prod 用 time.monotonic。HTTP-date 用 datetime.now(utc) 仍合理。"""
+    ...
 ```
 
-關鍵語意（codex feedback #5）：
-- `max_attempts = 3` ⇒ 1 次原始 + 2 次 retry（明確命名解決 ambiguity）
-- 致命 4xx（401 / 403 / 404 / 410 / 422 等）**不 retry**
-- 可重試集合 = `{429, 500, 502, 503, 504}` + transport exceptions
-- `Retry-After` cap 60s（避免攻擊者用 1h Retry-After 拖死）
+語意：
+- `max_attempts = 3` ⇒ 1 原始 + 2 retry
+- transport timeout 可重試；transport 其他錯誤（DNS / refused / TLS / proxy）**不可重試** → 立即 raise
+- retryable 5xx / 429 retry 至 `max_attempts` 後 raise `RETRY_EXHAUSTED`
+- `Retry-After` cap 由 config 控（預設 60s）
+- `_compute_wait` 為 pure function，**測試直接驗**（codex iter-2 important#8 → 不需 sleep 2s 這種 flaky test）
 
-### 4. Per-hop Redirect Policy（critical SSRF fix — codex feedback #1）
-
-httpx `follow_redirects=False`，自行迴圈，**每跳重新跑完整 policy**：
-
-```python
-def _execute_with_redirects(self, initial_url: str) -> httpx.Response:
-    current_url = initial_url
-    for hop in range(self._config.max_redirects + 1):
-        request = self._build_httpx_request(current_url)
-        response = self._retry_loop(request)
-
-        if not _is_redirect_status(response.status_code):
-            return response
-
-        location = response.headers.get("location")
-        if not location:
-            raise _AdapterError(NetworkFailureType.REDIRECT_DENIED, "redirect missing Location")
-
-        next_url = urljoin(current_url, location)
-
-        # Per-hop policy（重點）
-        self._validate_redirect_target(from_url=current_url, to_url=next_url, hop_index=hop)
-
-        self._record_redirect_hop(from_url=current_url, to_url=next_url, status=response.status_code, hop=hop)
-        current_url = next_url
-
-    raise _AdapterError(NetworkFailureType.REDIRECT_DENIED, f"redirect loop > {self._config.max_redirects}")
-
-
-def _validate_redirect_target(self, *, from_url: str, to_url: str, hop_index: int) -> None:
-    parsed_from = urlparse(from_url)
-    parsed_to = urlparse(to_url)
-
-    # 1. Protocol downgrade（HTTPS → HTTP）
-    if parsed_from.scheme == "https" and parsed_to.scheme == "http":
-        raise _AdapterError(NetworkFailureType.REDIRECT_DENIED, "protocol_downgrade_https_to_http")
-
-    # 2. 必須仍是 http/https
-    if parsed_to.scheme not in {"http", "https"}:
-        raise _AdapterError(NetworkFailureType.REDIRECT_DENIED, f"unsupported_scheme:{parsed_to.scheme}")
-
-    # 3. Egress allowlist（per-hop 重檢，非只看初始 URL）
-    if self._config.egress_allowlist:
-        target_origin = f"{parsed_to.scheme}://{parsed_to.netloc}"
-        if target_origin not in self._config.egress_allowlist:
-            raise _AdapterError(NetworkFailureType.EGRESS_DENIED, f"redirect_off_allowlist:{target_origin}")
-
-    # 4. Private network / loopback / link-local（重用 fetch/network_acquisition.is_private_network_url）
-    if not self._config.allow_private_network and is_private_network_url(to_url):
-        raise _AdapterError(NetworkFailureType.PRIVATE_NETWORK_DENIED, f"redirect_to_private:{parsed_to.hostname}")
-
-    # 5. DNS rebinding 緩解：解析 hostname 至 IP，再次跑 private-network 檢查
-    #    （DNS rebinding 完全防禦需要 connection-time hook；P0 提供基本層保護）
-    try:
-        resolved = socket.gethostbyname(parsed_to.hostname or "")
-        if not self._config.allow_private_network and is_private_network_url(f"{parsed_to.scheme}://{resolved}"):
-            raise _AdapterError(NetworkFailureType.PRIVATE_NETWORK_DENIED, f"dns_rebind_to_private:{resolved}")
-    except (socket.gaierror, ValueError):
-        # DNS 解析失敗 → 由 connection-time 處理（不在 policy 階段失敗）
-        pass
-```
-
-注意：DNS rebinding 防護不完整（無法防 TOCTOU），但已涵蓋常見的「公開 hostname 解析至 RFC1918 IP」攻擊。完整防護需自訂 `httpx.Transport`，列 P1。
-
-### 5. Evidence — 走 ref-based artifact（codex feedback #3）
-
-**不擴 `NetworkResponse` 欄位**（避免破壞既有 contract validators），改用 sidecar artifact：
+### 6. Evidence — inline，**不需 artifact store 注入**（codex iter-2 important#4）
 
 ```python
 # contracts/network.py — 新增
-class NetworkAttemptEvidence(TimestampedModel):
-    """單次 HTTP attempt 的詳細 evidence，作為 artifact JSON 內容。
-
-    寫入 artifact_ref 對應的 store；NetworkResponse 透過 attempt_evidence_artifact_refs 引用。
-    """
-    id: str
-    request_ref: Ref
+class NetworkAttemptEvidence(BaseModel):
+    """單次 HTTP attempt 的詳細證據。inline 帶在 NetworkClientResult 內。"""
     attempt_number: int
     started_at: datetime
     elapsed_ms: int
     request_method: str
     request_url: str
-    request_headers_redacted: dict[str, str]   # 已脫敏
-    response_status: int | None                # transport 失敗時為 None
+    request_headers_redacted: dict[str, str]
+    response_status: int | None
     response_headers_redacted: dict[str, str] | None
-    failure_class: str | None                  # 例如 "httpx.ConnectTimeout"
-    failure_type: str | None                   # NetworkFailureType.value，若 attempt 失敗
+    failure_class: str | None         # exception class name（transport 錯誤時）
+    failure_type: str | None          # NetworkFailureType.value
 ```
 
-`NetworkResponse` **新增一個 optional ref list**（不破壞 PASS validator，因為 default 空 list）：
-
 ```python
-class NetworkResponse(TimestampedModel):
-    # ... 既有欄位不動 ...
-    attempt_evidence_artifact_refs: list[Ref] = Field(default_factory=list)
+# ports/network.py — 修改 dataclass
+@dataclass(frozen=True)
+class NetworkClientResult:
+    response: NetworkResponse
+    redirect_hops: list[RedirectHop]
+    body_text: str
+    artifact_refs: list[Ref]
+    attempt_evidences: list[NetworkAttemptEvidence] = field(default_factory=list)
 ```
 
-artifact 寫入：
+`artifact_refs[0]` 仍是 raw artifact（呼叫端假設不變）。`attempt_evidences` 為 inline list，後續 P1 可改為 ref-backed。
+
+### 7. egress_allowlist 接線（codex iter-2 critical#2）
+
+新增 factory：
 
 ```python
-def _record_attempt_evidence(self, attempt: int, result: _AttemptResult) -> None:
-    evidence = NetworkAttemptEvidence(
-        id=f"attempt-evidence:{self.request.id}:{attempt}",
-        request_ref=self.request.id,
-        attempt_number=attempt,
-        ...
-        request_headers_redacted=_redact_headers(result.request_headers, self._config.sensitive_header_keys),
-        response_headers_redacted=_redact_headers(result.response_headers, ...) if result.response_headers else None,
-        ...
+# fetch/network_acquisition.py
+def build_http_adapter_for_acquisition(
+    request: NetworkRequest,
+    *,
+    egress_allowlist: list[str],
+    allow_private_network: bool,
+    transport: httpx.BaseTransport | None = None,
+    sleep_fn: Callable[[float], None] = time.sleep,
+    clock_fn: Callable[[], float] = time.monotonic,
+) -> StdlibHttpSourceAdapter:
+    config = _default_config_from_request(request)
+    config = replace(
+        config,
+        egress_allowlist=frozenset(egress_allowlist),
+        allow_private_network=allow_private_network,
     )
-    artifact_ref = f"artifact:{self.request.id}:attempt:{attempt}:{stable_hash(evidence.model_dump_json())[:12]}"
-    self._evidence_artifacts.append((artifact_ref, evidence))
+    return StdlibHttpSourceAdapter(
+        request,
+        config=config,
+        transport=transport,
+        sleep_fn=sleep_fn,
+        clock_fn=clock_fn,
+    )
 ```
 
-artifact 實際寫入 store（artifact_store port）由呼叫端注入的 store 處理；adapter 只回傳 ref 列表。
+`execute_http_network_acquisition` 改用 factory（注入 allowlist），既有 13 call sites 不改（保留 default-empty allowlist；列 P1 遷移）。
+
+### 8. Failure Mapping（codex iter-2 critical#1）
+
+修改 `fetch/acquisition.py:execute_source_acquisition`，**不吞** `NetworkAdapterError`：
 
 ```python
-def _redact_headers(headers: Mapping[str, str], sensitive: frozenset[str]) -> dict[str, str]:
-    return {k: ("<redacted>" if k.lower() in sensitive else v) for k, v in headers.items()}
+# fetch/acquisition.py — 修改 try/except
+try:
+    result = adapter.execute(command)
+except NetworkAdapterError:
+    raise  # 穿透回上層
+except ValueError as exc:
+    # 維持當前 ADAPTER_FAILURE / mismatch 行為
+    ...
 ```
 
-### 6. Exception → NetworkFailureType mapping（codex feedback #4）
-
-`_AdapterError(failure_type, detail)` 為內部例外，**adapter 邊界向外 raise 時**轉成 `ValueError` 子類，attaching `failure_type` 屬性：
+`fetch/network_acquisition.py:execute_http_network_acquisition` 在 `execute_source_acquisition()` 外層加 try/except：
 
 ```python
-class NetworkAdapterError(ValueError):
-    """Base — 所有 adapter 失敗皆 ValueError 子類，與既有 catch 相容。"""
-    def __init__(self, failure_type: NetworkFailureType, detail: str):
-        self.failure_type = failure_type
-        self.detail = detail
-        super().__init__(f"{failure_type.value}: {detail}")
-
-class NetworkAdapterTimeoutError(NetworkAdapterError):
-    """保留向後相容名稱。"""
-    def __init__(self, detail: str = "network request timed out"):
-        super().__init__(NetworkFailureType.NETWORK_TIMEOUT, detail)
-```
-
-`fetch/network_acquisition.py:170` 既有 `except ValueError:` 仍會 catch（向後相容）；
-`fetch/network_acquisition.py:186-198` 新增 try block 包 `execute_source_acquisition`，按 `failure_type` 分類至 `NetworkFailureType`：
-
-```python
-# fetch/network_acquisition.py — execute_http_network_acquisition 內
 try:
     source_outcome = execute_source_acquisition(...)
-except NetworkAdapterError as e:
+except NetworkAdapterError as exc:
+    # 部分結果可從 adapter.last_result 取（partial failure evidence）
     return _failure_report(
-        fixture_id=fixture_id, request=request,
-        failure_type=e.failure_type,
+        fixture_id=fixture_id,
+        request=request,
+        failure_type=exc.failure_type,
         policy_decision_refs=policy_refs,
     )
-except ValueError as e:
-    # 非 NetworkAdapterError 的 ValueError → ADAPTER_FAILURE（保險絲）
-    return _failure_report(..., failure_type=NetworkFailureType.ADAPTER_FAILURE, ...)
 ```
 
-需要新增 enum value（grep 確認；缺則加）：
-- `RETRY_EXHAUSTED`（若不存在則 fallback 至 `NETWORK_TIMEOUT`，由 detail 區分）
+### 9. Size Budget Enforcement（codex iter-2 important#10）
 
-### 7. httpx Proxy API（codex feedback #6）
-
-固定 httpx `>=0.27,<1.0`，使用 `proxy=`（單數，0.27+）：
+httpx streaming：
 
 ```python
-client_kwargs: dict[str, Any] = {
-    "timeout": httpx.Timeout(
+def _read_body(self, response: httpx.Response, *, max_bytes: int) -> bytes:
+    chunks = []
+    total = 0
+    for chunk in response.iter_bytes(chunk_size=8192):
+        total += len(chunk)
+        if total > max_bytes:
+            response.close()
+            raise NetworkAdapterError(
+                NetworkFailureType.SIZE_BUDGET_EXCEEDED,
+                f"body > {max_bytes} bytes",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+```
+
+`max_bytes = self.request.size_budget_bytes`。
+
+### 10. Exception Mapping Table（codex iter-2 important#11）
+
+```python
+def _classify_transport_error(exc: httpx.HTTPError) -> NetworkFailureType:
+    if isinstance(exc, (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)):
+        return NetworkFailureType.NETWORK_TIMEOUT
+    if isinstance(exc, httpx.ProxyError):
+        return NetworkFailureType.ADAPTER_FAILURE          # detail="proxy_error"
+    if isinstance(exc, httpx.ConnectError):
+        return NetworkFailureType.ADAPTER_FAILURE          # detail="connect_failed"（含 DNS / refused）
+    if isinstance(exc, httpx.RemoteProtocolError):
+        return NetworkFailureType.ADAPTER_FAILURE          # detail="remote_protocol"
+    # ssl.SSLError 通常被 httpx 包成 ConnectError；fallback
+    return NetworkFailureType.ADAPTER_FAILURE
+```
+
+設計取捨：DNS / refused / TLS 共享 `ADAPTER_FAILURE`，由 `detail` 字串區分（避免 enum 爆炸）。Acceptance test 驗 `e.detail` 含關鍵字。**未來** P1 視需要拆 enum。
+
+### 11. httpx Client 構造
+
+```python
+def _build_client(self, transport: httpx.BaseTransport | None) -> httpx.Client:
+    timeout = httpx.Timeout(
         connect=self._config.connect_timeout_s,
         read=self._config.read_timeout_s,
         write=self._config.read_timeout_s,
         pool=self._config.connect_timeout_s,
-    ),
-    "verify": self._config.verify_tls,
-    "follow_redirects": False,
-    "headers": {"User-Agent": self._config.user_agent},
-}
-if self._config.proxy is not None:
-    parsed = urlparse(self._config.proxy)
-    if parsed.scheme not in {"http", "https"}:
-        raise ValueError(f"unsupported proxy scheme: {parsed.scheme} (only http/https)")
-    client_kwargs["proxy"] = self._config.proxy
-
-self._client = httpx.Client(**client_kwargs)
+    )
+    kwargs: dict[str, Any] = {
+        "timeout": timeout,
+        "verify": self._config.verify_tls,
+        "follow_redirects": False,
+        "headers": {"User-Agent": self._config.user_agent},
+    }
+    if self._config.proxy is not None:
+        parsed = urlparse(self._config.proxy)
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError(f"unsupported proxy scheme: {parsed.scheme}")
+        kwargs["proxy"] = self._config.proxy
+    if transport is not None:
+        kwargs["transport"] = transport
+    return httpx.Client(**kwargs)
 ```
 
 ## Dependencies
 
 | Package | Version | Status | Justification |
 |---------|---------|--------|---------------|
-| `httpx` | `>=0.27,<1.0` | NEW | 取代 `urllib`：connection pool / proper timeout 拆分 / proxy API；版本 pin 對齊 `proxy=` 介面 |
-| `tenacity` | `>=9.0` | NEW | 提供 `wait_exponential` / jitter helpers；retry 主迴圈仍自寫，tenacity 僅做 jitter / wait helpers（避免 codex feedback #5 的 decorator 行為陷阱）|
-| `pytest-httpserver` | latest | NEW (test only) | 取代 httpbin 依賴；可控 429 → 200 序列、可控 redirect chain；deterministic |
+| `httpx` | `>=0.27,<1.0` | NEW | 取代 `urllib`：connection pool / proper timeout 拆分 / `proxy=` API / streaming |
+| `pytest-httpserver` | latest | NEW (test only) | deterministic 429→200 / redirect chain；取代 httpbin / 黑洞 IP |
 
-均為 well-maintained、license MIT/Apache、無 native deps。
+**~~tenacity~~ 移除**（codex iter-2 minor#12）：retry 主迴圈自寫，jitter 用 stdlib `random.uniform`。
 
 ## Test Strategy
 
@@ -395,96 +418,70 @@ self._client = httpx.Client(**client_kwargs)
 pytest tests/ -k "stdlib_http or network_acquisition or live_http or source_coverage or contract"
 ```
 
-需更新預期的測試（fixture 假設 `urllib` 行為）：列出後逐一更新測試假設、不放寬契約。
-
 ### 新增 unit tests（`tests/adapters/network/test_httpx_source_adapter.py`）
 
-全部用 `httpx.MockTransport` 或 `pytest-httpserver`，**無外部網路依賴**（codex feedback #9）：
+全部用 `httpx.MockTransport`（注入點：constructor `transport=`），**或** `pytest-httpserver`，**全無外部網路依賴 / 無真實 sleep**。
 
-1. **timeout 拆分**
-   - `MockTransport` 模擬 connect 永不回（`httpx.ConnectTimeout`） → `attempt_evidence.failure_class == "httpx.ConnectTimeout"`
-   - `MockTransport` 回 header 後 sleep > read_timeout → `httpx.ReadTimeout`
+#### Pure function tests（無 transport 需求）
+1. **`_compute_wait` 表驗**：直接 call，驗 `Retry-After: 5` → 5.0；`Retry-After: 3600` → cap 至 60；無 header 時 attempt=1 → ∈ [1,2]，attempt=4 → ∈ [8,9]
+2. **`_parse_retry_after` 表驗**：純秒、HTTP-date（用 `datetime.now(utc) + 2s`）、垃圾字串、None
+3. **`_classify_transport_error`**：每個 httpx exception class 對應正確 NetworkFailureType
+4. **`_is_retryable_response`** / **`_is_retryable_failure`**：boundary（429 yes、403 no、500 yes、501 no）
+5. **`_failure_for_status`**：429 → RATE_BUDGET_EXCEEDED；503 → RETRY_EXHAUSTED
 
-2. **429 + Retry-After（純秒）**
-   - `pytest-httpserver` 第一次 `/test` 回 429 + `Retry-After: 2`，第二次 `/test` 回 200
-   - 等待 ≥ 2.0s 後第二次成功；`attempt_evidence` 共 2 筆
+#### Behavior tests（用 MockTransport）
 
-3. **429 + Retry-After（HTTP-date）relative time**
-   - 動態計算 HTTP-date：`(datetime.now(timezone.utc) + timedelta(seconds=2)).strftime("%a, %d %b %Y %H:%M:%S GMT")`
-   - 驗證等待約 2s（codex feedback #11）
+6. **timeout 拆分（mock）**：MockTransport raise `httpx.ConnectTimeout` → adapter retry → max_attempts 後 raise `NetworkAdapterError(NETWORK_TIMEOUT)`；assert `mock_sleep.call_count == max_attempts - 1`
+7. **read timeout**：MockTransport raise `httpx.ReadTimeout` → 同上
+8. **致命 transport**：MockTransport raise `httpx.ConnectError("connection refused")` → 立即 raise（無 retry），`failure_type == ADAPTER_FAILURE`，`detail` 含 "connect"
+9. **TLS 錯誤**：raise `httpx.ConnectError` containing SSL → ADAPTER_FAILURE
+10. **Proxy 錯誤**：raise `httpx.ProxyError` → ADAPTER_FAILURE，detail 含 "proxy"
+11. **429 + Retry-After（純秒）**：
+    - MockTransport 第一回 429 + `Retry-After: 2`；第二回 200
+    - `mock_sleep` 收到 2.0；第二次 send 之後成功
+    - `attempt_evidences` 共 2 筆
+12. **429 + Retry-After（HTTP-date）**：動態算 `(datetime.now(utc) + 2s).strftime(...)` → mock_sleep ≈ 2.0
+13. **Retry-After cap**：`Retry-After: 3600` → mock_sleep == 60.0
+14. **致命 4xx 不 retry，回 response**（codex iter-2 critical#3）：MockTransport 第一回 403 → execute() 完成；`last_result.response.status_code == 403`；body 仍記錄；無 raise
+15. **可重試 5xx 耗盡**：MockTransport 連續 3 次 500 → raise `NetworkAdapterError(RETRY_EXHAUSTED)`；attempt_evidences 共 3 筆
+16. **Redirect loop**：pytest-httpserver `/a → /b → /a → /b → /a → /b → /a`；max_redirects=5 → raise `REDIRECT_DENIED`；`last_result.redirect_hops` 有 5 hops（partial result，codex iter-2 important#5）
+17. **Protocol downgrade**：MockTransport `https` → `http` location → raise `REDIRECT_DENIED`，detail "protocol_downgrade"
+18. **Per-hop egress allowlist**：config.egress_allowlist={`https://a.example`}；redirect 至 `https://b.example` → raise `EGRESS_DENIED`
+19. **Per-hop private network**：redirect 至 `http://127.0.0.1` → raise `PRIVATE_NETWORK_DENIED`
+20. **DNS rebinding**：mock `socket.gethostbyname` 回 `10.0.0.1`，目標 `https://attacker.example` → raise `PRIVATE_NETWORK_DENIED`
+21. **Size budget**：MockTransport 回 200 + body 100KB；request.size_budget_bytes=8192 → raise `SIZE_BUDGET_EXCEEDED`；assert body 在第 ~9KB 處中斷（streaming）
+22. **Evidence 脫敏**：request 帶 `Authorization: Bearer secret`、response `Set-Cookie: sid=x` → evidence headers 對應 key 為 `<redacted>`，其他不動
+23. **UA 預設**：不傳 config → request `User-Agent` 通過 regex `^Mozilla/5\.0 .* Chrome/\d+\.\d+\.\d+\.\d+`、不以 `VeraCrawl-` 開頭
+24. **UA 注入**：`config=HttpClientConfig(user_agent="MyBot/1")` → header `User-Agent == "MyBot/1"`
+25. **Proxy scheme 拒絕**：`config.proxy="socks5://..."` → `__init__` raise `ValueError`
+26. **Proxy http 通過**：`config.proxy="http://127.0.0.1:9999"` → 構造成功（用 transport 攔截，不真連）
+27. **Backwards compat**：`StdlibHttpSourceAdapter(request)` 無 config → 預設 config，`config.egress_allowlist` 為空 frozenset（13 既有 call sites 行為不變）
+28. **Timeout precedence**：注入 `config=HttpClientConfig(read_timeout_s=5.0)` + `request.timeout_ms=999999` → adapter 用 5.0；不傳 config + `request.timeout_ms=2000` → 預設 config 的 read_timeout_s = 2.0
+29. **Partial result on raise**：發生 REDIRECT_DENIED 後 `adapter.last_result` 非 None，含已完成的 redirect_hops 與 attempt_evidences
 
-4. **Retry-After cap 60s**
-   - 設 `Retry-After: 3600` → 實際等待 ≤ 60s
+#### Integration tests（fetch 層）
 
-5. **致命 4xx 不重試**
-   - 第一次回 403 → 立即由 `execute()` 透過 contract 邏輯回對應結果；evidence 只 1 筆 attempt
+30. **Acquisition 路徑 SSRF 阻擋**（codex iter-2 critical#2 驗證）：
+    - 模擬 redirect 至 `127.0.0.1`
+    - 走 `execute_http_network_acquisition` + factory（allowlist 由 acquisition 提供）
+    - 預期得 `_failure_report(failure_type=PRIVATE_NETWORK_DENIED)`
+31. **Acquisition 路徑保留 NetworkAdapterError 失敗類型**：模擬 RETRY_EXHAUSTED → outcome.report.operator_status == "retry_exhausted"
 
-6. **可重試集合 5xx**
-   - 第一次 500 → retry → 第二次 200 → 成功
-
-7. **Redirect loop 上限**
-   - `pytest-httpserver` `/a → /b → /a → /b → /a → /b → /a`（6 跳）
-   - `max_redirects=5` → raise `NetworkAdapterError(REDIRECT_DENIED, "redirect loop > 5")`
-   - 前 5 個 redirect_hop 都進 evidence
-
-8. **Cross-origin protocol downgrade 阻擋**
-   - `MockTransport` 對 `https://a.example/x` 回 302 `Location: http://a.example/x`
-   - raise `NetworkAdapterError(REDIRECT_DENIED, "protocol_downgrade_...")`
-
-9. **Per-hop egress allowlist**
-   - allowlist = `{"https://a.example"}`
-   - `/x` 回 302 `Location: https://b.example/y`
-   - raise `NetworkAdapterError(EGRESS_DENIED, ...)`
-
-10. **Per-hop private network block**
-    - `/x` 回 302 `Location: http://127.0.0.1/admin`
-    - raise `NetworkAdapterError(PRIVATE_NETWORK_DENIED, ...)`
-
-11. **Evidence 脫敏**
-    - request 帶 `Authorization: Bearer secret`，response 帶 `Set-Cookie: sid=xxx`
-    - assert `attempt_evidence.request_headers_redacted["Authorization"] == "<redacted>"`
-    - assert `attempt_evidence.response_headers_redacted["Set-Cookie"] == "<redacted>"`
-    - 其他 header 原樣保留
-
-12. **UA 注入 + 預設**
-    - 不傳 config → request `User-Agent` 不以 `VeraCrawl-` 開頭、符合 Chrome regex
-    - 傳 `config=HttpClientConfig(user_agent="MyBot/1")` → header `User-Agent == "MyBot/1"`
-
-13. **Proxy scheme 驗證**
-    - `HttpClientConfig(proxy="socks5://127.0.0.1:1080")` → `__init__` raise `ValueError`
-    - `proxy="http://127.0.0.1:9999"` → 通過，httpx Client config 含 `proxy` key
-
-14. **Failure type mapping**
-    - 觸發每種 failure 路徑，assert `e.failure_type` 對應的 `NetworkFailureType` 值
-
-15. **Backwards compat: 既有 callers**
-    - `StdlibHttpSourceAdapter(request)` 不傳 config → 應 work，行為使用 default config（除了預設 timeout 由 request.timeout_ms 覆蓋）
-
-### 新增 integration tests（`@pytest.mark.live`，預設 skip）
-
-`tests/adapters/network/test_httpx_source_adapter_live.py`：
+### 新增 integration tests（`@pytest.mark.live`）
 
 ```python
 @pytest.mark.live
 def test_real_chrome_ua_against_httpbin():
-    """驗證真實環境下 UA 不被視為 bot（example.com / httpbin.org/headers）。"""
-    request = build_network_request(target_url="https://httpbin.org/headers", ...)
-    adapter = StdlibHttpSourceAdapter(request)
-    adapter.execute(_source_command_for_network(request))
-    body = json.loads(adapter.last_result.body_text)
-    assert "Chrome" in body["headers"]["User-Agent"]
-    assert "VeraCrawl" not in body["headers"]["User-Agent"]
+    """真實 UA 不被當 bot；驗 httpbin.org/headers 回的 User-Agent 含 Chrome 不含 VeraCrawl。"""
 
 @pytest.mark.live
 def test_real_redirect_recording():
-    """httpbin.org/redirect-to?url=... 真實 redirect 路徑能被 record。"""
-    ...
-
-# NOTE: 不再用 httpbin.org/status/429 測 retry-to-200（codex feedback #10）：
-# httpbin 的 429 endpoint 永遠回 429。retry 行為已在 unit test 用 pytest-httpserver 驗證完整。
+    """httpbin.org/redirect-to → 真實 redirect 路徑能 record。"""
 ```
 
-### Boundary test（既有 + 新增）
+**不**用 `httpbin.org/status/429`（codex iter-1 important#10）—— retry 行為已在 unit 完整驗證。
+
+### Boundary test
 
 ```bash
 pytest tests/contract/test_*_import_boundaries.py
@@ -492,57 +489,43 @@ pytest tests/contract/test_*_import_boundaries.py
 
 ## Acceptance Criteria
 
-- [ ] `pyproject.toml` 含 `httpx>=0.27,<1.0`、`tenacity>=9.0`、`pytest-httpserver`（dev / test）
+- [ ] `pyproject.toml` 含 `httpx>=0.27,<1.0`、`pytest-httpserver`；**不含 `tenacity`**
 - [ ] `src/veracrawl/adapters/network/stdlib_http.py` 不再 `import urllib.request` / `urllib.error`
-- [ ] `grep "VeraCrawl-local-fixture" src/veracrawl/adapters/network/` = 0（**僅檢查 P0-1 scope 的 UA**；codex feedback #7）
+- [ ] `grep "VeraCrawl-local-fixture" src/veracrawl/adapters/network/` = 0
 - [ ] `src/veracrawl/adapters/network/stdlib_http.py` 預設 UA 通過 regex `^Mozilla/5\.0 .* Chrome/\d+\.\d+\.\d+\.\d+`
-- [ ] 13 個既有 call site 不需修改（通過既有 contract test 驗證）
-- [ ] 預設 connect/read timeout = 10s / 30s（檢查 `HttpClientConfig.connect_timeout_s` / `read_timeout_s`）
-- [ ] `live_http.py:79` 與 `network_acquisition.py:143` 預設 `timeout_ms` ≥ 30000
 - [ ] `contracts/network.py` 含 `NetworkAttemptEvidence` model
-- [ ] `contracts/network.py` 的 `NetworkResponse.attempt_evidence_artifact_refs` 為 optional list
-- [ ] 15 個新 unit test 全綠
+- [ ] `contracts/enums.py` `NetworkFailureType` 含 `RETRY_EXHAUSTED`
+- [ ] `ports/network.py` `NetworkClientResult` 含 `attempt_evidences` field（default 空 list）
+- [ ] `fetch/network_acquisition.py` 含 `build_http_adapter_for_acquisition` factory
+- [ ] `fetch/acquisition.py` `execute_source_acquisition` 不吞 `NetworkAdapterError`（用 import-graph + AST 驗證或單元測試）
+- [ ] 既有 13 call sites 不需變動（`grep -c "StdlibHttpSourceAdapter(request)" src/veracrawl/cli tests/` 數量不變）
+- [ ] `live_http.py:79` / `network_acquisition.py:143` 預設 `timeout_ms` ≥ 30000
+- [ ] 31 個新 unit + integration test 全綠
 - [ ] 既有 contract test 全綠
-- [ ] `pytest -m "not live"` 全綠
-- [ ] `ruff check` 無新錯
-- [ ] `mypy src/veracrawl/adapters/network/` 無新錯
-- [ ] commit message 描述 why（含 codex feedback 對應的設計決策）
+- [ ] `pytest -m "not live"` 在 CI 5 分鐘內完成（無真實 sleep）
+- [ ] `ruff check` / `mypy src/veracrawl/adapters/network/` 無新錯
+- [ ] commit message 描述 why（含 codex 三輪 feedback 對應的設計決策）
 
 ## Rollback
 
-- 若 httpx `proxy=` 在某些 macOS / linux 環境不一致：
-  - pin httpx 至已驗證的具體版本（如 `>=0.27.2,<0.28`）
-- 若 `pytest-httpserver` 與 fixture 互動有問題：
-  - fallback `httpx.MockTransport` 自寫 transport scenarios
-- 若 `NetworkAttemptEvidence` 加入 `NetworkResponse.attempt_evidence_artifact_refs` 觸發既有 PASS validator 嚴格檢查：
-  - 改用獨立 `NetworkAttemptEvidenceReport` 並透過 `NetworkAcquisitionReport.failure_report_refs` 引用（仍 ref-based，不破壞既有 model）
-- 若 per-hop allowlist policy 與 `network_policy_failure` 既有邏輯重複：
-  - 抽 helper `validate_url_against_policy(url, *, allowlist, allow_private)` 兩處共用
+- 若 httpx `proxy=` 行為不一致：pin `httpx==0.27.2`
+- 若 `NetworkAttemptEvidence` 加在 `NetworkClientResult` 觸發 dataclass 欄位排序問題：改 ABC + Protocol 或 `kw_only=True`
+- 若 streaming size budget 與既有 `body_text` 抓取衝突：先讀完整 body 再 abort（捨 streaming 防 abuse 性質）但仍以 `body_size > budget` raise
+- 若改 `execute_source_acquisition` 影響其他 adapter（不只 HTTP）：把判斷收斂在新 helper `_unwrap_network_adapter_error`，其他 adapter 無 NetworkAdapterError 不受影響
 
 ## Open Questions
 
-- **Q1**：HTTP/2 是否要支援？
-  - codex feedback #12 指出 motivation 與 dependencies 矛盾
-  - **決定**：移除 HTTP/2 自 motivation；P0 不做。**Acceptance 不提**
-  - P1 評估時加 `httpx[http2]` extra
+- **Q1**：13 call site 的 SSRF migration 何時做？
+  - **決定**：列 P0-1 後續 PR 但仍 P0 等級；本 plan 限縮在 acquisition path
 
-- **Q2**：DNS rebinding 完整防護
-  - 當前 design 在 redirect policy 內做 DNS resolve，仍有 TOCTOU
-  - 完整防禦需自訂 `httpx.Transport` 在連線層擋
-  - **決定**：P0 提供基本層（resolve + 重檢），完整 transport-level 列 P1
+- **Q2**：是否要把 `egress_allowlist` 直接擴入 `NetworkRequest` 契約？
+  - **決定**：不擴。keep contract minimal；fetch layer factory 注入 config
 
-- **Q3**：`NetworkAttemptEvidence` 的 `request_method` 是否要全 enum？
-  - 目前 `NetworkRequest.method` 已限制為 `{"GET", "HEAD"}`
-  - **決定**：用 `str` 即可，evidence 不重複契約限制
+- **Q3**：DNS rebinding 完整防護
+  - **決定**：transport-level 完整防護列 P1；P0 提供 resolve-time 檢查
 
-- **Q4**：13 個 call site 是否在本 P0 內遷移為 config-aware？
-  - **決定**：不遷移。P0-1 只保證向後相容；call site 遷移列為 P0-1 後續 follow-up（仍 P0 範圍但獨立 commit）
+- **Q4**：`NetworkAttemptEvidence` inline vs ref-based
+  - **決定**：P0-1 inline（無 store 依賴）；P1 改 ref + persistent
 
-- **Q5**：`max_attempts` 預設值
-  - 當前 design `max_attempts=3`（1 原始 + 2 retry）
-  - 對 e-commerce 可能需要 5（特別 Cloudflare 需要 warm-up）
-  - **決定**：預設 3，呼叫端可注入；保守起點，避免拖長 P95 latency
-
-- **Q6**：`Retry-After` cap 60s 是否合理？
-  - 過短會違反站點意圖；過長會被 DOS
-  - **決定**：60s 足夠涵蓋常見 throttle window，極端 case 由呼叫端 catch + 自決定 cooldown
+- **Q5**：HTTP/2
+  - **決定**：徹底移除自 motivation 與 scope；P1 評估

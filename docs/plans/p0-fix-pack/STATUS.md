@@ -35,6 +35,7 @@
 | 階段 | 對象 | Iteration | 結果 | 修正方向 |
 |------|------|-----------|------|----------|
 | plan | p0-1-http-client.md | 1 | ❌ | 1 critical (per-hop SSRF) + 10 important + 1 minor |
+| plan | p0-1-http-client.md | 2 | ❌ | 3 critical (failure-prop, allowlist-wiring, 4xx) + 8 important + 2 minor |
 
 iter 1 主要問題：
 1. **critical**：redirect 只擋 HTTPS→HTTP downgrade，未對 redirect target 重跑 egress / private-network / DNS-rebind policy
@@ -49,6 +50,37 @@ iter 1 主要問題：
 10. live test 用 httpbin.org/status/429 永遠回 429 無法驗 retry-to-200
 11. 寫死 `Wed, 21 Oct 2026 ...` HTTP-date / `Chrome 131` 字面值
 12. HTTP/2 motivation 與 dependencies 矛盾
+
+v3 修正策略（iter 2 主要問題）：
+
+iter 2 critical：
+1. `execute_source_acquisition` 內部 catch `ValueError` 會吞掉 `NetworkAdapterError` → 必須改 acquisition.py 使其不吞此 type
+2. `egress_allowlist` 在 adapter config 預設空集合，但 13 個 call site 用 `StdlibHttpSourceAdapter(request)` 不傳 config → 跨域 redirect 仍未擋 → factory + 接線到 `execute_http_network_acquisition`
+3. retry 迴圈把 401/403/404/410/422 當 success 回，但呼叫端假設「any adapter result is success」→ 必須明確決定 4xx 是「成功 HTTP 採集」（status 寫進 NetworkResponse）
+
+iter 2 important：
+4. evidence 沒有 artifact_store 注入點 → 改為 inline list（無 store 依賴）
+5. raise 時 `last_result` 為 None → 失敗仍 populate 部分結果
+6. `RETRY_EXHAUSTED` enum 不存在 + last_failure_type 對 retryable 5xx 未更新
+7. `MockTransport` 無注入點 → 加 `transport=` constructor kwarg
+8. retry 計時測試會睡 2-60s flaky → 注入 `sleep_fn`、`clock_fn`；`_compute_wait` 變 pure function 直接驗
+9. timeout 雙來源（config vs request.timeout_ms）邏輯矛盾 → 規則：config 顯式注入時 canonical；無 config 時用 request.timeout_ms
+10. 沒做 size_budget streaming → 用 `httpx.iter_bytes` streaming
+11. exception mapping 太粗（ConnectError 全部 → NETWORK_TIMEOUT）→ DNS/refused/TLS/proxy 細分
+
+iter 2 minor：
+12. 列 tenacity 但實際自寫 → 移除 tenacity，stdlib random.uniform
+13. HTTP/2 motivation 與 scope 矛盾 → 徹底移除
+
+v3 主要新增結構：
+- `NetworkClientResult.attempt_evidences: list[NetworkAttemptEvidence]`（inline）
+- `NetworkFailureType.RETRY_EXHAUSTED` 新 enum
+- `build_http_adapter_for_acquisition` factory 接線 allowlist
+- `transport` / `sleep_fn` / `clock_fn` 注入點
+- 4xx 設計決策：視為「成功 HTTP 採集」，status 帶出去由上游分類
+- exception mapping 表格化
+- streaming size budget enforcement
+- `_compute_wait` pure function（測試直接驗）
 
 v2 修正策略：
 - 保留現有 constructor + execute() 介面，新加 `*, config=None` kwarg
