@@ -6,7 +6,7 @@
 | P0-2 | Playwright stealth + context reuse | NOT_STARTED | - | - | - | - |
 | P0-3 | OpenAI adapter fix | NOT_STARTED | - | - | - | - |
 | P0-4 | Tool Gateway gating | NOT_STARTED | - | - | - | - |
-| P0-5 | Structured logging | IN_PROGRESS (TDD) | 2026-05-06 | - | - | 用戶決定跳過 plan review，直接 TDD；plan v3 為 working draft |
+| P0-5 | Structured logging | IN_PROGRESS (sub-step 1/N) | 2026-05-06 | - | bd9b249 (initial) | sub-step 1: redaction processor (recursive + expanded keys) |
 | P0-6 | CI workflow | NOT_STARTED | - | - | - | - |
 | P0-7 | Break optimization cycle | NOT_STARTED | - | - | - | - |
 | P0-8 | Runtime mode (prod vs fixture) | NOT_STARTED | - | - | - | - |
@@ -69,6 +69,19 @@ iter 3 主要新問題：
 - (c) 跳過 plan review（接受當前 v3 為 working draft），直接進 TDD 實作；codex task review 抓殘留
 - (d) 暫停 P0-1，先處理較簡單的 P0（P0-5 logging / P0-6 CI / P0-8 runtime mode），累積 codex review pattern 經驗後再回頭做 P0-1
 
+## P0-5 Sub-steps
+
+P0-5 拆為以下 atomic sub-steps，每個獨立 commit + codex task review：
+
+1. **redaction processor**（已 commit `bd9b249`，task review iter 1 ❌；fix-up 待 commit）
+2. structlog dependency + `logging.py` 核心（configure_logging / get_logger / with_correlation_id）
+3. `bootstrap_cli_logging` context manager + 1 個代表性 CLI 遷移
+4. 其他 67 個 CLI entry points 注入 bootstrap
+5. 3 個內部模組（stdlib_http / tool_gateway / observability）展示 get_logger 用法
+6. 非合約 print 從代表性 CLI 移除
+7. boundary tests（限制範圍 import 規則）
+8. 30 個 CLI bootstrap AST scan boundary test
+
 ## Codex Review 紀錄
 
 | 階段 | 對象 | Iteration | 結果 | 修正方向 |
@@ -78,7 +91,8 @@ iter 3 主要新問題：
 | plan | p0-1-http-client.md | 3 | ❌ | 2 critical (retry-semantics 矛盾, initial-URL SSRF) + 6 important + 2 minor — **3 連敗，停止重新評估** |
 | plan | p0-5-logging.md | 1 | ❌ | 6 important + 3 minor (no critical)：129 prints 全在 cli/、structlog factory 與 caplog 不容、idempotency、thread contextvar 錯誤聲明、entry-point 缺清單、無 redaction policy、import boundary 設計衝突 |
 | plan | p0-5-logging.md | 2 | ❌ | 8 important + 3 minor (still no critical)：BoundLogger 型別矛盾、idempotency level 不真實生效、reset 動 root handlers 影響 caplog、bootstrap 缺 cid AST 檢查、prog binding leakage、runtime entry inventory 不夠具體、CLI scope/commit 訊息語義不清、import boundary 太寬、ANSI test 不可行 |
-| plan | p0-5-logging.md | 3 | ❌ | 9 important + 3 minor (still no critical)：propagate=False vs caplog 矛盾、structured fields 不在 record.attr、entry-point 數應為 68 不是 30、AST 檢查太弱、cli_token 邏輯誤、bind_runtime_context 缺設計、結構化 error print 分類不清、correlation 覆蓋與 Why 矛盾、boundary 漏列 11 個套件 — **3 連敗** |
+| plan | p0-5-logging.md | 3 | ❌ | 9 important + 3 minor (still no critical)：propagate=False vs caplog 矛盾、structured fields 不在 record.attr、entry-point 數應為 68 不是 30、AST 檢查太弱、cli_token 邏輯誤、bind_runtime_context 缺設計、結構化 error print 分類不清、correlation 覆蓋與 Why 矛盾、boundary 漏列 11 個套件 — **3 連敗，停 plan review，改走 TDD** |
+| task | bd9b249 (P0-5 sub-step 1: redaction processor) | 1 | ❌ | 3 important：top-level only redaction（缺 recursive）、漏 password/private_key/x-api-key/session_id/csrf 等 sensitive key、STATUS.md scope 過大宣稱 |
 
 iter 1 主要問題：
 1. **critical**：redirect 只擋 HTTPS→HTTP downgrade，未對 redirect target 重跑 egress / private-network / DNS-rebind policy
