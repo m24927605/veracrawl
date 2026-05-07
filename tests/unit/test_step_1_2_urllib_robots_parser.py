@@ -125,7 +125,7 @@ def test_evaluate_treats_5xx_as_disallow_all() -> None:
     advice = parser.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
     # A 5xx must NOT be silently treated as allow-all — the spec says
     # the crawler should assume disallow until robots.txt can be
-    # fetched cleanly. Coopperative crawlers fail closed.
+    # fetched cleanly. Cooperative crawlers fail closed.
     assert advice.is_allowed is False
 
 
@@ -278,3 +278,83 @@ def test_fetch_failure_treated_as_disallow() -> None:
     parser = UrllibRobotsParser(fetcher=failing_fetcher)
     advice = parser.evaluate("https://example.test/p", user_agent=_DEFAULT_UA)
     assert advice.is_allowed is False
+
+
+# -- codex iter-1 regression tests --------------------------------
+
+
+def test_distinct_user_agents_get_distinct_cached_rules() -> None:
+    """Origins can serve UA-specific robots.txt — the cache must not mix.
+
+    Codex iter-1 important: keying the cache only on host meant a
+    first evaluation populated the cache and a second evaluation with
+    a different UA reused the wrong rules.
+    """
+
+    bodies = {
+        "VeraCrawlA/1": "User-agent: *\nDisallow: /a\n",
+        "VeraCrawlB/1": "User-agent: *\nDisallow: /b\n",
+    }
+
+    def per_ua_fetcher(robots_url: str, user_agent: str) -> RobotsFetchResult:
+        ua_key = user_agent.split("/")[0] + "/1"
+        return RobotsFetchResult(status=200, body=bodies[ua_key])
+
+    parser = UrllibRobotsParser(fetcher=per_ua_fetcher)
+    # UA A gets blocked on /a but not /b.
+    advice_a_on_a = parser.evaluate("https://example.test/a", user_agent="VeraCrawlA/1")
+    advice_a_on_b = parser.evaluate("https://example.test/b", user_agent="VeraCrawlA/1")
+    # UA B sees the opposite rule set.
+    advice_b_on_a = parser.evaluate("https://example.test/a", user_agent="VeraCrawlB/1")
+    advice_b_on_b = parser.evaluate("https://example.test/b", user_agent="VeraCrawlB/1")
+    assert advice_a_on_a.is_allowed is False
+    assert advice_a_on_b.is_allowed is True
+    assert advice_b_on_a.is_allowed is True
+    assert advice_b_on_b.is_allowed is False
+
+
+def test_distinct_user_agents_each_trigger_a_fetch() -> None:
+    """Each distinct UA on the same host triggers its own robots.txt fetch.
+
+    Without this, a second UA would reuse the first UA's parser and
+    the per-UA rule set would be silently wrong (codex iter-1 important).
+    """
+
+    counter: list[tuple[str, str]] = []
+    parser = UrllibRobotsParser(fetcher=_make_fetcher(_allow_all_robots(), counter=counter))
+    parser.evaluate("https://example.test/", user_agent="VeraCrawlA/1")
+    parser.evaluate("https://example.test/", user_agent="VeraCrawlB/1")
+    assert len(counter) == 2
+    # Each fetch carried its own UA — the fetcher saw both.
+    assert {ua for _, ua in counter} == {"VeraCrawlA/1", "VeraCrawlB/1"}
+
+
+def test_disk_cache_preserves_original_body_verbatim(tmp_path: Path) -> None:
+    """On-disk cache stores the original fetched body, not a parser rendering.
+
+    Codex iter-1 important: ``str(RobotFileParser)`` is a parser-state
+    rendering and is not a faithful round-trip — comments and unknown
+    directives can be dropped. The cache layer must keep the bytes we
+    actually received.
+    """
+
+    body_with_comments = (
+        "# top-of-file comment we want to preserve\n"
+        "User-agent: *\n"
+        "Disallow: /admin\n"
+        "Allow: /public\n"
+        "# trailing comment\n"
+        "Sitemap: https://example.test/sitemap.xml\n"
+    )
+
+    parser_a = UrllibRobotsParser(
+        fetcher=_make_fetcher(body_with_comments),
+        cache_dir=tmp_path,
+    )
+    parser_a.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
+
+    # Find the body file written to disk and assert byte-exact content.
+    body_files = list(tmp_path.glob("*.robots.txt"))
+    assert len(body_files) == 1
+    on_disk = body_files[0].read_text(encoding="utf-8")
+    assert on_disk == body_with_comments

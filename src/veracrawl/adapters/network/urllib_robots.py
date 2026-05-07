@@ -79,6 +79,13 @@ class _CachedEntry:
     # ``set_url``) but it isn't in the typeshed stubs, so we keep our
     # own copy to satisfy ``mypy --strict`` without ``# type: ignore``.
     robots_url: str
+    # Original fetched body (codex iter-1 important): the on-disk cache
+    # writes this verbatim instead of ``str(RobotFileParser)`` because
+    # the latter is a parser-state rendering and may not faithfully
+    # round-trip (e.g., comments / unknown directives are dropped).
+    # ``None`` for synthesised parsers (404 → empty rules, 5xx →
+    # disallow-all) where there is no original body to preserve.
+    body: str | None
 
 
 class UrllibRobotsParser:
@@ -122,8 +129,8 @@ class UrllibRobotsParser:
     # -- Public API ---------------------------------------------------
 
     def evaluate(self, url: str, *, user_agent: str) -> RobotsAdvice:
-        host_key = _host_key(url)
-        entry = self._get_or_fetch(host_key=host_key, url=url, user_agent=user_agent)
+        cache_key = _cache_key(url, user_agent)
+        entry = self._get_or_fetch(cache_key=cache_key, url=url, user_agent=user_agent)
         if entry is None:
             # Failure to fetch and to recover from disk → fail closed.
             return RobotsAdvice(
@@ -139,35 +146,39 @@ class UrllibRobotsParser:
     def _get_or_fetch(
         self,
         *,
-        host_key: str,
+        cache_key: str,
         url: str,
         user_agent: str,
     ) -> _CachedEntry | None:
-        # Per-host lock so concurrent ``evaluate`` calls collapse to a
-        # single fetch (design: fetch-once-per-host).
-        host_lock = self._lock_for_host(host_key)
+        # Per-(host, ua) lock so concurrent ``evaluate`` calls collapse
+        # into a single fetch (design: fetch-once-per-host). The cache
+        # key includes the user-agent because origins can serve UA-
+        # specific robots.txt — sharing a parser across UAs would mix
+        # rule sets and violate the single-source-of-truth UA contract
+        # (codex iter-1 important).
+        host_lock = self._lock_for_key(cache_key)
         with host_lock:
-            cached = self._entries.get(host_key)
+            cached = self._entries.get(cache_key)
             now = self._clock()
             if cached is not None and (now - cached.fetched_at) < self._ttl:
                 return cached
-            disk_entry = self._read_disk_cache(host_key=host_key, now=now)
+            disk_entry = self._read_disk_cache(cache_key=cache_key, now=now)
             if disk_entry is not None:
-                self._entries[host_key] = disk_entry
+                self._entries[cache_key] = disk_entry
                 return disk_entry
             fetched = self._fetch_with_fallback(url=url, user_agent=user_agent)
             if fetched is None:
                 return None
-            self._entries[host_key] = fetched
-            self._write_disk_cache(host_key=host_key, entry=fetched)
+            self._entries[cache_key] = fetched
+            self._write_disk_cache(cache_key=cache_key, entry=fetched)
             return fetched
 
-    def _lock_for_host(self, host_key: str) -> threading.Lock:
+    def _lock_for_key(self, cache_key: str) -> threading.Lock:
         with self._global_lock:
-            lock = self._host_locks.get(host_key)
+            lock = self._host_locks.get(cache_key)
             if lock is None:
                 lock = threading.Lock()
-                self._host_locks[host_key] = lock
+                self._host_locks[cache_key] = lock
             return lock
 
     def _fetch_with_fallback(self, *, url: str, user_agent: str) -> _CachedEntry | None:
@@ -182,56 +193,80 @@ class UrllibRobotsParser:
             )
             return None
         parser = _build_parser(robots_url=robots_url, status=result.status, body=result.body)
+        # Preserve the original body for synthesised parsers as ``None``
+        # (404 → allow-all, 5xx → disallow-all). For 200 responses the
+        # exact bytes are kept so the on-disk cache round-trips
+        # faithfully (codex iter-1 important).
+        body_for_cache: str | None = result.body if 200 <= result.status < 300 else None
         return _CachedEntry(
             parser=parser,
             fetched_at=self._clock(),
             status=result.status,
             robots_url=robots_url,
+            body=body_for_cache,
         )
 
     # -- On-disk cache ------------------------------------------------
 
-    def _disk_paths(self, host_key: str) -> tuple[Path, Path] | None:
+    def _disk_paths(self, cache_key: str) -> tuple[Path, Path] | None:
         if self._cache_dir is None:
             return None
-        safe = _safe_filename(host_key)
+        safe = _safe_filename(cache_key)
         return (
             self._cache_dir / f"{safe}{_BODY_SUFFIX}",
             self._cache_dir / f"{safe}{_META_SUFFIX}",
         )
 
-    def _read_disk_cache(self, *, host_key: str, now: float) -> _CachedEntry | None:
-        paths = self._disk_paths(host_key)
+    def _read_disk_cache(self, *, cache_key: str, now: float) -> _CachedEntry | None:
+        paths = self._disk_paths(cache_key)
         if paths is None:
             return None
         body_path, meta_path = paths
-        if not body_path.exists() or not meta_path.exists():
+        if not meta_path.exists():
             return None
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             status = int(meta["status"])
             fetched_at = float(meta["fetched_at"])
             robots_url = str(meta["robots_url"])
-            body = body_path.read_text(encoding="utf-8")
         except (OSError, ValueError, KeyError):
             return None
         if (now - fetched_at) >= self._ttl:
             return None
-        parser = _build_parser(robots_url=robots_url, status=status, body=body)
+        # Body file may be absent for synthesised parsers (404 / 5xx
+        # caches don't preserve a body — see ``body_for_cache`` above).
+        body: str | None = None
+        if body_path.exists():
+            try:
+                body = body_path.read_text(encoding="utf-8")
+            except OSError:
+                return None
+        parser = _build_parser(robots_url=robots_url, status=status, body=body or "")
         return _CachedEntry(
             parser=parser,
             fetched_at=fetched_at,
             status=status,
             robots_url=robots_url,
+            body=body,
         )
 
-    def _write_disk_cache(self, *, host_key: str, entry: _CachedEntry) -> None:
-        paths = self._disk_paths(host_key)
+    def _write_disk_cache(self, *, cache_key: str, entry: _CachedEntry) -> None:
+        paths = self._disk_paths(cache_key)
         if paths is None:
             return
         body_path, meta_path = paths
         try:
-            body_path.write_text(_serialise_parser(entry.parser), encoding="utf-8")
+            if entry.body is not None:
+                # Preserve the original fetched body verbatim — ``str``
+                # of ``RobotFileParser`` is a parser-state rendering and
+                # may drop comments / unknown directives, so it is not
+                # a faithful round-trip (codex iter-1 important).
+                body_path.write_text(entry.body, encoding="utf-8")
+            else:
+                # Synthesised parser (404 / 5xx) — clean up any prior
+                # body file so reads see "absent" consistently.
+                if body_path.exists():
+                    body_path.unlink()
             meta_path.write_text(
                 json.dumps(
                     {
@@ -245,7 +280,7 @@ class UrllibRobotsParser:
         except OSError as exc:
             _logger.warning(
                 "robots.txt on-disk cache write failed",
-                host_key=host_key,
+                cache_key=cache_key,
                 error_type=type(exc).__name__,
             )
 
@@ -260,13 +295,35 @@ def _host_key(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}".lower()
 
 
+def _cache_key(url: str, user_agent: str) -> str:
+    """Cache key combining host and user-agent.
+
+    Origins can serve UA-specific ``robots.txt`` (Google's spec
+    permits per-UA groups). Sharing a parser across UAs would mix
+    rule sets and silently violate the single-source-of-truth UA
+    contract — codex iter-1 important. Including the UA forces a
+    fresh fetch when the run's UA differs from a previously cached
+    one, which is the conservative behavior for a cooperative
+    crawler.
+    """
+
+    return f"{_host_key(url)}|ua={user_agent}"
+
+
 def _robots_url_for(url: str) -> str:
     parts = urlsplit(url)
     return urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
 
 
-def _safe_filename(host_key: str) -> str:
-    return host_key.replace("://", "__").replace("/", "_").replace(":", "_")
+def _safe_filename(cache_key: str) -> str:
+    # Hash to keep the on-disk filename short and avoid path traversal
+    # via UA strings that could contain ``/`` or other separator
+    # characters. The hash is used purely as a stable key — collisions
+    # would only mean a fresh re-fetch.
+    import hashlib
+
+    digest = hashlib.sha1(cache_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
+    return digest
 
 
 def _build_parser(*, robots_url: str, status: int, body: str) -> RobotFileParser:
@@ -285,16 +342,10 @@ def _build_parser(*, robots_url: str, status: int, body: str) -> RobotFileParser
     return parser
 
 
-def _serialise_parser(parser: RobotFileParser) -> str:
-    """Best-effort serialisation of the parser back to text for disk cache.
-
-    ``RobotFileParser`` exposes ``__str__`` which renders parsed rules
-    in a robots.txt-compatible form. We use it directly so the disk
-    payload is human-readable and the parsing path on next load is
-    identical to the live fetch path.
-    """
-
-    return str(parser)
+# ``_serialise_parser`` was removed in favor of writing the original
+# fetched body directly (see ``_CachedEntry.body`` and
+# ``_write_disk_cache``) — codex iter-1 important: parser ``__str__``
+# is a state rendering and was not a faithful round-trip.
 
 
 def _advice_from_parser(

@@ -208,3 +208,51 @@ def test_default_robots_port_is_noop_so_existing_callers_unaffected() -> None:
     )
     result = adapter.execute(_make_command())
     assert result.status.value == "succeeded"
+
+
+# -- codex iter-1 regression -------------------------------------
+
+
+def test_robots_blocked_error_is_value_error_subclass() -> None:
+    """``RobotsBlockedError`` must satisfy the existing ``except ValueError``
+    handler in ``fetch.acquisition`` / ``fetch.network_acquisition``.
+
+    Codex iter-1 important asked us to assert the public execute /
+    diagnostic contract rather than only ``pytest.raises``. The
+    acquisition layer's existing handler is ``except ValueError``;
+    every ``NetworkAdapterError`` subclass — including
+    ``RobotsBlockedError`` (PolicyViolation mixin) — inherits
+    ``ValueError`` so the legacy handler keeps matching without code
+    changes. This test pins that contract for ``RobotsBlockedError``
+    specifically so a future refactor cannot silently break the
+    acquisition-layer wiring.
+    """
+
+    assert issubclass(RobotsBlockedError, ValueError)
+
+
+def test_acquisition_layer_handler_catches_robots_blocked_error() -> None:
+    """Simulates ``execute_source_acquisition``'s ``except ValueError``
+    catch path when the adapter raises ``RobotsBlockedError``.
+
+    The acquisition layer treats a caught ``ValueError`` as a typed
+    failure (the source_result is set to ``None`` and a failure
+    report is built downstream). We don't reproduce the full
+    acquisition wiring here — that's covered by other tests — but we
+    verify the critical link: the exception type is catchable via
+    the historic ``ValueError`` handler.
+    """
+
+    robots = _StubRobotsPort(advice=RobotsAdvice(is_allowed=False, disallow_reason="forbidden"))
+    adapter = StdlibHttpSourceAdapter(
+        _make_request("https://example.test/forbidden"),
+        config=HttpClientConfig(robots_port=robots),
+        transport=_ok_transport(),
+    )
+    caught: ValueError | None = None
+    try:
+        adapter.execute(_make_command())
+    except ValueError as exc:  # acquisition.py line 326 catches this
+        caught = exc
+    assert caught is not None
+    assert isinstance(caught, RobotsBlockedError)
