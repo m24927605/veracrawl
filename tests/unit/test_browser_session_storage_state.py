@@ -118,7 +118,7 @@ class _FakeContext:
         # blob — matches Playwright's actual semantics.
         self.storage_state_calls.append({"path": path})
         payload = {"cookies": [{"name": "session", "value": "from:" + str(self.init_kwargs)}]}
-        Path(path).write_text(json.dumps(payload))
+        Path(path).write_text(json.dumps(payload), encoding="utf-8")
         return payload
 
     def close(self) -> None:
@@ -365,7 +365,10 @@ def test_storage_state_loaded_into_context_on_session_open(tmp_path: Path) -> No
     This is how cookies survive across runs."""
     # Simulate a prior run by pre-creating the file.
     state_file = tmp_path / _storage_state_filename("run:rehydrate")
-    state_file.write_text(json.dumps({"cookies": [{"name": "from-prior-run", "value": "x"}]}))
+    state_file.write_text(
+        json.dumps({"cookies": [{"name": "from-prior-run", "value": "x"}]}),
+        encoding="utf-8",
+    )
 
     captured: dict[str, Any] = {}
 
@@ -508,7 +511,10 @@ def test_run_a_does_not_load_run_b_state(tmp_path: Path) -> None:
     up — the file lookup is keyed on run_ref, not on whatever
     arbitrary file lives in the directory."""
     other_run_state = tmp_path / _storage_state_filename("run:other")
-    other_run_state.write_text(json.dumps({"cookies": [{"name": "leaked", "value": "x"}]}))
+    other_run_state.write_text(
+        json.dumps({"cookies": [{"name": "leaked", "value": "x"}]}),
+        encoding="utf-8",
+    )
 
     captured: dict[str, Any] = {}
 
@@ -569,7 +575,11 @@ def test_one_shot_observe_still_works(tmp_path: Path) -> None:
     )
     assert result.dom_content_hash
     pw: _FakePlaywright = captured["pw"]
-    # One browser, one context, one page; storage_state saved on close.
+    # One browser, one context, one page — even though
+    # ``storage_state_dir`` is configured, the one-shot path is
+    # transient (codex iter-2 important): NO storage_state= kwarg on
+    # new_context, NO storage_state(path=...) call on close, and NO
+    # JSON file written to disk.
     assert len(pw.browsers) == 1
     browser = pw.browsers[0]
     assert browser.closed
@@ -577,7 +587,9 @@ def test_one_shot_observe_still_works(tmp_path: Path) -> None:
     context = browser.contexts[0]
     assert len(context.new_pages) == 1
     assert context.closed
-    assert len(context.storage_state_calls) == 1
+    assert "storage_state" not in context.init_kwargs
+    assert context.storage_state_calls == []
+    assert list(tmp_path.glob("*.storage_state.json")) == []
 
 
 # Codex iter-1 critical: filename collision regression -------------
@@ -710,4 +722,151 @@ def test_storage_state_file_is_owner_only(tmp_path: Path) -> None:
         f"storage_state file mode {oct(mode)} is broader than owner-only — "
         "anyone with read access to the directory can exfiltrate the "
         "session cookies"
+    )
+
+
+# Codex iter-2 important: one-shot observe must stay transient -----
+
+
+def test_one_shot_observe_does_not_write_storage_state_when_dir_configured(
+    tmp_path: Path,
+) -> None:
+    """The legacy ``adapter.observe(run_ref=..., target_url=...)``
+    path is documented as transient. Even when the adapter is
+    configured with ``storage_state_dir``, the one-shot path must
+    not read or write the per-run storage_state file — otherwise
+    two unrelated one-shot calls with the same ``run_ref`` would
+    silently leak state through disk."""
+    captured: dict[str, Any] = {}
+
+    @contextmanager
+    def capturing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        captured["pw"] = pw
+        yield pw
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: capturing_factory,
+    )
+    adapter.observe(
+        run_ref="run:one-shot-transient",
+        source_ref="source:fixture",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+    )
+
+    pw: _FakePlaywright = captured["pw"]
+    context = pw.browsers[0].contexts[0]
+    # No storage_state= kwarg on new_context, no storage_state(path=...)
+    # call on close, and no JSON file left on disk.
+    assert "storage_state" not in context.init_kwargs
+    assert context.storage_state_calls == []
+    assert list(tmp_path.glob("*.storage_state.json")) == []
+
+
+def test_one_shot_observe_does_not_load_prior_state(tmp_path: Path) -> None:
+    """If a prior session wrote ``run:abc.storage_state.json``, a
+    later one-shot ``observe(run_ref="run:abc", ...)`` must NOT
+    re-hydrate from that file. The legacy path is transient."""
+    state_file = tmp_path / _storage_state_filename("run:shared")
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(
+        json.dumps({"cookies": [{"name": "from-session", "value": "x"}]}),
+        encoding="utf-8",
+    )
+
+    captured: dict[str, Any] = {}
+
+    @contextmanager
+    def capturing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        captured["pw"] = pw
+        yield pw
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: capturing_factory,
+    )
+    adapter.observe(
+        run_ref="run:shared",
+        source_ref="source:fixture",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+    )
+    pw: _FakePlaywright = captured["pw"]
+    context = pw.browsers[0].contexts[0]
+    assert "storage_state" not in context.init_kwargs
+
+
+# Codex iter-2 important: per-observation cleanup robustness -------
+
+
+def test_unroute_runs_when_page_close_raises(tmp_path: Path) -> None:
+    """Inside a long-lived session, if ``page.close()`` raises during
+    cleanup, the route handler must still get unregistered —
+    otherwise route handlers stack across navigations and corrupt
+    later observations' counters."""
+
+    captured: dict[str, Any] = {}
+
+    class _FailingClosePage(_FakePage):
+        def close(self) -> None:
+            raise RuntimeError("simulated page close failure")
+
+    class _FailingClosePageContext(_FakeContext):
+        def new_page(self) -> _FakePage:
+            page = _FailingClosePage(self)
+            self.new_pages.append(page)
+            return page
+
+    class _FailingClosePageBrowser(_FakeBrowser):
+        def new_context(self, **kwargs: Any) -> _FakeContext:
+            ctx = _FailingClosePageContext(self, kwargs)
+            self.contexts.append(ctx)
+            return ctx
+
+    class _FailingClosePageChromium:
+        def __init__(self, parent: _FakePlaywright) -> None:
+            self._parent = parent
+
+        def launch(self, *, headless: bool) -> _FakeBrowser:
+            assert headless is True
+            browser = _FailingClosePageBrowser()
+            self._parent.browsers.append(browser)
+            return browser
+
+    @contextmanager
+    def failing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        pw.chromium = _FailingClosePageChromium(pw)  # type: ignore[assignment]
+        captured["pw"] = pw
+        yield pw
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: failing_factory,
+    )
+    with adapter.open_session(run_ref="run:cleanup-fail") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+    pw: _FakePlaywright = captured["pw"]
+    context = pw.browsers[0].contexts[0]
+    # Route was registered AND unregistered, even though the page
+    # close in between raised.
+    assert context.routes_registered == 1
+    assert context.routes_unregistered == 1, (
+        "context.unroute must run even when page.close() raises"
     )

@@ -273,8 +273,23 @@ class PlaywrightBrowserObservationAdapter:
         want persistence must pass ``storage_state_dir=None``
         (codex iter-1 important).
         """
+        with self._open_session_internal(run_ref=run_ref, persist=True) as session:
+            yield session
+
+    @contextmanager
+    def _open_session_internal(self, *, run_ref: Ref, persist: bool) -> Iterator[BrowserSession]:
+        """Common session lifecycle with explicit persistence opt-in.
+
+        ``persist=False`` forces transient behavior regardless of the
+        adapter's ``storage_state_dir`` setting — the legacy
+        single-call ``observe()`` / ``execute()`` paths use this so
+        a one-shot navigation never reads or writes the persisted
+        storage_state file (codex iter-2 important: the legacy
+        paths must remain transient even when the adapter is
+        otherwise configured for session-scoped persistence).
+        """
         sync_playwright = self._playwright_factory()
-        storage_state_path = self._storage_state_path(run_ref)
+        storage_state_path = self._storage_state_path(run_ref) if persist else None
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             context = self._new_context(browser, storage_state_path=storage_state_path)
@@ -340,15 +355,21 @@ class PlaywrightBrowserObservationAdapter:
         target_url: str,
         sandbox_policy: BrowserSandboxPolicy,
     ) -> BrowserObservationResult:
-        """One-shot navigation that opens a session of length 1.
+        """One-shot navigation that opens a transient session of length 1.
 
         Backwards-compatible with the v0 single-call usage: every
         invocation launches a fresh browser, creates a context, runs
-        the navigation, and closes everything before returning. Use
-        :meth:`open_session` instead when multiple navigations should
-        share a context.
+        the navigation, and closes everything before returning.
+        Persistence is **disabled** for this path even when the
+        adapter is configured with ``storage_state_dir`` — a
+        transient one-shot must not silently inherit or contribute
+        to the per-run storage_state file (codex iter-2 important:
+        the legacy path's "transient" claim has to hold regardless
+        of how the adapter is otherwise configured). Use
+        :meth:`open_session` when multiple navigations should share a
+        context AND the run's accumulated state should persist.
         """
-        with self.open_session(run_ref=run_ref) as session:
+        with self._open_session_internal(run_ref=run_ref, persist=False) as session:
             return session.observe(
                 source_ref=source_ref,
                 target_url=target_url,
@@ -364,7 +385,15 @@ class PlaywrightBrowserObservationAdapter:
         target_url: str,
         sandbox_policy: BrowserSandboxPolicy,
     ) -> BrowserObservationResult:
-        """Single navigation against an already-open BrowserContext."""
+        """Single navigation against an already-open BrowserContext.
+
+        Per-call resources (route handler, page) are torn down even
+        when the navigation raises, so a long-lived session does not
+        accumulate stacked route handlers or leaked pages across
+        partially-failed observations (codex iter-2 important:
+        defensive cleanup must preserve the original exception while
+        still running every cleanup step).
+        """
         started = time.monotonic()
         network_request_count = 0
         blocked_request_count = 0
@@ -381,10 +410,13 @@ class PlaywrightBrowserObservationAdapter:
                 return
             route.continue_()
 
-        context.route("**/*", route_handler)
-        page = context.new_page()
-        page.on("console", lambda message: console_logs.append(message.text))
+        page: Any | None = None
+        route_registered = False
         try:
+            context.route("**/*", route_handler)
+            route_registered = True
+            page = context.new_page()
+            page.on("console", lambda message: console_logs.append(message.text))
             page.goto(
                 target_url,
                 wait_until=self.wait_until,
@@ -405,10 +437,28 @@ class PlaywrightBrowserObservationAdapter:
                 dom_text = dom_html
             screenshot = page.screenshot(full_page=True)
         finally:
-            # Pages are session-scoped: closed after each observation
-            # so the route handler does not stack across navigations.
-            page.close()
-            context.unroute("**/*", route_handler)
+            # Each cleanup step is independently guarded so a failure
+            # in one step does not skip later steps and never masks
+            # the original exception (Python re-raises automatically
+            # when the finally block completes without raising).
+            if page is not None:
+                try:
+                    page.close()
+                except Exception:  # noqa: BLE001
+                    _logger.exception(
+                        "browser_page_close_failed",
+                        run_ref=run_ref,
+                        target_url=target_url,
+                    )
+            if route_registered:
+                try:
+                    context.unroute("**/*", route_handler)
+                except Exception:  # noqa: BLE001
+                    _logger.exception(
+                        "browser_unroute_failed",
+                        run_ref=run_ref,
+                        target_url=target_url,
+                    )
 
         wall_time_ms = max(1, int((time.monotonic() - started) * 1000))
         dom_digest = stable_hash({"url": target_url, "dom": dom_html, "text": dom_text})
