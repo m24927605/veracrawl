@@ -1,5 +1,29 @@
 # P0 Fix Pack — Status
 
+## v2 production-authorized-source-crawler — Phase 0 → 6 progress
+
+| Step | Title | Status | Commits (this attempt) | Codex iter | Reservations |
+|------|-------|--------|------------------------|------------|--------------|
+| 0.1 | Exception mixins (RetryableError / FatalError / PolicyViolation) | DONE | a87f606 (master) | n/a (pre-attempt) | none |
+| 0.2 | Agent contracts (Message / ToolCall / ToolSpec / ResponseFormat / TokenUsage / TokenBudget / LLMExtractionCandidate / FieldCitation / FieldConfidence / RecoveryDecision / RecoveryTrace) | DONE | a08a147, c522826, 5098605, f21b7ec | 4 (approved) | 1 — see "v2 phase 0 step 0.2 reservations" below |
+
+**Attempt id**: `0a4ea4442335e51ed8ba7fcd5b47e8a86d4a6eea:da7df723b19ab39d21915274fef71ecb:01KR0038H38F0MFMR0H7HGHEA4`
+
+### v2 phase 0 step 0.2 reservations
+
+- **`ExtractionCandidate` naming divergence** (Phase 4 follow-up): design.md §3.5 listed `ExtractionCandidate` under `contracts/agent.py`, but the bare name is owned by the V1 `processing.ExtractionCandidate` heuristic contract across ~13 production imports, the foundation registry's `"ExtractionCandidate"` entry, and 8 internal target-coverage references. Phase 0 ships the v2 LLM-driven shape under the implementation-only name `LLMExtractionCandidate` plus a module-local alias inside `agent.py`. design.md was updated in commit f21b7ec to make Phase 4's reclaim of the bare name explicit; `FieldCitation` / `FieldConfidence` already ship under spec names since they have no V1 collision. **Phase 4 step 4.6** retires the legacy class and reclaims the bare name as the canonical registry/package surface.
+
+## v2 Phase 0 codex review log
+
+| Step | Iter | Result | Key findings |
+|------|------|--------|--------------|
+| 0.2 | 1 | ❌ rejected | important: spec-name `ExtractionCandidate`/`FieldCitation`/`FieldConfidence` not exposed; non-finite floats accepted by cost validators; whitespace-only strings accepted as required identifiers |
+| 0.2 | 2 | ❌ rejected | important: `source_url`/`alternative_url` accept non-http schemes; CHEAP_CLASSIFIER `cost_usd` not pinned to 0; new contracts not registered in FOUNDATION_CONTRACTS; minor: `ResponseFormat` allows `schema_name`/`strict` outside JSON_SCHEMA |
+| 0.2 | 3 | ❌ rejected | important: spec-name `ExtractionCandidate`/`FieldCitation`/`FieldConfidence` still not in registry under spec names; package exports diverge from design.md §3.5 |
+| 0.2 | 4 | ✅ approved | no production-blocking issues |
+
+## V1 (Sept 2026) — preserved
+
 | ID | Title | Status | Started | Completed | Commits | Notes |
 |----|-------|--------|---------|-----------|---------|-------|
 | P0-1 | HTTP client (urllib → httpx) | DONE | 2026-05-06 | 2026-05-07 | (this commit) | urllib → httpx；retry/Retry-After；per-hop redirect SSRF (opt-in via config)；real Chrome UA；NetworkAdapterError(ValueError) with failure_type；20 個新 unit test |
