@@ -6,12 +6,17 @@
 |------|-------|--------|------------------------|------------|--------------|
 | 0.1 | Exception mixins (RetryableError / FatalError / PolicyViolation) | DONE | a87f606 (master) | n/a (pre-attempt) | none |
 | 0.2 | Agent contracts (Message / ToolCall / ToolSpec / ResponseFormat / TokenUsage / TokenBudget / LLMExtractionCandidate / FieldCitation / FieldConfidence / RecoveryDecision / RecoveryTrace) | DONE | a08a147, c522826, 5098605, f21b7ec | 4 (approved) | 1 — see "v2 phase 0 step 0.2 reservations" below |
+| 0.3 | Network / source-adapter / security-privacy contracts (NetworkAttemptEvidence / AccessControlBlocked / AdapterEscalationDecision / AdapterEscalationPolicy / CredentialScope / CredentialUseRecord) | DONE_WITH_RESERVATIONS | afa5190, ea4feb6, 5d0fc76, d95daa3, 14862f9, 6b4137d | 5 (rejected at iter-5; iter-5 findings addressed in post-iter-5 commit 6b4137d but not re-reviewed) | 1 — see "v2 phase 0 step 0.3 reservations" below |
 
 **Attempt id**: `0a4ea4442335e51ed8ba7fcd5b47e8a86d4a6eea:da7df723b19ab39d21915274fef71ecb:01KR0038H38F0MFMR0H7HGHEA4`
 
 ### v2 phase 0 step 0.2 reservations
 
 - **`ExtractionCandidate` naming divergence** (Phase 4 follow-up): design.md §3.5 listed `ExtractionCandidate` under `contracts/agent.py`, but the bare name is owned by the V1 `processing.ExtractionCandidate` heuristic contract across ~13 production imports, the foundation registry's `"ExtractionCandidate"` entry, and 8 internal target-coverage references. Phase 0 ships the v2 LLM-driven shape under the implementation-only name `LLMExtractionCandidate` plus a module-local alias inside `agent.py`. design.md was updated in commit f21b7ec to make Phase 4's reclaim of the bare name explicit; `FieldCitation` / `FieldConfidence` already ship under spec names since they have no V1 collision. **Phase 4 step 4.6** retires the legacy class and reclaims the bare name as the canonical registry/package surface.
+
+### v2 phase 0 step 0.3 reservations
+
+- **Runtime ReDoS hardening for `CredentialScope.allowed_route_patterns`** (Phase 2 step 2.2 follow-up): codex iter-5 important finding flagged that the substring-based nested-quantifier check missed shapes like `(a+)+`, `([a-z]+)+`, and nested alternation groups. Commit 6b4137d (post-iter-5) replaced the substring check with a structural AST walk over Python's `re._parser` that catches every `MAX_REPEAT` / `MIN_REPEAT` / `POSSESSIVE_REPEAT` operator nested inside another, so all those shapes are now refused at the contract layer. Two gaps remain that are squarely runtime concerns and belong to **Phase 2 step 2.2's `StrictAllowlistScope`**: (a) regex matches still run on the standard Python engine, which has no per-match timeout — a sufficiently pathological input could still wedge the matcher even though the AST is well-formed; (b) attacker-controlled URL paths in production hit the regex on every request, so a runtime hardening layer (timeout, alternative engine, e.g., `re2` or a glob-only DSL) is needed even with the contract-layer AST guard. The contract-layer AST detector is the appropriate Phase 0 fix; runtime defenses are Phase 2's job.
 
 ## v2 Phase 0 codex review log
 
@@ -21,6 +26,11 @@
 | 0.2 | 2 | ❌ rejected | important: `source_url`/`alternative_url` accept non-http schemes; CHEAP_CLASSIFIER `cost_usd` not pinned to 0; new contracts not registered in FOUNDATION_CONTRACTS; minor: `ResponseFormat` allows `schema_name`/`strict` outside JSON_SCHEMA |
 | 0.2 | 3 | ❌ rejected | important: spec-name `ExtractionCandidate`/`FieldCitation`/`FieldConfidence` still not in registry under spec names; package exports diverge from design.md §3.5 |
 | 0.2 | 4 | ✅ approved | no production-blocking issues |
+| 0.3 | 1 | ❌ rejected | important: `allowed_route_patterns` empty allowed; `allowed_origins` validates as URL not origin (path/query/fragment leak through); `CredentialUseRecord` allows transport failure without `attempt_evidence_ref`; `AdapterEscalationPolicy` doesn't enforce design.md §3.2 escalation chain; minor: tests don't cover all of the above |
+| 0.3 | 2 | ❌ rejected | important: `CredentialScope.expires_at` time-dependent validation breaks replay determinism (rejected past expiry at construction) |
+| 0.3 | 3 | ❌ rejected | important: `credential_handle_ref` accepts raw secrets like `raw_secret:...` / `password=...`; `NetworkAttemptEvidence` headers stored without redaction validation (Authorization/Cookie/X-Api-Key leak risk); minor: `AdapterEscalationPolicy` allows empty `allowed_transitions` |
+| 0.3 | 4 | ❌ rejected | important: route-pattern grammar admits ReDoS patterns (`.*` catch-all, no anchoring requirement); minor: `AccessControlProvider` enum not exposed at package root |
+| 0.3 | 5 | ❌ rejected | important: substring-based ReDoS detection misses `(a+)+` / `([a-z]+)+` / nested alternation groups; minor: `CredentialScope` docstring contradicts shape-only validator. **Both findings addressed in post-iter-5 commit 6b4137d** (structural AST walk for nested quantifiers + docstring update); status = DONE_WITH_RESERVATIONS because no formal iter-6 review per the 5-iter cap protocol. Runtime ReDoS hardening (timeout / alt engine) deferred to Phase 2 step 2.2 |
 
 ## V1 (Sept 2026) — preserved
 
