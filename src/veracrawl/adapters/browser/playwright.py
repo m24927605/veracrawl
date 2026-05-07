@@ -48,6 +48,7 @@ end-to-end without a real Chromium install.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import time
@@ -78,6 +79,12 @@ _DEFAULT_CHROME_UA: Final[str] = (
 
 _RUN_REF_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9_.-]+")
 _STORAGE_STATE_FILE_MODE: Final[int] = 0o600  # owner read/write only
+# Cap the human-readable prefix so the resulting filename stays well
+# inside POSIX ``NAME_MAX`` (255) and Windows ``MAX_PATH`` margins
+# regardless of how long the caller's run_ref happens to be (codex
+# iter-3 minor). The 16-hex-char SHA-256 digest is the collision-
+# resistant key; the prefix is purely cosmetic.
+_RUN_REF_PREFIX_MAX: Final[int] = 64
 
 _logger = get_logger(__name__)
 
@@ -95,11 +102,17 @@ def _storage_state_filename(run_ref: str) -> str:
 
     Use a SHA-256 digest of the raw ``run_ref`` as the
     collision-resistant suffix and keep the sanitized prefix only
-    for human readability. Two distinct refs hash to distinct
-    suffixes; the file lookup keys on the suffix, so cross-run
-    contamination at the filename layer is impossible.
+    for human readability. The prefix is truncated to
+    ``_RUN_REF_PREFIX_MAX`` characters so externally-supplied long
+    refs cannot push the filename past the filesystem's
+    ``NAME_MAX`` limit (codex iter-3 minor — silent persistence
+    failure at session close otherwise). Two distinct refs hash to
+    distinct suffixes; the file lookup keys on the digest, so
+    cross-run contamination at the filename layer is impossible.
     """
     sanitized = _RUN_REF_SAFE_RE.sub("_", run_ref).strip("_") or "run"
+    if len(sanitized) > _RUN_REF_PREFIX_MAX:
+        sanitized = sanitized[:_RUN_REF_PREFIX_MAX]
     digest = hashlib.sha256(run_ref.encode("utf-8")).hexdigest()[:16]
     return f"{sanitized}.{digest}.storage_state.json"
 
@@ -292,59 +305,114 @@ class PlaywrightBrowserObservationAdapter:
         storage_state_path = self._storage_state_path(run_ref) if persist else None
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
-            context = self._new_context(browser, storage_state_path=storage_state_path)
-            session = BrowserSession(
-                adapter=self,
-                playwright_browser=browser,
-                playwright_context=context,
-                run_ref=run_ref,
-            )
+            # Outer try owns the browser; inner try owns the context.
+            # If context creation raises, the outer ``finally`` still
+            # runs ``browser.close()`` so a launched Chromium process
+            # never outlives a failed setup (codex iter-3 important).
             try:
-                yield session
-            finally:
-                # Persistence is best-effort: a failure here must not
-                # leak the browser process. Log and proceed to close.
-                if storage_state_path is not None:
-                    try:
-                        self._write_storage_state(context, storage_state_path)
-                    except Exception:  # noqa: BLE001
-                        _logger.exception(
-                            "browser_storage_state_persist_failed",
-                            run_ref=run_ref,
-                        )
-                # Cleanup runs unconditionally. Each step is also
-                # guarded so a failure in context.close() still gives
-                # browser.close() a chance to run.
                 try:
-                    context.close()
-                except Exception:  # noqa: BLE001
-                    _logger.exception("browser_context_close_failed", run_ref=run_ref)
+                    context = self._new_context(browser, storage_state_path=storage_state_path)
+                except Exception:
+                    _logger.exception("browser_context_create_failed", run_ref=run_ref)
+                    raise
+                session = BrowserSession(
+                    adapter=self,
+                    playwright_browser=browser,
+                    playwright_context=context,
+                    run_ref=run_ref,
+                )
+                try:
+                    yield session
+                finally:
+                    # Persistence is best-effort: a failure here must
+                    # not leak the browser process. Log and proceed.
+                    if storage_state_path is not None:
+                        try:
+                            self._write_storage_state(context, storage_state_path)
+                        except Exception:  # noqa: BLE001
+                            _logger.exception(
+                                "browser_storage_state_persist_failed",
+                                run_ref=run_ref,
+                            )
+                    try:
+                        context.close()
+                    except Exception:  # noqa: BLE001
+                        _logger.exception("browser_context_close_failed", run_ref=run_ref)
+                    session._closed = True  # noqa: SLF001
+            finally:
                 try:
                     browser.close()
                 except Exception:  # noqa: BLE001
                     _logger.exception("browser_close_failed", run_ref=run_ref)
-                session._closed = True  # noqa: SLF001
 
     @staticmethod
     def _write_storage_state(context: Any, path: Path) -> None:
-        """Persist ``context.storage_state`` to ``path`` with mode 0600.
+        """Persist ``context.storage_state`` to ``path`` atomically with
+        owner-only permissions.
 
         ``storage_state`` carries live cookies and origin storage —
-        the file is sensitive and must not be world-readable. We
-        ask Playwright to write the file (its native serializer is
-        what produces the round-trippable JSON shape), then chmod
-        the result to owner-only on POSIX. ``os.chmod`` is a no-op
-        on systems that do not support POSIX modes, which is
-        acceptable: those platforms get the filesystem default.
+        the file is sensitive by definition. The naive sequence
+        "write file via playwright; chmod afterward" leaves a window
+        controlled by the process umask during which the file is
+        readable by group/other (codex iter-3 important).
+
+        Atomic + secure recipe (POSIX):
+
+        1. Ask playwright for the storage_state dict (no ``path=``
+           kwarg → the dict comes back without playwright touching
+           the filesystem).
+        2. Open a sibling temp file with ``O_CREAT | O_EXCL |
+           O_WRONLY`` and mode 0o600 — atomic creation refuses to
+           clobber an existing file (so a pre-existing broad-mode
+           file or a symlink in the directory cannot leak data
+           through us), and the mode is set in the create call so
+           there is no permission-window race.
+        3. ``O_NOFOLLOW`` (where supported) refuses to follow a
+           symlink at the temp path — defends against an attacker
+           planting a symlink to a file they control.
+        4. Write JSON to the temp file, fsync to ensure durability,
+           then ``os.replace`` for atomic rename onto the final
+           path.
+        5. Re-verify the final mode is 0o600 (the rename preserves
+           the source mode on POSIX, so the chmod call is belt-
+           and-braces; on Windows ACL semantics this is a no-op
+           and we accept the filesystem default).
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        context.storage_state(path=str(path))
+        state = context.storage_state()  # dict, no filesystem touch
+        # Encode to bytes so we can write through ``os.write`` on a
+        # raw file descriptor with the secure flags below.
+        payload = json.dumps(state, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        # Use a sibling temp filename so ``os.replace`` ends up on the
+        # same filesystem (atomic rename guarantee).
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        # Build the open flags: O_NOFOLLOW where supported (POSIX);
+        # silently fall back where it's not defined (Windows).
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        flags |= nofollow
+        # If a stale temp file remains from a prior crashed run,
+        # remove it so O_EXCL doesn't reject the create.
+        if temp_path.exists() or temp_path.is_symlink():
+            try:
+                temp_path.unlink()
+            except OSError:
+                _logger.exception("browser_storage_state_temp_unlink_failed", path=str(temp_path))
+                raise
+        fd = os.open(str(temp_path), flags, _STORAGE_STATE_FILE_MODE)
+        try:
+            os.write(fd, payload)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        # Atomic rename. On POSIX this preserves the temp file's
+        # mode (0o600). On Windows the mode is filesystem-default,
+        # which is acceptable because Windows uses ACLs we cannot
+        # set portably.
+        os.replace(str(temp_path), str(path))
         try:
             os.chmod(path, _STORAGE_STATE_FILE_MODE)
         except OSError:
-            # Non-POSIX filesystems / Windows ACL semantics: log and
-            # accept the platform default rather than fail the whole
-            # session over a permissions hardening step.
             _logger.debug("storage_state_chmod_unsupported", path=str(path))
 
     def observe(

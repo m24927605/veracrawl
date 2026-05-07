@@ -112,13 +112,17 @@ class _FakeContext:
         self.new_pages.append(page)
         return page
 
-    def storage_state(self, *, path: str) -> dict[str, Any]:
-        # Record AND write a real file so subsequent runs that pass
-        # ``storage_state=path`` to ``new_context`` find a valid JSON
-        # blob — matches Playwright's actual semantics.
+    def storage_state(self, *, path: str | None = None) -> dict[str, Any]:
+        # Record the call shape and return a payload. The adapter
+        # invokes this without ``path`` (atomic-write recipe in
+        # codex iter-3 fix-up); legacy fake callers may still pass
+        # path, so accept both.
         self.storage_state_calls.append({"path": path})
         payload = {"cookies": [{"name": "session", "value": "from:" + str(self.init_kwargs)}]}
-        Path(path).write_text(json.dumps(payload), encoding="utf-8")
+        if path is not None:
+            # Legacy code path — write to disk. The new adapter does
+            # not exercise this branch; kept for fixture compatibility.
+            Path(path).write_text(json.dumps(payload), encoding="utf-8")
         return payload
 
     def close(self) -> None:
@@ -352,11 +356,15 @@ def test_storage_state_saved_to_disk_at_session_close(tmp_path: Path) -> None:
     pw: _FakePlaywright = captured["pw"]
     context = pw.browsers[0].contexts[0]
     assert len(context.storage_state_calls) == 1, (
-        "storage_state(path=...) must be called exactly once at session close"
+        "storage_state() must be called exactly once at session close"
     )
-    saved_path = Path(context.storage_state_calls[0]["path"])
-    assert saved_path.parent == tmp_path
-    assert saved_path.exists(), "storage_state file must be on disk after close"
+    # The adapter calls storage_state() WITHOUT a path (atomic write
+    # recipe in codex iter-3 fix-up: get the dict, write it via
+    # secure os.open + os.replace ourselves). Verify the file is on
+    # disk in the configured directory.
+    files = list(tmp_path.glob("*.storage_state.json"))
+    assert len(files) == 1, "storage_state file must be on disk after close"
+    assert files[0].parent == tmp_path
 
 
 def test_storage_state_loaded_into_context_on_session_open(tmp_path: Path) -> None:
@@ -494,16 +502,15 @@ def test_distinct_run_refs_use_distinct_storage_state_files(tmp_path: Path) -> N
                 sandbox_policy=_sandbox(),
             )
 
-    saved_paths = [
-        Path(captured[i]["pw"].browsers[0].contexts[0].storage_state_calls[0]["path"])
-        for i in range(2)
-    ]
-    assert len({p.name for p in saved_paths}) == 2, (
-        "distinct run_refs must produce distinct storage_state file names"
-    )
-    # And both files end up on disk (closed session = persisted).
-    for path in saved_paths:
-        assert path.exists()
+    # The adapter writes via secure os.open + os.replace itself, so
+    # the canonical evidence is the filesystem state in tmp_path.
+    saved_paths = sorted(tmp_path.glob("*.storage_state.json"))
+    assert len(saved_paths) == 2, "distinct run_refs must produce distinct storage_state file names"
+    assert len({p.name for p in saved_paths}) == 2
+    # Both runs invoked storage_state() exactly once at session close.
+    for entry in captured:
+        context = entry["pw"].browsers[0].contexts[0]
+        assert len(context.storage_state_calls) == 1
 
 
 def test_run_a_does_not_load_run_b_state(tmp_path: Path) -> None:
@@ -870,3 +877,125 @@ def test_unroute_runs_when_page_close_raises(tmp_path: Path) -> None:
     assert context.routes_unregistered == 1, (
         "context.unroute must run even when page.close() raises"
     )
+
+
+# Codex iter-3 important: browser cleanup on context-create failure
+
+
+def test_browser_closes_when_context_create_raises(tmp_path: Path) -> None:
+    """If ``browser.new_context(...)`` raises (corrupt prior storage_state,
+    Playwright internal error, permission denied), the launched
+    Chromium process must still close — leaking a process per failed
+    setup builds up to OOM in production."""
+    captured: dict[str, Any] = {}
+
+    class _ContextCreateFailureBrowser(_FakeBrowser):
+        def new_context(self, **kwargs: Any) -> _FakeContext:
+            self.contexts.append(_FakeContext(self, kwargs))  # record attempt
+            raise RuntimeError("simulated context create failure")
+
+    class _ContextCreateFailureChromium:
+        def __init__(self, parent: _FakePlaywright) -> None:
+            self._parent = parent
+
+        def launch(self, *, headless: bool) -> _FakeBrowser:
+            assert headless is True
+            browser = _ContextCreateFailureBrowser()
+            self._parent.browsers.append(browser)
+            return browser
+
+    @contextmanager
+    def failing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        pw.chromium = _ContextCreateFailureChromium(pw)  # type: ignore[assignment]
+        captured["pw"] = pw
+        yield pw
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: failing_factory,
+    )
+    with pytest.raises(RuntimeError, match="simulated context create failure"):
+        with adapter.open_session(run_ref="run:ctx-fail"):
+            pass
+
+    pw: _FakePlaywright = captured["pw"]
+    assert len(pw.browsers) == 1
+    assert pw.browsers[0].closed, (
+        "browser.close() must run when context creation raises so the "
+        "Chromium process is not leaked"
+    )
+
+
+# Codex iter-3 important: atomic + secure storage_state write -----
+
+
+def test_storage_state_file_mode_is_set_during_create_not_after(
+    tmp_path: Path,
+) -> None:
+    """The previous implementation called ``context.storage_state(path=...)``
+    then ran ``os.chmod`` afterwards — a permission window controlled by
+    the process umask sat between those two calls during which the file
+    was readable by group/other. The fix uses ``os.open(...,
+    O_CREAT|O_EXCL|O_WRONLY, 0o600)`` to set the mode atomically with
+    creation. Verify the resulting file mode is correct on POSIX."""
+    if os.name != "posix":  # noqa: SIM103 — explicit Windows skip
+        pytest.skip("POSIX-only file mode check")
+
+    adapter = _adapter(storage_state_dir=tmp_path)
+    with adapter.open_session(run_ref="run:atomic") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+    files = list(tmp_path.glob("*.storage_state.json"))
+    assert len(files) == 1
+    mode = files[0].stat().st_mode & 0o777
+    assert mode == 0o600
+
+
+def test_storage_state_write_clobbers_stale_temp_file(tmp_path: Path) -> None:
+    """If a previous session crashed mid-write, a leftover ``.tmp``
+    file might exist next to the final path. The atomic recipe uses
+    ``O_EXCL`` so a stale temp would otherwise crash session close;
+    the implementation removes any leftover temp before opening so
+    a crashed prior run does not break the next one."""
+    target_name = _storage_state_filename("run:after-crash")
+    stale_tmp = tmp_path / (target_name + ".tmp")
+    stale_tmp.write_text("garbage from prior crash", encoding="utf-8")
+
+    adapter = _adapter(storage_state_dir=tmp_path)
+    # Should not raise.
+    with adapter.open_session(run_ref="run:after-crash") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+
+    files = list(tmp_path.glob("*.storage_state.json"))
+    assert len(files) == 1
+    # The .tmp file is gone (consumed by the atomic rename).
+    assert not stale_tmp.exists()
+
+
+# Codex iter-3 minor: filename length cap ---------------------------
+
+
+def test_storage_state_filename_caps_long_run_ref_prefix() -> None:
+    """A pathologically long run_ref must not push the resulting
+    filename past the filesystem ``NAME_MAX`` limit (255 on most
+    POSIX filesystems). The prefix is capped; the digest provides
+    the collision-resistant key."""
+    long_ref = "run:" + ("very-long-segment" * 50)
+    filename = _storage_state_filename(long_ref)
+    # Stay safely below NAME_MAX=255 across all common filesystems.
+    assert len(filename) <= 200
+    # Two distinct long refs that share the cap-truncated prefix
+    # must still produce distinct filenames thanks to the digest.
+    other_long_ref = long_ref + "_distinct_suffix"
+    assert _storage_state_filename(long_ref) != _storage_state_filename(other_long_ref)
