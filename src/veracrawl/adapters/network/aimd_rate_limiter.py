@@ -260,20 +260,32 @@ class InMemoryAimdLimiter:
         if bucket is None:
             return
         with bucket.lock:
-            bucket.rate_per_second = max(
+            new_rate = max(
                 self._min_rate,
                 bucket.rate_per_second / self._md_factor,
             )
+            bucket.rate_per_second = new_rate
             bucket.success_count = 0
             now = self._clock()
             jitter = self._random(0.0, self._cooldown_jitter) if self._cooldown_jitter > 0 else 0.0
-            cooldown_until = now + self._cooldown_base + jitter
+            cooldown_candidate = now + self._cooldown_base + jitter
             if retry_after_seconds is not None and retry_after_seconds > 0:
-                cooldown_until = max(cooldown_until, now + retry_after_seconds)
+                cooldown_candidate = max(cooldown_candidate, now + retry_after_seconds)
             existing = bucket.cooldown_until_monotonic
-            bucket.cooldown_until_monotonic = (
-                cooldown_until if existing is None else max(existing, cooldown_until)
+            cooldown_until = (
+                cooldown_candidate if existing is None else max(existing, cooldown_candidate)
             )
+            bucket.cooldown_until_monotonic = cooldown_until
+        origin, route_class, adapter_type = permit.bucket_key
+        _logger.info(
+            "rate_limiter_throttled",
+            origin=origin,
+            route_class=route_class.value,
+            adapter_type=adapter_type.value,
+            new_rate_per_second=new_rate,
+            cooldown_seconds=cooldown_until - now,
+            retry_after_seconds=retry_after_seconds,
+        )
 
     # -- Inspection (test / observability) ---------------------------
 

@@ -55,6 +55,7 @@ from veracrawl.ports.rate_limiter import (
     NoopRateLimiter,
     RateLimiterPort,
     RateLimitFloor,
+    RateLimitProhibited,
 )
 from veracrawl.ports.robots import NoopRobotsPort, RobotsAdvice, RobotsPort
 from veracrawl.runtime_support.runtime_mode import (
@@ -399,6 +400,13 @@ class StdlibHttpSourceAdapter:
         self._client = httpx.Client(**client_kwargs)
         self._last_result: NetworkClientResult | None = None
         self._redirect_hops: list[RedirectHop] = []
+        # Retry-After observed during the most recent ``_send_with_retry``.
+        # Reset at the start of each per-permit attempt so a stale hint
+        # from a previous hop does not bleed into the next bucket's
+        # cooldown (the limiter applies cooldown per (origin, route,
+        # adapter) bucket; hop-to-hop mixing would over-extend an
+        # unrelated bucket).
+        self._last_retry_after_seconds: float | None = None
 
     @property
     def last_result(self) -> NetworkClientResult | None:
@@ -511,7 +519,18 @@ class StdlibHttpSourceAdapter:
         * Successful (non-retryable, returned by ``_send_with_retry``)
           → ``report_success`` → drives additive-increase phase.
         * :class:`RetryExhaustedError` after a 429 retry burst →
-          ``report_throttled`` → multiplicative decrease + cooldown.
+          ``report_throttled(retry_after_seconds=…)`` → multiplicative
+          decrease + cooldown that honors the server's Retry-After
+          hint when present (design.md §4 Phase 1: floor is the
+          strictest of ``Retry-After`` / ``Crawl-delay`` /
+          ``Request-rate``; the cooldown extension preserves that
+          contract for the *next* caller of the bucket).
+        * :class:`RateLimitProhibited` (raised by the limiter when
+          the floor signals ``Request-rate: 0/N`` → infinite
+          interval) → translate to :class:`RobotsBlockedError` so the
+          cooperative-crawler refusal path is uniform with what
+          :meth:`_check_robots` raises for explicit ``Disallow``
+          rules.
         * Other failures (network / SSRF / etc.) → no report so
           AIMD state is not biased by infrastructure issues.
         """
@@ -520,16 +539,29 @@ class StdlibHttpSourceAdapter:
             crawl_delay_seconds=advice.crawl_delay,
             request_rate=advice.request_rate,
         )
-        with self._config.rate_limiter.acquire(
-            origin=_origin(url),
-            route_class=self._config.route_class,
-            adapter_type=AdapterType.HTTP,
-            floor=floor,
-        ) as permit:
+        try:
+            permit_cm = self._config.rate_limiter.acquire(
+                origin=_origin(url),
+                route_class=self._config.route_class,
+                adapter_type=AdapterType.HTTP,
+                floor=floor,
+            )
+        except RateLimitProhibited as exc:
+            raise RobotsBlockedError(
+                f"{url}: rate-limiter refused (full prohibition): {exc}"
+            ) from exc
+        # Reset the per-attempt Retry-After cache so a hint observed
+        # on a previous hop does not extend the cooldown for the
+        # *current* bucket (each acquire is its own logical attempt).
+        self._last_retry_after_seconds = None
+        with permit_cm as permit:
             try:
                 response = self._send_with_retry(url)
             except RetryExhaustedError:
-                self._config.rate_limiter.report_throttled(permit=permit)
+                self._config.rate_limiter.report_throttled(
+                    permit=permit,
+                    retry_after_seconds=self._last_retry_after_seconds,
+                )
                 raise
             self._config.rate_limiter.report_success(permit=permit)
             return response
@@ -570,9 +602,19 @@ class StdlibHttpSourceAdapter:
 
             if response.status_code in _RETRYABLE_STATUSES:
                 last_response = response
+                # Track the last observed Retry-After so
+                # ``_send_with_rate_limit`` can pass it into
+                # ``report_throttled`` on retry exhaustion. Only
+                # 429 + 503 carry meaningful Retry-After per RFC
+                # 7231; we record any retryable status though,
+                # because the server may include the header on
+                # 502 / 504 too.
+                retry_after_hint = _parse_retry_after(response.headers.get(_RETRY_AFTER_HEADER))
+                if retry_after_hint is not None:
+                    self._last_retry_after_seconds = retry_after_hint
                 if attempt >= self._config.max_attempts:
                     break
-                wait = _parse_retry_after(response.headers.get(_RETRY_AFTER_HEADER))
+                wait = retry_after_hint
                 if wait is None:
                     wait = _backoff_seconds(attempt, jitter=self._jitter)
                 wait = min(wait, self._config.retry_after_cap_s)

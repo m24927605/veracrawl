@@ -31,9 +31,9 @@ from veracrawl.contracts.source_adapter import SourceAdapterCommand
 from veracrawl.fetch.acquisition import source_adapter_spec
 from veracrawl.ports.rate_limiter import (
     NoopRateLimiter,
+    RateLimiterPort,
     RateLimitFloor,
     RateLimitPermit,
-    RateLimiterPort,
 )
 from veracrawl.ports.robots import RobotsAdvice
 from veracrawl.runtime_support.runtime_mode import (
@@ -327,3 +327,143 @@ def test_default_noop_limiter_used_when_not_configured() -> None:
 
     config = HttpClientConfig()
     assert isinstance(config.rate_limiter, NoopRateLimiter)
+
+
+class _ProhibitingRateLimiter:
+    """Limiter that always raises ``RateLimitProhibited`` on acquire.
+    Models the ``Request-rate: 0/N`` floor → infinite-interval case.
+    """
+
+    def acquire(
+        self,
+        *,
+        origin: str,
+        route_class: RouteClass,
+        adapter_type: AdapterType,
+        floor: RateLimitFloor | None = None,
+    ) -> RateLimitPermit:
+        from veracrawl.ports.rate_limiter import RateLimitProhibited
+
+        del route_class, adapter_type, floor
+        raise RateLimitProhibited(f"prohibited: {origin}")
+
+    def report_success(self, *, permit: RateLimitPermit) -> None:
+        del permit
+
+    def report_throttled(
+        self,
+        *,
+        permit: RateLimitPermit,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        del permit, retry_after_seconds
+
+
+def test_rate_limit_prohibited_translates_to_robots_blocked() -> None:
+    """When the limiter refuses (e.g. ``Request-rate: 0/N``), the
+    adapter must surface a typed cooperative refusal — same shape as
+    an explicit ``Disallow`` rule from ``_check_robots``.
+    """
+
+    from veracrawl.adapters.network.stdlib_http import RobotsBlockedError
+
+    adapter = StdlibHttpSourceAdapter(
+        _make_request(),
+        config=HttpClientConfig(rate_limiter=_ProhibitingRateLimiter()),
+        transport=_ok_transport(),
+    )
+    with pytest.raises(RobotsBlockedError) as exc:
+        adapter.execute(_make_command())
+    assert "rate-limiter refused" in str(exc.value)
+
+
+class _RetryAfterCapturingLimiter:
+    """Records the retry_after_seconds passed to report_throttled."""
+
+    def __init__(self) -> None:
+        self.acquired: list[str] = []
+        self.throttled_retry_after: list[float | None] = []
+        self.successes = 0
+
+    def acquire(
+        self,
+        *,
+        origin: str,
+        route_class: RouteClass,
+        adapter_type: AdapterType,
+        floor: RateLimitFloor | None = None,
+    ) -> RateLimitPermit:
+        del floor
+        self.acquired.append(origin)
+        return RateLimitPermit(
+            bucket_key=(origin, route_class, adapter_type),
+            granted_at_monotonic=0.0,
+        )
+
+    def report_success(self, *, permit: RateLimitPermit) -> None:
+        permit.mark_reported()
+        self.successes += 1
+
+    def report_throttled(
+        self,
+        *,
+        permit: RateLimitPermit,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        permit.mark_reported()
+        self.throttled_retry_after.append(retry_after_seconds)
+
+
+def _retry_after_transport(retry_after: str) -> httpx.MockTransport:
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            429,
+            headers={"content-type": "text/plain", "retry-after": retry_after},
+        )
+
+    return httpx.MockTransport(_handler)
+
+
+def test_retry_after_propagated_to_report_throttled() -> None:
+    """The server's ``Retry-After`` hint must reach the limiter so the
+    cooldown extension honors the spec floor (strictest of
+    ``Retry-After`` / ``Crawl-delay`` / ``Request-rate``).
+    """
+
+    from veracrawl.adapters.network.stdlib_http import RetryExhaustedError
+
+    limiter = _RetryAfterCapturingLimiter()
+    adapter = StdlibHttpSourceAdapter(
+        _make_request(),
+        config=HttpClientConfig(rate_limiter=limiter, max_attempts=2),
+        transport=_retry_after_transport("7"),
+        sleep_fn=lambda _s: None,
+        jitter_fn=lambda: 0.0,
+    )
+    with pytest.raises(RetryExhaustedError):
+        adapter.execute(_make_command())
+    assert limiter.throttled_retry_after == [7.0]
+
+
+def test_retry_after_none_when_header_absent_on_429() -> None:
+    """If the server's 429 has no Retry-After, ``report_throttled`` is
+    called with ``retry_after_seconds=None`` (the limiter falls back
+    to its base cooldown)."""
+
+    from veracrawl.adapters.network.stdlib_http import RetryExhaustedError
+
+    limiter = _RetryAfterCapturingLimiter()
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, headers={"content-type": "text/plain"})
+
+    adapter = StdlibHttpSourceAdapter(
+        _make_request(),
+        config=HttpClientConfig(rate_limiter=limiter, max_attempts=2),
+        transport=httpx.MockTransport(_handler),
+        sleep_fn=lambda _s: None,
+        jitter_fn=lambda: 0.0,
+    )
+    with pytest.raises(RetryExhaustedError):
+        adapter.execute(_make_command())
+    assert limiter.throttled_retry_after == [None]
