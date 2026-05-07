@@ -64,6 +64,26 @@ class AdapterType(StrEnum):
     PRIOR_SNAPSHOT = "prior_snapshot"
 
 
+class RouteClass(StrEnum):
+    """Coarse route classification used by the rate limiter bucket key.
+
+    Per design.md §6 (Phase 1 step 1.3 ``RateLimiterPort``): the AIMD
+    bucket is keyed by ``(origin, route_class, adapter_type)``. The
+    five values mirror ``docs/09 §Website Pattern Coverage`` for the
+    cooperative crawler: ``listing`` and ``detail`` separate index
+    pages from leaf records, ``search`` covers query endpoints,
+    ``api`` covers structured / official API endpoints, and ``file``
+    covers documents / large binary downloads. Keep the set small —
+    each new route class multiplies the per-origin bucket cardinality.
+    """
+
+    LISTING = "listing"
+    DETAIL = "detail"
+    SEARCH = "search"
+    API = "api"
+    FILE = "file"
+
+
 class SourceAdapterResultType(StrEnum):
     FETCH_RESULT = "fetch_result"
     BROWSER_SNAPSHOT = "browser_snapshot"

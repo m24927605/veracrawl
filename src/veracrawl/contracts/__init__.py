@@ -112,6 +112,7 @@ from veracrawl.contracts.enums import (
     RecoveryDecisionSource,
     RecoveryTerminationReason,
     ResponseFormatKind,
+    RouteClass,
 )
 from veracrawl.contracts.event import CrawlRunEvent, EventCursor, EventTypeSpec
 from veracrawl.contracts.evidence import (
@@ -561,6 +562,7 @@ __all__ = [
     "RecoveryTrace",
     "ResponseFormat",
     "ResponseFormatKind",
+    "RouteClass",
     "TokenBudget",
     "TokenUsage",
     "ToolCall",
