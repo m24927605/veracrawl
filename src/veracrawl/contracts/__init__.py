@@ -1,4 +1,15 @@
-"""Public foundation contract exports."""
+"""Public foundation contract exports.
+
+The package root re-exports the V1 contract surface plus the v2
+production-authorized-source-crawler additions (design.md §3.5).
+For the v2 path it also re-exports the enum types those contracts
+use as field types (``MessageRole``, ``RecoveryDecisionKind``,
+``AccessControlProvider``, etc.), so a consumer that imports
+``Message`` / ``AccessControlBlocked`` / ``RecoveryDecision`` from
+the package root can construct them without a second import from
+``veracrawl.contracts.enums``. V1 contract field enums continue to
+be sourced from ``veracrawl.contracts.enums`` directly.
+"""
 
 from veracrawl.contracts.agent import (
     AgentActionTrace,
@@ -92,6 +103,15 @@ from veracrawl.contracts.durable import (
     EventCursorRecord,
     OutboxRecord,
     UnitOfWorkRecord,
+)
+from veracrawl.contracts.enums import (
+    AccessControlProvider,
+    CalibrationMethod,
+    MessageRole,
+    RecoveryDecisionKind,
+    RecoveryDecisionSource,
+    RecoveryTerminationReason,
+    ResponseFormatKind,
 )
 from veracrawl.contracts.event import CrawlRunEvent, EventCursor, EventTypeSpec
 from veracrawl.contracts.evidence import (
@@ -467,8 +487,10 @@ __all__ = [
     "ContextBundleTrace",
     "ContextRef",
     "AccessControlBlocked",
+    "AccessControlProvider",
     "AdapterEscalationDecision",
     "AdapterEscalationPolicy",
+    "CalibrationMethod",
     "CredentialScope",
     "CredentialUseAudit",
     "CredentialUseRecord",
@@ -531,9 +553,14 @@ __all__ = [
     "LLMFieldCitation",
     "LLMFieldConfidence",
     "Message",
+    "MessageRole",
     "RecoveryDecision",
+    "RecoveryDecisionKind",
+    "RecoveryDecisionSource",
+    "RecoveryTerminationReason",
     "RecoveryTrace",
     "ResponseFormat",
+    "ResponseFormatKind",
     "TokenBudget",
     "TokenUsage",
     "ToolCall",

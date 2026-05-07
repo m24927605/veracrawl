@@ -453,6 +453,83 @@ def test_credential_scope_rejects_uncompilable_route_pattern() -> None:
         _valid_credential_scope(allowed_route_patterns=["^/bad("])
 
 
+@pytest.mark.parametrize(
+    "catch_all",
+    [
+        ".*",
+        ".+",
+        "^.*$",
+        "^.+$",
+        "^/$",
+        "/",
+        "^/.*$",
+        "/.*",
+        "/.+",
+    ],
+)
+def test_credential_scope_rejects_catch_all_route_pattern(catch_all: str) -> None:
+    """A catch-all route pattern would let StrictAllowlistScope admit
+    every URL under the origin, defeating the fine-grained scope
+    rule. The ``allowed_origins`` field already expresses
+    origin-wide policy."""
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(allowed_route_patterns=[catch_all])
+
+
+@pytest.mark.parametrize(
+    "unanchored",
+    [
+        "buy/browse/v1/.*",  # missing leading /
+        ".*/api",  # not path-anchored
+        "browse",  # bare path component
+    ],
+)
+def test_credential_scope_rejects_unanchored_route_pattern(unanchored: str) -> None:
+    """The contract requires path anchoring so origin policy stays
+    expressed via ``allowed_origins`` and route policy stays
+    expressed via ``allowed_route_patterns``."""
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(allowed_route_patterns=[unanchored])
+
+
+@pytest.mark.parametrize(
+    "redos",
+    [
+        "^/buy/(.*)+/v1",
+        "^/buy/(.+)+",
+        "^/(.*)*",
+        "^/(.+)*",
+        "^/(.*?)+",
+        "^/(.+?)+",
+    ],
+)
+def test_credential_scope_rejects_redos_prone_route_pattern(redos: str) -> None:
+    """Nested-quantifier constructs like ``(.*)+`` are catastrophic-
+    backtracking ReDoS risk. Refuse at the contract layer; runtime-
+    side hardening is Phase 2 step 2.2's job."""
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(allowed_route_patterns=[redos])
+
+
+def test_credential_scope_rejects_oversize_route_pattern() -> None:
+    big = "^/buy/browse/v1/" + "x" * 300
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(allowed_route_patterns=[big])
+
+
+def test_credential_scope_accepts_realistic_route_patterns() -> None:
+    """Realistic patterns the design's V1 targets actually use must
+    keep validating."""
+    scope = _valid_credential_scope(
+        allowed_route_patterns=[
+            "^/buy/browse/v1/item/.*",
+            "/products/[0-9]+",
+            "^/api/v[0-9]+/orders/.+/items$",
+        ],
+    )
+    assert len(scope.allowed_route_patterns) == 3
+
+
 # Codex iter-1 fix-up: origin-only validation ---------------------
 
 

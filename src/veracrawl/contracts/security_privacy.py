@@ -21,10 +21,85 @@ from veracrawl.contracts.enums import (
 
 _ALLOWED_HTTP_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 
+# Maximum length of a route pattern. Anything longer almost certainly
+# encodes a wall of alternations the producer should split into
+# multiple ``CredentialScope`` entries instead. Caps total work for
+# any single regex compile + match in ``StrictAllowlistScope``.
+_MAX_ROUTE_PATTERN_LENGTH = 256
+
+# Patterns that are catch-alls after the standard anchors are stripped.
+# ``StrictAllowlistScope`` admitting any of these would defeat the
+# fine-grained scope rule design.md §3.5 stipulates.
+_CATCH_ALL_BODIES = frozenset({"", ".", ".*", ".+", "/", "/.*", "/.+", "/.*?", "/.+?"})
+
+# Substrings that signal ReDoS-prone constructs (nested quantifiers).
+# Phase 0 catches the obvious shapes; runtime-side hardening (Phase 2
+# step 2.2) can layer additional defenses (timeout, alternative engine).
+_REDOS_INDICATORS = (
+    "(.*)+",
+    "(.+)+",
+    "(.*)*",
+    "(.+)*",
+    "(.*?)+",
+    "(.+?)+",
+)
+
 
 def _is_http_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _validate_route_pattern(pattern: str) -> None:
+    """Reject route patterns that would defeat fine-grained scope.
+
+    Codex iter-4 important: ``StrictAllowlistScope`` runs each
+    pattern against every credential-bearing request URL. Patterns
+    like ``.*`` fail open into origin-wide credential use; nested
+    quantifiers like ``(.*)+`` are catastrophic-backtracking ReDoS
+    risk. Phase 0 enforces a path-anchored, non-catch-all subset at
+    the contract layer; Phase 2 step 2.2 may layer runtime defenses.
+    """
+    if not pattern:
+        raise ValueError("credential scope allowed_route_pattern must be non-empty")
+    if len(pattern) > _MAX_ROUTE_PATTERN_LENGTH:
+        raise ValueError(
+            f"credential scope allowed_route_pattern length {len(pattern)} exceeds "
+            f"the {_MAX_ROUTE_PATTERN_LENGTH}-character cap; split into multiple "
+            "scope entries"
+        )
+    if not (pattern.startswith("/") or pattern.startswith("^/")):
+        raise ValueError(
+            f"credential scope allowed_route_pattern {pattern!r} must be path-"
+            "anchored (start with '/' or '^/'); origin policy is expressed via "
+            "allowed_origins, not the route pattern"
+        )
+    body = pattern
+    if body.startswith("^"):
+        body = body[1:]
+    if body.endswith("$"):
+        body = body[:-1]
+    if body in _CATCH_ALL_BODIES:
+        raise ValueError(
+            f"credential scope allowed_route_pattern {pattern!r} is a catch-all; "
+            "StrictAllowlistScope admitting it would defeat the fine-grained "
+            "scope rule. Use a specific path prefix instead, or split into "
+            "multiple scopes if the producer truly needs origin-wide access"
+        )
+    for indicator in _REDOS_INDICATORS:
+        if indicator in pattern:
+            raise ValueError(
+                f"credential scope allowed_route_pattern {pattern!r} contains a "
+                f"nested-quantifier construct {indicator!r} that is a known "
+                "ReDoS risk; rewrite without nested ``*``/``+`` quantifiers"
+            )
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(
+            f"credential scope allowed_route_pattern {pattern!r} is not a "
+            f"compilable regex: {exc.msg}"
+        ) from exc
 
 
 def _is_valid_origin(value: str) -> bool:
@@ -487,13 +562,7 @@ class CredentialScope(TimestampedModel):
                 "path under the origin"
             )
         for pattern in self.allowed_route_patterns:
-            try:
-                re.compile(pattern)
-            except re.error as exc:
-                raise ValueError(
-                    f"credential scope allowed_route_pattern {pattern!r} is not a "
-                    f"compilable regex: {exc.msg}"
-                ) from exc
+            _validate_route_pattern(pattern)
         if not self.allowed_methods:
             raise ValueError("credential scope requires at least one allowed method")
         for method in self.allowed_methods:
