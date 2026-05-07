@@ -256,13 +256,22 @@ def test_production_mode_with_default_noop_port_fails_closed() -> None:
 
 def test_production_mode_with_real_port_succeeds() -> None:
     """Production mode must accept any non-noop port — the gate only
-    refuses to silently bypass; it does not refuse legitimate wiring."""
+    refuses to silently bypass; it does not refuse legitimate wiring.
+    """
+
+    from veracrawl.adapters.network.aimd_rate_limiter import InMemoryAimdLimiter
 
     real_port = _StubRobotsPort(advice=RobotsAdvice(is_allowed=True))
+    # Phase 1 step 1.3 also gates the rate limiter in production —
+    # supply a real ``InMemoryAimdLimiter`` so the constructor passes
+    # both gates.
     with with_runtime_mode(RuntimeMode.PRODUCTION):
         adapter = StdlibHttpSourceAdapter(
             _make_request("https://example.test/p/1"),
-            config=HttpClientConfig(robots_port=real_port),
+            config=HttpClientConfig(
+                robots_port=real_port,
+                rate_limiter=InMemoryAimdLimiter(),
+            ),
             transport=_ok_transport(),
         )
     result = adapter.execute(_make_command())

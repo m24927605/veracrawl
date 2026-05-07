@@ -44,13 +44,19 @@ from veracrawl.contracts.enums import (
     AdapterResultStatus,
     AdapterType,
     NetworkFailureType,
+    RouteClass,
     SourceAdapterResultType,
 )
 from veracrawl.contracts.errors import FatalError, PolicyViolation, RetryableError
 from veracrawl.contracts.network import NetworkRequest, NetworkResponse, RedirectHop
 from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapterResult
 from veracrawl.ports.network import NetworkClientResult
-from veracrawl.ports.robots import NoopRobotsPort, RobotsPort
+from veracrawl.ports.rate_limiter import (
+    NoopRateLimiter,
+    RateLimiterPort,
+    RateLimitFloor,
+)
+from veracrawl.ports.robots import NoopRobotsPort, RobotsAdvice, RobotsPort
 from veracrawl.runtime_support.runtime_mode import (
     ProductionRuntimeNotImplemented,
     RuntimeMode,
@@ -263,6 +269,23 @@ class HttpClientConfig:
     # cross-redirect target with the same single-source-of-truth user
     # agent (``user_agent``).
     robots_port: RobotsPort = field(default_factory=NoopRobotsPort)
+    # ``RateLimiterPort`` cooperative pacing (design.md §4 Phase 1
+    # step 1.3). The default is :class:`NoopRateLimiter` so existing
+    # fixture tests without rate-limit wiring continue to pass;
+    # production callers must inject :class:`InMemoryAimdLimiter` (or
+    # another real impl). The adapter acquires a permit per HTTP
+    # attempt — initial URL plus every redirect target — with the
+    # ``RateLimitFloor`` derived from the live ``RobotsAdvice`` so
+    # ``Crawl-delay`` / ``Request-rate`` flow into the AIMD floor.
+    # Successful (non-retryable) responses report success; retry
+    # exhaustion on ``429`` reports throttle so multiplicative
+    # decrease + cooldown apply for the next caller.
+    rate_limiter: RateLimiterPort = field(default_factory=NoopRateLimiter)
+    # Bucket key route class. Default :class:`RouteClass.LISTING`
+    # because most cooperative crawls start from listing pages;
+    # callers fetching detail / search / api / file should override
+    # so AIMD state stays separated per route class.
+    route_class: RouteClass = RouteClass.LISTING
 
 
 def _is_private_network_url(url: str) -> bool:
@@ -330,9 +353,9 @@ class StdlibHttpSourceAdapter:
     ) -> None:
         self.request = request
         self._config = config or _default_config_from_request(request)
-        # Production-mode robots gate (codex iter-2 critical): the
-        # default ``HttpClientConfig.robots_port`` is ``NoopRobotsPort``
-        # so existing fixture tests keep passing. In production the
+        # Production-mode robots gate: the default
+        # ``HttpClientConfig.robots_port`` is ``NoopRobotsPort`` so
+        # existing fixture tests keep passing. In production the
         # no-op would silently bypass robots enforcement, which the
         # cooperative-crawler charter (``docs/09:116``) forbids; raise
         # so an unwired production deployment fails closed instead of
@@ -342,6 +365,18 @@ class StdlibHttpSourceAdapter:
         ):
             raise ProductionRuntimeNotImplemented(
                 backend="robots",
+                gate="StdlibHttpSourceAdapter",
+            )
+        # Production-mode rate-limiter gate (design.md §4 Phase 1
+        # step 1.3): same pattern as the robots gate. In production
+        # the no-op would skip cooperative pacing entirely, so a
+        # mis-configured deployment cannot silently hammer an origin
+        # — fail closed instead.
+        if current_mode() == RuntimeMode.PRODUCTION and isinstance(
+            self._config.rate_limiter, NoopRateLimiter
+        ):
+            raise ProductionRuntimeNotImplemented(
+                backend="rate_limiter",
                 gate="StdlibHttpSourceAdapter",
             )
         self._sleep = sleep_fn
@@ -429,9 +464,9 @@ class StdlibHttpSourceAdapter:
     def _fetch_with_redirects(self, url: str, *, policy_decision_refs: list[str]) -> httpx.Response:
         current_url = url
         # Initial URL robots check (design.md §4 Phase 1 step 1.2).
-        self._check_robots(current_url, policy_decision_refs=policy_decision_refs)
+        advice = self._check_robots(current_url, policy_decision_refs=policy_decision_refs)
         for hop in range(self._config.max_redirects + 1):
-            response = self._send_with_retry(current_url)
+            response = self._send_with_rate_limit(current_url, advice=advice)
             if not _is_redirect_status(response.status_code):
                 return response
             location = response.headers.get("location")
@@ -444,7 +479,7 @@ class StdlibHttpSourceAdapter:
             # redirect target". The check runs on every hop, not only
             # on cross-origin hops, because path-based ``Disallow``
             # rules can refuse a same-host redirect target.
-            self._check_robots(next_url, policy_decision_refs=policy_decision_refs)
+            advice = self._check_robots(next_url, policy_decision_refs=policy_decision_refs)
             self._redirect_hops.append(
                 RedirectHop(
                     id=f"redirect-hop:{self.request.id}:{hop + 1}",
@@ -459,10 +494,50 @@ class StdlibHttpSourceAdapter:
             current_url = next_url
         raise RedirectDeniedError(f"redirect loop > max_redirects={self._config.max_redirects}")
 
-    def _check_robots(self, url: str, *, policy_decision_refs: list[str]) -> None:
+    def _send_with_rate_limit(
+        self,
+        url: str,
+        *,
+        advice: RobotsAdvice,
+    ) -> httpx.Response:
+        """Acquire a rate-limit permit, send + retry, and report outcome.
+
+        The permit is scoped to one logical HTTP attempt (which may
+        retry internally on 429 / 5xx via :meth:`_send_with_retry`).
+        Floor inputs come from the live :class:`RobotsAdvice` so
+        ``Crawl-delay`` / ``Request-rate`` flow into the AIMD floor
+        for the bucket. AIMD outcomes:
+
+        * Successful (non-retryable, returned by ``_send_with_retry``)
+          → ``report_success`` → drives additive-increase phase.
+        * :class:`RetryExhaustedError` after a 429 retry burst →
+          ``report_throttled`` → multiplicative decrease + cooldown.
+        * Other failures (network / SSRF / etc.) → no report so
+          AIMD state is not biased by infrastructure issues.
+        """
+
+        floor = RateLimitFloor(
+            crawl_delay_seconds=advice.crawl_delay,
+            request_rate=advice.request_rate,
+        )
+        with self._config.rate_limiter.acquire(
+            origin=_origin(url),
+            route_class=self._config.route_class,
+            adapter_type=AdapterType.HTTP,
+            floor=floor,
+        ) as permit:
+            try:
+                response = self._send_with_retry(url)
+            except RetryExhaustedError:
+                self._config.rate_limiter.report_throttled(permit=permit)
+                raise
+            self._config.rate_limiter.report_success(permit=permit)
+            return response
+
+    def _check_robots(self, url: str, *, policy_decision_refs: list[str]) -> RobotsAdvice:
         advice = self._config.robots_port.evaluate(url, user_agent=self._config.user_agent)
         if advice.is_allowed:
-            return
+            return advice
         reason = advice.disallow_reason or "robots.txt disallowed"
         # Embed the active policy decision refs in the error detail so
         # replay / audit diagnostics keep traceability for blocked

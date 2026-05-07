@@ -187,15 +187,13 @@ class InMemoryAimdLimiter:
 
         normalized_origin = _normalize_origin(origin)
         bucket_key = (normalized_origin, route_class, adapter_type)
-        # Codex iter-1 important: refuse the request before acquiring
-        # the semaphore slot when the floor signals a full prohibition
-        # (currently ``Request-rate: 0/N`` → infinite interval). Sleeping
-        # forever inside ``_wait_for_grant`` would hang a worker and
-        # also strand the per-origin concurrency slot.
+        # Refuse the request before acquiring a semaphore slot when
+        # the floor signals a full prohibition (``Request-rate: 0/N``
+        # → infinite interval). Sleeping forever would hang a worker
+        # and strand the per-origin slot. The exception uses the
+        # *normalized* origin so credentials a caller smuggled into
+        # the raw URL cannot leak via the message.
         if floor is not None and not _is_finite_interval(floor.strictest_interval_seconds):
-            # Use the *normalized* origin (post userinfo strip) so the
-            # exception cannot leak credentials a caller smuggled in
-            # via the raw URL (codex iter-2 important).
             raise RateLimitProhibited(
                 f"floor signals full prohibition for origin {normalized_origin!r}"
             )
@@ -229,11 +227,10 @@ class InMemoryAimdLimiter:
             raise
 
     def report_success(self, *, permit: RateLimitPermit) -> None:
-        # Codex iter-1 important: AIMD state mutation is one-shot per
-        # permit. ``mark_reported`` returns ``True`` only for the first
-        # caller; duplicate reports become no-ops so the success
-        # counter cannot be inflated and an additive-increase tick
-        # cannot fire spuriously.
+        # AIMD state mutation is one-shot per permit. ``mark_reported``
+        # returns ``True`` only for the first caller; duplicate reports
+        # become no-ops so the success counter cannot be inflated and
+        # an additive-increase tick cannot fire spuriously.
         if not permit.mark_reported():
             return
         bucket = self._lookup_bucket(permit.bucket_key)
@@ -254,9 +251,9 @@ class InMemoryAimdLimiter:
         permit: RateLimitPermit,
         retry_after_seconds: float | None = None,
     ) -> None:
-        # Codex iter-1 important: same one-shot guarantee as
-        # ``report_success`` — duplicate report calls must not stack
-        # multiplicative decreases or repeatedly extend the cooldown.
+        # Same one-shot guarantee as ``report_success`` — duplicate
+        # reports must not stack multiplicative decreases or repeatedly
+        # extend the cooldown.
         if not permit.mark_reported():
             return
         bucket = self._lookup_bucket(permit.bucket_key)
@@ -352,24 +349,23 @@ def _normalize_origin(origin: str) -> str:
     ``scheme://host`` origin, or a full URL and reduce them to the
     canonical ``scheme://host[:port]`` form for keying.
 
-    Userinfo (``user:pass@``) is dropped explicitly. Codex iter-2
-    important: building from ``parts.netloc`` preserved userinfo, so
-    a caller passing ``https://user:pass@example.com/path`` would
-    have keyed a separate bucket containing credentials — splitting
-    rate-limit / concurrency state from ``https://example.com`` and
-    risking secret exposure in error messages or telemetry. We
-    rebuild the netloc from ``parts.hostname`` (already lowercased,
-    userinfo stripped) plus the explicit port, never trusting
-    ``parts.netloc`` as-is.
+    Userinfo (``user:pass@``) is dropped explicitly. Building from
+    ``parts.netloc`` would preserve userinfo and a caller passing
+    ``https://user:pass@example.com/path`` would key a separate bucket
+    containing credentials — splitting rate-limit / concurrency
+    state from ``https://example.com`` and risking secret exposure in
+    error messages or telemetry. We rebuild the netloc from
+    ``parts.hostname`` (already lowercased, userinfo stripped) plus
+    the explicit port, never trusting ``parts.netloc`` as-is.
 
     Schemeless inputs (``example.com``, ``example.com/path?x=1``) are
     interpreted host-first: the host is the substring up to the first
-    ``/``, ``?`` or ``#``, and we then peel off any leading
-    ``user:pass@`` if present (a schemeless input could carry
-    userinfo too — same hygiene applies). Codex iter-1 minor:
-    schemeless inputs with paths previously became distinct origins,
-    silently splitting AIMD state and bypassing the concurrency cap.
-    We never synthesise a scheme the caller did not provide.
+    ``/``, ``?`` or ``#``, then any leading ``user:pass@`` is peeled
+    off (a schemeless input can smuggle userinfo too — same hygiene
+    applies). Without this normalization, paths under the same host
+    became distinct origins and would silently split AIMD state +
+    bypass the per-origin concurrency cap. We never synthesise a
+    scheme the caller did not provide.
     """
 
     if not origin:

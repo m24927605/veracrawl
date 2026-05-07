@@ -167,10 +167,9 @@ class RateLimitPermit:
     def released(self) -> bool:
         """Return whether the permit has been released. Thread-safe.
 
-        Codex iter-2 minor: the underlying flag is mutated under
-        :attr:`_state_lock`, so reading it without the lock could
-        observe a stale value on weak memory orderings. Take the lock
-        for a coherent read.
+        The underlying flag is mutated under :attr:`_state_lock`, so
+        reading it without the lock could observe a stale value on
+        weak memory orderings. We take the lock for a coherent read.
         """
 
         with self._state_lock:
@@ -271,12 +270,11 @@ class NoopRateLimiter:
         )
 
     def report_success(self, *, permit: RateLimitPermit) -> None:
-        # Mark reported so duplicate report calls become no-ops — same
-        # one-shot guarantee :class:`InMemoryAimdLimiter` offers.
+        # Mark reported so duplicate report calls become no-ops —
+        # same one-shot guarantee :class:`InMemoryAimdLimiter` offers.
         # Release stays the caller's responsibility (via the permit's
         # context-manager exit) so the no-op default cannot hide
-        # caller lifecycle bugs that would surface in production
-        # (codex iter-2 minor).
+        # caller lifecycle bugs that would surface in production.
         permit.mark_reported()
 
     def report_throttled(

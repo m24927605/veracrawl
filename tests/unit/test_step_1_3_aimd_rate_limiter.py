@@ -486,7 +486,7 @@ def test_concurrency_cap_blocks_excess_acquires_per_origin() -> None:
         t.start()
     for t in threads:
         t.join(timeout=5.0)
-    # Codex iter-1 minor: the original test only checked the
+    # the original test only checked the
     # observed-max bound, so a deadlock or worker exception would have
     # left ``observed_max <= 2`` and silently passed. Now we assert
     # all four workers completed cleanly and no exceptions slipped.
@@ -497,7 +497,7 @@ def test_concurrency_cap_blocks_excess_acquires_per_origin() -> None:
 
 
 def test_infinite_floor_raises_prohibited_before_semaphore_acquire() -> None:
-    # Codex iter-1 important: ``RateLimitFloor(request_rate=(0, N))``
+    # ``RateLimitFloor(request_rate=(0, N))``
     # produces an infinite interval; the limiter must refuse before
     # taking a semaphore slot so a worker cannot hang forever inside
     # ``time.sleep(inf)`` while holding the per-origin slot.
@@ -585,7 +585,7 @@ def test_report_methods_do_not_double_release_permit() -> None:
 
 
 def test_duplicate_report_success_is_noop() -> None:
-    # Codex iter-1 important: a permit's AIMD mutation must fire at
+    # a permit's AIMD mutation must fire at
     # most once. Calling ``report_success`` 12 times on the same
     # permit (with threshold=10) must not trigger an additive
     # increase, because only the first call is counted.
@@ -608,7 +608,7 @@ def test_duplicate_report_success_is_noop() -> None:
 
 
 def test_duplicate_report_throttled_is_noop() -> None:
-    # Codex iter-1 important: ``report_throttled`` is also one-shot.
+    # ``report_throttled`` is also one-shot.
     # Two calls on the same permit must halve the rate exactly once.
     fake = _FakeClock()
     fake.set_uniform(0.0)
@@ -653,7 +653,7 @@ def test_report_throttled_after_report_success_is_noop() -> None:
 
 
 def test_schemeless_origin_with_path_normalizes_to_host() -> None:
-    # Codex iter-1 minor: schemeless inputs with paths previously
+    # schemeless inputs with paths previously
     # became distinct origins; the limiter would split AIMD state
     # and bypass the per-origin concurrency cap.
     fake = _FakeClock()
@@ -677,7 +677,7 @@ def test_schemeless_origin_with_path_normalizes_to_host() -> None:
 
 
 def test_credentialed_url_strips_userinfo_in_bucket_key() -> None:
-    # Codex iter-2 important: a credentialed URL must not produce a
+    # a credentialed URL must not produce a
     # separate bucket — that would split AIMD state from the bare
     # origin and risk leaking secrets via bucket-key telemetry. The
     # throttle on ``user:pass@example.com`` must apply to plain

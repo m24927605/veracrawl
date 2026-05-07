@@ -1,4 +1,5 @@
 .ait/
+.ait-context.md
 .claude/
 .envrc
 __pycache__/
