@@ -1871,3 +1871,25 @@ class RecoveryTerminationReason(StrEnum):
     MAX_ITERATIONS_EXCEEDED = "max_iterations_exceeded"
     REPEATED_SIGNATURE_HARD_STOP = "repeated_signature_hard_stop"
     COST_CAP_REACHED = "cost_cap_reached"
+
+
+class AccessControlProvider(StrEnum):
+    """Origin-side access-control technology detected by AccessControlClassifier.
+
+    The classifier (Phase 3 step 3.1) reads response headers, body
+    fingerprints, and challenge markers to identify which protection
+    is in front of the URL. The classifier never solves or bypasses
+    the challenge — it labels and surfaces a typed
+    ``AccessControlBlocked`` contract so the orchestrator can choose
+    between authorized session escalation, abandonment, or operator
+    review (charter §Safety Boundary, ``docs/09:116``).
+    """
+
+    CLOUDFLARE = "cloudflare"
+    TURNSTILE = "turnstile"
+    DATADOME = "datadome"
+    PERIMETERX = "perimeterx"
+    AKAMAI = "akamai"
+    LOGIN_WALL = "login_wall"
+    GENERIC_CAPTCHA = "generic_captcha"
+    UNKNOWN = "unknown"

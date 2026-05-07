@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from urllib.parse import urlparse
+
 from pydantic import Field, model_validator
 
-from veracrawl.contracts.common import Ref, TimestampedModel
+from veracrawl.contracts.common import Ref, TimestampedModel, utc_now
 from veracrawl.contracts.enums import (
     ArtifactLifecycleOperation,
     CompletenessResult,
@@ -14,6 +17,18 @@ from veracrawl.contracts.enums import (
     SecurityCheckResult,
     SecurityPrivacyFailureType,
 )
+
+_ALLOWED_HTTP_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
+
+
+def _is_http_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _is_valid_http_status(value: int) -> bool:
+    return 100 <= value <= 599
+
 
 _SENSITIVE_MARKERS = (
     "password",
@@ -155,9 +170,7 @@ class CredentialedSessionRuntimeReport(TimestampedModel):
                 or self.raw_secret_leak_refs
                 or self.adapter_native_state_canonical_refs
             ):
-                raise ValueError(
-                    f"passing credentialed session report missing refs: {missing}"
-                )
+                raise ValueError(f"passing credentialed session report missing refs: {missing}")
         elif not (
             self.failure_type
             and (
@@ -249,13 +262,17 @@ class ArtifactLifecycleAction(TimestampedModel):
             raise ValueError("artifact lifecycle action requires projection cleanup refs")
         if not self.policy_decision_refs or not self.command_refs or not self.event_refs:
             raise ValueError("artifact lifecycle action requires policy, command, and event refs")
-        if self.action_type in {
-            ArtifactLifecycleOperation.REDACT,
-            ArtifactLifecycleOperation.TOMBSTONE,
-            ArtifactLifecycleOperation.DELETE,
-            ArtifactLifecycleOperation.LEGAL_HOLD,
-            ArtifactLifecycleOperation.RELEASE_LEGAL_HOLD,
-        } and not self.approval_decision_refs:
+        if (
+            self.action_type
+            in {
+                ArtifactLifecycleOperation.REDACT,
+                ArtifactLifecycleOperation.TOMBSTONE,
+                ArtifactLifecycleOperation.DELETE,
+                ArtifactLifecycleOperation.LEGAL_HOLD,
+                ArtifactLifecycleOperation.RELEASE_LEGAL_HOLD,
+            }
+            and not self.approval_decision_refs
+        ):
             raise ValueError("side-effecting lifecycle action requires approval refs")
         if not self.outbox_refs:
             raise ValueError("artifact lifecycle action requires outbox refs")
@@ -372,4 +389,114 @@ class SecurityPrivacyFixtureManifest(TimestampedModel):
             raise ValueError("negative security privacy fixture must expect fail")
         if self.expected_failure_type is not None and not self.negative_case:
             raise ValueError("expected failure type requires negative case")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# v2 contracts (production-authorized-source-crawler design §3.5).
+#
+# Phase 2 ships the authorized session subsystem the V1 implementation
+# of ``docs/09 §Capability Areas`` missed. ``CredentialScope`` declares
+# *where* a credential is allowed to flow (origin / route / method /
+# expiry); the Phase 2 ``StrictAllowlistScope`` policy enforces the
+# scope at request build time. ``CredentialUseRecord`` is the per-use
+# outbox row the ``AuthorizedSessionAdapter`` writes whenever it
+# attaches a credential, providing the audit trail the
+# ``CredentialUseAudit`` aggregate (above) summarises.
+#
+# Charter rule (``docs/09:116``): neither contract may carry the
+# credential value itself — only a *handle* into the credential
+# vault. Producers that violate this should fail validation in the
+# vault adapter (Phase 2 step 2.1), not here; these contracts are
+# the data shape, not the runtime enforcement point.
+# ---------------------------------------------------------------------------
+
+
+class CredentialScope(TimestampedModel):
+    """Scope spec the Phase 2 ``StrictAllowlistScope`` enforces.
+
+    ``credential_handle_ref`` is an opaque reference into the
+    credential vault — never the secret itself. The orchestrator
+    builds requests against the scope; the
+    ``StrictAllowlistScope`` policy rejects any request whose
+    origin, route pattern, or method falls outside the allowlist.
+    ``expires_at`` is required to be timezone-aware (replay
+    determinism) and in the future at construction time (a
+    pre-expired scope admits no requests and is almost certainly
+    a wiring bug).
+    """
+
+    id: str
+    credential_handle_ref: Ref
+    allowed_origins: list[str] = Field(default_factory=list)
+    allowed_route_patterns: list[str] = Field(default_factory=list)
+    allowed_methods: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> CredentialScope:
+        if not self.credential_handle_ref.strip():
+            raise ValueError("credential scope credential_handle_ref must be non-blank")
+        if not self.allowed_origins:
+            raise ValueError("credential scope requires at least one allowed origin")
+        for origin in self.allowed_origins:
+            if not _is_http_url(origin):
+                raise ValueError(
+                    f"credential scope allowed origin must be absolute http(s): {origin!r}"
+                )
+        if not self.allowed_methods:
+            raise ValueError("credential scope requires at least one allowed method")
+        for method in self.allowed_methods:
+            if method != method.upper():
+                raise ValueError(f"credential scope allowed method must be upper-case: {method!r}")
+            if method not in _ALLOWED_HTTP_METHODS:
+                raise ValueError(
+                    f"credential scope allowed method {method!r} is not in the allowed set "
+                    f"{sorted(_ALLOWED_HTTP_METHODS)}"
+                )
+        if self.expires_at is not None:
+            if self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None:
+                raise ValueError(
+                    "credential scope expires_at must be timezone-aware for replay determinism"
+                )
+            if self.expires_at.astimezone(UTC) <= utc_now():
+                raise ValueError(
+                    "credential scope expires_at must be in the future at construction time"
+                )
+        return self
+
+
+class CredentialUseRecord(TimestampedModel):
+    """Per-use outbox row written by the ``AuthorizedSessionAdapter``.
+
+    Records WHO was used (``credential_scope_ref``) for WHICH
+    request (``request_url`` / ``request_method``), the response
+    status (or None for transport failures, paired with an
+    ``attempt_evidence_ref``), and WHEN. The ``CredentialUseAudit``
+    (above) aggregates these records into the authorized-session
+    audit at the end of a run.
+
+    No credential value lives here — the producer must reference
+    the credential by ``credential_scope_ref`` only.
+    """
+
+    id: str
+    run_ref: Ref
+    credential_scope_ref: Ref
+    request_url: str
+    request_method: str
+    response_status: int | None = None
+    timestamp_used: datetime
+    attempt_evidence_ref: Ref | None = None
+
+    @model_validator(mode="after")
+    def validate_use_record(self) -> CredentialUseRecord:
+        if not _is_http_url(self.request_url):
+            raise ValueError("credential use record request_url must be absolute http(s)")
+        if not self.request_method.strip():
+            raise ValueError("credential use record request_method must be non-blank")
+        if self.response_status is not None and not _is_valid_http_status(self.response_status):
+            raise ValueError("credential use record response_status must be valid HTTP")
+        if self.timestamp_used.tzinfo is None or self.timestamp_used.utcoffset() is None:
+            raise ValueError("credential use record timestamp_used must be timezone-aware")
         return self

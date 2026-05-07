@@ -105,3 +105,97 @@ class SourceAdapterCommand(TimestampedModel):
     deterministic_clock_ref: Ref | None = None
     randomness_seed_ref: Ref | None = None
     credential_scope_ref: Ref | None = None
+
+
+# ---------------------------------------------------------------------------
+# v2 contracts (production-authorized-source-crawler design §3.5).
+#
+# The Phase 3 ``PolicyDrivenEscalator`` walks adapter types in a
+# policy-bounded chain (HTTP → BROWSER_SNAPSHOT → AUTHORIZED_SESSION,
+# never the reverse, and never to anything the policy hasn't admitted)
+# and emits an ``AdapterEscalationDecision`` per transition. The
+# ``AdapterEscalationPolicy`` is the static spec orchestrators load
+# from config; it is NOT mutated at runtime.
+# ---------------------------------------------------------------------------
+
+
+class AdapterEscalationDecision(TimestampedModel):
+    """Typed transition from one adapter type to another within a run.
+
+    Produced by the Phase 3 ``PolicyDrivenEscalator`` whenever a
+    failure (typed via ``failure_signature``) makes it pointless to
+    retry the same adapter type — for example, an HTTP adapter
+    receiving a Cloudflare challenge escalates to an authorized
+    session adapter that is allowed to carry a credential. The
+    ``triggered_by_ref`` points to the structured failure that
+    motivated the transition (typically ``NetworkAttemptEvidence``
+    or ``AccessControlBlocked``).
+    """
+
+    id: str
+    run_ref: Ref
+    from_adapter_type: AdapterType
+    to_adapter_type: AdapterType
+    reason: str
+    failure_signature: str
+    policy_ref: Ref
+    triggered_by_ref: Ref
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> AdapterEscalationDecision:
+        if self.from_adapter_type is self.to_adapter_type:
+            raise ValueError(
+                "adapter escalation decision must change adapter_type "
+                "(from_adapter_type != to_adapter_type)"
+            )
+        if not self.reason.strip():
+            raise ValueError("adapter escalation decision reason must be non-blank")
+        if not self.failure_signature.strip():
+            raise ValueError("adapter escalation decision failure_signature must be non-blank")
+        return self
+
+
+class AdapterEscalationPolicy(TimestampedModel):
+    """Static spec describing which adapter-type transitions are allowed.
+
+    ``allowed_transitions`` keys are the source adapter types; values
+    are the lists of admissible target adapter types. The structure is
+    asymmetric on purpose — escalating HTTP → AUTHORIZED_SESSION does
+    not imply the reverse is allowed. ``requires_review`` flips the
+    policy into "every escalation needs an operator approval" mode,
+    used for sensitive sources. ``max_escalations_per_run`` caps
+    runaway chains; the docstring rules out zero / negative because a
+    policy that admits no transitions is a misconfiguration (callers
+    should drop the policy ref instead).
+    """
+
+    id: str
+    name: str
+    allowed_transitions: dict[AdapterType, list[AdapterType]] = Field(default_factory=dict)
+    requires_review: bool = False
+    max_escalations_per_run: int = 1
+
+    @model_validator(mode="after")
+    def validate_policy(self) -> AdapterEscalationPolicy:
+        if not self.name.strip():
+            raise ValueError("adapter escalation policy name must be non-blank")
+        if self.max_escalations_per_run < 1:
+            raise ValueError(
+                "adapter escalation policy max_escalations_per_run must be >= 1; "
+                "drop the policy ref to express 'no escalation allowed'"
+            )
+        for source, targets in self.allowed_transitions.items():
+            if not targets:
+                raise ValueError(
+                    f"adapter escalation policy entry {source.value} has empty target list; "
+                    "drop the entry instead of recording dead policy"
+                )
+            if source in targets:
+                raise ValueError(
+                    f"adapter escalation policy must not list {source.value} as its own target"
+                )
+            if len(set(targets)) != len(targets):
+                raise ValueError(
+                    f"adapter escalation policy entry {source.value} contains duplicate targets"
+                )
+        return self

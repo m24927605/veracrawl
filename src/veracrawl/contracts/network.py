@@ -7,12 +7,20 @@ from urllib.parse import urlparse
 from pydantic import Field, model_validator
 
 from veracrawl.contracts.common import Ref, TimestampedModel
-from veracrawl.contracts.enums import CompletenessResult, LiveHttpAcquisitionFailureType
+from veracrawl.contracts.enums import (
+    AccessControlProvider,
+    CompletenessResult,
+    LiveHttpAcquisitionFailureType,
+)
 
 
 def _is_http_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _is_valid_http_status(value: int) -> bool:
+    return 100 <= value <= 599
 
 
 class NetworkRequest(TimestampedModel):
@@ -246,4 +254,107 @@ class NetworkFixtureManifest(TimestampedModel):
             raise ValueError("network fixture acquisition_type must be http or browser")
         if self.negative_case and self.expected_completion_result == "pass":
             raise ValueError("negative network fixture must not expect pass")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# v2 contracts (production-authorized-source-crawler design §3.5).
+#
+# Phase 1 populates ``NetworkAttemptEvidence`` on every HTTP / browser
+# attempt. Phase 3 ``AccessControlClassifier`` produces
+# ``AccessControlBlocked`` when origin-side protection is detected;
+# the contract is charter-scoped — the classifier identifies and
+# surfaces, never solves or bypasses (``docs/09:116`` §Safety Boundary).
+# ---------------------------------------------------------------------------
+
+
+class NetworkAttemptEvidence(TimestampedModel):
+    """Per-attempt evidence sidecar populated by the cooperative HTTP /
+    browser paths.
+
+    Phase 1 attaches one ``NetworkAttemptEvidence`` per attempt to
+    ``NetworkClientResult.attempt_evidences`` so retry / redirect /
+    failure analysis has a typed record per try. Headers must already
+    be redacted by the producer — this contract stores the redacted
+    view; it does not perform redaction itself. The combination of
+    ``response_status is None`` and ``response_headers_redacted is
+    None`` indicates the request never reached an HTTP response
+    (timeout, connection refused, TLS error); in that case
+    ``failure_class`` is required so the orchestrator can classify
+    the attempt.
+    """
+
+    id: str
+    run_ref: Ref
+    request_ref: Ref
+    attempt_number: int
+    request_method: str
+    request_url: str
+    request_headers_redacted: dict[str, str] = Field(default_factory=dict)
+    response_status: int | None = None
+    response_headers_redacted: dict[str, str] | None = None
+    elapsed_ms: int
+    failure_class: str | None = None
+    redirect_hop_count: int = 0
+
+    @model_validator(mode="after")
+    def validate_attempt_evidence(self) -> NetworkAttemptEvidence:
+        if not _is_http_url(self.request_url):
+            raise ValueError("attempt evidence request_url must be absolute http(s)")
+        if not self.request_method.strip():
+            raise ValueError("attempt evidence request_method must be non-blank")
+        if self.attempt_number < 1:
+            raise ValueError("attempt evidence attempt_number must be >= 1")
+        if self.elapsed_ms < 0:
+            raise ValueError("attempt evidence elapsed_ms must be non-negative")
+        if self.redirect_hop_count < 0:
+            raise ValueError("attempt evidence redirect_hop_count must be non-negative")
+        if self.response_status is not None and not _is_valid_http_status(self.response_status):
+            raise ValueError("attempt evidence response_status must be a valid HTTP status")
+        if self.response_status is None and self.response_headers_redacted is not None:
+            raise ValueError("attempt evidence cannot record response headers without a status")
+        if self.response_status is not None and self.response_headers_redacted is None:
+            raise ValueError(
+                "attempt evidence with response_status requires response_headers_redacted"
+            )
+        if self.response_status is None and self.failure_class is None:
+            raise ValueError(
+                "attempt evidence with no response requires failure_class to classify the attempt"
+            )
+        return self
+
+
+class AccessControlBlocked(TimestampedModel):
+    """Typed payload from the Phase 3 ``AccessControlClassifier``.
+
+    The classifier reads response headers, body fingerprints, and
+    challenge markers to identify which origin-side protection is in
+    front of the URL (Cloudflare / Turnstile / DataDome / PerimeterX
+    / Akamai / login-wall / generic CAPTCHA) and produces an
+    ``AccessControlBlocked`` instead of attempting any kind of
+    bypass. Downstream policy (``AdapterEscalationPolicy`` / Phase 5
+    ``RecoveryPort``) decides whether to escalate to authorized
+    session, request operator review, or abandon.
+
+    A claim of detection without supporting evidence is a silent
+    false positive — ``detection_signal_refs`` must therefore be
+    non-empty.
+    """
+
+    id: str
+    run_ref: Ref
+    url: str
+    detected_provider: AccessControlProvider
+    detection_signal_refs: list[Ref] = Field(default_factory=list)
+    response_status: int
+    attempt_evidence_ref: Ref | None = None
+
+    @model_validator(mode="after")
+    def validate_access_control_blocked(self) -> AccessControlBlocked:
+        if not _is_http_url(self.url):
+            raise ValueError("access control blocked url must be absolute http(s)")
+        if not _is_valid_http_status(self.response_status):
+            raise ValueError("access control blocked response_status must be valid HTTP")
+        if not self.detection_signal_refs:
+            raise ValueError("access control blocked requires at least one detection_signal_ref")
         return self

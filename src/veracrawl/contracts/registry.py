@@ -185,6 +185,21 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         tests=["tests/contract/test_source_adapter_conformance.py"],
     ),
     "SourceAdapterCommand": _contract("SourceAdapterCommand", OwnerService.PORTS, "source_adapter"),
+    # v2 source-adapter escalation contracts (design.md §3.5).
+    # Phase 3 ``PolicyDrivenEscalator`` produces ``AdapterEscalationDecision``
+    # under the static spec described by ``AdapterEscalationPolicy``.
+    "AdapterEscalationDecision": _contract(
+        "AdapterEscalationDecision",
+        OwnerService.PORTS,
+        "source_adapter",
+        tests=["tests/contract/test_step_0_3_contracts.py"],
+    ),
+    "AdapterEscalationPolicy": _contract(
+        "AdapterEscalationPolicy",
+        OwnerService.POLICY,
+        "source_adapter",
+        tests=["tests/contract/test_step_0_3_contracts.py"],
+    ),
     "AgentToolSpec": _contract("AgentToolSpec", OwnerService.AGENTS, "agent"),
     "AgentRuntimeSpec": _contract("AgentRuntimeSpec", OwnerService.AGENTS, "agent"),
     "ContextRef": _contract("ContextRef", OwnerService.AGENTS, "agent", privacy=True),
@@ -1229,6 +1244,27 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         mutation_allowed=True,
         privacy=True,
         tests=["tests/contract/test_security_privacy_contracts.py"],
+    ),
+    # v2 authorized-session contracts (design.md §3.5).
+    # Phase 2 ``StrictAllowlistScope`` enforces ``CredentialScope`` at
+    # request build time; ``AuthorizedSessionAdapter`` writes one
+    # ``CredentialUseRecord`` to the outbox per credential-bearing
+    # request, providing the audit trail the existing
+    # ``CredentialUseAudit`` aggregate summarises.
+    "CredentialScope": _contract(
+        "CredentialScope",
+        OwnerService.POLICY,
+        "security_privacy",
+        privacy=True,
+        tests=["tests/contract/test_step_0_3_contracts.py"],
+    ),
+    "CredentialUseRecord": _contract(
+        "CredentialUseRecord",
+        OwnerService.POLICY,
+        "security_privacy",
+        mutation_allowed=True,
+        privacy=True,
+        tests=["tests/contract/test_step_0_3_contracts.py"],
     ),
     "CredentialedSessionRuntimeReport": _contract(
         "CredentialedSessionRuntimeReport",
@@ -2453,6 +2489,23 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "network",
         mutation_allowed=True,
         tests=["tests/unit/test_network_browser_replay.py"],
+    ),
+    # v2 per-attempt evidence + access-control contracts (design.md §3.5).
+    # Phase 1 attaches ``NetworkAttemptEvidence`` to every HTTP / browser
+    # attempt; Phase 3 ``AccessControlClassifier`` produces
+    # ``AccessControlBlocked`` when origin-side protection is detected.
+    "NetworkAttemptEvidence": _contract(
+        "NetworkAttemptEvidence",
+        OwnerService.FETCH,
+        "network",
+        privacy=True,
+        tests=["tests/contract/test_step_0_3_contracts.py"],
+    ),
+    "AccessControlBlocked": _contract(
+        "AccessControlBlocked",
+        OwnerService.FETCH,
+        "network",
+        tests=["tests/contract/test_step_0_3_contracts.py"],
     ),
     "NetworkFixtureManifest": _contract(
         "NetworkFixtureManifest",
