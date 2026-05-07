@@ -241,6 +241,85 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "agent",
         tests=["tests/integration/test_multi_agent_fixtures.py"],
     ),
+    # v2 agent contracts (production-authorized-source-crawler design §3.5).
+    # Phase 4/5 wire these into the v2 ModelProviderPort, the LLM-driven
+    # extraction rewrite, and the RecoveryPort. Registered here so the
+    # foundation registry's coverage / replay / privacy gates discover them.
+    # Spec-named aliases (ExtractionCandidate / FieldCitation / FieldConfidence)
+    # are intentionally NOT registered separately: they rebind to the
+    # LLM-prefixed classes inside contracts.agent, while the legacy
+    # ExtractionCandidate registration below continues to point at the
+    # heuristic processing.ExtractionCandidate until Phase 4 retires it.
+    "Message": _contract(
+        "Message",
+        OwnerService.AGENTS,
+        "agent",
+        privacy=True,
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "ToolCall": _contract(
+        "ToolCall",
+        OwnerService.AGENTS,
+        "agent",
+        privacy=True,
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "ToolSpec": _contract(
+        "ToolSpec",
+        OwnerService.AGENTS,
+        "agent",
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "ResponseFormat": _contract(
+        "ResponseFormat",
+        OwnerService.AGENTS,
+        "agent",
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "TokenUsage": _contract(
+        "TokenUsage",
+        OwnerService.AGENTS,
+        "agent",
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "TokenBudget": _contract(
+        "TokenBudget",
+        OwnerService.AGENTS,
+        "agent",
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "LLMExtractionCandidate": _contract(
+        "LLMExtractionCandidate",
+        OwnerService.AGENTS,
+        "agent",
+        privacy=True,
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "LLMFieldCitation": _contract(
+        "LLMFieldCitation",
+        OwnerService.AGENTS,
+        "agent",
+        privacy=True,
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "LLMFieldConfidence": _contract(
+        "LLMFieldConfidence",
+        OwnerService.AGENTS,
+        "agent",
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "RecoveryDecision": _contract(
+        "RecoveryDecision",
+        OwnerService.REVIEW_REPLAY,
+        "agent",
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
+    "RecoveryTrace": _contract(
+        "RecoveryTrace",
+        OwnerService.REVIEW_REPLAY,
+        "agent",
+        tests=["tests/contract/test_agent_contracts_v2.py"],
+    ),
     "AgentAdapterExecutionRecord": _contract(
         "AgentAdapterExecutionRecord",
         OwnerService.AGENTS,

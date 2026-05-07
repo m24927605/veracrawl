@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 
@@ -39,6 +40,20 @@ _TERMINATION_REASONS_REQUIRING_DECISIONS = frozenset(
         RecoveryTerminationReason.MAX_ITERATIONS_EXCEEDED,
     }
 )
+
+
+def _is_http_url(value: str) -> bool:
+    """Match the scheme/netloc rule used by other crawler contracts.
+
+    Mirrors ``contracts.crawler_optimization._is_http_url`` so the v2
+    agent contracts apply the same SSRF / scheme allow-list as the
+    rest of the foundation: ``http`` or ``https`` scheme plus a
+    non-empty network location. Relative paths, ``file:`` /
+    ``javascript:`` / ``data:`` schemes, and ``http://`` with no host
+    all fail.
+    """
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
 class AgentToolSpec(TimestampedModel):
@@ -584,8 +599,13 @@ class ResponseFormat(VeraModel):
         else:
             if self.json_schema is not None:
                 raise ValueError(f"{self.kind.value} response format must not carry json_schema")
-            if self.kind is ResponseFormatKind.TEXT and self.schema_name is not None:
-                raise ValueError("text response format must not carry schema_name")
+            if self.schema_name is not None:
+                raise ValueError(f"{self.kind.value} response format must not carry schema_name")
+            if self.strict:
+                raise ValueError(
+                    f"{self.kind.value} response format must not set strict=True; "
+                    "strict mode is meaningful only for json_schema"
+                )
         return self
 
 
@@ -686,6 +706,8 @@ class LLMExtractionCandidate(TimestampedModel):
 
     @model_validator(mode="after")
     def validate_candidate(self) -> LLMExtractionCandidate:
+        if not _is_http_url(self.source_url):
+            raise ValueError("LLM extraction candidate source_url must be an absolute http(s) URL")
         value_keys = set(self.field_values)
         missing_citations = sorted(value_keys - set(self.field_citation_refs))
         if missing_citations:
@@ -807,10 +829,20 @@ class RecoveryDecision(TimestampedModel):
             raise ValueError("recovery decision cost_usd must be a finite number")
         if self.cost_usd < 0:
             raise ValueError("recovery decision cost_usd must be non-negative")
+        if self.source is RecoveryDecisionSource.CHEAP_CLASSIFIER and self.cost_usd != 0.0:
+            raise ValueError(
+                "cheap_classifier recovery decisions must have cost_usd=0.0; "
+                "non-zero cost should attribute to llm_recovery"
+            )
         if self.kind is RecoveryDecisionKind.DIFFERENT_URL:
             if self.alternative_url is None or not self.alternative_url.strip():
                 raise ValueError(
                     "different_url recovery decision requires non-blank alternative_url"
+                )
+            if not _is_http_url(self.alternative_url):
+                raise ValueError(
+                    "different_url recovery decision alternative_url must be an "
+                    "absolute http(s) URL"
                 )
             if self.escalation_target is not None:
                 raise ValueError("different_url recovery decision must not set escalation_target")

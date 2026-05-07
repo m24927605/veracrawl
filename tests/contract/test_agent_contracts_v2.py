@@ -745,3 +745,100 @@ def test_processing_extraction_candidate_alias_does_not_shadow_legacy_export() -
 
     assert PackageExtractionCandidate is ProcessingExtractionCandidate
     assert PackageExtractionCandidate is not agent_contracts.ExtractionCandidate
+
+
+# URL validation (codex review iter-2 important #1) ------------------
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "data:text/html,<script>",
+        "ftp://example.test/x",
+        "/relative/path",
+        "example.test/p/1",
+        "http://",
+    ],
+)
+def test_llm_extraction_candidate_rejects_non_http_source_url(bad_url: str) -> None:
+    with pytest.raises(ValidationError):
+        _valid_llm_candidate(source_url=bad_url)
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "/relative/path",
+        "example.test/p/1",
+    ],
+)
+def test_recovery_decision_different_url_rejects_non_http_alternative(bad_url: str) -> None:
+    with pytest.raises(ValidationError):
+        RecoveryDecision(
+            id="recovery-decision:1",
+            kind=RecoveryDecisionKind.DIFFERENT_URL,
+            reason="x",
+            failure_signature="x",
+            source=RecoveryDecisionSource.HEURISTIC,
+            alternative_url=bad_url,
+        )
+
+
+# CHEAP_CLASSIFIER cost invariant (codex review iter-2 important #2) -
+
+
+def test_cheap_classifier_with_zero_cost_accepted() -> None:
+    decision = RecoveryDecision(
+        id="recovery-decision:1",
+        kind=RecoveryDecisionKind.ABANDON,
+        reason="trivial",
+        failure_signature="404",
+        source=RecoveryDecisionSource.CHEAP_CLASSIFIER,
+        cost_usd=0.0,
+    )
+    assert decision.cost_usd == 0.0
+
+
+def test_cheap_classifier_with_non_zero_cost_rejected() -> None:
+    """The docstring documents cheap-classifier decisions as zero-cost.
+    Allowing any positive cost would let cheap-path decisions silently
+    consume the per-objective / per-host LLM budget the docstring
+    promises they don't touch."""
+    with pytest.raises(ValidationError):
+        RecoveryDecision(
+            id="recovery-decision:1",
+            kind=RecoveryDecisionKind.ABANDON,
+            reason="trivial",
+            failure_signature="404",
+            source=RecoveryDecisionSource.CHEAP_CLASSIFIER,
+            cost_usd=0.0001,
+        )
+
+
+# ResponseFormat tightening (codex review iter-2 minor #4) ----------
+
+
+def test_response_format_text_with_strict_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ResponseFormat(kind=ResponseFormatKind.TEXT, strict=True)
+
+
+def test_response_format_json_object_with_strict_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT, strict=True)
+
+
+def test_response_format_json_object_with_schema_name_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT, schema_name="X")
+
+
+def test_response_format_json_object_minimal_valid() -> None:
+    rf = ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
+    assert rf.schema_name is None
+    assert rf.json_schema is None
+    assert rf.strict is False
