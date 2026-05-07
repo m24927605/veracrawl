@@ -388,9 +388,16 @@ def _normalize_origin(origin: str) -> str:
         try:
             port = parts.port
         except ValueError:
-            # Malformed port — refuse to silently lose it; treat the
-            # whole origin as opaque (lowercased) instead.
-            return origin.lower()
+            # Malformed port — keep the userinfo strip applied. Falling
+            # back to ``origin.lower()`` would have leaked credentials
+            # through bucket keys, telemetry, and ``RateLimitProhibited``
+            # error messages for inputs like
+            # ``https://user:secret@example.com:bad/path``. Build the
+            # safe form from ``parts.scheme`` + ``parts.hostname`` and
+            # surface the malformed port as a raw token so callers can
+            # see something is off, but never as part of a credential-
+            # bearing string.
+            return f"{parts.scheme.lower()}://{host}:<malformed-port>"
         if port is not None:
             return f"{parts.scheme.lower()}://{host}:{port}"
         return f"{parts.scheme.lower()}://{host}"

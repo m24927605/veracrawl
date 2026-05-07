@@ -377,6 +377,42 @@ def test_rate_limit_prohibited_translates_to_robots_blocked() -> None:
     assert "rate-limiter refused" in str(exc.value)
 
 
+def test_rate_limit_prohibited_with_real_limiter_translates_to_robots_blocked() -> None:
+    """End-to-end: real ``InMemoryAimdLimiter`` + robots advice with
+    ``request_rate=(0, 60)`` (full prohibition) must surface as
+    :class:`RobotsBlockedError` from the HTTP adapter.
+
+    This is the case the contextmanager wrapping makes load-bearing:
+    ``RateLimitProhibited`` is raised inside ``acquire``'s generator
+    body (which runs on ``__enter__``), so catching it must wrap the
+    ``with`` statement, not the bare ``acquire(...)`` call.
+    """
+
+    from veracrawl.adapters.network.stdlib_http import RobotsBlockedError
+    from veracrawl.ports.robots import RobotsPort
+
+    class _ZeroRateRobots:
+        def evaluate(self, url: str, *, user_agent: str) -> RobotsAdvice:
+            del url, user_agent
+            return RobotsAdvice(
+                is_allowed=True,
+                request_rate=(0, 60),  # robots-spec full prohibition
+            )
+
+    robots: RobotsPort = _ZeroRateRobots()
+    adapter = StdlibHttpSourceAdapter(
+        _make_request(),
+        config=HttpClientConfig(
+            robots_port=robots,
+            rate_limiter=InMemoryAimdLimiter(),
+        ),
+        transport=_ok_transport(),
+    )
+    with pytest.raises(RobotsBlockedError) as exc:
+        adapter.execute(_make_command())
+    assert "rate-limiter refused" in str(exc.value)
+
+
 class _RetryAfterCapturingLimiter:
     """Records the retry_after_seconds passed to report_throttled."""
 

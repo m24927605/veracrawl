@@ -539,32 +539,39 @@ class StdlibHttpSourceAdapter:
             crawl_delay_seconds=advice.crawl_delay,
             request_rate=advice.request_rate,
         )
-        try:
-            permit_cm = self._config.rate_limiter.acquire(
-                origin=_origin(url),
-                route_class=self._config.route_class,
-                adapter_type=AdapterType.HTTP,
-                floor=floor,
-            )
-        except RateLimitProhibited as exc:
-            raise RobotsBlockedError(
-                f"{url}: rate-limiter refused (full prohibition): {exc}"
-            ) from exc
         # Reset the per-attempt Retry-After cache so a hint observed
         # on a previous hop does not extend the cooldown for the
         # *current* bucket (each acquire is its own logical attempt).
         self._last_retry_after_seconds = None
-        with permit_cm as permit:
-            try:
-                response = self._send_with_retry(url)
-            except RetryExhaustedError:
-                self._config.rate_limiter.report_throttled(
-                    permit=permit,
-                    retry_after_seconds=self._last_retry_after_seconds,
-                )
-                raise
-            self._config.rate_limiter.report_success(permit=permit)
-            return response
+        # ``InMemoryAimdLimiter.acquire`` is a ``@contextmanager``
+        # whose generator body runs on ``__enter__`` — so
+        # :class:`RateLimitProhibited` (raised inside that body when
+        # the floor is infinite, i.e. ``Request-rate: 0/N``) surfaces
+        # at the ``with`` statement, not at the bare ``acquire(...)``
+        # call. The translation to :class:`RobotsBlockedError` must
+        # therefore wrap the ``with`` block, otherwise the exception
+        # escapes uncaught and breaks the cooperative-refusal contract.
+        try:
+            with self._config.rate_limiter.acquire(
+                origin=_origin(url),
+                route_class=self._config.route_class,
+                adapter_type=AdapterType.HTTP,
+                floor=floor,
+            ) as permit:
+                try:
+                    response = self._send_with_retry(url)
+                except RetryExhaustedError:
+                    self._config.rate_limiter.report_throttled(
+                        permit=permit,
+                        retry_after_seconds=self._last_retry_after_seconds,
+                    )
+                    raise
+                self._config.rate_limiter.report_success(permit=permit)
+                return response
+        except RateLimitProhibited as exc:
+            raise RobotsBlockedError(
+                f"{url}: rate-limiter refused (full prohibition): {exc}"
+            ) from exc
 
     def _check_robots(self, url: str, *, policy_decision_refs: list[str]) -> RobotsAdvice:
         advice = self._config.robots_port.evaluate(url, user_agent=self._config.user_agent)

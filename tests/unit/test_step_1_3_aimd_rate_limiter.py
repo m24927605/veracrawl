@@ -740,6 +740,55 @@ def test_schemeless_credentialed_input_strips_userinfo() -> None:
     assert sum(fake.sleeps) > 0.0
 
 
+def test_malformed_port_does_not_leak_userinfo_in_bucket_key() -> None:
+    # The malformed-port fallback path must still strip userinfo —
+    # leaving credentials in the normalized origin would leak them
+    # into bucket keys, telemetry, and ``RateLimitProhibited``
+    # exception messages.
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    floor = RateLimitFloor(request_rate=(0, 60))
+    with pytest.raises(RateLimitProhibited) as exc_info:
+        with limiter.acquire(
+            origin="https://user:secret@example.com:bad/path",
+            route_class=RouteClass.LISTING,
+            adapter_type=AdapterType.HTTP,
+            floor=floor,
+        ):
+            pass
+    msg = str(exc_info.value)
+    assert "user" not in msg
+    assert "secret" not in msg
+    assert "/path" not in msg
+    assert "example.com" in msg
+
+
+def test_malformed_port_marks_origin_in_bucket_key() -> None:
+    # The fallback marks the malformed port explicitly so a malformed
+    # URL still yields a deterministic bucket — two requests with the
+    # same broken port land in the same bucket and don't sneak past
+    # AIMD state.
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    with limiter.acquire(
+        origin="https://example.com:bad/path",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_throttled(permit=permit)
+    fake.sleeps.clear()
+    # Same malformed origin → same bucket → cooldown applies.
+    with limiter.acquire(
+        origin="https://example.com:bad/other",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ):
+        pass
+    assert sum(fake.sleeps) > 0.0
+
+
 def test_explicit_port_preserved_in_bucket_key() -> None:
     fake = _FakeClock()
     fake.set_uniform(0.0)
