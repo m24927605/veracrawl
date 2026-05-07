@@ -95,13 +95,18 @@ def _redact_url(value: str) -> str:
     try:
         parts = urlsplit(value)
     except ValueError:
-        return _redact_field(value)
-    netloc = parts.hostname or ""
+        # Malformed URL — full redaction (codex iter-4 important):
+        # ``_redact_field`` only catches a small marker list, so a
+        # malformed URL containing userinfo or a query parameter
+        # outside the marker tuple (``?session=...`` /
+        # ``?code=...`` etc.) would otherwise survive into the log
+        # line.
+        return "[REDACTED]"
     try:
         port = parts.port
     except ValueError:
-        # Malformed authority — fall back to bare hostname, no port.
-        port = None
+        return "[REDACTED]"
+    netloc = parts.hostname or ""
     if port is not None:
         netloc = f"{netloc}:{port}"
     sanitized = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
@@ -271,3 +276,149 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
             f"{self.requested_origin}{self.requested_route} "
             f"(scope={self.scope_ref}): {self.reason}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Provider-neutral model-provider exception surface (codex iter-4 important).
+#
+# Phase 4 ``OutboxBackedBudget`` and other core / domain components raise
+# :class:`TokenBudgetExceeded` and :class:`StructuredOutputViolation`. They
+# cannot import from ``veracrawl.adapters.*`` because core code must depend
+# only on contracts / ports. The full v2 model-provider exception surface
+# therefore lives here in :mod:`contracts.errors`; the existing
+# ``adapters.model_providers.errors`` module has been reduced to a
+# back-compat re-export so existing callers (the OpenAI adapter, tests,
+# anything importing through the old path) continue to work.
+# ---------------------------------------------------------------------------
+
+
+class ModelProviderError(RuntimeError):
+    """Adapter-level failure with structured fields and no body content.
+
+    Inherits :class:`RuntimeError` so existing
+    ``except RuntimeError`` handlers continue to match. Category-specific
+    subclasses below additionally mix in one of the markers from this
+    module (``RetryableError`` / ``FatalError`` / ``PolicyViolation``)
+    so callers can dispatch on category without inspecting
+    ``error_code``.
+
+    The formatted message is provider-neutral on purpose: the
+    ``ModelProviderPort`` v2 (Phase 4 step 4.1) is provider-blind, so
+    the base class's message cannot privilege one provider. Concrete
+    adapters that want a provider-flavored message subclass and
+    override.
+    """
+
+    def __init__(
+        self,
+        *,
+        status_code: int,
+        error_code: str,
+        request_id: str | None,
+    ) -> None:
+        self.status_code = status_code
+        self.error_code = error_code
+        self.request_id = request_id
+        request_id_repr = request_id if request_id is not None else "<none>"
+        super().__init__(
+            f"model provider error: status={status_code} "
+            f"code={error_code} request_id={request_id_repr}"
+        )
+
+
+class ProviderAuthFailed(ModelProviderError, FatalError):
+    """401 / 403 — credential bad or revoked. Do not retry."""
+
+
+class ProviderRateLimited(ModelProviderError, RetryableError):
+    """429 — caller may retry under same policy after Retry-After."""
+
+
+class ProviderServerError(ModelProviderError, RetryableError):
+    """5xx — transient upstream error. Caller may retry."""
+
+
+class ProviderBadRequest(ModelProviderError, FatalError):
+    """400 / 422 — request shape rejected. Retrying without changes will not help."""
+
+
+class ProviderNotFound(ModelProviderError, FatalError):
+    """404 — model id or endpoint not found."""
+
+
+class ProviderAdapterFailure(ModelProviderError, FatalError):
+    """Catch-all for transport / decode failures the adapter could not classify."""
+
+
+class TokenBudgetExceeded(ModelProviderError, PolicyViolation):
+    """Raised when a model call would push run-level token usage past
+    the declared ``TokenBudget`` (Phase 4 ``OutboxBackedBudget``).
+
+    The exception is a ``PolicyViolation`` rather than a ``RetryableError``
+    because retrying without changing the budget would just trigger the
+    same refusal. Phase 5 ``RecoveryPort`` is expected to map this to
+    ``RecoveryDecisionKind.ABANDON`` or ``REQUEST_REVIEW``.
+    """
+
+
+class StructuredOutputViolation(ModelProviderError, PolicyViolation):
+    """Raised when a model returns JSON that does not validate against
+    the declared ``ResponseFormat.json_schema`` (Phase 4 OpenAI / Anthropic
+    adapters apply this on the parsed payload).
+
+    Marker is ``PolicyViolation``: the contract requires schema-valid
+    output and the adapter's job is to surface the contract breach,
+    not silently coerce or retry. Recovery may legitimately ask the
+    same model again with a follow-up prompt, but that's a Phase 5
+    runtime decision, not the contract layer's call.
+    """
+
+
+_PROVIDER_ERROR_CODE_TO_CLASS: dict[str, type[ModelProviderError]] = {
+    "AUTH_FAILED": ProviderAuthFailed,
+    "RATE_LIMITED": ProviderRateLimited,
+    "SERVER_ERROR": ProviderServerError,
+    "BAD_REQUEST": ProviderBadRequest,
+    "NOT_FOUND": ProviderNotFound,
+    "ADAPTER_FAILURE": ProviderAdapterFailure,
+    "TOKEN_BUDGET_EXCEEDED": TokenBudgetExceeded,
+    "STRUCTURED_OUTPUT_VIOLATION": StructuredOutputViolation,
+}
+
+
+def classify_provider_error(
+    *,
+    status_code: int,
+    error_code: str,
+    request_id: str | None,
+) -> ModelProviderError:
+    """Return the marker-bearing subclass for ``error_code``.
+
+    Falls back to :class:`ProviderAdapterFailure` (a ``FatalError``)
+    for codes without a dedicated subclass so every classified error
+    carries one of the recovery-dispatch markers
+    (``RetryableError`` / ``FatalError`` / ``PolicyViolation``).
+    Falling back to the bare ``ModelProviderError`` would leave the
+    orchestrator's ``except FatalError:`` / ``except PolicyViolation:``
+    branches blind to unknown codes (codex iter-3 important).
+    """
+    cls = _PROVIDER_ERROR_CODE_TO_CLASS.get(error_code, ProviderAdapterFailure)
+    return cls(status_code=status_code, error_code=error_code, request_id=request_id)
+
+
+def classify_provider_status(status: int) -> str:
+    """Map an HTTP status code to one of the canonical ``error_code``
+    strings the registry uses. Provider-neutral; the OpenAI / Anthropic
+    adapters translate their wire status codes through this helper.
+    """
+    if status in (401, 403):
+        return "AUTH_FAILED"
+    if status == 429:
+        return "RATE_LIMITED"
+    if status == 404:
+        return "NOT_FOUND"
+    if status in (400, 422):
+        return "BAD_REQUEST"
+    if 500 <= status < 600:
+        return "SERVER_ERROR"
+    return "ADAPTER_FAILURE"

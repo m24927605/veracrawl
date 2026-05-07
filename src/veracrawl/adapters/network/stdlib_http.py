@@ -130,6 +130,66 @@ class AdapterFailureError(NetworkAdapterError, FatalError):
         super().__init__(NetworkFailureType.ADAPTER_FAILURE, detail)
 
 
+class SizeBudgetExceededError(NetworkAdapterError, FatalError):
+    """Response body grew past the configured size budget mid-stream.
+
+    Marker is ``FatalError``: re-issuing the same request would just
+    hit the same limit. Phase 5 ``RecoveryPort`` is expected to map
+    this to ``RecoveryDecisionKind.ABANDON`` or to switch adapter.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.SIZE_BUDGET_EXCEEDED, detail)
+
+
+class RobotsBlockedError(NetworkAdapterError, PolicyViolation):
+    """``robots.txt`` (or per-target ToS) refused the URL.
+
+    Marker is ``PolicyViolation`` — the charter (``docs/09:116``)
+    requires honoring robots; bypass is forbidden. The orchestrator
+    must record-and-terminate, never retry.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.ROBOTS_BLOCKED, detail)
+
+
+class RateBudgetExceededError(NetworkAdapterError, FatalError):
+    """Per-(origin, route, adapter) rate budget exhausted for the run.
+
+    Marker is ``FatalError``: budget refusal is per-run and a retry
+    will hit the same cap; recovery must restructure (e.g., escalate
+    or abandon), not retry.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.RATE_BUDGET_EXCEEDED, detail)
+
+
+class UnsafeBrowserSideEffectError(NetworkAdapterError, PolicyViolation):
+    """Browser observation triggered a side-effect the policy forbids.
+
+    Marker is ``PolicyViolation`` — the design forbids browser writes
+    / form submissions / pointer events outside the authorized
+    interaction surface; the orchestrator must record and terminate.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.UNSAFE_BROWSER_SIDE_EFFECT, detail)
+
+
+class MissingNetworkArtifactError(NetworkAdapterError, FatalError):
+    """Expected network artifact (response body / HAR / etc.) is missing.
+
+    Marker is ``FatalError`` — a missing artifact is a contract
+    violation by the upstream layer; retrying the same request will
+    not produce the missing data.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(NetworkFailureType.MISSING_NETWORK_ARTIFACT, detail)
+
+
 _NETWORK_FAILURE_TYPE_TO_CLASS: dict[NetworkFailureType, type[NetworkAdapterError]] = {
     NetworkFailureType.NETWORK_TIMEOUT: NetworkTimeoutError,
     NetworkFailureType.RETRY_EXHAUSTED: RetryExhaustedError,
@@ -137,30 +197,34 @@ _NETWORK_FAILURE_TYPE_TO_CLASS: dict[NetworkFailureType, type[NetworkAdapterErro
     NetworkFailureType.EGRESS_DENIED: EgressDeniedError,
     NetworkFailureType.PRIVATE_NETWORK_DENIED: PrivateNetworkDeniedError,
     NetworkFailureType.ADAPTER_FAILURE: AdapterFailureError,
+    NetworkFailureType.SIZE_BUDGET_EXCEEDED: SizeBudgetExceededError,
+    NetworkFailureType.ROBOTS_BLOCKED: RobotsBlockedError,
+    NetworkFailureType.RATE_BUDGET_EXCEEDED: RateBudgetExceededError,
+    NetworkFailureType.UNSAFE_BROWSER_SIDE_EFFECT: UnsafeBrowserSideEffectError,
+    NetworkFailureType.MISSING_NETWORK_ARTIFACT: MissingNetworkArtifactError,
 }
 
 
-def classify_network_failure(
-    failure_type: NetworkFailureType, detail: str
-) -> NetworkAdapterError:
+def classify_network_failure(failure_type: NetworkFailureType, detail: str) -> NetworkAdapterError:
     """Pick the marker-bearing subclass for ``failure_type``.
 
-    Falls back to the generic :class:`NetworkAdapterError` for failure
-    types that don't have a dedicated subclass yet (e.g.
-    SIZE_BUDGET_EXCEEDED, ROBOTS_BLOCKED, RATE_BUDGET_EXCEEDED). Those
-    subclasses can be added incrementally without disturbing existing
-    callers — the helper continues to return a base
-    ``NetworkAdapterError`` for unmapped values.
+    Every value of :class:`NetworkFailureType` now has a dedicated
+    marker-bearing subclass (codex iter-4 important: an unmapped
+    value used to fall back to bare ``NetworkAdapterError`` without a
+    marker, breaking ``except FatalError:`` / ``except PolicyViolation:``
+    dispatch). The fallback for an unrecognised enum (added in some
+    future commit before its subclass lands) is
+    :class:`AdapterFailureError`, which carries the ``FatalError``
+    marker; that keeps the dispatch contract intact while the new
+    enum value waits for a dedicated class.
     """
-    cls = _NETWORK_FAILURE_TYPE_TO_CLASS.get(failure_type)
-    if cls is None:
-        return NetworkAdapterError(failure_type, detail)
-    # Specific subclasses take only ``detail`` (failure_type is implied
-    # by the class). The dispatch table is keyed so cls is one of the
-    # six known subclasses; mypy's view is the broader base type, so
-    # the call-arg / arg-type signatures of the parent are reported
+    cls = _NETWORK_FAILURE_TYPE_TO_CLASS.get(failure_type, AdapterFailureError)
+    # Every subclass takes only ``detail`` (failure_type is implied by
+    # the class). The dispatch table is keyed so cls is one of the
+    # known subclasses; mypy's view is the broader base type, so the
+    # call-arg / arg-type signatures of the parent are reported
     # despite this being correct against every entry in the dict.
-    return cls(detail)  # type: ignore[arg-type,call-arg]
+    return cls(detail)  # type: ignore[call-arg]
 
 
 @dataclass(frozen=True)
@@ -329,16 +393,12 @@ class StdlibHttpSourceAdapter:
             result_type=SourceAdapterResultType.FETCH_RESULT,
             output_refs=[artifact_ref],
             policy_decision_refs=self.request.policy_decision_refs,
-            replay_event_refs=[
-                f"event:{command.command_envelope_id}:network_response_recorded"
-            ],
+            replay_event_refs=[f"event:{command.command_envelope_id}:network_response_recorded"],
             idempotency_key=f"{command.adapter_spec.id}:{self.request.id}",
             status=AdapterResultStatus.SUCCEEDED,
         )
 
-    def _fetch_with_redirects(
-        self, url: str, *, policy_decision_refs: list[str]
-    ) -> httpx.Response:
+    def _fetch_with_redirects(self, url: str, *, policy_decision_refs: list[str]) -> httpx.Response:
         current_url = url
         for hop in range(self._config.max_redirects + 1):
             response = self._send_with_retry(current_url)
@@ -361,9 +421,7 @@ class StdlibHttpSourceAdapter:
                 )
             )
             current_url = next_url
-        raise RedirectDeniedError(
-            f"redirect loop > max_redirects={self._config.max_redirects}"
-        )
+        raise RedirectDeniedError(f"redirect loop > max_redirects={self._config.max_redirects}")
 
     def _send_with_retry(self, url: str) -> httpx.Response:
         last_response: httpx.Response | None = None
@@ -378,9 +436,7 @@ class StdlibHttpSourceAdapter:
                     failure is not NetworkFailureType.NETWORK_TIMEOUT
                     or attempt >= self._config.max_attempts
                 ):
-                    raise classify_network_failure(
-                        failure, f"{type(exc).__name__}: {exc}"
-                    ) from exc
+                    raise classify_network_failure(failure, f"{type(exc).__name__}: {exc}") from exc
                 self._sleep(_backoff_seconds(attempt, jitter=self._jitter))
                 continue
 
@@ -400,20 +456,15 @@ class StdlibHttpSourceAdapter:
 
         if last_response is not None:
             raise RetryExhaustedError(
-                f"max_attempts={self._config.max_attempts} "
-                f"last_status={last_response.status_code}"
+                f"max_attempts={self._config.max_attempts} last_status={last_response.status_code}"
             )
-        raise classify_network_failure(
-            last_failure, f"max_attempts={self._config.max_attempts}"
-        )
+        raise classify_network_failure(last_failure, f"max_attempts={self._config.max_attempts}")
 
     def _validate_redirect_target(self, *, from_url: str, to_url: str) -> None:
         from_scheme = urlparse(from_url).scheme
         to_parsed = urlparse(to_url)
         if to_parsed.scheme not in {"http", "https"}:
-            raise RedirectDeniedError(
-                f"unsupported redirect scheme: {to_parsed.scheme!r}"
-            )
+            raise RedirectDeniedError(f"unsupported redirect scheme: {to_parsed.scheme!r}")
         if from_scheme == "https" and to_parsed.scheme == "http":
             raise RedirectDeniedError("protocol_downgrade_https_to_http")
         if self._config.egress_allowlist:
@@ -421,9 +472,7 @@ class StdlibHttpSourceAdapter:
             if target_origin not in self._config.egress_allowlist:
                 raise EgressDeniedError(f"redirect off allowlist: {target_origin}")
         if not self._config.allow_private_network and _is_private_network_url(to_url):
-            raise PrivateNetworkDeniedError(
-                f"redirect to private host: {to_parsed.hostname}"
-            )
+            raise PrivateNetworkDeniedError(f"redirect to private host: {to_parsed.hostname}")
 
 
 def _is_redirect_status(status: int) -> bool:

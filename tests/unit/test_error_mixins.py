@@ -141,13 +141,21 @@ def test_classify_network_failure_returns_marker_bearing_subclass() -> None:
         assert err.failure_type is failure_type
 
 
-def test_classify_network_failure_falls_back_to_base_for_unmapped_types() -> None:
-    """SIZE_BUDGET_EXCEEDED, ROBOTS_BLOCKED etc. don't have dedicated
-    subclasses yet; the helper returns the generic NetworkAdapterError
-    so callers continue to get a ValueError they can catch."""
-    err = classify_network_failure(NetworkFailureType.SIZE_BUDGET_EXCEEDED, "too big")
-    assert type(err) is NetworkAdapterError
-    assert isinstance(err, ValueError)
+def test_classify_network_failure_covers_every_enum_value() -> None:
+    """Phase 0 step 0.4 codex iter-4: every value of
+    :class:`NetworkFailureType` now classifies into a marker-bearing
+    subclass so ``except FatalError:`` / ``except PolicyViolation:``
+    / ``except RetryableError:`` dispatch never silently misses a
+    typed failure."""
+    from veracrawl.contracts.errors import FatalError, PolicyViolation, RetryableError
+
+    for failure_type in NetworkFailureType:
+        err = classify_network_failure(failure_type, "detail")
+        assert isinstance(err, ValueError), failure_type
+        assert isinstance(err, NetworkAdapterError), failure_type
+        assert isinstance(err, RetryableError | FatalError | PolicyViolation), (
+            f"{failure_type.value} produced {type(err).__qualname__} which has no marker"
+        )
 
 
 # Network-side dispatch with marker.
@@ -191,32 +199,24 @@ def test_existing_value_error_catch_still_matches() -> None:
 
 
 def test_provider_auth_failed_is_fatal() -> None:
-    err = ProviderAuthFailed(
-        status_code=401, error_code="AUTH_FAILED", request_id="req_x"
-    )
+    err = ProviderAuthFailed(status_code=401, error_code="AUTH_FAILED", request_id="req_x")
     assert isinstance(err, ModelProviderError)
     assert isinstance(err, RuntimeError)
     assert isinstance(err, FatalError)
 
 
 def test_provider_rate_limited_is_retryable() -> None:
-    err = ProviderRateLimited(
-        status_code=429, error_code="RATE_LIMITED", request_id=None
-    )
+    err = ProviderRateLimited(status_code=429, error_code="RATE_LIMITED", request_id=None)
     assert isinstance(err, RetryableError)
 
 
 def test_provider_server_error_is_retryable() -> None:
-    err = ProviderServerError(
-        status_code=503, error_code="SERVER_ERROR", request_id=None
-    )
+    err = ProviderServerError(status_code=503, error_code="SERVER_ERROR", request_id=None)
     assert isinstance(err, RetryableError)
 
 
 def test_provider_bad_request_is_fatal() -> None:
-    err = ProviderBadRequest(
-        status_code=400, error_code="BAD_REQUEST", request_id=None
-    )
+    err = ProviderBadRequest(status_code=400, error_code="BAD_REQUEST", request_id=None)
     assert isinstance(err, FatalError)
 
 
@@ -240,18 +240,14 @@ def test_classify_provider_error_picks_right_subclass() -> None:
         (0, "ADAPTER_FAILURE", ProviderAdapterFailure, FatalError),
     ]
     for status, code, expected_cls, expected_marker in cases:
-        err = classify_provider_error(
-            status_code=status, error_code=code, request_id=None
-        )
+        err = classify_provider_error(status_code=status, error_code=code, request_id=None)
         assert type(err) is expected_cls, f"status={status} code={code}"
         assert isinstance(err, expected_marker)
 
 
 def test_existing_runtime_error_catch_still_matches_provider() -> None:
     """Existing call sites that catch RuntimeError must still match."""
-    err = ProviderAuthFailed(
-        status_code=401, error_code="AUTH_FAILED", request_id=None
-    )
+    err = ProviderAuthFailed(status_code=401, error_code="AUTH_FAILED", request_id=None)
     try:
         raise err
     except RuntimeError as caught:
@@ -282,9 +278,7 @@ def test_existing_veracrawl_error_catch_still_matches() -> None:
 def test_classify_network_failure_does_not_leak_through_str() -> None:
     """Detail strings should not be modified; the str form is
     deterministic and free of internal class lookup details."""
-    err = classify_network_failure(
-        NetworkFailureType.NETWORK_TIMEOUT, "ConnectTimeout: ..."
-    )
+    err = classify_network_failure(NetworkFailureType.NETWORK_TIMEOUT, "ConnectTimeout: ...")
     assert str(err) == "network_timeout: network request timed out" or (
         "network_timeout" in str(err)
     )
@@ -292,9 +286,7 @@ def test_classify_network_failure_does_not_leak_through_str() -> None:
 
 def test_classify_provider_error_message_has_no_body() -> None:
     """Provider errors must never embed body content (RAW_RESPONSE_LEAK)."""
-    err = classify_provider_error(
-        status_code=400, error_code="BAD_REQUEST", request_id="req_xyz"
-    )
+    err = classify_provider_error(status_code=400, error_code="BAD_REQUEST", request_id="req_xyz")
     msg = str(err)
     assert "400" in msg
     assert "BAD_REQUEST" in msg

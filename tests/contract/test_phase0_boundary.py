@@ -604,6 +604,91 @@ def test_classify_provider_error_unknown_code_falls_back_to_marker_class() -> No
     assert isinstance(err, FatalError)
 
 
+# Codex iter-4 important: ModelProviderError lives in contracts/ ----
+
+
+def test_model_provider_error_canonical_home_is_contracts() -> None:
+    """Codex iter-4 important: core / domain code (e.g., Phase 4
+    ``OutboxBackedBudget``) cannot import from
+    ``veracrawl.adapters.*``; the v2 model-provider exception surface
+    must therefore live in ``contracts.errors``. Lock the canonical
+    location independently so a refactor that moves the classes back
+    under adapters/ would fail this test."""
+    # The adapter-layer module is a re-export of the contracts module.
+    from veracrawl.adapters.model_providers import errors as adapter_re_export
+    from veracrawl.contracts.errors import (
+        ModelProviderError as ContractsModelProviderError,
+    )
+    from veracrawl.contracts.errors import (
+        StructuredOutputViolation as ContractsStructuredOutputViolation,
+    )
+    from veracrawl.contracts.errors import (
+        TokenBudgetExceeded as ContractsTokenBudgetExceeded,
+    )
+
+    assert adapter_re_export.ModelProviderError is ContractsModelProviderError
+    assert adapter_re_export.TokenBudgetExceeded is ContractsTokenBudgetExceeded
+    assert adapter_re_export.StructuredOutputViolation is ContractsStructuredOutputViolation
+
+
+# Codex iter-4 important: classify_network_failure marker coverage --
+
+
+def test_classify_network_failure_covers_every_failure_type() -> None:
+    """Every value of :class:`NetworkFailureType` must classify into a
+    marker-bearing subclass; an unmapped enum that fell through to
+    bare ``NetworkAdapterError`` would let ``except FatalError:`` /
+    ``except PolicyViolation:`` dispatch silently miss the typed
+    failure."""
+    from veracrawl.adapters.network.stdlib_http import classify_network_failure
+    from veracrawl.contracts.enums import NetworkFailureType
+
+    for failure_type in NetworkFailureType:
+        err = classify_network_failure(failure_type, "detail")
+        assert isinstance(err, RetryableError | FatalError | PolicyViolation), (
+            f"{failure_type.value} produced {type(err).__qualname__} "
+            "which has no marker — every classifier output must carry one"
+        )
+
+
+# Codex iter-4 important: malformed URL = full redaction -----------
+
+
+@pytest.mark.parametrize(
+    "malformed_origin_with_secrets",
+    [
+        # Malformed authority hiding userinfo
+        "https://user:hunter2@example.com:bad/path",
+        # Malformed authority hiding query secrets
+        "https://example.com:99999/path?session=abc123",
+        # Genuinely garbled
+        "https://[invalid-ipv6:hunter2@host",
+    ],
+)
+def test_credential_scope_violation_full_redacts_malformed_origins_with_secrets(
+    malformed_origin_with_secrets: str,
+) -> None:
+    """Codex iter-4 important: previously a malformed URL fell back
+    through ``_redact_field`` which only catches the small marker
+    list. A malformed authority hiding ``user:hunter2`` or a
+    ``?session=...`` parameter would survive that path. Now the
+    fallback is full ``[REDACTED]`` so no caller-supplied substring
+    can leak from a malformed URL."""
+    err = CredentialScopeViolation(
+        scope_ref="credential-scope:ebay",
+        requested_origin=malformed_origin_with_secrets,
+        requested_route="/items",
+        requested_method="GET",
+        reason="malformed origin",
+    )
+    msg = str(err)
+    for leak in ("hunter2", "session=", "abc123", "user:"):
+        assert leak.lower() not in msg.lower(), (
+            f"CredentialScopeViolation leaked {leak!r} from malformed origin "
+            f"{malformed_origin_with_secrets!r}: msg={msg}"
+        )
+
+
 # Catch-compatibility lockdown for the three new subclasses.
 
 
