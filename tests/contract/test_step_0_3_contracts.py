@@ -495,20 +495,57 @@ def test_credential_scope_rejects_unanchored_route_pattern(unanchored: str) -> N
 @pytest.mark.parametrize(
     "redos",
     [
+        # Original substring-detected shapes
         "^/buy/(.*)+/v1",
         "^/buy/(.+)+",
         "^/(.*)*",
         "^/(.+)*",
         "^/(.*?)+",
         "^/(.+?)+",
+        # AST-detected shapes the substring matcher misses (codex iter-5)
+        "^/buy/(a+)+",
+        "^/buy/([a-z]+)+",
+        "^/buy/([0-9]+)*",
+        "^/buy/(\\d+)+",
+        "^/buy/(\\w+)*",
+        "^/buy/(a|b+)+",  # nested quantifier inside alternation branch
+        "^/buy/((a)+)+",  # doubly-nested groups
+        "^/buy/((a)+)*",
+        "^/buy/(a+){2,}",  # bounded outer repeat with quantified body
+        "^/buy/([a-z]{2,5})+",  # bounded inner with outer repeat
     ],
 )
 def test_credential_scope_rejects_redos_prone_route_pattern(redos: str) -> None:
-    """Nested-quantifier constructs like ``(.*)+`` are catastrophic-
-    backtracking ReDoS risk. Refuse at the contract layer; runtime-
-    side hardening is Phase 2 step 2.2's job."""
+    """Nested-quantifier constructs are catastrophic-backtracking
+    ReDoS risk. Refuse at the contract layer using a structural AST
+    walk over the parsed regex (codex iter-5 important: substring
+    matching missed shapes like ``(a+)+`` and ``([a-z]+)+``)."""
     with pytest.raises(ValidationError):
         _valid_credential_scope(allowed_route_patterns=[redos])
+
+
+@pytest.mark.parametrize(
+    "ok_pattern",
+    [
+        # Sibling quantifiers (not nested)
+        "^/api/v[0-9]+/orders/.+/items$",
+        "^/buy/[a-z]+/[0-9]+",
+        # Quantifier on body without inner quantifier
+        "^/buy/[a-z]+",
+        "^/buy/(item)+",  # quantifier on group whose body is literal-only
+        # Bounded counts on simple bodies
+        "^/products/[0-9]{1,10}",
+        # Alternation without nested quantifier
+        "^/(buy|sell)/v1/.+",
+    ],
+)
+def test_credential_scope_accepts_non_nested_quantifier_patterns(
+    ok_pattern: str,
+) -> None:
+    """Sibling and non-nested quantifiers are not ReDoS-prone and
+    must keep validating."""
+    scope = _valid_credential_scope(allowed_route_patterns=[ok_pattern])
+    assert ok_pattern in scope.allowed_route_patterns
 
 
 def test_credential_scope_rejects_oversize_route_pattern() -> None:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from re import _parser as _sre_parser  # type: ignore[attr-defined]
+from typing import Any
 from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
@@ -32,17 +34,53 @@ _MAX_ROUTE_PATTERN_LENGTH = 256
 # fine-grained scope rule design.md §3.5 stipulates.
 _CATCH_ALL_BODIES = frozenset({"", ".", ".*", ".+", "/", "/.*", "/.+", "/.*?", "/.+?"})
 
-# Substrings that signal ReDoS-prone constructs (nested quantifiers).
-# Phase 0 catches the obvious shapes; runtime-side hardening (Phase 2
-# step 2.2) can layer additional defenses (timeout, alternative engine).
-_REDOS_INDICATORS = (
-    "(.*)+",
-    "(.+)+",
-    "(.*)*",
-    "(.+)*",
-    "(.*?)+",
-    "(.+?)+",
+# sre opcodes that represent ``*`` / ``+`` / ``?`` / ``{n,m}`` quantifiers
+# in the parsed regex AST (codex iter-5 important: catch nested
+# quantifiers structurally, not by substring matching).
+_REPEAT_OPS = frozenset(
+    {
+        _sre_parser.MAX_REPEAT,
+        _sre_parser.MIN_REPEAT,
+        _sre_parser.POSSESSIVE_REPEAT,
+    }
 )
+
+
+def _walk_for_nested_quantifier(node: Any, *, inside_repeat: bool) -> bool:
+    """AST walk that returns True iff the regex contains a quantifier
+    nested inside another quantifier (the canonical ReDoS shape).
+
+    ``re._parser.parse`` returns a sequence of ``(opcode, args)`` tuples
+    that may contain nested ``SubPattern`` objects. The walk descends
+    into ``SUBPATTERN``, ``BRANCH`` (alternation), and the bodies of
+    repeat operators; when we are already inside a repeat operator and
+    encounter another, the pattern is structurally vulnerable to
+    catastrophic backtracking.
+    """
+    for op, args in node:
+        if op in _REPEAT_OPS:
+            if inside_repeat:
+                return True
+            # MAX_REPEAT / MIN_REPEAT / POSSESSIVE_REPEAT args = (min, max, body)
+            body = args[2]
+            if _walk_for_nested_quantifier(body, inside_repeat=True):
+                return True
+        elif op == _sre_parser.SUBPATTERN:
+            # SUBPATTERN args = (group_id, add_flags, del_flags, body)
+            body = args[3]
+            if _walk_for_nested_quantifier(body, inside_repeat=inside_repeat):
+                return True
+        elif op == _sre_parser.BRANCH:
+            # BRANCH args = (None, [list of alternative SubPattern])
+            for alt in args[1]:
+                if _walk_for_nested_quantifier(alt, inside_repeat=inside_repeat):
+                    return True
+    return False
+
+
+def _has_nested_quantifier(pattern: str) -> bool:
+    parsed = _sre_parser.parse(pattern)
+    return _walk_for_nested_quantifier(parsed, inside_repeat=False)
 
 
 def _is_http_url(value: str) -> bool:
@@ -86,13 +124,6 @@ def _validate_route_pattern(pattern: str) -> None:
             "scope rule. Use a specific path prefix instead, or split into "
             "multiple scopes if the producer truly needs origin-wide access"
         )
-    for indicator in _REDOS_INDICATORS:
-        if indicator in pattern:
-            raise ValueError(
-                f"credential scope allowed_route_pattern {pattern!r} contains a "
-                f"nested-quantifier construct {indicator!r} that is a known "
-                "ReDoS risk; rewrite without nested ``*``/``+`` quantifiers"
-            )
     try:
         re.compile(pattern)
     except re.error as exc:
@@ -100,6 +131,14 @@ def _validate_route_pattern(pattern: str) -> None:
             f"credential scope allowed_route_pattern {pattern!r} is not a "
             f"compilable regex: {exc.msg}"
         ) from exc
+    if _has_nested_quantifier(pattern):
+        raise ValueError(
+            f"credential scope allowed_route_pattern {pattern!r} contains a "
+            "nested-quantifier construct (a quantified group whose body is "
+            "itself quantified, e.g., ``(a+)+`` / ``([a-z]+)*`` / "
+            "``(a|b+)+``) that is a known catastrophic-backtracking ReDoS "
+            "risk; rewrite without nested ``*``/``+``/``?`` quantifiers"
+        )
 
 
 def _is_valid_origin(value: str) -> bool:
@@ -525,9 +564,13 @@ class CredentialScope(TimestampedModel):
     ``StrictAllowlistScope`` policy rejects any request whose
     origin, route pattern, or method falls outside the allowlist.
     ``expires_at`` is required to be timezone-aware (replay
-    determinism) and in the future at construction time (a
-    pre-expired scope admits no requests and is almost certainly
-    a wiring bug).
+    determinism) but is *not* required to be in the future at
+    construction time: contracts validate shape, not time-of-day
+    truth, so a scope serialized while valid stays loadable for
+    audit / replay / registry round-trips after expiry. Runtime
+    expiry enforcement lives in ``StrictAllowlistScope`` (Phase 2
+    step 2.2), which IS allowed to be time-dependent because it
+    sits in the request-build path.
     """
 
     id: str
