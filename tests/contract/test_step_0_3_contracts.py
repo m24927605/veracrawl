@@ -370,12 +370,17 @@ def test_credential_scope_rejects_naive_expiration() -> None:
         _valid_credential_scope(expires_at=datetime(2026, 12, 31))  # noqa: DTZ001
 
 
-def test_credential_scope_rejects_past_expiration() -> None:
-    """A scope created with an already-past expiry is unusable; the
-    producer almost certainly meant to pin a future datetime."""
+def test_credential_scope_accepts_past_expiration() -> None:
+    """Contracts validate shape, not time-of-day truth. A scope
+    serialized while valid must still be loadable by the registry,
+    audit replay, and outbox replay paths after expiry; otherwise
+    deterministic round-trips would break the moment a scope's TTL
+    elapsed. ``StrictAllowlistScope`` (Phase 2 step 2.2) is the
+    runtime policy that rejects expired scopes at request build
+    time."""
     expiry = datetime(2020, 1, 1, tzinfo=UTC)
-    with pytest.raises(ValidationError):
-        _valid_credential_scope(expires_at=expiry)
+    scope = _valid_credential_scope(expires_at=expiry)
+    assert scope.expires_at == expiry
 
 
 # CredentialUseRecord ---------------------------------------------

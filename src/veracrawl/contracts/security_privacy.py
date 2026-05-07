@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 
-from veracrawl.contracts.common import Ref, TimestampedModel, utc_now
+from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import (
     ArtifactLifecycleOperation,
     CompletenessResult,
@@ -500,10 +500,13 @@ class CredentialScope(TimestampedModel):
                 raise ValueError(
                     "credential scope expires_at must be timezone-aware for replay determinism"
                 )
-            if self.expires_at.astimezone(UTC) <= utc_now():
-                raise ValueError(
-                    "credential scope expires_at must be in the future at construction time"
-                )
+        # NOTE: deliberately do NOT reject already-past ``expires_at`` here.
+        # Contracts validate shape, not time-of-day truth — a scope
+        # serialized while valid must still be loadable after expiry so
+        # replay, audit, and registry round-trips stay deterministic.
+        # Runtime policy (``StrictAllowlistScope``, Phase 2 step 2.2)
+        # decides whether an already-expired scope may be used at
+        # request build time.
         return self
 
 
