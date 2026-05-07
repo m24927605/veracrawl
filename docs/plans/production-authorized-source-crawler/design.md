@@ -266,8 +266,22 @@ Added under `contracts/`:
 
 - `Message`, `ToolCall`, `ToolSpec`, `ResponseFormat`, `TokenUsage`,
   `TokenBudget` — `agent.py`
-- `ExtractionCandidate`, `FieldCitation`, `FieldConfidence` —
-  `agent.py`
+- `FieldCitation`, `FieldConfidence` — `agent.py` (no collision; ship
+  under spec names in Phase 0).
+- `LLMExtractionCandidate` (canonical class) + `ExtractionCandidate`
+  (alias) — `agent.py`. The bare name `ExtractionCandidate` is
+  already taken at registry / package-export level by the
+  heuristic-driven `processing.ExtractionCandidate` that ~13 V1
+  modules import for the heuristic extraction path. Phase 0 ships
+  the v2 LLM-driven shape under the implementation-only name
+  `LLMExtractionCandidate` plus a module-local alias
+  `ExtractionCandidate` inside `agent.py`, so Phase 4 code following
+  the design's import path (`from veracrawl.contracts.agent import
+  ExtractionCandidate`) resolves to the v2 shape. Phase 4 retires
+  the heuristic class in `processing.py`, swaps the package-level
+  re-export and registry entry to point at `agent.py`, and reclaims
+  the bare name as the canonical registry/package surface (see
+  Phase 4 step 4.6 deliverables).
 - `AccessControlBlocked`, `NetworkAttemptEvidence` —
   `network.py`
 - `AdapterEscalationDecision`, `AdapterEscalationPolicy` —

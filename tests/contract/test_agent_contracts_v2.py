@@ -842,3 +842,50 @@ def test_response_format_json_object_minimal_valid() -> None:
     assert rf.schema_name is None
     assert rf.json_schema is None
     assert rf.strict is False
+
+
+# Spec-named exports & registrations (codex review iter-3 important #1+#2) -
+
+
+def test_field_citation_alias_resolves_at_package_level() -> None:
+    """Phase 4 code following design.md §3.5 must be able to import
+    ``FieldCitation`` straight from the package. The class is a v2
+    type with no V1 collision, so it ships under the spec name at
+    both module and package levels."""
+    from veracrawl.contracts import FieldCitation as PackageFieldCitation
+
+    assert PackageFieldCitation is LLMFieldCitation
+
+
+def test_field_confidence_alias_resolves_at_package_level() -> None:
+    from veracrawl.contracts import FieldConfidence as PackageFieldConfidence
+
+    assert PackageFieldConfidence is LLMFieldConfidence
+
+
+def test_field_citation_registered_under_spec_name() -> None:
+    """Registry consumers (coverage / replay / privacy gates) must
+    discover the v2 contract under the spec name. Verifying both
+    the contract entry exists and that the python_model points at
+    the canonical agent module class."""
+    from veracrawl.contracts.registry import FOUNDATION_CONTRACTS
+
+    assert "FieldCitation" in FOUNDATION_CONTRACTS
+    assert "FieldConfidence" in FOUNDATION_CONTRACTS
+    citation_reg = FOUNDATION_CONTRACTS["FieldCitation"]
+    assert citation_reg.python_model == "veracrawl.contracts.agent.FieldCitation"
+
+
+def test_extraction_candidate_v2_registered_only_under_llm_prefix() -> None:
+    """The bare ``ExtractionCandidate`` registry key still points at the
+    legacy ``processing.ExtractionCandidate`` because Phase 0 cannot
+    safely retire the heuristic class (~13 imports + the registry's
+    own internal references). The v2 LLM-driven contract registers
+    under the implementation-only ``LLMExtractionCandidate`` key
+    until Phase 4 retires the legacy and reclaims the bare name —
+    see design.md §3.5."""
+    from veracrawl.contracts.registry import FOUNDATION_CONTRACTS
+
+    assert "LLMExtractionCandidate" in FOUNDATION_CONTRACTS
+    legacy = FOUNDATION_CONTRACTS["ExtractionCandidate"]
+    assert legacy.python_model == "veracrawl.contracts.processing.ExtractionCandidate"

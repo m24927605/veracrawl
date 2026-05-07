@@ -295,15 +295,18 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         privacy=True,
         tests=["tests/contract/test_agent_contracts_v2.py"],
     ),
-    "LLMFieldCitation": _contract(
-        "LLMFieldCitation",
+    # FieldCitation / FieldConfidence ship under their spec names from
+    # design.md §3.5 because there is no collision with V1 contracts.
+    # The python_model points at the canonical class in contracts.agent.
+    "FieldCitation": _contract(
+        "FieldCitation",
         OwnerService.AGENTS,
         "agent",
         privacy=True,
         tests=["tests/contract/test_agent_contracts_v2.py"],
     ),
-    "LLMFieldConfidence": _contract(
-        "LLMFieldConfidence",
+    "FieldConfidence": _contract(
+        "FieldConfidence",
         OwnerService.AGENTS,
         "agent",
         tests=["tests/contract/test_agent_contracts_v2.py"],
