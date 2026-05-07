@@ -407,7 +407,16 @@ def _build_parser(*, robots_url: str, status: int, body: str) -> RobotFileParser
         # this by feeding an empty rule set.
         parser.parse([])
         return parser
-    if status >= 500 or status >= 400:
+    if 300 <= status < 400:
+        # Unresolved redirect (codex iter-3 important): the fetcher is
+        # supposed to follow robots-txt redirects, but if it didn't (or
+        # the redirect chain exceeded the cap) we must NOT treat the
+        # 3xx body as the rule set — that would silently make a redirected
+        # robots.txt allow-all and let a crawler bypass real rules. Fail
+        # closed instead.
+        parser.parse(["User-agent: *", "Disallow: /"])
+        return parser
+    if status >= 400:
         # 5xx (and other 4xx that aren't 404) → fail closed: produce a
         # parser that disallows everything.
         parser.parse(["User-agent: *", "Disallow: /"])
@@ -456,6 +465,7 @@ def _advice_from_parser(
 def make_httpx_robots_fetcher(
     *,
     timeout_s: float = 10.0,
+    max_redirects: int = 5,
     transport: httpx.BaseTransport | None = None,
 ) -> RobotsFetcher:
     """Production-grade robots.txt fetcher.
@@ -470,21 +480,31 @@ def make_httpx_robots_fetcher(
     :class:`RobotsPort` before every fetch, so using it to retrieve
     ``/robots.txt`` would loop.
 
+    Redirects on ``/robots.txt`` are followed up to ``max_redirects``
+    (codex iter-3 important): well-behaved origins commonly redirect
+    ``/robots.txt`` (e.g., ``www.example.com`` → ``example.com``), and
+    failing to follow leaves a 3xx body that the parser would treat
+    as a permissive empty rule set. The cap is bounded so a redirect
+    loop does not stall the run; if the chain exceeds the cap, the
+    fetcher returns the final 3xx status and ``_build_parser`` then
+    treats it as fail-closed (defence in depth).
+
     The fetcher honors the ``user_agent`` argument (so the single
     source-of-truth UA is preserved end to end) and a small per-request
-    timeout. It does not implement retries, redirect following, or
-    the broader :class:`StdlibHttpSourceAdapter` policy machinery —
-    those layers belong to the caller-side fetch, not to robots
-    discovery. Network-level failures and non-2xx responses are
-    surfaced via :class:`RobotsFetchResult` so the caller's fail-closed
-    semantics apply uniformly.
+    timeout. It does not implement retries or the broader
+    :class:`StdlibHttpSourceAdapter` policy machinery — those layers
+    belong to the caller-side fetch, not to robots discovery.
+    Network-level failures and non-2xx responses are surfaced via
+    :class:`RobotsFetchResult` so the caller's fail-closed semantics
+    apply uniformly.
     """
 
     def fetch(robots_url: str, user_agent: str) -> RobotsFetchResult:
         client_kwargs: dict[str, object] = {
             "timeout": httpx.Timeout(timeout_s),
             "headers": {"User-Agent": user_agent},
-            "follow_redirects": False,
+            "follow_redirects": True,
+            "max_redirects": max_redirects,
         }
         if transport is not None:
             client_kwargs["transport"] = transport

@@ -421,6 +421,22 @@ def test_disk_cache_metadata_uses_wallclock_not_monotonic(tmp_path: Path) -> Non
     assert "fetched_at" not in meta or meta.get("fetched_at") is None
 
 
+def test_unresolved_3xx_robots_response_fails_closed() -> None:
+    """A 3xx the fetcher could not follow must be fail-closed.
+
+    Codex iter-3 important: previously, a ``/robots.txt`` returning a
+    301/302 with an empty body was parsed by ``RobotFileParser`` as
+    "no rules" → allow-all, which silently let a redirected
+    robots.txt bypass real rules. Defence-in-depth: even with the
+    fetcher's redirect-following, an unresolved 3xx surfaced to the
+    parser must not be treated as permissive.
+    """
+
+    parser = UrllibRobotsParser(fetcher=_make_fetcher("", status=301))
+    advice = parser.evaluate("https://example.test/anything", user_agent=_DEFAULT_UA)
+    assert advice.is_allowed is False
+
+
 def test_make_httpx_robots_fetcher_returns_callable_with_correct_signature() -> None:
     """The production helper returns a fetcher with the documented shape.
 
