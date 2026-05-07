@@ -548,6 +548,116 @@ def test_make_httpx_robots_fetcher_allows_when_in_allowlist() -> None:
     assert result.status == 200
 
 
+# -- post-iter-5 fix-up regression tests (no further codex run) -
+
+
+def test_make_httpx_robots_fetcher_runs_policy_check_per_redirect_hop() -> None:
+    """Codex iter-5 critical: ``follow_redirects=True`` let httpx
+    contact the redirect target before our policy check could refuse
+    it. The fetcher now follows redirects manually, with the policy
+    check ahead of every hop — a redirect from an allowlisted public
+    host to an off-allowlist host must refuse before the second
+    request is issued.
+    """
+
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        requested.append(url)
+        if url == "https://allowed.test/robots.txt":
+            return httpx.Response(301, headers={"location": "https://forbidden.test/robots.txt"})
+        return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+
+    transport = httpx.MockTransport(handler)
+    fetcher = make_httpx_robots_fetcher(
+        egress_allowlist={"https://allowed.test"},
+        transport=transport,
+    )
+    with pytest.raises(RobotsFetchPolicyError):
+        fetcher("https://allowed.test/robots.txt", _DEFAULT_UA)
+    # Only the initial request was issued; the redirect target was
+    # blocked before any second request hit the transport.
+    assert requested == ["https://allowed.test/robots.txt"]
+
+
+def test_make_httpx_robots_fetcher_blocks_dns_resolved_private_host() -> None:
+    """Codex iter-5 important: hostname resolving to a private IP must
+    be blocked. We inject a resolver that points the host at 127.0.0.1.
+    """
+
+    def fake_resolver(host: str) -> list[str]:
+        return ["127.0.0.1"]
+
+    fetcher = make_httpx_robots_fetcher(
+        allow_private_network=False,
+        dns_resolver=fake_resolver,
+    )
+    with pytest.raises(RobotsFetchPolicyError):
+        fetcher("https://disguised.test/robots.txt", _DEFAULT_UA)
+
+
+def test_make_httpx_robots_fetcher_allows_dns_resolved_public_host() -> None:
+    """A hostname resolving to a public IP under
+    ``allow_private_network=False`` must NOT be blocked — the gate
+    refuses bypass, not legitimate public traffic."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+
+    def fake_resolver(host: str) -> list[str]:
+        return ["93.184.216.34"]
+
+    fetcher = make_httpx_robots_fetcher(
+        allow_private_network=False,
+        dns_resolver=fake_resolver,
+        transport=httpx.MockTransport(handler),
+    )
+    result = fetcher("https://example.test/robots.txt", _DEFAULT_UA)
+    assert result.status == 200
+
+
+def test_disk_cache_meta_records_cache_key_for_collision_verification(tmp_path: Path) -> None:
+    """Codex iter-5 minor: meta now stores the original ``cache_key``
+    so the read path can verify the file belongs to the expected
+    (host, ua) pair even if the filename hash collides."""
+
+    fetcher = _make_fetcher(_allow_all_robots())
+    parser = UrllibRobotsParser(fetcher=fetcher, cache_dir=tmp_path)
+    parser.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
+
+    meta_files = list(tmp_path.glob("*.meta.json"))
+    assert len(meta_files) == 1
+    meta = json.loads(meta_files[0].read_text(encoding="utf-8"))
+    assert meta["cache_key"] == f"https://example.test|ua={_DEFAULT_UA}"
+
+
+def test_disk_cache_rejects_meta_with_mismatched_cache_key(tmp_path: Path) -> None:
+    """If a meta file's stored cache_key does not match the lookup,
+    the entry must be rejected (a fresh fetch is issued instead).
+
+    We simulate the collision case by hand-writing a meta file with
+    a deliberately wrong ``cache_key``.
+    """
+
+    counter: list[tuple[str, str]] = []
+    fetcher = _make_fetcher(_allow_all_robots(), counter=counter)
+    parser = UrllibRobotsParser(fetcher=fetcher, cache_dir=tmp_path)
+    parser.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
+    assert len(counter) == 1
+
+    # Corrupt the meta file's cache_key field.
+    meta_files = list(tmp_path.glob("*.meta.json"))
+    payload = json.loads(meta_files[0].read_text(encoding="utf-8"))
+    payload["cache_key"] = "https://other.test|ua=Other/1"
+    meta_files[0].write_text(json.dumps(payload), encoding="utf-8")
+
+    # New parser instance that should NOT trust the corrupted entry.
+    parser_b = UrllibRobotsParser(fetcher=fetcher, cache_dir=tmp_path)
+    parser_b.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
+    assert len(counter) == 2
+
+
 def test_robots_fetcher_policy_error_is_cached_as_failure() -> None:
     """A policy refusal during robots discovery must turn into a
     fail-closed cache entry just like a transport failure does, so

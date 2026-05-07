@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import tempfile
 import threading
 import time
@@ -44,7 +45,7 @@ from dataclasses import dataclass
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Final
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -290,7 +291,15 @@ class UrllibRobotsParser:
             status = int(meta["status"])
             fetched_at_wallclock = float(meta["fetched_at_wallclock"])
             robots_url = str(meta["robots_url"])
+            stored_cache_key = str(meta["cache_key"])
         except (OSError, ValueError, KeyError):
+            return None
+        # Codex iter-5 minor: verify the stored cache_key matches the
+        # one we computed for this lookup. Even with full-length
+        # sha256 the filename is a hash; an unexpected mismatch means
+        # the file does not belong to this (host, ua) pair and must
+        # not be reused.
+        if stored_cache_key != cache_key:
             return None
         # TTL math against persisted entries uses wall-clock so it is
         # valid across process restarts (codex iter-2 important —
@@ -349,6 +358,7 @@ class UrllibRobotsParser:
                     "status": entry.status,
                     "fetched_at_wallclock": entry.fetched_at_wallclock,
                     "robots_url": entry.robots_url,
+                    "cache_key": cache_key,
                 }
             )
             _atomic_write_text(meta_path, meta_payload)
@@ -419,10 +429,12 @@ def _atomic_write_text(path: Path, content: str) -> None:
 def _safe_filename(cache_key: str) -> str:
     # Hash to keep the on-disk filename short and avoid path traversal
     # via UA strings that could contain ``/`` or other separator
-    # characters. The hash is used purely as a stable key — collisions
-    # would only mean a fresh re-fetch.
-    digest = hashlib.sha1(cache_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
-    return digest
+    # characters. We use full-length sha256 (codex iter-5 minor:
+    # truncated SHA-1 left a non-trivial collision risk that would
+    # silently mix robots policy across origin / UA pairs). The disk
+    # meta also stores the original ``cache_key`` so the read path
+    # can verify the file belongs to the expected pair.
+    return hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
 
 
 def _build_parser(*, robots_url: str, status: int, body: str) -> RobotFileParser:
@@ -508,6 +520,7 @@ def make_httpx_robots_fetcher(
     egress_allowlist: Iterable[str] = (),
     allow_private_network: bool = True,
     transport: httpx.BaseTransport | None = None,
+    dns_resolver: Callable[[str], list[str]] | None = None,
 ) -> RobotsFetcher:
     """Production-grade robots.txt fetcher.
 
@@ -550,15 +563,25 @@ def make_httpx_robots_fetcher(
     """
 
     allowlist = frozenset(o.lower() for o in egress_allowlist)
+    resolver = dns_resolver if dns_resolver is not None else _default_dns_resolver
 
     def _check_policy(url: str) -> None:
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise RobotsFetchPolicyError(f"unsupported robots URL scheme: {url!r}")
-        if not allow_private_network and _is_private_host(parsed.hostname):
-            raise RobotsFetchPolicyError(
-                f"robots.txt host is on a private / loopback network: {parsed.hostname!r}"
-            )
+        host = parsed.hostname
+        if host is None:
+            raise RobotsFetchPolicyError(f"robots.txt URL missing host: {url!r}")
+        if not allow_private_network:
+            # Codex iter-5 important: ``_is_private_host`` only blocked
+            # literal IPs / ``localhost``. A hostname resolving to a
+            # private / loopback / link-local IP would slip through. We
+            # now resolve every host with the injected resolver and
+            # refuse if any answer is a private address.
+            if _is_private_host(host) or _host_resolves_to_private(host, resolver):
+                raise RobotsFetchPolicyError(
+                    f"robots.txt host resolves to a private / loopback network: {host!r}"
+                )
         if allowlist:
             origin = f"{parsed.scheme}://{parsed.netloc}".lower()
             if origin not in allowlist:
@@ -567,24 +590,78 @@ def make_httpx_robots_fetcher(
                 )
 
     def fetch(robots_url: str, user_agent: str) -> RobotsFetchResult:
-        _check_policy(robots_url)
+        # Manual per-hop redirect handling (codex iter-5 critical):
+        # ``follow_redirects=True`` would let httpx contact a redirect
+        # target before we get a chance to re-run the policy check, so
+        # an allowlisted public origin could redirect to a private
+        # / off-allowlist host and httpx would still issue that
+        # request. We follow redirects ourselves with the policy check
+        # ahead of every request.
+        current_url = robots_url
         client_kwargs: dict[str, object] = {
             "timeout": httpx.Timeout(timeout_s),
             "headers": {"User-Agent": user_agent},
-            "follow_redirects": True,
-            "max_redirects": max_redirects,
+            "follow_redirects": False,
         }
         if transport is not None:
             client_kwargs["transport"] = transport
         with httpx.Client(**client_kwargs) as client:  # type: ignore[arg-type]
-            response = client.get(robots_url)
-            # If redirects steered the chain off the allowlist or onto
-            # a private network, the final URL may differ from the
-            # requested one. Re-check before surfacing the body.
-            _check_policy(str(response.url))
-            return RobotsFetchResult(status=int(response.status_code), body=response.text)
+            for _hop in range(max_redirects + 1):
+                _check_policy(current_url)
+                response = client.get(current_url)
+                status = int(response.status_code)
+                if not (300 <= status < 400):
+                    return RobotsFetchResult(status=status, body=response.text)
+                location = response.headers.get("location")
+                if not location:
+                    return RobotsFetchResult(status=status, body=response.text)
+                current_url = urljoin(current_url, location)
+            # Redirect chain exceeded the cap → return a synthetic
+            # 3xx result so ``_build_parser`` fails closed (defence in
+            # depth — same shape as a real unresolved redirect).
+            return RobotsFetchResult(status=302, body="")
 
     return fetch
+
+
+def _default_dns_resolver(host: str) -> list[str]:
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return []
+    addrs: list[str] = []
+    for entry in infos:
+        sockaddr = entry[4]
+        if sockaddr and isinstance(sockaddr[0], str):
+            addrs.append(sockaddr[0])
+    return addrs
+
+
+def _host_resolves_to_private(host: str, resolver: Callable[[str], list[str]]) -> bool:
+    try:
+        addrs = resolver(host)
+    except Exception:  # noqa: BLE001 — fail-closed on resolver failure
+        # If resolution itself fails we cannot prove the host is
+        # public, so fail closed: a cooperative crawler should not
+        # contact unknown / unresolvable hosts when private-network
+        # access is forbidden.
+        return True
+    if not addrs:
+        return True
+    for addr in addrs:
+        try:
+            ip = ip_address(addr)
+        except ValueError:
+            return True
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return True
+    return False
 
 
 def _is_private_host(host: str | None) -> bool:
