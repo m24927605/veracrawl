@@ -249,6 +249,104 @@ def test_credential_scope_violation_message_carries_no_secret() -> None:
         )
 
 
+# Tainted-input redaction (codex iter-1 minor + important):
+# Run actually-sensitive strings through the constructor and assert the
+# formatted message no longer contains the sensitive substring. The raw
+# value remains accessible via the typed attribute for the audit
+# pipeline.
+
+
+@pytest.mark.parametrize(
+    "tainted_origin",
+    [
+        "https://api.ebay.com/?api_key=sk-prod-XXXX",
+        "https://api.ebay.com/path?token=eyJhbGc.payload.sig",
+        "https://user:hunter2@api.ebay.com",
+        "https://api.ebay.com/#access_token=Bearer-xyz",
+    ],
+)
+def test_credential_scope_violation_redacts_tainted_origin(tainted_origin: str) -> None:
+    """Origin / URL fields routinely carry query-string credentials
+    or userinfo. The formatted message must drop those before
+    landing in logs."""
+    err = CredentialScopeViolation(
+        scope_ref="credential-scope:ebay",
+        requested_origin=tainted_origin,
+        requested_route="/items",
+        requested_method="GET",
+        reason="not in scope",
+    )
+    msg = str(err)
+    for leak in (
+        "api_key=",
+        "sk-prod-",
+        "token=",
+        "eyJhbGc",
+        "hunter2",
+        "Bearer-xyz",
+        "access_token=",
+    ):
+        assert leak.lower() not in msg.lower(), (
+            f"CredentialScopeViolation leaked {leak!r} from tainted "
+            f"origin {tainted_origin!r}: msg={msg}"
+        )
+    # The structured attribute keeps the original (the audit pipeline
+    # may persist it in a separately-redacted artifact).
+    assert err.requested_origin == tainted_origin
+
+
+@pytest.mark.parametrize(
+    "tainted_route",
+    [
+        "/admin?password=hunter2",
+        "/api/v1/secret=abc",
+        "/oauth?api_key=sk-XXX",
+        "/items?token=eyJhbGc",
+    ],
+)
+def test_credential_scope_violation_redacts_tainted_route(tainted_route: str) -> None:
+    err = CredentialScopeViolation(
+        scope_ref="credential-scope:ebay",
+        requested_origin="https://api.ebay.com",
+        requested_route=tainted_route,
+        requested_method="GET",
+        reason="not in scope",
+    )
+    msg = str(err)
+    for leak in ("password=", "secret=", "api_key=", "token=", "hunter2", "sk-XXX", "eyJhbGc"):
+        assert leak.lower() not in msg.lower(), (
+            f"CredentialScopeViolation leaked {leak!r} from tainted "
+            f"route {tainted_route!r}: msg={msg}"
+        )
+
+
+@pytest.mark.parametrize(
+    "tainted_reason",
+    [
+        "header Authorization: Bearer eyJhbGc.payload.sig was rejected",
+        "received password=hunter2",
+        "request carried token=abc",
+        "credential api_key=sk-XXX did not match",
+    ],
+)
+def test_credential_scope_violation_redacts_tainted_reason(tainted_reason: str) -> None:
+    err = CredentialScopeViolation(
+        scope_ref="credential-scope:ebay",
+        requested_origin="https://api.ebay.com",
+        requested_route="/items",
+        requested_method="GET",
+        reason=tainted_reason,
+    )
+    msg = str(err)
+    for leak in ("Bearer ", "password=", "token=", "api_key=", "hunter2", "sk-XXX", "eyJhbGc"):
+        assert leak.lower() not in msg.lower(), (
+            f"CredentialScopeViolation leaked {leak!r} from tainted "
+            f"reason {tainted_reason!r}: msg={msg}"
+        )
+    # Raw reason still accessible.
+    assert err.reason == tainted_reason
+
+
 # Catch-compatibility lockdown for the three new subclasses.
 
 
