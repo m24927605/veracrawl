@@ -24,6 +24,15 @@ authorized access**:
   which on SPA pages sat blocking on tracking pixels that never
   resolved) plus a configurable ``post_load_idle_ms``.
 
+Phase 1 step 1.1 adds session lifecycle so multiple navigations
+within a single run reuse one ``BrowserContext`` — cookies / local
+storage / session state survive across page-to-page navigation —
+and the run's accumulated state persists to disk as
+``storage_state.json`` keyed by ``run_ref``. The standalone
+``observe()`` and ``execute()`` paths remain backwards-compatible:
+each runs in a transient one-shot session that opens, navigates,
+and closes the context inline.
+
 Detection of bot-protection challenges (Cloudflare Turnstile,
 DataDome, PerimeterX, etc.) is the access-control classifier's job
 in a separate phase; this adapter surfaces such pages as a typed
@@ -31,14 +40,19 @@ in a separate phase; this adapter surfaces such pages as a typed
 
 Playwright itself is still optional — it is loaded lazily inside
 ``_load_sync_playwright`` so the adapter module can be imported
-without the ``browser-playwright`` extra installed.
+without the ``browser-playwright`` extra installed. Tests inject a
+mock factory via ``playwright_factory`` to exercise the adapter
+end-to-end without a real Chromium install.
 """
 
 from __future__ import annotations
 
 import hashlib
+import re
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Final
 
 from veracrawl.contracts.browser import BrowserInteractionStep, BrowserSandboxPolicy
@@ -60,6 +74,89 @@ _DEFAULT_CHROME_UA: Final[str] = (
     "Chrome/131.0.0.0 Safari/537.36"
 )
 
+_RUN_REF_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def _storage_state_filename(run_ref: str) -> str:
+    """Map ``run_ref`` to a filesystem-safe ``storage_state`` file name.
+
+    Run refs use ``:`` separators (``run:abc-123``) which are valid on
+    POSIX filesystems but unfriendly elsewhere; replace any
+    non-``[A-Za-z0-9_.-]`` character with ``_`` so the resulting file
+    name round-trips on every platform the test matrix covers.
+    """
+    sanitized = _RUN_REF_SAFE_RE.sub("_", run_ref)
+    return f"{sanitized}.storage_state.json"
+
+
+class BrowserSession:
+    """Long-lived browser context scoped to one run.
+
+    Yielded by :meth:`PlaywrightBrowserObservationAdapter.open_session`.
+    Reuse semantics: every ``observe()`` call within the session uses
+    the same ``BrowserContext`` (cookies, local storage, and session
+    state survive across navigations), so a multi-page crawl that
+    relies on session state — login carry-over, CSRF tokens, OAuth
+    refresh-token rotation — works the way the underlying site
+    expects without manually re-establishing state per page.
+
+    The session is single-threaded by design: pages are created
+    sequentially, never in parallel, so route-handler counters and
+    storage-state writes have no interleaving concerns.
+    """
+
+    def __init__(
+        self,
+        *,
+        adapter: PlaywrightBrowserObservationAdapter,
+        playwright_browser: Any,
+        playwright_context: Any,
+        run_ref: Ref,
+    ) -> None:
+        self._adapter = adapter
+        self._browser = playwright_browser
+        self._context = playwright_context
+        self._run_ref = run_ref
+        self._closed = False
+
+    @property
+    def run_ref(self) -> Ref:
+        return self._run_ref
+
+    @property
+    def context(self) -> Any:
+        """Underlying playwright BrowserContext.
+
+        Exposed for tests that want to assert against the same
+        object across multiple ``observe()`` calls (the design's
+        BrowserContext-reuse acceptance).
+        """
+        return self._context
+
+    def observe(
+        self,
+        *,
+        source_ref: Ref,
+        target_url: str,
+        sandbox_policy: BrowserSandboxPolicy,
+    ) -> BrowserObservationResult:
+        """Navigate the session's existing context to ``target_url``.
+
+        Uses :attr:`context` — does NOT create a new context — so the
+        cookies and storage that prior navigations left on the
+        context apply to this navigation and any new state this
+        navigation produces is visible to subsequent ones.
+        """
+        if self._closed:
+            raise RuntimeError("BrowserSession has been closed")
+        return self._adapter._observe_on_context(
+            context=self._context,
+            run_ref=self._run_ref,
+            source_ref=source_ref,
+            target_url=target_url,
+            sandbox_policy=sandbox_policy,
+        )
+
 
 class PlaywrightBrowserObservationAdapter:
     def __init__(
@@ -73,6 +170,8 @@ class PlaywrightBrowserObservationAdapter:
         user_agent: str = _DEFAULT_CHROME_UA,
         wait_until: str = "domcontentloaded",
         post_load_idle_ms: int = 250,
+        storage_state_dir: Path | None = None,
+        playwright_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.fixture_id = fixture_id
         self.target_url = target_url
@@ -82,11 +181,86 @@ class PlaywrightBrowserObservationAdapter:
         self.user_agent = user_agent
         self.wait_until = wait_until
         self.post_load_idle_ms = post_load_idle_ms
+        # Phase 1 step 1.1: per-run storage_state persistence directory.
+        # ``None`` disables persistence (back-compat with one-shot
+        # callers that do not declare a run-scoped storage location).
+        self.storage_state_dir = storage_state_dir
+        # Tests override the playwright entry point with a mock that
+        # does not require a real Chromium install.
+        self._playwright_factory: Callable[[], Any] = (
+            playwright_factory if playwright_factory is not None else _load_sync_playwright
+        )
         self._last_result: BrowserObservationResult | None = None
 
     @property
     def last_result(self) -> BrowserObservationResult | None:
         return self._last_result
+
+    def _storage_state_path(self, run_ref: Ref) -> Path | None:
+        """Resolve the per-run ``storage_state.json`` path or ``None``.
+
+        Returns ``None`` when persistence is disabled (no
+        ``storage_state_dir`` configured); callers treat ``None`` as
+        "do not load and do not save".
+        """
+        if self.storage_state_dir is None:
+            return None
+        return self.storage_state_dir / _storage_state_filename(run_ref)
+
+    def _new_context(self, browser: Any, *, storage_state_path: Path | None) -> Any:
+        """Construct a ``BrowserContext`` with the rendering-stability
+        config, optionally re-hydrated from a prior run's
+        ``storage_state.json``.
+        """
+        context_kwargs: dict[str, Any] = {
+            "java_script_enabled": True,
+            "ignore_https_errors": False,
+            "user_agent": self.user_agent,
+            "locale": "en-US",
+            "extra_http_headers": {"Accept-Language": "en-US,en;q=0.9"},
+        }
+        if storage_state_path is not None and storage_state_path.exists():
+            context_kwargs["storage_state"] = str(storage_state_path)
+        return browser.new_context(**context_kwargs)
+
+    @contextmanager
+    def open_session(self, *, run_ref: Ref) -> Iterator[BrowserSession]:
+        """Open a long-lived browser session scoped to ``run_ref``.
+
+        On entry: launches Chromium, creates one ``BrowserContext``
+        (re-hydrated from ``storage_state_dir/{run_ref}.storage_state.json``
+        if persistence is enabled and a prior run's file exists).
+
+        Yields a :class:`BrowserSession` whose ``observe()`` method
+        reuses the same context across calls.
+
+        On exit: persists the context's ``storage_state`` to disk
+        (when ``storage_state_dir`` is configured), then closes the
+        context and the browser. Per-run isolation is automatic
+        because each run_ref maps to its own storage_state file —
+        two runs with different run_refs will not see each other's
+        cookies even if they share a ``storage_state_dir``.
+        """
+        sync_playwright = self._playwright_factory()
+        storage_state_path = self._storage_state_path(run_ref)
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = self._new_context(browser, storage_state_path=storage_state_path)
+            session = BrowserSession(
+                adapter=self,
+                playwright_browser=browser,
+                playwright_context=context,
+                run_ref=run_ref,
+            )
+            try:
+                yield session
+            finally:
+                if storage_state_path is not None:
+                    storage_state_path.parent.mkdir(parents=True, exist_ok=True)
+                    context.storage_state(path=str(storage_state_path))
+                context.close()
+                browser.close()
+                session._closed = True  # noqa: SLF001
 
     def observe(
         self,
@@ -96,36 +270,51 @@ class PlaywrightBrowserObservationAdapter:
         target_url: str,
         sandbox_policy: BrowserSandboxPolicy,
     ) -> BrowserObservationResult:
-        sync_playwright = _load_sync_playwright()
+        """One-shot navigation that opens a session of length 1.
+
+        Backwards-compatible with the v0 single-call usage: every
+        invocation launches a fresh browser, creates a context, runs
+        the navigation, and closes everything before returning. Use
+        :meth:`open_session` instead when multiple navigations should
+        share a context.
+        """
+        with self.open_session(run_ref=run_ref) as session:
+            return session.observe(
+                source_ref=source_ref,
+                target_url=target_url,
+                sandbox_policy=sandbox_policy,
+            )
+
+    def _observe_on_context(
+        self,
+        *,
+        context: Any,
+        run_ref: Ref,
+        source_ref: Ref,
+        target_url: str,
+        sandbox_policy: BrowserSandboxPolicy,
+    ) -> BrowserObservationResult:
+        """Single navigation against an already-open BrowserContext."""
         started = time.monotonic()
         network_request_count = 0
         blocked_request_count = 0
         console_logs: list[str] = []
 
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            context = browser.new_context(
-                java_script_enabled=True,
-                ignore_https_errors=False,
-                user_agent=self.user_agent,
-                locale="en-US",
-                extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
-            )
+        def route_handler(route: Any) -> None:
+            nonlocal network_request_count, blocked_request_count
+            request_url = str(route.request.url)
+            network_request_count += 1
+            request_origin = url_origin(request_url)
+            if request_origin not in sandbox_policy.egress_allowlist:
+                blocked_request_count += 1
+                route.abort()
+                return
+            route.continue_()
 
-            def route_handler(route: Any) -> None:
-                nonlocal network_request_count, blocked_request_count
-                request_url = str(route.request.url)
-                network_request_count += 1
-                request_origin = url_origin(request_url)
-                if request_origin not in sandbox_policy.egress_allowlist:
-                    blocked_request_count += 1
-                    route.abort()
-                    return
-                route.continue_()
-
-            context.route("**/*", route_handler)
-            page = context.new_page()
-            page.on("console", lambda message: console_logs.append(message.text))
+        context.route("**/*", route_handler)
+        page = context.new_page()
+        page.on("console", lambda message: console_logs.append(message.text))
+        try:
             page.goto(
                 target_url,
                 wait_until=self.wait_until,
@@ -145,8 +334,11 @@ class PlaywrightBrowserObservationAdapter:
             except Exception:  # noqa: BLE001
                 dom_text = dom_html
             screenshot = page.screenshot(full_page=True)
-            context.close()
-            browser.close()
+        finally:
+            # Pages are session-scoped: closed after each observation
+            # so the route handler does not stack across navigations.
+            page.close()
+            context.unroute("**/*", route_handler)
 
         wall_time_ms = max(1, int((time.monotonic() - started) * 1000))
         dom_digest = stable_hash({"url": target_url, "dom": dom_html, "text": dom_text})
@@ -216,7 +408,7 @@ class PlaywrightBrowserObservationAdapter:
 
 def _load_sync_playwright() -> Any:
     try:
-        from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
+        from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise RuntimeError(
             "Playwright is required for the live browser adapter; install the "
