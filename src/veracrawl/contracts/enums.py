@@ -591,9 +591,7 @@ class ProductionBenchmarkReleaseFailureType(StrEnum):
     MISSING_PRODUCT_ACCEPTANCE = "production_release_missing_product_acceptance"
     MISSING_SECURITY_PRIVACY = "production_release_missing_security_privacy"
     MISSING_PUBLICATION = "production_release_missing_publication"
-    MISSING_WORKER_ORCHESTRATION = (
-        "production_release_missing_worker_orchestration"
-    )
+    MISSING_WORKER_ORCHESTRATION = "production_release_missing_worker_orchestration"
     MISSING_OPS_RUNTIME = "production_release_missing_ops_runtime"
     SLO_VIOLATION = "production_release_slo_violation"
     RELEASE_BLOCKER_PRESENT = "production_release_blocker_present"
@@ -637,9 +635,7 @@ class RealWorldAIAgentBenchmarkFailureType(StrEnum):
     MISSING_AGENT_ACTION_TRACE = "real_world_ai_missing_agent_action_trace"
     MISSING_TOOL_CALL_TRACE = "real_world_ai_missing_tool_call_trace"
     MISSING_CONTEXT_BUNDLE_TRACE = "real_world_ai_missing_context_bundle_trace"
-    MISSING_CANDIDATE_SOURCE_ANCHOR = (
-        "real_world_ai_missing_candidate_source_anchor"
-    )
+    MISSING_CANDIDATE_SOURCE_ANCHOR = "real_world_ai_missing_candidate_source_anchor"
     LLM_OUTPUT_AS_EVIDENCE = "real_world_ai_llm_output_as_evidence"
     PUBLICATION_BYPASS = "real_world_ai_publication_bypass"
     FRAMEWORK_STATE_PERSISTED = "real_world_ai_framework_state_persisted"
@@ -1250,9 +1246,7 @@ class BrowserQualityFailureType(StrEnum):
     BUDGET_EXCEEDED = "browser_quality_budget_exceeded"
     REPLAY_MISMATCH = "browser_quality_replay_mismatch"
     ADAPTER_UNAVAILABLE = "browser_quality_adapter_unavailable"
-    INSUFFICIENT_BROWSER_REQUIRED_TARGETS = (
-        "browser_quality_insufficient_browser_required_targets"
-    )
+    INSUFFICIENT_BROWSER_REQUIRED_TARGETS = "browser_quality_insufficient_browser_required_targets"
 
 
 class DeepCrawlFailureType(StrEnum):
@@ -1337,9 +1331,7 @@ class QualityMetricFailureType(StrEnum):
     PRECISION_BELOW_THRESHOLD = "quality_metrics_precision_below_threshold"
     RECALL_BELOW_THRESHOLD = "quality_metrics_recall_below_threshold"
     F1_BELOW_THRESHOLD = "quality_metrics_f1_below_threshold"
-    CRITICAL_PRECISION_BELOW_THRESHOLD = (
-        "quality_metrics_critical_precision_below_threshold"
-    )
+    CRITICAL_PRECISION_BELOW_THRESHOLD = "quality_metrics_critical_precision_below_threshold"
     HIDDEN_FALSE_POSITIVE = "quality_metrics_hidden_false_positive"
     LLM_AS_TRUE_POSITIVE = "quality_metrics_llm_as_true_positive"
     PUBLICATION_BYPASS_TRUE_POSITIVE = "quality_metrics_publication_bypass_true_positive"
@@ -1565,13 +1557,9 @@ class OutputTypeCoverageFailureType(StrEnum):
     MEMORY_AS_EVIDENCE = "output_type_coverage_memory_as_evidence"
     AGENT_REASONING_AS_EVIDENCE = "output_type_coverage_agent_reasoning_as_evidence"
     TEMPORAL_KG_AS_EVIDENCE = "output_type_coverage_temporal_kg_as_evidence"
-    MISSING_TABLE_CELL_EVIDENCE = (
-        "output_type_coverage_missing_table_cell_evidence"
-    )
+    MISSING_TABLE_CELL_EVIDENCE = "output_type_coverage_missing_table_cell_evidence"
     MISSING_FILE_LIFECYCLE = "output_type_coverage_missing_file_lifecycle"
-    MISSING_DATASET_ITEM_EVIDENCE = (
-        "output_type_coverage_missing_dataset_item_evidence"
-    )
+    MISSING_DATASET_ITEM_EVIDENCE = "output_type_coverage_missing_dataset_item_evidence"
     MISSING_FACT_VERIFICATION = "output_type_coverage_missing_fact_verification"
     MISSING_REPLAY_REFS = "output_type_coverage_missing_replay_refs"
 
@@ -1621,16 +1609,12 @@ class ProductAcceptanceFailureType(StrEnum):
     MISSING_REPLAY = "product_acceptance_missing_replay"
     MISSING_OPERATOR_VISIBILITY = "product_acceptance_missing_operator_visibility"
     MISSING_POLICY = "product_acceptance_missing_policy"
-    MISSING_WORKFLOW_SPECIFIC_REFS = (
-        "product_acceptance_missing_workflow_specific_refs"
-    )
+    MISSING_WORKFLOW_SPECIFIC_REFS = "product_acceptance_missing_workflow_specific_refs"
     SCAFFOLD_ONLY = "product_acceptance_scaffold_only"
     CONTRACT_ONLY = "product_acceptance_contract_only"
     FALSE_COMPLETE_STATUS = "product_acceptance_false_complete_status"
     DEGRADED_OPERATIONAL = "product_acceptance_degraded_operational"
-    MISSING_EXPORT_RECONCILIATION = (
-        "product_acceptance_missing_export_reconciliation"
-    )
+    MISSING_EXPORT_RECONCILIATION = "product_acceptance_missing_export_reconciliation"
 
 
 class TargetRuntimeStatus(StrEnum):
@@ -1771,9 +1755,7 @@ class TemporalKGFailureType(StrEnum):
     MISSING_IDENTITY_EVIDENCE = "temporal_kg_missing_identity_evidence"
     MISSING_CANONICAL_SOURCES = "temporal_kg_missing_canonical_sources"
     MISSING_BITEMPORAL_REFS = "temporal_kg_missing_bitemporal_refs"
-    FALSE_MERGE_WITHOUT_ADJUDICATION = (
-        "temporal_kg_false_merge_without_adjudication"
-    )
+    FALSE_MERGE_WITHOUT_ADJUDICATION = "temporal_kg_false_merge_without_adjudication"
     FALSE_SPLIT_WITHOUT_SUPERSESSION = "temporal_kg_false_split_without_supersession"
     MISSING_REPLAY_REFS = "temporal_kg_missing_replay_refs"
 
@@ -1837,3 +1819,55 @@ class GraphMemoryProductionFailureType(StrEnum):
     MEMORY_AS_EVIDENCE = "graph_memory_memory_as_evidence"
     STALE_MEMORY_USED = "graph_memory_stale_memory_used"
     REPLAY_MISMATCH = "graph_memory_replay_mismatch"
+
+
+class MessageRole(StrEnum):
+    """Role of a chat message in an LLM conversation."""
+
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL = "tool"
+
+
+class ResponseFormatKind(StrEnum):
+    """Shape the model is asked to return."""
+
+    TEXT = "text"
+    JSON_OBJECT = "json_object"
+    JSON_SCHEMA = "json_schema"
+
+
+class CalibrationMethod(StrEnum):
+    """How a per-field confidence score was post-processed."""
+
+    NONE = "none"
+    PLATT = "platt"
+    ISOTONIC = "isotonic"
+
+
+class RecoveryDecisionKind(StrEnum):
+    """Outcome the recovery layer asks the orchestrator to take."""
+
+    DIFFERENT_URL = "different_url"
+    ESCALATE_ADAPTER = "escalate_adapter"
+    REQUEST_REVIEW = "request_review"
+    ABANDON = "abandon"
+
+
+class RecoveryDecisionSource(StrEnum):
+    """Which subsystem produced a recovery decision (cost attribution)."""
+
+    CHEAP_CLASSIFIER = "cheap_classifier"
+    LLM_RECOVERY = "llm_recovery"
+    HEURISTIC = "heuristic"
+
+
+class RecoveryTerminationReason(StrEnum):
+    """Why a recovery loop stopped."""
+
+    COMPLETED = "completed"
+    ABANDONED = "abandoned"
+    MAX_ITERATIONS_EXCEEDED = "max_iterations_exceeded"
+    REPEATED_SIGNATURE_HARD_STOP = "repeated_signature_hard_stop"
+    COST_CAP_REACHED = "cost_cap_reached"
