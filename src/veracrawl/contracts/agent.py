@@ -511,10 +511,10 @@ class Message(VeraModel):
     @model_validator(mode="after")
     def validate_message(self) -> Message:
         if self.role is MessageRole.TOOL:
-            if not self.tool_call_id:
-                raise ValueError("tool-role message requires tool_call_id")
-            if not self.name:
-                raise ValueError("tool-role message requires name")
+            if self.tool_call_id is None or not self.tool_call_id.strip():
+                raise ValueError("tool-role message requires non-blank tool_call_id")
+            if self.name is None or not self.name.strip():
+                raise ValueError("tool-role message requires non-blank name")
             if self.tool_calls:
                 raise ValueError("tool-role message must not carry tool_calls")
         elif self.role is MessageRole.ASSISTANT:
@@ -577,8 +577,8 @@ class ResponseFormat(VeraModel):
     @model_validator(mode="after")
     def validate_response_format(self) -> ResponseFormat:
         if self.kind is ResponseFormatKind.JSON_SCHEMA:
-            if not self.schema_name:
-                raise ValueError("json_schema response format requires schema_name")
+            if self.schema_name is None or not self.schema_name.strip():
+                raise ValueError("json_schema response format requires non-blank schema_name")
             if self.json_schema is None:
                 raise ValueError("json_schema response format requires json_schema")
         else:
@@ -655,8 +655,12 @@ class TokenBudget(TimestampedModel):
                 "token budget requires at least one cap (input / output / total / cost)"
             )
         for name, value in caps:
-            if value is not None and value < 0:
+            if value is None:
+                continue
+            if value < 0:
                 raise ValueError(f"{name} must be non-negative when set")
+        if self.max_cost_usd is not None and not math.isfinite(self.max_cost_usd):
+            raise ValueError("max_cost_usd must be a finite number")
         return self
 
 
@@ -799,16 +803,22 @@ class RecoveryDecision(TimestampedModel):
             raise ValueError("recovery decision reason must be non-blank")
         if not self.failure_signature.strip():
             raise ValueError("recovery decision failure_signature must be non-blank")
+        if not math.isfinite(self.cost_usd):
+            raise ValueError("recovery decision cost_usd must be a finite number")
         if self.cost_usd < 0:
             raise ValueError("recovery decision cost_usd must be non-negative")
         if self.kind is RecoveryDecisionKind.DIFFERENT_URL:
-            if not self.alternative_url:
-                raise ValueError("different_url recovery decision requires alternative_url")
+            if self.alternative_url is None or not self.alternative_url.strip():
+                raise ValueError(
+                    "different_url recovery decision requires non-blank alternative_url"
+                )
             if self.escalation_target is not None:
                 raise ValueError("different_url recovery decision must not set escalation_target")
         elif self.kind is RecoveryDecisionKind.ESCALATE_ADAPTER:
-            if not self.escalation_target:
-                raise ValueError("escalate_adapter recovery decision requires escalation_target")
+            if self.escalation_target is None or not self.escalation_target.strip():
+                raise ValueError(
+                    "escalate_adapter recovery decision requires non-blank escalation_target"
+                )
             if self.alternative_url is not None:
                 raise ValueError("escalate_adapter recovery decision must not set alternative_url")
         else:  # ABANDON, REQUEST_REVIEW
@@ -843,6 +853,8 @@ class RecoveryTrace(TimestampedModel):
 
     @model_validator(mode="after")
     def validate_trace(self) -> RecoveryTrace:
+        if not math.isfinite(self.total_cost_usd):
+            raise ValueError("recovery trace total_cost_usd must be a finite number")
         if self.total_cost_usd < 0:
             raise ValueError("recovery trace total_cost_usd must be non-negative")
         if (
@@ -854,3 +866,28 @@ class RecoveryTrace(TimestampedModel):
                 "requires at least one decision ref"
             )
         return self
+
+
+# ---------------------------------------------------------------------------
+# Spec-named aliases per design.md §3.5.
+#
+# Phase 4 code follows the design's class names (``ExtractionCandidate``,
+# ``FieldCitation``, ``FieldConfidence``) when importing from
+# ``veracrawl.contracts.agent``. The bare names are re-bound here to the
+# ``LLM``-prefixed classes so a Phase 4 importer like
+#
+#     from veracrawl.contracts.agent import ExtractionCandidate
+#
+# resolves to the v2 LLM-driven shape, while
+#
+#     from veracrawl.contracts.processing import ExtractionCandidate
+#
+# (and the unchanged top-level ``veracrawl.contracts.ExtractionCandidate``
+# re-export) keep returning the heuristic shape until Phase 4 retires it.
+# Phase 4 will reconcile by removing the heuristic class and dropping
+# these aliases — see STATUS.md "v2 phase 0 step 0.2 reservations".
+# ---------------------------------------------------------------------------
+
+ExtractionCandidate = LLMExtractionCandidate
+FieldCitation = LLMFieldCitation
+FieldConfidence = LLMFieldConfidence

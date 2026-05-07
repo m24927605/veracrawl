@@ -26,10 +26,16 @@ the validator rejects a deliberately malformed payload.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from pydantic import ValidationError
 
+from veracrawl.contracts import agent as agent_contracts
 from veracrawl.contracts.agent import (
+    ExtractionCandidate,
+    FieldCitation,
+    FieldConfidence,
     LLMExtractionCandidate,
     LLMFieldCitation,
     LLMFieldConfidence,
@@ -605,3 +611,137 @@ def test_recovery_trace_max_iterations_requires_decisions() -> None:
             terminated_by=RecoveryTerminationReason.MAX_ITERATIONS_EXCEEDED,
             decision_refs=[],
         )
+
+
+# Whitespace-only string rejection (codex review iter-1 minor #3) ---
+
+
+def test_message_tool_role_rejects_whitespace_tool_call_id() -> None:
+    with pytest.raises(ValidationError):
+        Message(
+            role=MessageRole.TOOL,
+            content="result",
+            name="search",
+            tool_call_id="   ",
+        )
+
+
+def test_message_tool_role_rejects_whitespace_name() -> None:
+    with pytest.raises(ValidationError):
+        Message(
+            role=MessageRole.TOOL,
+            content="result",
+            name="   ",
+            tool_call_id="call_1",
+        )
+
+
+def test_response_format_json_schema_rejects_whitespace_schema_name() -> None:
+    with pytest.raises(ValidationError):
+        ResponseFormat(
+            kind=ResponseFormatKind.JSON_SCHEMA,
+            schema_name="   ",
+            json_schema={"type": "object"},
+        )
+
+
+def test_recovery_decision_different_url_rejects_whitespace_alternative() -> None:
+    with pytest.raises(ValidationError):
+        RecoveryDecision(
+            id="recovery-decision:1",
+            kind=RecoveryDecisionKind.DIFFERENT_URL,
+            reason="x",
+            failure_signature="x",
+            source=RecoveryDecisionSource.HEURISTIC,
+            alternative_url="   ",
+        )
+
+
+def test_recovery_decision_escalate_rejects_whitespace_target() -> None:
+    with pytest.raises(ValidationError):
+        RecoveryDecision(
+            id="recovery-decision:1",
+            kind=RecoveryDecisionKind.ESCALATE_ADAPTER,
+            reason="x",
+            failure_signature="x",
+            source=RecoveryDecisionSource.LLM_RECOVERY,
+            escalation_target="   ",
+        )
+
+
+# Non-finite float rejection (codex review iter-1 important #2) -----
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_token_budget_rejects_non_finite_cost(bad: float) -> None:
+    with pytest.raises(ValidationError):
+        TokenBudget(id="budget:run:1", run_ref="run:1", max_cost_usd=bad)
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_recovery_decision_rejects_non_finite_cost(bad: float) -> None:
+    with pytest.raises(ValidationError):
+        RecoveryDecision(
+            id="recovery-decision:1",
+            kind=RecoveryDecisionKind.ABANDON,
+            reason="x",
+            failure_signature="x",
+            source=RecoveryDecisionSource.HEURISTIC,
+            cost_usd=bad,
+        )
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_recovery_trace_rejects_non_finite_total_cost(bad: float) -> None:
+    with pytest.raises(ValidationError):
+        RecoveryTrace(
+            id="recovery-trace:1",
+            agent_run_request_ref="agent-run-request:1",
+            terminated_by=RecoveryTerminationReason.COMPLETED,
+            total_cost_usd=bad,
+        )
+
+
+# Spec-named aliases (codex review iter-1 important #1) -------------
+
+
+def test_extraction_candidate_alias_resolves_to_v2_class() -> None:
+    """design.md §3.5 names ``ExtractionCandidate`` under
+    ``contracts.agent``; the alias must resolve to the same class as
+    ``LLMExtractionCandidate`` so Phase 4 imports following the design
+    pick up the v2 shape (citations, confidences, abstentions) instead
+    of the legacy heuristic ``processing.ExtractionCandidate``."""
+    assert ExtractionCandidate is LLMExtractionCandidate
+    assert FieldCitation is LLMFieldCitation
+    assert FieldConfidence is LLMFieldConfidence
+
+
+def test_alias_constructs_with_v2_shape() -> None:
+    candidate = ExtractionCandidate.model_validate(
+        {
+            "id": "alias-candidate:1",
+            "run_ref": "run:1",
+            "source_url": "https://example.test/p/1",
+            "schema_ref": "schema:product",
+            "model_call_trace_ref": "model-trace:1",
+            "field_values": {"price": "9.99"},
+            "field_citation_refs": {"price": "citation:price"},
+            "field_confidence_refs": {"price": "confidence:price"},
+        }
+    )
+    assert isinstance(candidate, LLMExtractionCandidate)
+
+
+def test_processing_extraction_candidate_alias_does_not_shadow_legacy_export() -> None:
+    """The top-level ``veracrawl.contracts.ExtractionCandidate`` re-export
+    must still resolve to the legacy heuristic shape from
+    ``contracts.processing``, not the v2 alias. Replacing the legacy
+    export is squarely Phase 4's job; doing it in Phase 0 would
+    break ~40 modules and the foundation registry."""
+    from veracrawl.contracts import ExtractionCandidate as PackageExtractionCandidate
+    from veracrawl.contracts.processing import (
+        ExtractionCandidate as ProcessingExtractionCandidate,
+    )
+
+    assert PackageExtractionCandidate is ProcessingExtractionCandidate
+    assert PackageExtractionCandidate is not agent_contracts.ExtractionCandidate
