@@ -30,6 +30,7 @@ and round-trip persistence through the configured
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -216,9 +217,27 @@ def test_session_reuses_one_context_across_multiple_observations(
 ) -> None:
     """Phase 1 step 1.1 deliverable: multiple navigations inside one
     session must reuse one ``BrowserContext``. The fake chromium
-    counts ``new_context`` calls; reuse means exactly 1."""
-    adapter = _adapter(storage_state_dir=tmp_path)
+    counts ``new_context`` calls; reuse means exactly 1 across all
+    three observations (codex iter-1: replace the previous
+    tautological ``session.context is session.context`` with
+    captured-fake assertions)."""
+    captured: dict[str, Any] = {}
+
+    @contextmanager
+    def capturing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        captured["pw"] = pw
+        yield pw
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: capturing_factory,
+    )
     sandbox = _sandbox()
+    contexts_seen_by_session: list[Any] = []
     with adapter.open_session(run_ref="run:reuse") as session:
         for url in (
             "https://example.test/page1",
@@ -230,18 +249,22 @@ def test_session_reuses_one_context_across_multiple_observations(
                 target_url=url,
                 sandbox_policy=sandbox,
             )
-        # The session's exposed context attribute must remain stable
-        # across observations — a reused object, not a new one each
-        # call.
-        assert session.context is session.context
+            contexts_seen_by_session.append(session.context)
 
-    # The fake's browser / context bookkeeping confirms reuse.
-    factory_pw_holder = _fake_playwright_factory()
-    # Re-evaluating the factory creates a fresh instance; assert
-    # against the adapter's actual recorded usage instead by
-    # inspecting the session's underlying context (still cleanly
-    # closed).
-    assert factory_pw_holder is _fake_sync_playwright
+    pw: _FakePlaywright = captured["pw"]
+    # Exactly one browser launched across the whole session.
+    assert len(pw.browsers) == 1
+    # Exactly one context created — that is the reuse rule.
+    browser = pw.browsers[0]
+    assert len(browser.contexts) == 1, (
+        "expected exactly one BrowserContext for three observations; got "
+        f"{len(browser.contexts)} — context reuse is broken"
+    )
+    # The session's ``context`` attribute exposed the same object
+    # for each observation.
+    assert all(ctx is browser.contexts[0] for ctx in contexts_seen_by_session)
+    # And three pages on that one context, one per navigation.
+    assert len(browser.contexts[0].new_pages) == 3
 
 
 def test_session_creates_one_browser_and_one_context(tmp_path: Path) -> None:
@@ -555,3 +578,136 @@ def test_one_shot_observe_still_works(tmp_path: Path) -> None:
     assert len(context.new_pages) == 1
     assert context.closed
     assert len(context.storage_state_calls) == 1
+
+
+# Codex iter-1 critical: filename collision regression -------------
+
+
+@pytest.mark.parametrize(
+    ("ref_a", "ref_b"),
+    [
+        # All three reduce to "run_a_b" under a naive ``[^A-Za-z0-9_.-]+``
+        # → "_" sanitizer; the SHA-256 suffix must keep them distinct.
+        ("run:a:b", "run:a/b"),
+        ("run:a:b", "run:a?b"),
+        ("run:a/b", "run:a?b"),
+        # Different ref content, same sanitized prefix shape.
+        ("run:fetch:eval", "run:fetch_eval"),
+        # Pathological: the sanitizer collapses runs of unsafe chars.
+        ("run::abc", "run:abc"),
+    ],
+)
+def test_storage_state_filename_no_collision_under_naive_sanitization(
+    ref_a: str, ref_b: str
+) -> None:
+    """Codex iter-1 critical: a non-injective filename derivation lets
+    one run hydrate from another run's storage_state. Lock the
+    no-collision rule with explicit pairs that the previous naive
+    sanitizer collapsed."""
+    assert _storage_state_filename(ref_a) != _storage_state_filename(ref_b), (
+        f"distinct run_refs collided: {ref_a!r} and {ref_b!r}"
+    )
+
+
+def test_storage_state_filename_is_deterministic() -> None:
+    """Same run_ref → same filename; replay determinism requires it."""
+    assert _storage_state_filename("run:abc") == _storage_state_filename("run:abc")
+
+
+# Codex iter-1 important: cleanup unconditional even on persistence failure
+
+
+def test_browser_closes_when_storage_state_write_raises(tmp_path: Path) -> None:
+    """If ``context.storage_state(path=...)`` raises (filesystem full,
+    permissions denied, serializer bug), the browser and context
+    must still close — leaking a Chromium process per failed run
+    would build up to OOM in production."""
+
+    captured: dict[str, Any] = {}
+
+    @contextmanager
+    def capturing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        captured["pw"] = pw
+        yield pw
+
+    # Subclass the fake context to make storage_state(path=...) raise.
+    class _FailingContext(_FakeContext):
+        def storage_state(self, *, path: str) -> dict[str, Any]:
+            self.storage_state_calls.append({"path": path})
+            raise RuntimeError("simulated disk write failure")
+
+    class _FailingBrowser(_FakeBrowser):
+        def new_context(self, **kwargs: Any) -> _FakeContext:
+            ctx = _FailingContext(self, kwargs)
+            self.contexts.append(ctx)
+            return ctx
+
+    class _FailingChromium:
+        def __init__(self, parent: _FakePlaywright) -> None:
+            self._parent = parent
+
+        def launch(self, *, headless: bool) -> _FakeBrowser:
+            assert headless is True
+            browser = _FailingBrowser()
+            self._parent.browsers.append(browser)
+            return browser
+
+    @contextmanager
+    def failing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        pw.chromium = _FailingChromium(pw)  # type: ignore[assignment]
+        captured["pw"] = pw
+        yield pw
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: failing_factory,
+    )
+    # The session must NOT propagate the persistence failure to
+    # the caller — this is best-effort persistence with logged
+    # failure, not a fatal error.
+    with adapter.open_session(run_ref="run:fail") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+
+    pw: _FakePlaywright = captured["pw"]
+    browser = pw.browsers[0]
+    context = browser.contexts[0]
+    # Cleanup ran despite the persistence error.
+    assert context.closed, "BrowserContext.close() must run even when persistence raises"
+    assert browser.closed, "Browser.close() must run even when persistence raises"
+
+
+# Codex iter-1 important: file permissions ------------------------
+
+
+def test_storage_state_file_is_owner_only(tmp_path: Path) -> None:
+    """The persisted ``storage_state.json`` carries live cookies and
+    origin storage; a world-readable file is a privacy regression.
+    On POSIX systems we set ``chmod 0600``."""
+    if os.name != "posix":  # noqa: SIM103 — explicit Windows skip
+        pytest.skip("POSIX-only file mode check")
+
+    adapter = _adapter(storage_state_dir=tmp_path)
+    with adapter.open_session(run_ref="run:perm") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+
+    files = list(tmp_path.glob("*.storage_state.json"))
+    assert len(files) == 1
+    mode = files[0].stat().st_mode & 0o777
+    assert mode == 0o600, (
+        f"storage_state file mode {oct(mode)} is broader than owner-only — "
+        "anyone with read access to the directory can exfiltrate the "
+        "session cookies"
+    )

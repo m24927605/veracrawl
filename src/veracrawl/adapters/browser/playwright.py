@@ -48,6 +48,7 @@ end-to-end without a real Chromium install.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -67,6 +68,7 @@ from veracrawl.contracts.enums import (
 from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapterResult
 from veracrawl.fetch.network_acquisition import url_origin
 from veracrawl.ports.browser import BrowserObservationResult
+from veracrawl.runtime_support.logging import get_logger
 
 _DEFAULT_CHROME_UA: Final[str] = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -75,18 +77,31 @@ _DEFAULT_CHROME_UA: Final[str] = (
 )
 
 _RUN_REF_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9_.-]+")
+_STORAGE_STATE_FILE_MODE: Final[int] = 0o600  # owner read/write only
+
+_logger = get_logger(__name__)
 
 
 def _storage_state_filename(run_ref: str) -> str:
-    """Map ``run_ref`` to a filesystem-safe ``storage_state`` file name.
+    """Map ``run_ref`` to a collision-resistant filesystem-safe name.
 
-    Run refs use ``:`` separators (``run:abc-123``) which are valid on
-    POSIX filesystems but unfriendly elsewhere; replace any
-    non-``[A-Za-z0-9_.-]`` character with ``_`` so the resulting file
-    name round-trips on every platform the test matrix covers.
+    Run refs use ``:`` separators (``run:abc-123``) and may carry
+    other characters (``/``, ``?``, ``#``) that are filesystem-
+    hostile or stream separators on Windows. A naive sanitizer
+    (replace ``[^A-Za-z0-9_.-]+`` with ``_``) collides — ``run:a:b``
+    and ``run:a/b`` both reduce to ``run_a_b`` — and a collision
+    here would let one run hydrate from another run's
+    ``storage_state.json`` (codex iter-1 critical).
+
+    Use a SHA-256 digest of the raw ``run_ref`` as the
+    collision-resistant suffix and keep the sanitized prefix only
+    for human readability. Two distinct refs hash to distinct
+    suffixes; the file lookup keys on the suffix, so cross-run
+    contamination at the filename layer is impossible.
     """
-    sanitized = _RUN_REF_SAFE_RE.sub("_", run_ref)
-    return f"{sanitized}.storage_state.json"
+    sanitized = _RUN_REF_SAFE_RE.sub("_", run_ref).strip("_") or "run"
+    digest = hashlib.sha256(run_ref.encode("utf-8")).hexdigest()[:16]
+    return f"{sanitized}.{digest}.storage_state.json"
 
 
 class BrowserSession:
@@ -228,18 +243,35 @@ class PlaywrightBrowserObservationAdapter:
         """Open a long-lived browser session scoped to ``run_ref``.
 
         On entry: launches Chromium, creates one ``BrowserContext``
-        (re-hydrated from ``storage_state_dir/{run_ref}.storage_state.json``
-        if persistence is enabled and a prior run's file exists).
+        (re-hydrated from a collision-resistant per-run file under
+        ``storage_state_dir`` if persistence is enabled and a prior
+        run's file exists).
 
         Yields a :class:`BrowserSession` whose ``observe()`` method
         reuses the same context across calls.
 
         On exit: persists the context's ``storage_state`` to disk
         (when ``storage_state_dir`` is configured), then closes the
-        context and the browser. Per-run isolation is automatic
-        because each run_ref maps to its own storage_state file —
-        two runs with different run_refs will not see each other's
-        cookies even if they share a ``storage_state_dir``.
+        context and the browser. The persistence step runs inside
+        its own ``try`` so a serialization or filesystem failure
+        does not strand the open browser process — the cleanup
+        block always runs (codex iter-1 important: cleanup must
+        be unconditional).
+
+        Per-run isolation is automatic because each run_ref maps
+        to its own storage_state file via a SHA-256 digest of the
+        ref; two runs with different run_refs will not see each
+        other's cookies even if they share a ``storage_state_dir``.
+
+        Privacy contract for the persisted file: ``storage_state``
+        contains live cookies and origin storage that are sensitive
+        by definition. The file is written with ``chmod 0600``
+        (owner read/write only). Retention / cleanup of accumulated
+        ``storage_state.json`` files is a Phase 6 ``ArtifactLifecycle``
+        gate concern — this adapter writes the file and lets the
+        operational lifecycle layer prune it. Callers that do not
+        want persistence must pass ``storage_state_dir=None``
+        (codex iter-1 important).
         """
         sync_playwright = self._playwright_factory()
         storage_state_path = self._storage_state_path(run_ref)
@@ -255,12 +287,50 @@ class PlaywrightBrowserObservationAdapter:
             try:
                 yield session
             finally:
+                # Persistence is best-effort: a failure here must not
+                # leak the browser process. Log and proceed to close.
                 if storage_state_path is not None:
-                    storage_state_path.parent.mkdir(parents=True, exist_ok=True)
-                    context.storage_state(path=str(storage_state_path))
-                context.close()
-                browser.close()
+                    try:
+                        self._write_storage_state(context, storage_state_path)
+                    except Exception:  # noqa: BLE001
+                        _logger.exception(
+                            "browser_storage_state_persist_failed",
+                            run_ref=run_ref,
+                        )
+                # Cleanup runs unconditionally. Each step is also
+                # guarded so a failure in context.close() still gives
+                # browser.close() a chance to run.
+                try:
+                    context.close()
+                except Exception:  # noqa: BLE001
+                    _logger.exception("browser_context_close_failed", run_ref=run_ref)
+                try:
+                    browser.close()
+                except Exception:  # noqa: BLE001
+                    _logger.exception("browser_close_failed", run_ref=run_ref)
                 session._closed = True  # noqa: SLF001
+
+    @staticmethod
+    def _write_storage_state(context: Any, path: Path) -> None:
+        """Persist ``context.storage_state`` to ``path`` with mode 0600.
+
+        ``storage_state`` carries live cookies and origin storage —
+        the file is sensitive and must not be world-readable. We
+        ask Playwright to write the file (its native serializer is
+        what produces the round-trippable JSON shape), then chmod
+        the result to owner-only on POSIX. ``os.chmod`` is a no-op
+        on systems that do not support POSIX modes, which is
+        acceptable: those platforms get the filesystem default.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        context.storage_state(path=str(path))
+        try:
+            os.chmod(path, _STORAGE_STATE_FILE_MODE)
+        except OSError:
+            # Non-POSIX filesystems / Windows ACL semantics: log and
+            # accept the platform default rather than fail the whole
+            # session over a permissions hardening step.
+            _logger.debug("storage_state_chmod_unsupported", path=str(path))
 
     def observe(
         self,
