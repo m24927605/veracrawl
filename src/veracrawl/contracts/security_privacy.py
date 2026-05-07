@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
@@ -24,6 +25,30 @@ _ALLOWED_HTTP_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELET
 def _is_http_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _is_valid_origin(value: str) -> bool:
+    """Origin-only URL: ``scheme://host[:port]``.
+
+    Stricter than ``_is_http_url``: rejects URLs that carry a path
+    other than ``/``, a query, a fragment, or userinfo. This is the
+    shape ``StrictAllowlistScope`` (Phase 2) needs so origin checks
+    don't accidentally match arbitrary URLs that share a prefix —
+    the route policy is expressed separately via
+    ``allowed_route_patterns``.
+    """
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if not parsed.netloc:
+        return False
+    if parsed.path not in ("", "/"):
+        return False
+    if parsed.query or parsed.fragment:
+        return False
+    if parsed.username or parsed.password:
+        return False
+    return True
 
 
 def _is_valid_http_status(value: int) -> bool:
@@ -440,10 +465,26 @@ class CredentialScope(TimestampedModel):
         if not self.allowed_origins:
             raise ValueError("credential scope requires at least one allowed origin")
         for origin in self.allowed_origins:
-            if not _is_http_url(origin):
+            if not _is_valid_origin(origin):
                 raise ValueError(
-                    f"credential scope allowed origin must be absolute http(s): {origin!r}"
+                    "credential scope allowed origin must be a bare http(s) origin "
+                    "(scheme://host[:port], no path/query/fragment/userinfo): "
+                    f"{origin!r}"
                 )
+        if not self.allowed_route_patterns:
+            raise ValueError(
+                "credential scope requires at least one allowed_route_pattern; "
+                "an origin-only scope would let StrictAllowlistScope admit any "
+                "path under the origin"
+            )
+        for pattern in self.allowed_route_patterns:
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"credential scope allowed_route_pattern {pattern!r} is not a "
+                    f"compilable regex: {exc.msg}"
+                ) from exc
         if not self.allowed_methods:
             raise ValueError("credential scope requires at least one allowed method")
         for method in self.allowed_methods:
@@ -497,6 +538,11 @@ class CredentialUseRecord(TimestampedModel):
             raise ValueError("credential use record request_method must be non-blank")
         if self.response_status is not None and not _is_valid_http_status(self.response_status):
             raise ValueError("credential use record response_status must be valid HTTP")
+        if self.response_status is None and self.attempt_evidence_ref is None:
+            raise ValueError(
+                "credential use record with no response_status (transport failure) requires "
+                "attempt_evidence_ref so the audit trail can replay the failure"
+            )
         if self.timestamp_used.tzinfo is None or self.timestamp_used.utcoffset() is None:
             raise ValueError("credential use record timestamp_used must be timezone-aware")
         return self

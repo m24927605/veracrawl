@@ -401,8 +401,12 @@ def test_credential_use_record_minimal_valid() -> None:
 
 
 def test_credential_use_record_with_failure() -> None:
-    record = _valid_credential_use_record(response_status=None)
+    record = _valid_credential_use_record(
+        response_status=None,
+        attempt_evidence_ref="attempt-evidence:1",
+    )
     assert record.response_status is None
+    assert record.attempt_evidence_ref == "attempt-evidence:1"
 
 
 def test_credential_use_record_rejects_non_http_url() -> None:
@@ -423,3 +427,139 @@ def test_credential_use_record_rejects_invalid_status() -> None:
 def test_credential_use_record_rejects_naive_timestamp() -> None:
     with pytest.raises(ValidationError):
         _valid_credential_use_record(timestamp_used=datetime(2026, 5, 7, 0, 0, 0))  # noqa: DTZ001
+
+
+# Codex iter-1 fix-up: route patterns required + compilable -------
+
+
+def test_credential_scope_rejects_empty_route_patterns() -> None:
+    """An origin-only scope (no route patterns) would let
+    StrictAllowlistScope admit any path under the origin, defeating
+    the docs/09 fine-grained scope rule."""
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(allowed_route_patterns=[])
+
+
+def test_credential_scope_rejects_uncompilable_route_pattern() -> None:
+    """A bogus regex (e.g., trailing ``[``) is silently fail-open at
+    request time on most regex implementations; reject it here so
+    StrictAllowlistScope never has to see one."""
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(allowed_route_patterns=["^/bad("])
+
+
+# Codex iter-1 fix-up: origin-only validation ---------------------
+
+
+@pytest.mark.parametrize(
+    "bad_origin",
+    [
+        "https://api.ebay.com/buy/browse/v1/item",  # path > "/"
+        "https://api.ebay.com/?q=x",  # query
+        "https://api.ebay.com/#frag",  # fragment
+        "https://user:pass@api.ebay.com",  # userinfo
+    ],
+)
+def test_credential_scope_rejects_non_origin_url(bad_origin: str) -> None:
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(allowed_origins=[bad_origin])
+
+
+def test_credential_scope_accepts_origin_with_root_path() -> None:
+    """Some producers normalize origins with a trailing ``/``; that's
+    still origin-only. Accepting it avoids spurious rejections."""
+    scope = _valid_credential_scope(allowed_origins=["https://api.ebay.com/"])
+    assert scope.allowed_origins == ["https://api.ebay.com/"]
+
+
+def test_credential_scope_accepts_origin_with_port() -> None:
+    scope = _valid_credential_scope(allowed_origins=["https://api.ebay.com:8443"])
+    assert scope.allowed_origins[0].endswith(":8443")
+
+
+# Codex iter-1 fix-up: transport-failure invariant ----------------
+
+
+def test_credential_use_record_transport_failure_requires_attempt_evidence() -> None:
+    """A credential-bearing request that produced no HTTP response
+    (timeout / connection refused / TLS error) must carry an
+    attempt_evidence_ref so the audit trail can replay the failure;
+    otherwise the audit shows credential use with no link to the
+    failure mode."""
+    with pytest.raises(ValidationError):
+        _valid_credential_use_record(
+            response_status=None,
+            attempt_evidence_ref=None,
+        )
+
+
+def test_credential_use_record_transport_failure_with_attempt_evidence_ok() -> None:
+    record = _valid_credential_use_record(
+        response_status=None,
+        attempt_evidence_ref="attempt-evidence:1",
+    )
+    assert record.attempt_evidence_ref == "attempt-evidence:1"
+
+
+# Codex iter-1 fix-up: design-allowed escalation chain ------------
+
+
+@pytest.mark.parametrize(
+    ("from_type", "to_type"),
+    [
+        (AdapterType.AUTHORIZED_SESSION, AdapterType.HTTP),  # downgrade off auth
+        (AdapterType.AUTHORIZED_SESSION, AdapterType.BROWSER_SNAPSHOT),
+        (AdapterType.BROWSER_SNAPSHOT, AdapterType.HTTP),  # reverse
+        (AdapterType.HTTP, AdapterType.API_SOURCE),  # reverse
+        (AdapterType.SITEMAP, AdapterType.HTTP),  # not in chain
+        (AdapterType.RSS, AdapterType.AUTHORIZED_SESSION),  # not in chain
+    ],
+)
+def test_escalation_decision_rejects_disallowed_transition(
+    from_type: AdapterType, to_type: AdapterType
+) -> None:
+    with pytest.raises(ValidationError):
+        _valid_escalation_decision(from_adapter_type=from_type, to_adapter_type=to_type)
+
+
+@pytest.mark.parametrize(
+    ("from_type", "to_type"),
+    [
+        (AdapterType.API_SOURCE, AdapterType.HTTP),
+        (AdapterType.API_SOURCE, AdapterType.AUTHORIZED_SESSION),
+        (AdapterType.HTTP, AdapterType.AUTHORIZED_SESSION),
+        (AdapterType.HTTP, AdapterType.BROWSER_SNAPSHOT),
+        (AdapterType.BROWSER_SNAPSHOT, AdapterType.AUTHORIZED_SESSION),
+    ],
+)
+def test_escalation_decision_accepts_design_allowed_transition(
+    from_type: AdapterType, to_type: AdapterType
+) -> None:
+    decision = _valid_escalation_decision(
+        from_adapter_type=from_type,
+        to_adapter_type=to_type,
+    )
+    assert decision.from_adapter_type is from_type
+    assert decision.to_adapter_type is to_type
+
+
+def test_escalation_policy_rejects_reverse_transition_in_allowed_map() -> None:
+    """A policy that admits ``AUTHORIZED_SESSION → HTTP`` would let
+    ``PolicyDrivenEscalator`` walk back off authorized session,
+    contradicting design.md §3.2's terminal rule."""
+    with pytest.raises(ValidationError):
+        _valid_escalation_policy(
+            allowed_transitions={
+                AdapterType.AUTHORIZED_SESSION: [AdapterType.HTTP],
+            },
+        )
+
+
+def test_escalation_policy_rejects_non_chain_source_type() -> None:
+    """``SITEMAP``/``RSS`` etc. are non-fetch sources; they don't
+    participate in the escalation chain. A policy keying on them
+    is dead policy and almost certainly a wiring bug."""
+    with pytest.raises(ValidationError):
+        _valid_escalation_policy(
+            allowed_transitions={AdapterType.SITEMAP: [AdapterType.HTTP]},
+        )

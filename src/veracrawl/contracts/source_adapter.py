@@ -7,6 +7,25 @@ from pydantic import Field, model_validator
 from veracrawl.contracts.common import Ref, TimestampedModel
 from veracrawl.contracts.enums import AdapterResultStatus, AdapterType, SourceAdapterResultType
 
+# Allowed adapter-type escalation transitions per design.md §3.2 (the
+# "Adapter escalation chain" diagram, corrected per codex critical #1
+# in the v1 review). The chain encodes:
+#   - API_SOURCE → HTTP (rate limit / outage path)
+#   - API_SOURCE → AUTHORIZED_SESSION (auth issue path)
+#   - HTTP → AUTHORIZED_SESSION (access-control blocked + creds available)
+#   - HTTP → BROWSER_SNAPSHOT (rendering required, NOT anti-bot escalation)
+#   - BROWSER_SNAPSHOT → AUTHORIZED_SESSION (rendered + auth wall)
+# AUTHORIZED_SESSION is terminal — escalation cannot leave it because
+# downgrading off authorized session has no design-supported semantics.
+# Other AdapterType members (SITEMAP / RSS / DOCUMENT_SOURCE /
+# FILE_IMPORT / MANUAL_SEED / PRIOR_SNAPSHOT) are non-fetch sources
+# whose work product is consumed elsewhere, not escalation targets.
+_ALLOWED_ESCALATION_TRANSITIONS: dict[AdapterType, frozenset[AdapterType]] = {
+    AdapterType.API_SOURCE: frozenset({AdapterType.HTTP, AdapterType.AUTHORIZED_SESSION}),
+    AdapterType.HTTP: frozenset({AdapterType.AUTHORIZED_SESSION, AdapterType.BROWSER_SNAPSHOT}),
+    AdapterType.BROWSER_SNAPSHOT: frozenset({AdapterType.AUTHORIZED_SESSION}),
+}
+
 ADAPTER_RESULT_MAPPING: dict[AdapterType, set[SourceAdapterResultType]] = {
     AdapterType.HTTP: {
         SourceAdapterResultType.FETCH_RESULT,
@@ -148,6 +167,15 @@ class AdapterEscalationDecision(TimestampedModel):
                 "adapter escalation decision must change adapter_type "
                 "(from_adapter_type != to_adapter_type)"
             )
+        allowed = _ALLOWED_ESCALATION_TRANSITIONS.get(self.from_adapter_type, frozenset())
+        if self.to_adapter_type not in allowed:
+            raise ValueError(
+                f"adapter escalation decision {self.from_adapter_type.value} → "
+                f"{self.to_adapter_type.value} is not in the design-allowed "
+                f"escalation chain (design.md §3.2); allowed targets from "
+                f"{self.from_adapter_type.value}: "
+                f"{sorted(t.value for t in allowed)}"
+            )
         if not self.reason.strip():
             raise ValueError("adapter escalation decision reason must be non-blank")
         if not self.failure_signature.strip():
@@ -197,5 +225,14 @@ class AdapterEscalationPolicy(TimestampedModel):
             if len(set(targets)) != len(targets):
                 raise ValueError(
                     f"adapter escalation policy entry {source.value} contains duplicate targets"
+                )
+            design_allowed = _ALLOWED_ESCALATION_TRANSITIONS.get(source, frozenset())
+            disallowed = sorted(t.value for t in targets if t not in design_allowed)
+            if disallowed:
+                raise ValueError(
+                    f"adapter escalation policy entry {source.value} → "
+                    f"{disallowed} is not in the design-allowed escalation chain "
+                    f"(design.md §3.2); allowed targets from {source.value}: "
+                    f"{sorted(t.value for t in design_allowed)}"
                 )
         return self
