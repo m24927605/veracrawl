@@ -284,6 +284,31 @@ def test_fixture_mode_with_noop_port_keeps_working() -> None:
     assert result.status.value == "succeeded"
 
 
+def test_robots_blocked_error_carries_policy_decision_refs() -> None:
+    """Codex iter-4 minor: ``_check_robots`` previously dropped
+    ``policy_decision_refs`` when raising, breaking replay / audit
+    traceability for blocked decisions. The error detail now embeds
+    them so downstream diagnostics keep the chain.
+    """
+
+    robots = _StubRobotsPort(advice=RobotsAdvice(is_allowed=False, disallow_reason="forbidden"))
+    adapter = StdlibHttpSourceAdapter(
+        _make_request("https://example.test/admin"),
+        config=HttpClientConfig(robots_port=robots),
+        transport=_ok_transport(),
+    )
+    cmd = _make_command()
+    # The default fixture command's ``policy_snapshot_ref`` doesn't
+    # have commas, so the adapter falls back to
+    # ``request.policy_decision_refs``. Check that those refs are in
+    # the error detail.
+    expected_ref = adapter.request.policy_decision_refs[0]
+    with pytest.raises(RobotsBlockedError) as exc:
+        adapter.execute(cmd)
+    assert "policy_decision_refs=" in str(exc.value)
+    assert expected_ref in str(exc.value)
+
+
 def test_acquisition_layer_handler_catches_robots_blocked_error() -> None:
     """Simulates ``execute_source_acquisition``'s ``except ValueError``
     catch path when the adapter raises ``RobotsBlockedError``.

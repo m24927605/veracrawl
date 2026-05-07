@@ -429,7 +429,7 @@ class StdlibHttpSourceAdapter:
     def _fetch_with_redirects(self, url: str, *, policy_decision_refs: list[str]) -> httpx.Response:
         current_url = url
         # Initial URL robots check (design.md §4 Phase 1 step 1.2).
-        self._check_robots(current_url)
+        self._check_robots(current_url, policy_decision_refs=policy_decision_refs)
         for hop in range(self._config.max_redirects + 1):
             response = self._send_with_retry(current_url)
             if not _is_redirect_status(response.status_code):
@@ -444,7 +444,7 @@ class StdlibHttpSourceAdapter:
             # redirect target". The check runs on every hop, not only
             # on cross-origin hops, because path-based ``Disallow``
             # rules can refuse a same-host redirect target.
-            self._check_robots(next_url)
+            self._check_robots(next_url, policy_decision_refs=policy_decision_refs)
             self._redirect_hops.append(
                 RedirectHop(
                     id=f"redirect-hop:{self.request.id}:{hop + 1}",
@@ -459,12 +459,22 @@ class StdlibHttpSourceAdapter:
             current_url = next_url
         raise RedirectDeniedError(f"redirect loop > max_redirects={self._config.max_redirects}")
 
-    def _check_robots(self, url: str) -> None:
+    def _check_robots(self, url: str, *, policy_decision_refs: list[str]) -> None:
         advice = self._config.robots_port.evaluate(url, user_agent=self._config.user_agent)
         if advice.is_allowed:
             return
         reason = advice.disallow_reason or "robots.txt disallowed"
-        raise RobotsBlockedError(f"{url}: {reason}")
+        # Embed the active policy decision refs in the error detail so
+        # replay / audit diagnostics keep traceability for blocked
+        # decisions (codex iter-4 minor: previously
+        # ``policy_decision_refs`` was carried by the redirect path
+        # but ignored when robots blocked the URL).
+        if policy_decision_refs:
+            policy_part = ",".join(policy_decision_refs)
+            detail = f"{url}: {reason} (policy_decision_refs={policy_part})"
+        else:
+            detail = f"{url}: {reason}"
+        raise RobotsBlockedError(detail)
 
     def _send_with_retry(self, url: str) -> httpx.Response:
         last_response: httpx.Response | None = None

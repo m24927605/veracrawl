@@ -24,11 +24,16 @@ source of truth — we wrap it, we don't re-implement it).
 
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Callable
 from pathlib import Path
 
+import httpx
+import pytest
+
 from veracrawl.adapters.network.urllib_robots import (
+    RobotsFetchPolicyError,
     RobotsFetchResult,
     UrllibRobotsParser,
     make_httpx_robots_fetcher,
@@ -452,6 +457,122 @@ def test_make_httpx_robots_fetcher_returns_callable_with_correct_signature() -> 
     sig = inspect.signature(fetcher)
     params = list(sig.parameters)
     assert len(params) == 2
+
+
+# -- codex iter-4 regression tests --------------------------------
+
+
+def test_only_status_200_is_parsed_as_robots_body() -> None:
+    """Codex iter-4 important: 204 / 205 / 206 etc. carry no robots
+    body but were previously parsed as "no rules" → allow-all. They
+    must now fail closed.
+    """
+
+    for status in (204, 205, 206):
+        parser = UrllibRobotsParser(fetcher=_make_fetcher("", status=status))
+        advice = parser.evaluate("https://example.test/p", user_agent=_DEFAULT_UA)
+        assert advice.is_allowed is False, f"status {status} must fail closed"
+
+
+def test_status_200_is_parsed_normally() -> None:
+    parser = UrllibRobotsParser(fetcher=_make_fetcher(_allow_all_robots(), status=200))
+    advice = parser.evaluate("https://example.test/p", user_agent=_DEFAULT_UA)
+    assert advice.is_allowed is True
+
+
+def test_disk_cache_writes_are_atomic(tmp_path: Path) -> None:
+    """Codex iter-4 important: write must use temp file + os.replace
+    so concurrent readers never see partial JSON / mismatched body
+    and meta. We verify by inspecting the parent directory after a
+    write — only the final files exist; no leftover ``.tmp``-style
+    intermediates.
+    """
+
+    fetcher = _make_fetcher(_allow_all_robots())
+    parser = UrllibRobotsParser(fetcher=fetcher, cache_dir=tmp_path)
+    parser.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
+    leftovers = [
+        p
+        for p in tmp_path.iterdir()
+        if p.is_file() and not p.name.endswith(".robots.txt") and not p.name.endswith(".meta.json")
+    ]
+    assert leftovers == []
+
+
+def test_disk_cache_meta_file_contains_complete_json(tmp_path: Path) -> None:
+    """Concurrent readers should always observe well-formed JSON.
+    A subsequent ``json.loads`` on the meta file must succeed
+    every time without races to mid-write states.
+    """
+
+    fetcher = _make_fetcher(_allow_all_robots())
+    parser = UrllibRobotsParser(fetcher=fetcher, cache_dir=tmp_path)
+    parser.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
+    meta_files = list(tmp_path.glob("*.meta.json"))
+    assert len(meta_files) == 1
+    payload = json.loads(meta_files[0].read_text(encoding="utf-8"))
+    assert {"status", "fetched_at_wallclock", "robots_url"} <= payload.keys()
+
+
+def test_make_httpx_robots_fetcher_refuses_non_allowlisted_origin() -> None:
+    """Robots discovery must respect the egress allowlist (codex
+    iter-4 important): without this, an SSRF target would be
+    contacted by the robots fetcher even though the main adapter
+    would refuse the eventual fetch.
+    """
+
+    fetcher = make_httpx_robots_fetcher(egress_allowlist={"https://allowed.test"})
+    with pytest.raises(RobotsFetchPolicyError):
+        fetcher("https://forbidden.test/robots.txt", _DEFAULT_UA)
+
+
+def test_make_httpx_robots_fetcher_refuses_private_network_when_disallowed() -> None:
+    fetcher = make_httpx_robots_fetcher(allow_private_network=False)
+    with pytest.raises(RobotsFetchPolicyError):
+        fetcher("http://127.0.0.1/robots.txt", _DEFAULT_UA)
+
+
+def test_make_httpx_robots_fetcher_allows_when_in_allowlist() -> None:
+    """Allowlisted origins go through; the policy refuses bypass, not
+    legitimate traffic."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+
+    transport = httpx.MockTransport(handler)
+    fetcher = make_httpx_robots_fetcher(
+        egress_allowlist={"https://allowed.test"},
+        transport=transport,
+    )
+    result = fetcher("https://allowed.test/robots.txt", _DEFAULT_UA)
+    assert result.status == 200
+
+
+def test_robots_fetcher_policy_error_is_cached_as_failure() -> None:
+    """A policy refusal during robots discovery must turn into a
+    fail-closed cache entry just like a transport failure does, so
+    the wrapper short-circuits subsequent ``evaluate`` calls during
+    the outage window instead of re-issuing the same blocked
+    fetch.
+    """
+
+    counter = [0]
+
+    def policy_failing_fetcher(robots_url: str, user_agent: str) -> RobotsFetchResult:
+        counter[0] += 1
+        raise RobotsFetchPolicyError(f"refused: {robots_url}")
+
+    parser = UrllibRobotsParser(
+        fetcher=policy_failing_fetcher,
+        ttl_seconds=3600.0,
+        failure_ttl_seconds=60.0,
+    )
+    advice_a = parser.evaluate("https://example.test/p", user_agent=_DEFAULT_UA)
+    advice_b = parser.evaluate("https://example.test/q", user_agent=_DEFAULT_UA)
+    assert advice_a.is_allowed is False
+    assert advice_b.is_allowed is False
+    # Two evaluations during the outage → one fetch attempt.
+    assert counter[0] == 1
 
 
 def test_disk_cache_preserves_original_body_verbatim(tmp_path: Path) -> None:

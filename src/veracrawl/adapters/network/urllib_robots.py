@@ -35,10 +35,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Final
 from urllib.parse import urlsplit, urlunsplit
@@ -324,29 +327,31 @@ class UrllibRobotsParser:
         if paths is None:
             return
         body_path, meta_path = paths
+        # Atomic write (codex iter-4 important): concurrent workers
+        # sharing a cache directory must never see a partial JSON or a
+        # body/meta mismatch. We write each file via NamedTemporaryFile
+        # in the same directory, then ``os.replace`` it into place
+        # (``os.replace`` is atomic on POSIX and Windows for files on
+        # the same filesystem). Body is replaced first so any reader
+        # that observes a fresh meta_path is guaranteed to see the
+        # matching body (or no body for synthesised entries).
         try:
             if entry.body is not None:
-                # Preserve the original fetched body verbatim — ``str``
-                # of ``RobotFileParser`` is a parser-state rendering and
-                # may drop comments / unknown directives, so it is not
-                # a faithful round-trip (codex iter-1 important).
-                body_path.write_text(entry.body, encoding="utf-8")
+                _atomic_write_text(body_path, entry.body)
             else:
                 # Synthesised parser (404 / 5xx / fetch-failure) —
                 # clean up any prior body file so reads see "absent"
-                # consistently.
-                if body_path.exists():
-                    body_path.unlink()
-            meta_path.write_text(
-                json.dumps(
-                    {
-                        "status": entry.status,
-                        "fetched_at_wallclock": entry.fetched_at_wallclock,
-                        "robots_url": entry.robots_url,
-                    }
-                ),
-                encoding="utf-8",
+                # consistently. ``unlink(missing_ok=True)`` keeps this
+                # idempotent across races.
+                body_path.unlink(missing_ok=True)
+            meta_payload = json.dumps(
+                {
+                    "status": entry.status,
+                    "fetched_at_wallclock": entry.fetched_at_wallclock,
+                    "robots_url": entry.robots_url,
+                }
             )
+            _atomic_write_text(meta_path, meta_payload)
         except OSError as exc:
             _logger.warning(
                 "robots.txt on-disk cache write failed",
@@ -385,6 +390,32 @@ def _robots_url_for(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
 
 
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Write ``content`` to ``path`` atomically.
+
+    Concurrent workers sharing a cache directory must never observe a
+    partial file (codex iter-4 important). We write to a temp file in
+    the same directory then ``os.replace`` it into place — this is the
+    standard POSIX / Windows atomic-rename idiom for file-on-same-fs
+    publications.
+    """
+
+    parent = path.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", dir=str(parent))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        os.replace(tmp_path, path)
+    except OSError:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def _safe_filename(cache_key: str) -> str:
     # Hash to keep the on-disk filename short and avoid path traversal
     # via UA strings that could contain ``/`` or other separator
@@ -407,21 +438,17 @@ def _build_parser(*, robots_url: str, status: int, body: str) -> RobotFileParser
         # this by feeding an empty rule set.
         parser.parse([])
         return parser
-    if 300 <= status < 400:
-        # Unresolved redirect (codex iter-3 important): the fetcher is
-        # supposed to follow robots-txt redirects, but if it didn't (or
-        # the redirect chain exceeded the cap) we must NOT treat the
-        # 3xx body as the rule set — that would silently make a redirected
-        # robots.txt allow-all and let a crawler bypass real rules. Fail
-        # closed instead.
-        parser.parse(["User-agent: *", "Disallow: /"])
+    if status == 200:
+        # Only an explicit 200 OK is a usable robots.txt body (codex
+        # iter-4 important): 204 / 205 / 206 etc. ship empty bodies
+        # that ``RobotFileParser.parse([])`` would treat as "no rules"
+        # → permissive, which we should not do for status codes that
+        # do not document robots semantics.
+        parser.parse(body.splitlines())
         return parser
-    if status >= 400:
-        # 5xx (and other 4xx that aren't 404) → fail closed: produce a
-        # parser that disallows everything.
-        parser.parse(["User-agent: *", "Disallow: /"])
-        return parser
-    parser.parse(body.splitlines())
+    # Anything else (3xx unresolved, 2xx that isn't 200, 4xx that isn't
+    # 404, 5xx, anything we don't explicitly recognise) → fail closed.
+    parser.parse(["User-agent: *", "Disallow: /"])
     return parser
 
 
@@ -462,10 +489,24 @@ def _advice_from_parser(
     )
 
 
+class RobotsFetchPolicyError(RuntimeError):
+    """Egress / private-network policy refused the robots.txt fetch.
+
+    Raised by :func:`make_httpx_robots_fetcher` before any network I/O
+    when the requested ``robots.txt`` URL points at a private network
+    (and ``allow_private_network=False``) or at a host outside the
+    configured egress allowlist. The wrapper's ``_fetch_with_fallback``
+    catches it and caches a fail-closed entry, so a robots-discovery
+    SSRF attempt never silently allows the eventual fetch.
+    """
+
+
 def make_httpx_robots_fetcher(
     *,
     timeout_s: float = 10.0,
     max_redirects: int = 5,
+    egress_allowlist: Iterable[str] = (),
+    allow_private_network: bool = True,
     transport: httpx.BaseTransport | None = None,
 ) -> RobotsFetcher:
     """Production-grade robots.txt fetcher.
@@ -480,6 +521,16 @@ def make_httpx_robots_fetcher(
     :class:`RobotsPort` before every fetch, so using it to retrieve
     ``/robots.txt`` would loop.
 
+    Egress / private-network policy (codex iter-4 important): robots
+    discovery happens **before** the main HTTP adapter's allowlist
+    check. Without policy enforcement here, an internal / private host
+    could be contacted by the robots fetcher even when the normal
+    adapter would refuse the eventual fetch — an SSRF boundary
+    regression. ``egress_allowlist`` (set of ``scheme://host[:port]``
+    origins) and ``allow_private_network`` are checked before any
+    network I/O; a violation raises :class:`RobotsFetchPolicyError`,
+    which the wrapper turns into a fail-closed cache entry.
+
     Redirects on ``/robots.txt`` are followed up to ``max_redirects``
     (codex iter-3 important): well-behaved origins commonly redirect
     ``/robots.txt`` (e.g., ``www.example.com`` → ``example.com``), and
@@ -491,15 +542,32 @@ def make_httpx_robots_fetcher(
 
     The fetcher honors the ``user_agent`` argument (so the single
     source-of-truth UA is preserved end to end) and a small per-request
-    timeout. It does not implement retries or the broader
-    :class:`StdlibHttpSourceAdapter` policy machinery — those layers
-    belong to the caller-side fetch, not to robots discovery.
-    Network-level failures and non-2xx responses are surfaced via
+    timeout. It does not implement retries — those layers belong to
+    the caller-side fetch, not to robots discovery. Network-level
+    failures and non-2xx responses are surfaced via
     :class:`RobotsFetchResult` so the caller's fail-closed semantics
     apply uniformly.
     """
 
+    allowlist = frozenset(o.lower() for o in egress_allowlist)
+
+    def _check_policy(url: str) -> None:
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise RobotsFetchPolicyError(f"unsupported robots URL scheme: {url!r}")
+        if not allow_private_network and _is_private_host(parsed.hostname):
+            raise RobotsFetchPolicyError(
+                f"robots.txt host is on a private / loopback network: {parsed.hostname!r}"
+            )
+        if allowlist:
+            origin = f"{parsed.scheme}://{parsed.netloc}".lower()
+            if origin not in allowlist:
+                raise RobotsFetchPolicyError(
+                    f"robots.txt origin not in egress allowlist: {origin!r}"
+                )
+
     def fetch(robots_url: str, user_agent: str) -> RobotsFetchResult:
+        _check_policy(robots_url)
         client_kwargs: dict[str, object] = {
             "timeout": httpx.Timeout(timeout_s),
             "headers": {"User-Agent": user_agent},
@@ -510,12 +578,35 @@ def make_httpx_robots_fetcher(
             client_kwargs["transport"] = transport
         with httpx.Client(**client_kwargs) as client:  # type: ignore[arg-type]
             response = client.get(robots_url)
+            # If redirects steered the chain off the allowlist or onto
+            # a private network, the final URL may differ from the
+            # requested one. Re-check before surfacing the body.
+            _check_policy(str(response.url))
             return RobotsFetchResult(status=int(response.status_code), body=response.text)
 
     return fetch
 
 
+def _is_private_host(host: str | None) -> bool:
+    if host is None:
+        return True
+    if host == "localhost":
+        return True
+    try:
+        addr = ip_address(host)
+    except ValueError:
+        return False
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_unspecified
+    )
+
+
 __all__ = [
+    "RobotsFetchPolicyError",
     "RobotsFetchResult",
     "RobotsFetcher",
     "UrllibRobotsParser",
