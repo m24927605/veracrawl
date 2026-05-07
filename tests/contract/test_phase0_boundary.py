@@ -785,3 +785,74 @@ def test_classify_provider_error_routes_structured_output_violation() -> None:
     )
     assert type(err) is StructuredOutputViolation
     assert isinstance(err, PolicyViolation)
+
+
+# Codex iter-5 important: reason field PII / session token redaction
+
+
+@pytest.mark.parametrize(
+    "tainted_reason",
+    [
+        "header carried session=abc123",
+        "received sid=def456 in cookie jar",
+        "request had email=user@example.test",
+        "jwt=eyJhbGciOiJIUzI1NiJ9.payload.sig was rejected",
+        "code=oauth-grant-12345 was already used",
+        "access_token=ya29.XXX did not match",
+        "csrf_token=abc-123 mismatch",
+        "phpsessid=def-456 invalid",
+    ],
+)
+def test_credential_scope_violation_redacts_pii_in_reason(tainted_reason: str) -> None:
+    """Codex iter-5 important: the ``reason`` field is free-form
+    text supplied by ``StrictAllowlistScope`` (or any caller that
+    raises this exception). The previous narrow marker list let
+    ``session=...`` / ``email=...`` / ``jwt=...`` slip through —
+    those are exactly the parameter names URL-redaction strips
+    elsewhere. The expanded marker tuple now catches them too,
+    and the test covers both ``str(err)`` and the public
+    attribute / ``__dict__`` views (the latter is the
+    logging-handler back-channel codex iter-3 already flagged for
+    other fields)."""
+    err = CredentialScopeViolation(
+        scope_ref="credential-scope:ebay",
+        requested_origin="https://api.ebay.com",
+        requested_route="/items",
+        requested_method="GET",
+        reason=tainted_reason,
+    )
+    leaks = (
+        "session=",
+        "sid=",
+        "email=",
+        "jwt=",
+        "code=",
+        "access_token=",
+        "csrf_token=",
+        "phpsessid=",
+        "abc123",
+        "def456",
+        "user@example",
+        "eyJhbGc",
+        "oauth-grant",
+        "ya29",
+    )
+    msg = str(err)
+    for leak in leaks:
+        assert leak.lower() not in msg.lower(), (
+            f"CredentialScopeViolation message leaked {leak!r} from "
+            f"tainted reason {tainted_reason!r}: msg={msg}"
+        )
+    # Public attribute and __dict__ view both clean.
+    for leak in leaks:
+        assert leak.lower() not in err.reason.lower(), (
+            f"CredentialScopeViolation public reason attr leaked {leak!r}: reason={err.reason!r}"
+        )
+    for value in vars(err).values():
+        if not isinstance(value, str):
+            continue
+        for leak in leaks:
+            assert leak.lower() not in value.lower(), (
+                f"CredentialScopeViolation vars(err) leaked {leak!r} from "
+                f"tainted reason {tainted_reason!r}: value={value!r}"
+            )

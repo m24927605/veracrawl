@@ -35,20 +35,53 @@ from urllib.parse import urlsplit, urlunsplit
 # Sensitive substrings that must never appear unredacted in an exception
 # message. Duplicated here intentionally rather than imported from
 # ``contracts.security_privacy`` because that module already imports from
-# this one (foundation cycle); the cost of duplication is two short
-# tuples, the cost of a cycle would be import-time deadlock.
+# this one (foundation cycle); the cost of duplication is one tuple,
+# the cost of a cycle would be import-time deadlock.
+#
+# The list deliberately covers credential markers AND common PII /
+# session-tracking parameter names that show up in URL queries, OAuth
+# flows, and free-form error messages. ``_redact_field`` triggers a
+# full-string ``[REDACTED]`` substitution if ANY marker matches — over-
+# cautious by design (codex iter-5 important: ``session=`` /
+# ``email=`` / ``jwt=`` outside the original credential tuple were
+# slipping through ``reason`` text).
 _REDACTABLE_MARKERS = (
+    # Direct credential tokens
     "password",
     "secret",
     "token=",
     "api_key",
+    "apikey=",
     "aws_access_key",
     "aws_secret",
     "bearer ",
     "authorization",
+    # Internal markers
     "raw_prompt:",
     "raw_secret:",
     "raw_artifact:",
+    # OAuth / OIDC parameters
+    "access_token=",
+    "refresh_token=",
+    "id_token=",
+    "oauth_token=",
+    "code=",  # OAuth authorization code
+    # Session / cookie / CSRF
+    "session=",
+    "sessionid=",
+    "jsessionid=",
+    "sid=",
+    "phpsessid=",
+    "csrf=",
+    "csrf_token=",
+    "xsrf=",
+    "auth=",
+    # JWT / signed payloads
+    "jwt=",
+    # PII
+    "email=",
+    "ssn=",
+    "phone=",
 )
 
 
