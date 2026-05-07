@@ -241,7 +241,6 @@ def test_session_reuses_one_context_across_multiple_observations(
         playwright_factory=lambda: capturing_factory,
     )
     sandbox = _sandbox()
-    contexts_seen_by_session: list[Any] = []
     with adapter.open_session(run_ref="run:reuse") as session:
         for url in (
             "https://example.test/page1",
@@ -253,22 +252,27 @@ def test_session_reuses_one_context_across_multiple_observations(
                 target_url=url,
                 sandbox_policy=sandbox,
             )
-            contexts_seen_by_session.append(session.context)
 
     pw: _FakePlaywright = captured["pw"]
     # Exactly one browser launched across the whole session.
     assert len(pw.browsers) == 1
-    # Exactly one context created — that is the reuse rule.
+    # Exactly one context created — that is the reuse rule
+    # (codex iter-4 important: assert via the fake's bookkeeping
+    # rather than peeking through a public adapter property).
     browser = pw.browsers[0]
     assert len(browser.contexts) == 1, (
         "expected exactly one BrowserContext for three observations; got "
         f"{len(browser.contexts)} — context reuse is broken"
     )
-    # The session's ``context`` attribute exposed the same object
-    # for each observation.
-    assert all(ctx is browser.contexts[0] for ctx in contexts_seen_by_session)
-    # And three pages on that one context, one per navigation.
-    assert len(browser.contexts[0].new_pages) == 3
+    # Three pages on that one context, one per navigation. The
+    # ``new_pages`` list lives on the same fake context object across
+    # all three observations precisely because the adapter reused it.
+    context = browser.contexts[0]
+    assert len(context.new_pages) == 3
+    # Route handler was registered + unregistered once per navigation
+    # (the per-call cleanup contract from the iter-2 fix-up).
+    assert context.routes_registered == 3
+    assert context.routes_unregistered == 3
 
 
 def test_session_creates_one_browser_and_one_context(tmp_path: Path) -> None:
@@ -650,11 +654,15 @@ def test_browser_closes_when_storage_state_write_raises(tmp_path: Path) -> None:
         captured["pw"] = pw
         yield pw
 
-    # Subclass the fake context to make storage_state(path=...) raise.
+    # Subclass the fake context to raise when the adapter calls
+    # ``storage_state()`` (no-arg, matches Playwright's actual API
+    # after the iter-3 atomic-write refactor; codex iter-4 minor:
+    # the previous version required a ``path`` kwarg and only
+    # raised TypeError indirectly).
     class _FailingContext(_FakeContext):
-        def storage_state(self, *, path: str) -> dict[str, Any]:
+        def storage_state(self, *, path: str | None = None) -> dict[str, Any]:
             self.storage_state_calls.append({"path": path})
-            raise RuntimeError("simulated disk write failure")
+            raise RuntimeError("simulated storage_state serialization failure")
 
     class _FailingBrowser(_FakeBrowser):
         def new_context(self, **kwargs: Any) -> _FakeContext:
@@ -999,3 +1007,51 @@ def test_storage_state_filename_caps_long_run_ref_prefix() -> None:
     # must still produce distinct filenames thanks to the digest.
     other_long_ref = long_ref + "_distinct_suffix"
     assert _storage_state_filename(long_ref) != _storage_state_filename(other_long_ref)
+
+
+# Codex iter-4 important: full-payload write (no truncation) ------
+
+
+def test_storage_state_write_loops_until_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``os.write`` may perform a partial write; the adapter must
+    loop until every byte reaches the kernel buffer (codex iter-4
+    important: a partial write would leave a truncated JSON file
+    that later sessions try to hydrate from). Simulate a flaky
+    ``os.write`` that returns 1 byte at a time and verify the
+    final on-disk file contains the complete JSON payload."""
+    import veracrawl.adapters.browser.playwright as playwright_module
+
+    real_write = os.write
+    write_call_count = {"count": 0}
+
+    def slow_write(fd: int, data: bytes) -> int:
+        # Hand back one byte at a time the first 32 calls, then
+        # accept the rest in one shot.
+        write_call_count["count"] += 1
+        if write_call_count["count"] <= 32 and len(data) > 1:
+            return real_write(fd, data[:1])
+        return real_write(fd, data)
+
+    monkeypatch.setattr(playwright_module.os, "write", slow_write)
+
+    adapter = _adapter(storage_state_dir=tmp_path)
+    with adapter.open_session(run_ref="run:partial-write") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+
+    files = list(tmp_path.glob("*.storage_state.json"))
+    assert len(files) == 1
+    # The final file must contain valid JSON — a truncated write
+    # would produce a JSON parse error here.
+    payload = json.loads(files[0].read_text(encoding="utf-8"))
+    # The fake's storage_state() returns a dict with a ``cookies``
+    # key; verify the full payload survived the loop.
+    assert "cookies" in payload
+    # And the slow writer was actually exercised (otherwise the test
+    # would not validate the loop behavior).
+    assert write_call_count["count"] > 1

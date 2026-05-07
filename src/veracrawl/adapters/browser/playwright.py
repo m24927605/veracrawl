@@ -151,15 +151,13 @@ class BrowserSession:
     def run_ref(self) -> Ref:
         return self._run_ref
 
-    @property
-    def context(self) -> Any:
-        """Underlying playwright BrowserContext.
-
-        Exposed for tests that want to assert against the same
-        object across multiple ``observe()`` calls (the design's
-        BrowserContext-reuse acceptance).
-        """
-        return self._context
+    # NOTE: the playwright BrowserContext is intentionally NOT exposed
+    # as a public attribute (codex iter-4 important: a public escape
+    # hatch lets callers mutate routing / cookies / pages / lifecycle
+    # outside VeraCrawl's typed browser/session contract). Tests that
+    # need to assert reuse use the fake's bookkeeping (number of
+    # ``new_context`` calls on the fake browser) rather than peeking
+    # at this object directly.
 
     def observe(
         self,
@@ -401,7 +399,20 @@ class PlaywrightBrowserObservationAdapter:
                 raise
         fd = os.open(str(temp_path), flags, _STORAGE_STATE_FILE_MODE)
         try:
-            os.write(fd, payload)
+            # ``os.write`` can perform a partial write — loop until
+            # every byte of the payload reaches the kernel buffer
+            # (codex iter-4 important: a partial write would leave
+            # a truncated JSON file that later runs would fail to
+            # hydrate from).
+            written = 0
+            while written < len(payload):
+                chunk = os.write(fd, payload[written:])
+                if chunk <= 0:
+                    raise OSError(
+                        f"os.write returned {chunk} writing storage_state; "
+                        "refusing to spin and risk truncated persistence"
+                    )
+                written += chunk
             os.fsync(fd)
         finally:
             os.close(fd)
