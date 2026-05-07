@@ -130,10 +130,15 @@ def classify_provider_error(
 ) -> ModelProviderError:
     """Return the marker-bearing subclass for ``error_code``.
 
-    Falls back to the generic :class:`ModelProviderError` for codes
-    without a dedicated subclass; new codes can be added incrementally.
+    Falls back to :class:`ProviderAdapterFailure` (a ``FatalError``)
+    for codes without a dedicated subclass so every classified
+    error carries one of the recovery-dispatch markers
+    (``RetryableError`` / ``FatalError`` / ``PolicyViolation``).
+    Falling back to the bare ``ModelProviderError`` would leave the
+    orchestrator's ``except FatalError:`` / ``except PolicyViolation:``
+    branches blind to unknown codes (codex iter-3 important).
     """
-    cls = _ERROR_CODE_TO_CLASS.get(error_code, ModelProviderError)
+    cls = _ERROR_CODE_TO_CLASS.get(error_code, ProviderAdapterFailure)
     return cls(status_code=status_code, error_code=error_code, request_id=request_id)
 
 

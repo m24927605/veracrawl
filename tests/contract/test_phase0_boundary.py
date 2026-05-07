@@ -209,6 +209,8 @@ def test_credential_scope_violation_classification() -> None:
 
 
 def test_credential_scope_violation_carries_request_metadata() -> None:
+    """Public attributes carry the *sanitized* values; benign inputs
+    pass through unchanged."""
     err = CredentialScopeViolation(
         scope_ref="credential-scope:ebay",
         requested_origin="https://api.ebay.com",
@@ -267,8 +269,9 @@ def test_credential_scope_violation_message_carries_no_secret() -> None:
 )
 def test_credential_scope_violation_redacts_tainted_origin(tainted_origin: str) -> None:
     """Origin / URL fields routinely carry query-string credentials
-    or userinfo. The formatted message must drop those before
-    landing in logs."""
+    or userinfo. Both the formatted message AND the public attribute
+    must drop them — exception ``__dict__`` is read by logging
+    handlers (codex iter-3 important)."""
     err = CredentialScopeViolation(
         scope_ref="credential-scope:ebay",
         requested_origin=tainted_origin,
@@ -276,8 +279,7 @@ def test_credential_scope_violation_redacts_tainted_origin(tainted_origin: str) 
         requested_method="GET",
         reason="not in scope",
     )
-    msg = str(err)
-    for leak in (
+    leaks = (
         "api_key=",
         "sk-prod-",
         "token=",
@@ -285,14 +287,19 @@ def test_credential_scope_violation_redacts_tainted_origin(tainted_origin: str) 
         "hunter2",
         "Bearer-xyz",
         "access_token=",
-    ):
+    )
+    msg = str(err)
+    for leak in leaks:
         assert leak.lower() not in msg.lower(), (
             f"CredentialScopeViolation leaked {leak!r} from tainted "
             f"origin {tainted_origin!r}: msg={msg}"
         )
-    # The structured attribute keeps the original (the audit pipeline
-    # may persist it in a separately-redacted artifact).
-    assert err.requested_origin == tainted_origin
+    # Public attribute is sanitized too (closes the __dict__ leak).
+    for leak in leaks:
+        assert leak.lower() not in err.requested_origin.lower(), (
+            f"CredentialScopeViolation public attr leaked {leak!r}: "
+            f"requested_origin={err.requested_origin!r}"
+        )
 
 
 @pytest.mark.parametrize(
@@ -337,14 +344,21 @@ def test_credential_scope_violation_redacts_tainted_reason(tainted_reason: str) 
         requested_method="GET",
         reason=tainted_reason,
     )
+    leaks = ("Bearer ", "password=", "token=", "api_key=", "hunter2", "sk-XXX", "eyJhbGc")
     msg = str(err)
-    for leak in ("Bearer ", "password=", "token=", "api_key=", "hunter2", "sk-XXX", "eyJhbGc"):
+    for leak in leaks:
         assert leak.lower() not in msg.lower(), (
             f"CredentialScopeViolation leaked {leak!r} from tainted "
             f"reason {tainted_reason!r}: msg={msg}"
         )
-    # Raw reason still accessible.
-    assert err.reason == tainted_reason
+    # Public attribute is sanitized — raw reason is intentionally
+    # not preserved on the exception (codex iter-3 important: the
+    # audit pipeline reads structured data from CredentialUseRecord
+    # in the outbox, not from the raised exception).
+    for leak in leaks:
+        assert leak.lower() not in err.reason.lower(), (
+            f"CredentialScopeViolation public reason attr leaked {leak!r}: reason={err.reason!r}"
+        )
 
 
 # Codex iter-2 important: scope_ref redaction --------------------
@@ -372,15 +386,19 @@ def test_credential_scope_violation_redacts_tainted_scope_ref(tainted_scope: str
         requested_method="GET",
         reason="not in scope",
     )
+    leaks = ("password=", "token=", "api_key=", "Bearer ", "raw_secret:", "eyJhbGc", "sk-XXX")
     msg = str(err)
-    for leak in ("password=", "token=", "api_key=", "Bearer ", "raw_secret:", "eyJhbGc", "sk-XXX"):
+    for leak in leaks:
         assert leak.lower() not in msg.lower(), (
             f"CredentialScopeViolation leaked {leak!r} from tainted "
             f"scope_ref {tainted_scope!r}: msg={msg}"
         )
-    # Structured attribute keeps the raw value (audit pipeline's
-    # responsibility to redact again before persisting).
-    assert err.scope_ref == tainted_scope
+    # Public attribute is sanitized too.
+    for leak in leaks:
+        assert leak.lower() not in err.scope_ref.lower(), (
+            f"CredentialScopeViolation public scope_ref attr leaked {leak!r}: "
+            f"scope_ref={err.scope_ref!r}"
+        )
 
 
 # Codex iter-2 important: route query/fragment unconditional strip
@@ -463,10 +481,12 @@ def test_credential_scope_violation_handles_malformed_origin(
         requested_method="GET",
         reason="malformed origin",
     )
-    # Constructor produced a real exception with the structured
-    # attribute preserved.
+    # Constructor produced a real exception. Public attribute is
+    # sanitized; we don't assert the original input survives because
+    # malformed authorities fall back to a redacted form to avoid
+    # the ``__dict__`` leak vector.
     assert isinstance(err, CredentialScopeViolation)
-    assert err.requested_origin == malformed_origin
+    assert isinstance(err.requested_origin, str)
 
 
 # Codex iter-2 minor: provider-neutral message ------------------
@@ -485,6 +505,103 @@ def test_model_provider_error_message_is_provider_neutral() -> None:
     assert "500" in msg
     assert "SERVER_ERROR" in msg
     assert "req_x" in msg
+
+
+# Codex iter-3 important: __dict__ / vars() leak vector ----------
+
+
+def test_credential_scope_violation_vars_and_dict_carry_no_secret() -> None:
+    """``logging.exception()`` formats with ``exc.__dict__`` (and
+    callers that inspect ``vars(err)`` follow the same path).
+    Storing raw caller-supplied values on the exception would leak
+    them via this back-channel even when ``str(err)`` is scrubbed.
+    Verify both views are clean."""
+    err = CredentialScopeViolation(
+        scope_ref="raw_secret:ebay-prod",
+        requested_origin="https://api.ebay.com/?api_key=sk-XXX",
+        requested_route="/items?session=abc",
+        requested_method="GET",
+        reason="header Authorization: Bearer eyJhbGc was rejected",
+    )
+    leaks = (
+        "raw_secret:",
+        "ebay-prod",
+        "api_key=",
+        "sk-XXX",
+        "session=",
+        "abc",
+        "Bearer ",
+        "eyJhbGc",
+    )
+    for view_name, view in (("__dict__", err.__dict__), ("vars(err)", vars(err))):
+        for value in view.values():
+            if not isinstance(value, str):
+                continue
+            for leak in leaks:
+                assert leak.lower() not in value.lower(), (
+                    f"CredentialScopeViolation {view_name} value leaked "
+                    f"{leak!r}: {view_name}.values() contains {value!r}"
+                )
+
+
+# Codex iter-3 minor: canonical module direct imports ------------
+
+
+def test_canonical_provider_errors_module_exposes_classes() -> None:
+    """The boundary tests above import provider exceptions through
+    ``openai_responses`` (the back-compat re-export). Lock the
+    canonical provider-neutral module independently so the
+    re-export path's behavior cannot mask a regression in the
+    canonical home."""
+    from veracrawl.adapters.model_providers import errors as canonical_errors
+
+    for name in (
+        "ModelProviderError",
+        "ProviderAuthFailed",
+        "ProviderRateLimited",
+        "ProviderServerError",
+        "ProviderBadRequest",
+        "ProviderNotFound",
+        "ProviderAdapterFailure",
+        "TokenBudgetExceeded",
+        "StructuredOutputViolation",
+        "classify_provider_error",
+        "classify_status",
+    ):
+        assert hasattr(canonical_errors, name), (
+            f"{name} missing from canonical provider-errors module"
+        )
+
+
+def test_canonical_provider_errors_module_classes_are_same_object() -> None:
+    """The re-export in ``openai_responses`` must point at the
+    same class objects defined in the canonical module — not a
+    re-implementation. ``isinstance`` checks across import paths
+    must agree."""
+    from veracrawl.adapters.model_providers import errors as canonical_errors
+    from veracrawl.adapters.model_providers import openai_responses as openai_re_export
+
+    assert canonical_errors.ModelProviderError is openai_re_export.ModelProviderError
+    assert canonical_errors.TokenBudgetExceeded is openai_re_export.TokenBudgetExceeded
+    assert canonical_errors.StructuredOutputViolation is openai_re_export.StructuredOutputViolation
+
+
+def test_classify_provider_error_unknown_code_falls_back_to_marker_class() -> None:
+    """codex iter-3 important: an unknown ``error_code`` must still
+    classify into a marker-bearing subclass; the previous fallback
+    to bare ``ModelProviderError`` left the unknown-code path
+    invisible to ``except FatalError:`` / ``except PolicyViolation:``
+    dispatch."""
+    from veracrawl.adapters.model_providers.errors import (
+        ProviderAdapterFailure,
+        classify_provider_error,
+    )
+
+    err = classify_provider_error(
+        status_code=599, error_code="ADAPTER_DOES_NOT_KNOW", request_id="req_x"
+    )
+    assert type(err) is ProviderAdapterFailure
+    assert isinstance(err, FatalError)
 
 
 # Catch-compatibility lockdown for the three new subclasses.

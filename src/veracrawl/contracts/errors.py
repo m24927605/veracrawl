@@ -209,26 +209,38 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
     other policy refusals (egress / redirect / token-budget /
     structured-output).
 
-    The exception carries the (opaque) credential scope ref and the
-    requested origin / route / method as raw attributes so the audit
-    pipeline can decide what to persist. The *formatted* message that
-    lands in logs and stack traces, however, runs every caller-
-    supplied string through a redaction helper:
+    Privacy contract: every public attribute (``scope_ref`` /
+    ``requested_origin`` / ``requested_route`` / ``requested_method``
+    / ``reason``) carries the *sanitized* value, not the raw caller
+    input. Python exception logging routinely reaches into
+    ``__dict__`` / ``vars(err)`` (for example ``logging.exception``
+    formats with ``exc.__dict__``); storing raw caller-supplied
+    strings on the exception instance would leak credentials and PII
+    into log lines that the formatted-message redaction never sees.
 
-    * ``requested_origin`` and ``requested_route`` are reduced to
-      scheme + host + path (query strings, fragments, and userinfo
-      are dropped — the typical credential-leak vector at this
-      boundary is ``?api_key=...`` or ``user:pass@host``);
-    * ``reason`` is scrubbed against the same sensitive-marker
-      tuple ``security_privacy`` already uses (``password`` /
-      ``token=`` / ``bearer`` / etc.) and replaced with
-      ``[REDACTED]`` if any marker matches.
+    Sanitization rules:
 
-    The producer keeps full visibility via the typed attributes; only
-    the human-readable message is scrubbed. ``scope_ref`` is
-    rendered as-is because the documented contract requires it to be
-    an opaque vault handle (the ``CredentialScope`` validator already
-    rejects handles that look like secrets).
+    * ``requested_origin`` is reduced to scheme + host + path (query
+      strings, fragments, and userinfo dropped — the typical
+      credential-leak vector at this boundary is ``?api_key=...``
+      or ``user:pass@host``); malformed authorities (e.g.,
+      ``host:bad`` ports) fall back to a bare hostname instead of
+      raising.
+    * ``requested_route`` has query and fragment dropped
+      unconditionally because the substring marker check cannot
+      enumerate every PII parameter name (``session=`` / ``code=``
+      / ``email=`` / ``jwt=`` and similar all carry credentials or
+      PII outside the marker tuple).
+    * Every field then runs through the substring marker check;
+      anything matching is replaced with ``[REDACTED]``.
+
+    Audit semantics: this exception is a *signal* — "scope refused
+    request" — not the canonical audit record. The structured data
+    the audit pipeline persists comes from ``CredentialUseRecord``
+    (Phase 2 outbox row) where redaction is applied at write time
+    in a controlled context. Losing fidelity on this exception's
+    public attributes is therefore acceptable in exchange for
+    closing the ``__dict__`` leak vector.
     """
 
     def __init__(
@@ -240,24 +252,22 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
         requested_method: str,
         reason: str,
     ) -> None:
-        self.scope_ref = scope_ref
-        self.requested_origin = requested_origin
-        self.requested_route = requested_route
-        self.requested_method = requested_method
-        self.reason = reason
-        # Even though the contract requires scope_ref to be an opaque
-        # vault handle (``CredentialScope`` validator already enforces
-        # this), this exception's constructor is public — caller code
-        # could plausibly pass a bogus handle. Run scope_ref through
-        # the redactor too so this exception type's contract (no
-        # secrets in the formatted message) does not depend on a
-        # different validator's behavior (codex iter-2 important).
-        safe_scope = _redact_field(scope_ref)
-        safe_origin = _redact_url(requested_origin)
-        safe_route = _redact_route(requested_route)
-        safe_reason = _redact_field(reason)
-        safe_method = _redact_field(requested_method)
+        # All public attributes carry sanitized values. Exceptions
+        # are routinely logged via ``logging.exception()`` and similar
+        # paths that read ``__dict__`` (or ``vars(err)``) — storing
+        # raw caller-supplied values on the instance would leak
+        # credentials / PII into log lines that the formatted-message
+        # redaction never sees. The audit pipeline reads structured
+        # data from ``CredentialUseRecord`` in the outbox, not from
+        # the raised exception, so losing fidelity here is fine
+        # (codex iter-3 important).
+        self.scope_ref = _redact_field(scope_ref)
+        self.requested_origin = _redact_url(requested_origin)
+        self.requested_route = _redact_route(requested_route)
+        self.requested_method = _redact_field(requested_method)
+        self.reason = _redact_field(reason)
         super().__init__(
-            f"credential scope refused {safe_method} "
-            f"{safe_origin}{safe_route} (scope={safe_scope}): {safe_reason}"
+            f"credential scope refused {self.requested_method} "
+            f"{self.requested_origin}{self.requested_route} "
+            f"(scope={self.scope_ref}): {self.reason}"
         )
