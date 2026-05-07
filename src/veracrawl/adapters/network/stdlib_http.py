@@ -50,6 +50,7 @@ from veracrawl.contracts.errors import FatalError, PolicyViolation, RetryableErr
 from veracrawl.contracts.network import NetworkRequest, NetworkResponse, RedirectHop
 from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapterResult
 from veracrawl.ports.network import NetworkClientResult
+from veracrawl.ports.robots import NoopRobotsPort, RobotsPort
 
 _DEFAULT_CHROME_UA: Final[str] = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -249,6 +250,14 @@ class HttpClientConfig:
     egress_allowlist: frozenset[str] = field(default_factory=frozenset)
     allow_private_network: bool = True
     retry_after_cap_s: float = _RETRY_AFTER_CAP_S
+    # ``RobotsPort`` evaluation (design.md §4 Phase 1 step 1.2). The
+    # default is :class:`NoopRobotsPort` so existing fixture tests
+    # without robots wiring continue to pass; production callers must
+    # inject :class:`UrllibRobotsParser` (or another real impl). The
+    # adapter consults this port for the initial URL **and** every
+    # cross-redirect target with the same single-source-of-truth user
+    # agent (``user_agent``).
+    robots_port: RobotsPort = field(default_factory=NoopRobotsPort)
 
 
 def _is_private_network_url(url: str) -> bool:
@@ -400,6 +409,8 @@ class StdlibHttpSourceAdapter:
 
     def _fetch_with_redirects(self, url: str, *, policy_decision_refs: list[str]) -> httpx.Response:
         current_url = url
+        # Initial URL robots check (design.md §4 Phase 1 step 1.2).
+        self._check_robots(current_url)
         for hop in range(self._config.max_redirects + 1):
             response = self._send_with_retry(current_url)
             if not _is_redirect_status(response.status_code):
@@ -409,6 +420,12 @@ class StdlibHttpSourceAdapter:
                 raise RedirectDeniedError("redirect missing Location header")
             next_url = urljoin(current_url, location)
             self._validate_redirect_target(from_url=current_url, to_url=next_url)
+            # Cross-redirect robots re-check: design.md §4 Phase 1
+            # explicitly requires "enforce on initial URL **and** every
+            # redirect target". The check runs on every hop, not only
+            # on cross-origin hops, because path-based ``Disallow``
+            # rules can refuse a same-host redirect target.
+            self._check_robots(next_url)
             self._redirect_hops.append(
                 RedirectHop(
                     id=f"redirect-hop:{self.request.id}:{hop + 1}",
@@ -422,6 +439,13 @@ class StdlibHttpSourceAdapter:
             )
             current_url = next_url
         raise RedirectDeniedError(f"redirect loop > max_redirects={self._config.max_redirects}")
+
+    def _check_robots(self, url: str) -> None:
+        advice = self._config.robots_port.evaluate(url, user_agent=self._config.user_agent)
+        if advice.is_allowed:
+            return
+        reason = advice.disallow_reason or "robots.txt disallowed"
+        raise RobotsBlockedError(f"{url}: {reason}")
 
     def _send_with_retry(self, url: str) -> httpx.Response:
         last_response: httpx.Response | None = None
