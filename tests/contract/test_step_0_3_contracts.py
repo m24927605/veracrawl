@@ -568,3 +568,103 @@ def test_escalation_policy_rejects_non_chain_source_type() -> None:
         _valid_escalation_policy(
             allowed_transitions={AdapterType.SITEMAP: [AdapterType.HTTP]},
         )
+
+
+# Codex iter-3 fix-up: credential handle leak guard ----------------
+
+
+@pytest.mark.parametrize(
+    "leak",
+    [
+        "raw_secret:ebay-api-prod-12345",
+        "password=hunter2",
+        "TOKEN=abc.def.ghi",
+        "api_key:sk-xxx",
+        "AWS_SECRET_ACCESS_KEY=...",
+        "postgres://user:pass@host/db",
+    ],
+)
+def test_credential_scope_rejects_handle_that_looks_like_secret(leak: str) -> None:
+    """A producer that accidentally pastes the credential value into
+    ``credential_handle_ref`` would persist a raw secret into the
+    foundation registry — exactly the failure mode the docs/09
+    privacy classification forbids. Reuse the existing sensitive-
+    marker tripwire to fail-closed at construction."""
+    with pytest.raises(ValidationError):
+        _valid_credential_scope(credential_handle_ref=leak)
+
+
+# Codex iter-3 fix-up: header redaction guard ----------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("Authorization", "Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig"),
+        ("Cookie", "session=abc123def"),
+        ("Set-Cookie", "auth_token=xyz; HttpOnly"),
+        ("X-Api-Key", "sk_live_xxx"),
+        ("Proxy-Authorization", "Basic dXNlcjpwYXNz"),
+        ("X-Auth-Token", "token-12345"),
+    ],
+)
+def test_attempt_evidence_rejects_unredacted_request_header(name: str, value: str) -> None:
+    with pytest.raises(ValidationError):
+        _valid_attempt_evidence(request_headers_redacted={name: value})
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("Set-Cookie", "session=abc123def"),
+        ("X-Api-Key", "sk_live_xxx"),
+    ],
+)
+def test_attempt_evidence_rejects_unredacted_response_header(name: str, value: str) -> None:
+    with pytest.raises(ValidationError):
+        _valid_attempt_evidence(response_headers_redacted={name: value})
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("Authorization", "[REDACTED]"),
+        ("Cookie", "<REDACTED>"),
+        ("X-Api-Key", "***"),
+        ("Authorization", ""),  # empty is also acceptable
+        ("Authorization", "Bearer ***"),  # marker embedded
+    ],
+)
+def test_attempt_evidence_accepts_redacted_request_header(name: str, value: str) -> None:
+    ev = _valid_attempt_evidence(request_headers_redacted={name: value})
+    assert name in ev.request_headers_redacted
+
+
+def test_attempt_evidence_header_check_is_case_insensitive() -> None:
+    """``authorization`` / ``Authorization`` / ``AUTHORIZATION`` all
+    name the same HTTP header. The redaction guard normalises case
+    so an attacker can't sidestep by varying capitalisation."""
+    with pytest.raises(ValidationError):
+        _valid_attempt_evidence(
+            request_headers_redacted={"authorization": "Bearer abc.def.ghi"},
+        )
+
+
+def test_attempt_evidence_does_not_check_non_sensitive_headers() -> None:
+    """Non-sensitive headers like ``User-Agent`` carry meaningful
+    values that look nothing like redaction markers; the guard
+    must not reject them."""
+    ev = _valid_attempt_evidence(
+        request_headers_redacted={"User-Agent": "VeraCrawl/1.0 (+https://example.test)"}
+    )
+    assert "User-Agent" in ev.request_headers_redacted
+
+
+# Codex iter-3 fix-up: empty allowed_transitions rejection ---------
+
+
+def test_escalation_policy_rejects_empty_allowed_transitions() -> None:
+    """An escalation policy with no transitions admits no work and
+    contradicts the docstring's 'drop the policy ref instead' rule."""
+    with pytest.raises(ValidationError):
+        _valid_escalation_policy(allowed_transitions={})

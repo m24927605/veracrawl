@@ -70,10 +70,14 @@ _SENSITIVE_MARKERS = (
 )
 
 
+def _value_looks_like_secret(value: str) -> bool:
+    lowered = value.lower()
+    return any(marker in lowered for marker in _SENSITIVE_MARKERS)
+
+
 def _ensure_no_sensitive_values(values: list[str], field_name: str) -> None:
     for value in values:
-        lowered = value.lower()
-        if any(marker in lowered for marker in _SENSITIVE_MARKERS):
+        if _value_looks_like_secret(value):
             raise ValueError(f"{field_name} contains unredacted sensitive value")
 
 
@@ -462,6 +466,11 @@ class CredentialScope(TimestampedModel):
     def validate_scope(self) -> CredentialScope:
         if not self.credential_handle_ref.strip():
             raise ValueError("credential scope credential_handle_ref must be non-blank")
+        if _value_looks_like_secret(self.credential_handle_ref):
+            raise ValueError(
+                "credential scope credential_handle_ref must be an opaque vault "
+                "handle, not a credential value (matched a sensitive marker)"
+            )
         if not self.allowed_origins:
             raise ValueError("credential scope requires at least one allowed origin")
         for origin in self.allowed_origins:

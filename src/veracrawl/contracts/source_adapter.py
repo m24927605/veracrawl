@@ -212,6 +212,11 @@ class AdapterEscalationPolicy(TimestampedModel):
                 "adapter escalation policy max_escalations_per_run must be >= 1; "
                 "drop the policy ref to express 'no escalation allowed'"
             )
+        if not self.allowed_transitions:
+            raise ValueError(
+                "adapter escalation policy must declare at least one allowed transition; "
+                "drop the policy ref to express 'no escalation allowed'"
+            )
         for source, targets in self.allowed_transitions.items():
             if not targets:
                 raise ValueError(

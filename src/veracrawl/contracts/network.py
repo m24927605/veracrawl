@@ -23,6 +23,52 @@ def _is_valid_http_status(value: int) -> bool:
     return 100 <= value <= 599
 
 
+# Header names whose value carries a credential or session secret.
+# When NetworkAttemptEvidence stores these, the value must already be
+# redacted by the producer; persisting the raw bearer / cookie / api
+# key into evidence defeats the contract's privacy classification and
+# the design's per-attempt redaction acceptance criteria (Phase 1).
+_SENSITIVE_HEADER_NAMES = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "proxy-authorization",
+        "x-api-key",
+        "x-auth-token",
+        "x-session-token",
+        "x-csrf-token",
+    }
+)
+_REDACTION_MARKERS = ("[REDACTED]", "<REDACTED>", "***", "REDACTED")
+
+
+def _header_value_looks_redacted(value: str) -> bool:
+    """A redacted header value is empty or contains a redaction marker.
+
+    The producer is responsible for the actual redaction; this contract
+    just verifies the producer didn't forget — a missed redaction is
+    almost always an upstream wiring bug, and persisting the raw value
+    into a privacy-classified evidence row is exactly the regression we
+    want to catch at construction time.
+    """
+    if not value.strip():
+        return True
+    upper = value.upper()
+    return any(marker in upper for marker in _REDACTION_MARKERS)
+
+
+def _validate_redacted_headers(headers: dict[str, str], field_name: str) -> None:
+    for raw_name, raw_value in headers.items():
+        if raw_name.lower() in _SENSITIVE_HEADER_NAMES and not _header_value_looks_redacted(
+            raw_value
+        ):
+            raise ValueError(
+                f"{field_name} sensitive header {raw_name!r} value must be redacted; "
+                "expected a redaction marker (e.g., '[REDACTED]') or empty string"
+            )
+
+
 class NetworkRequest(TimestampedModel):
     id: str
     run_ref: Ref
@@ -320,6 +366,14 @@ class NetworkAttemptEvidence(TimestampedModel):
         if self.response_status is None and self.failure_class is None:
             raise ValueError(
                 "attempt evidence with no response requires failure_class to classify the attempt"
+            )
+        _validate_redacted_headers(
+            self.request_headers_redacted, "attempt evidence request_headers_redacted"
+        )
+        if self.response_headers_redacted is not None:
+            _validate_redacted_headers(
+                self.response_headers_redacted,
+                "attempt evidence response_headers_redacted",
             )
         return self
 
