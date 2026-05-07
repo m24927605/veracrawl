@@ -676,6 +676,92 @@ def test_schemeless_origin_with_path_normalizes_to_host() -> None:
     assert sum(fake.sleeps) > 0.0
 
 
+def test_credentialed_url_strips_userinfo_in_bucket_key() -> None:
+    # Codex iter-2 important: a credentialed URL must not produce a
+    # separate bucket — that would split AIMD state from the bare
+    # origin and risk leaking secrets via bucket-key telemetry. The
+    # throttle on ``user:pass@example.com`` must apply to plain
+    # ``https://example.com``.
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    with limiter.acquire(
+        origin="https://user:pass@example.com/path",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_throttled(permit=permit)
+    fake.sleeps.clear()
+    with limiter.acquire(
+        origin="https://example.com/other",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ):
+        pass
+    assert sum(fake.sleeps) > 0.0
+
+
+def test_credentialed_url_does_not_appear_in_prohibited_message() -> None:
+    fake = _FakeClock()
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    floor = RateLimitFloor(request_rate=(0, 60))
+    with pytest.raises(RateLimitProhibited) as exc_info:
+        with limiter.acquire(
+            origin="https://user:secret@example.com/path",
+            route_class=RouteClass.LISTING,
+            adapter_type=AdapterType.HTTP,
+            floor=floor,
+        ):
+            pass
+    msg = str(exc_info.value)
+    assert "user" not in msg
+    assert "secret" not in msg
+    assert "example.com" in msg
+
+
+def test_schemeless_credentialed_input_strips_userinfo() -> None:
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    with limiter.acquire(
+        origin="user:pw@example.com/path",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_throttled(permit=permit)
+    fake.sleeps.clear()
+    # Same host without credentials → same bucket → cooldown applies.
+    with limiter.acquire(
+        origin="example.com/other",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ):
+        pass
+    assert sum(fake.sleeps) > 0.0
+
+
+def test_explicit_port_preserved_in_bucket_key() -> None:
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    # Different ports are different origins per the URL spec.
+    with limiter.acquire(
+        origin="https://example.com:8443/path",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_throttled(permit=permit)
+    fake.sleeps.clear()
+    # Default-port (https → 443) is a *different* bucket.
+    with limiter.acquire(
+        origin="https://example.com/other",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ):
+        pass
+    assert sum(fake.sleeps) == 0.0
+
+
 def test_schemeless_does_not_synthesize_scheme() -> None:
     # Schemeless inputs key on bare host so two callers cannot share
     # a bucket because one passed ``http://`` and the other passed

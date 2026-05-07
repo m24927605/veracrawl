@@ -134,25 +134,44 @@ def test_permit_context_manager_releases_on_exception() -> None:
 
 def test_noop_limiter_grants_immediately_and_satisfies_protocol() -> None:
     limiter: RateLimiterPort = NoopRateLimiter()
-    permit = limiter.acquire(
+    with limiter.acquire(
         origin="https://example.com",
         route_class=RouteClass.LISTING,
         adapter_type=AdapterType.HTTP,
-    )
-    assert isinstance(permit, RateLimitPermit)
-    limiter.report_success(permit=permit)
+    ) as permit:
+        assert isinstance(permit, RateLimitPermit)
+        limiter.report_success(permit=permit)
+        # Report does NOT release — release is the context manager's
+        # job, matching ``InMemoryAimdLimiter`` semantics so callers
+        # can swap the implementation without changing lifecycle.
+        assert permit.released is False
     assert permit.released is True
 
 
-def test_noop_limiter_report_throttled_releases_permit() -> None:
+def test_noop_limiter_report_throttled_does_not_release() -> None:
     limiter = NoopRateLimiter()
-    permit = limiter.acquire(
+    with limiter.acquire(
         origin="https://example.com",
         route_class=RouteClass.LISTING,
         adapter_type=AdapterType.HTTP,
-    )
-    limiter.report_throttled(permit=permit, retry_after_seconds=12.0)
+    ) as permit:
+        limiter.report_throttled(permit=permit, retry_after_seconds=12.0)
+        assert permit.released is False
     assert permit.released is True
+
+
+def test_noop_limiter_marks_permit_reported() -> None:
+    limiter = NoopRateLimiter()
+    with limiter.acquire(
+        origin="https://example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_success(permit=permit)
+        assert permit.reported is True
+        # Idempotent: second report does not flip the flag back.
+        limiter.report_success(permit=permit)
+        assert permit.reported is True
 
 
 def test_noop_limiter_satisfies_runtime_protocol() -> None:

@@ -193,6 +193,9 @@ class InMemoryAimdLimiter:
         # forever inside ``_wait_for_grant`` would hang a worker and
         # also strand the per-origin concurrency slot.
         if floor is not None and not _is_finite_interval(floor.strictest_interval_seconds):
+            # Use the *normalized* origin (post userinfo strip) so the
+            # exception cannot leak credentials a caller smuggled in
+            # via the raw URL (codex iter-2 important).
             raise RateLimitProhibited(
                 f"floor signals full prohibition for origin {normalized_origin!r}"
             )
@@ -342,35 +345,59 @@ class InMemoryAimdLimiter:
 
 
 def _normalize_origin(origin: str) -> str:
-    """Lowercase scheme+host[:port], strip path/query/fragment.
+    """Lowercase scheme+host[:port], strip path/query/fragment + userinfo.
 
     The bucket key is the origin, not the URL — two URLs on the same
     host share the bucket. We accept either a bare ``host``, a
     ``scheme://host`` origin, or a full URL and reduce them to the
     canonical ``scheme://host[:port]`` form for keying.
 
+    Userinfo (``user:pass@``) is dropped explicitly. Codex iter-2
+    important: building from ``parts.netloc`` preserved userinfo, so
+    a caller passing ``https://user:pass@example.com/path`` would
+    have keyed a separate bucket containing credentials — splitting
+    rate-limit / concurrency state from ``https://example.com`` and
+    risking secret exposure in error messages or telemetry. We
+    rebuild the netloc from ``parts.hostname`` (already lowercased,
+    userinfo stripped) plus the explicit port, never trusting
+    ``parts.netloc`` as-is.
+
     Schemeless inputs (``example.com``, ``example.com/path?x=1``) are
     interpreted host-first: the host is the substring up to the first
-    ``/``, ``?`` or ``#``. Codex iter-1 minor: without this
-    normalization, ``example.com/listing`` and ``example.com/detail``
-    became distinct origins, which would silently split per-origin
-    AIMD state and bypass the concurrency cap. We never synthesise a
-    scheme the caller did not provide — schemeless inputs key on bare
-    host so two callers cannot accidentally share a bucket because
-    one passed ``http://`` and the other passed ``https://``.
+    ``/``, ``?`` or ``#``, and we then peel off any leading
+    ``user:pass@`` if present (a schemeless input could carry
+    userinfo too — same hygiene applies). Codex iter-1 minor:
+    schemeless inputs with paths previously became distinct origins,
+    silently splitting AIMD state and bypassing the concurrency cap.
+    We never synthesise a scheme the caller did not provide.
     """
 
     if not origin:
         return ""
     parts = urlsplit(origin)
-    if parts.scheme and parts.netloc:
-        return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
-    # Schemeless: split host from any path/query/fragment.
+    if parts.scheme and parts.hostname:
+        host = parts.hostname  # already lowercased; userinfo stripped
+        try:
+            port = parts.port
+        except ValueError:
+            # Malformed port — refuse to silently lose it; treat the
+            # whole origin as opaque (lowercased) instead.
+            return origin.lower()
+        if port is not None:
+            return f"{parts.scheme.lower()}://{host}:{port}"
+        return f"{parts.scheme.lower()}://{host}"
+    # Schemeless: split host from any path/query/fragment first…
     schemeless = origin.lower()
     for sep in ("/", "?", "#"):
         idx = schemeless.find(sep)
         if idx >= 0:
             schemeless = schemeless[:idx]
+    # …then strip leading ``user:pass@`` (defence in depth: a
+    # schemeless input that smuggled userinfo must not key a
+    # credential-bearing bucket either).
+    at_idx = schemeless.rfind("@")
+    if at_idx >= 0:
+        schemeless = schemeless[at_idx + 1 :]
     return schemeless
 
 
