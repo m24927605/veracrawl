@@ -33,15 +33,18 @@ parser for Python crawlers. We don't re-implement it; we wrap it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from time import monotonic
 from typing import Final
 from urllib.parse import urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
+
+import httpx
 
 from veracrawl.ports.robots import RobotsAdvice
 from veracrawl.runtime_support.logging import get_logger
@@ -49,8 +52,21 @@ from veracrawl.runtime_support.logging import get_logger
 _logger = get_logger(__name__)
 
 _DEFAULT_TTL_SECONDS: Final[float] = 3600.0
+# Short TTL for cached fetch failures (transport / 5xx). The design
+# requires fetch-once-per-host, but ``None`` returned without caching
+# meant every URL on a host triggered a fresh failing fetch during an
+# outage (codex iter-2 important). We cache failures briefly so
+# subsequent ``evaluate`` calls during the outage window short-circuit
+# without re-issuing the request, but still recover automatically once
+# the TTL elapses.
+_DEFAULT_FAILURE_TTL_SECONDS: Final[float] = 60.0
 _META_SUFFIX: Final[str] = ".meta.json"
 _BODY_SUFFIX: Final[str] = ".robots.txt"
+# Wall-clock failure marker for the on-disk cache: status code reserved
+# for "fetcher could not produce a real HTTP status" (transport error,
+# DNS failure, etc.). Persisted entries with this status are read back
+# as fail-closed regardless of body.
+_FETCH_FAILURE_STATUS: Final[int] = -1
 
 
 @dataclass(frozen=True)
@@ -72,7 +88,14 @@ RobotsFetcher = Callable[[str, str], RobotsFetchResult]
 @dataclass
 class _CachedEntry:
     parser: RobotFileParser
+    # Monotonic timestamp for in-memory TTL math. Monotonic time is
+    # immune to wall-clock jumps but is process-relative, so it is
+    # **not** persisted to disk (codex iter-2 important).
     fetched_at: float
+    # Wall-clock (epoch) timestamp persisted to disk so a fresh process
+    # / parser instance can compute TTL against its own clock without
+    # relying on the previous process's monotonic origin.
+    fetched_at_wallclock: float
     status: int
     # Track the robots URL alongside the parser. ``RobotFileParser`` does
     # carry an ``url`` attribute at runtime (set in ``__init__`` /
@@ -94,16 +117,26 @@ class UrllibRobotsParser:
     Construction parameters:
 
     * ``fetcher``: callable that fetches ``robots.txt`` for a given
-      ``robots_url`` using a given ``user_agent``. The fetcher is
-      injected so the parser is testable and so callers can wire it to
-      whatever transport the run uses (``StdlibHttpSourceAdapter`` for
-      production, a fake for tests).
-    * ``ttl_seconds``: in-memory + on-disk cache TTL. Defaults to one
-      hour, the same order of magnitude most well-behaved crawlers
-      use.
+      ``robots_url`` using a given ``user_agent``. The fetcher must be
+      a low-level HTTP client that **does not itself consult a
+      ``RobotsPort``** — using ``StdlibHttpSourceAdapter`` here would
+      cause infinite recursion (it now checks robots before every
+      fetch, so fetching ``/robots.txt`` would require evaluating
+      robots first). Use :func:`make_httpx_robots_fetcher` for
+      production wiring; tests inject a callable directly.
+    * ``ttl_seconds``: in-memory + on-disk cache TTL for successful
+      fetches. Defaults to one hour, the same order of magnitude most
+      well-behaved crawlers use.
+    * ``failure_ttl_seconds``: in-memory + on-disk cache TTL for fetch
+      failures (transport error / 5xx). Short by design (60s default)
+      so an outage doesn't pin fail-closed for an hour, but long
+      enough to avoid hammering an origin during a flap.
     * ``cache_dir``: optional directory for the on-disk cache. ``None``
       means "in-memory only" (still fetch-once-per-host per process).
-    * ``clock_fn``: monotonic-time injection for tests.
+    * ``clock_fn``: monotonic time for in-memory TTL math.
+    * ``wallclock_fn``: epoch / wall-clock time for the persisted
+      on-disk metadata. Monotonic time is process-relative and would
+      be invalid across process restarts (codex iter-2 important).
     """
 
     def __init__(
@@ -111,15 +144,21 @@ class UrllibRobotsParser:
         *,
         fetcher: RobotsFetcher,
         ttl_seconds: float = _DEFAULT_TTL_SECONDS,
+        failure_ttl_seconds: float = _DEFAULT_FAILURE_TTL_SECONDS,
         cache_dir: Path | None = None,
-        clock_fn: Callable[[], float] = monotonic,
+        clock_fn: Callable[[], float] = time.monotonic,
+        wallclock_fn: Callable[[], float] = time.time,
     ) -> None:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive")
+        if failure_ttl_seconds <= 0:
+            raise ValueError("failure_ttl_seconds must be positive")
         self._fetcher = fetcher
         self._ttl = ttl_seconds
+        self._failure_ttl = failure_ttl_seconds
         self._cache_dir = cache_dir
         self._clock = clock_fn
+        self._wallclock = wallclock_fn
         self._entries: dict[str, _CachedEntry] = {}
         self._global_lock = threading.Lock()
         self._host_locks: dict[str, threading.Lock] = {}
@@ -131,8 +170,8 @@ class UrllibRobotsParser:
     def evaluate(self, url: str, *, user_agent: str) -> RobotsAdvice:
         cache_key = _cache_key(url, user_agent)
         entry = self._get_or_fetch(cache_key=cache_key, url=url, user_agent=user_agent)
-        if entry is None:
-            # Failure to fetch and to recover from disk → fail closed.
+        if entry.status == _FETCH_FAILURE_STATUS:
+            # Cached fetch failure: fail-closed but don't re-issue.
             return RobotsAdvice(
                 is_allowed=False,
                 disallow_reason="robots.txt unavailable; cooperative crawler defaults to disallow",
@@ -149,7 +188,7 @@ class UrllibRobotsParser:
         cache_key: str,
         url: str,
         user_agent: str,
-    ) -> _CachedEntry | None:
+    ) -> _CachedEntry:
         # Per-(host, ua) lock so concurrent ``evaluate`` calls collapse
         # into a single fetch (design: fetch-once-per-host). The cache
         # key includes the user-agent because origins can serve UA-
@@ -158,20 +197,22 @@ class UrllibRobotsParser:
         # (codex iter-1 important).
         host_lock = self._lock_for_key(cache_key)
         with host_lock:
-            cached = self._entries.get(cache_key)
             now = self._clock()
-            if cached is not None and (now - cached.fetched_at) < self._ttl:
+            cached = self._entries.get(cache_key)
+            if cached is not None and not self._is_expired(cached, now=now):
                 return cached
             disk_entry = self._read_disk_cache(cache_key=cache_key, now=now)
             if disk_entry is not None:
                 self._entries[cache_key] = disk_entry
                 return disk_entry
-            fetched = self._fetch_with_fallback(url=url, user_agent=user_agent)
-            if fetched is None:
-                return None
-            self._entries[cache_key] = fetched
-            self._write_disk_cache(cache_key=cache_key, entry=fetched)
-            return fetched
+            entry = self._fetch_with_fallback(url=url, user_agent=user_agent)
+            self._entries[cache_key] = entry
+            self._write_disk_cache(cache_key=cache_key, entry=entry)
+            return entry
+
+    def _is_expired(self, entry: _CachedEntry, *, now: float) -> bool:
+        ttl = self._failure_ttl if entry.status == _FETCH_FAILURE_STATUS else self._ttl
+        return (now - entry.fetched_at) >= ttl
 
     def _lock_for_key(self, cache_key: str) -> threading.Lock:
         with self._global_lock:
@@ -181,7 +222,7 @@ class UrllibRobotsParser:
                 self._host_locks[cache_key] = lock
             return lock
 
-    def _fetch_with_fallback(self, *, url: str, user_agent: str) -> _CachedEntry | None:
+    def _fetch_with_fallback(self, *, url: str, user_agent: str) -> _CachedEntry:
         robots_url = _robots_url_for(url)
         try:
             result = self._fetcher(robots_url, user_agent)
@@ -191,7 +232,23 @@ class UrllibRobotsParser:
                 robots_url=robots_url,
                 error_type=type(exc).__name__,
             )
-            return None
+            # Cache the failure with a short TTL so subsequent
+            # ``evaluate`` calls during an outage short-circuit instead
+            # of re-issuing the failing request (codex iter-2
+            # important: fetch-once-per-host must hold under failure
+            # too). Synthesise a disallow-all parser so any read still
+            # fails closed.
+            failure_parser = _build_parser(
+                robots_url=robots_url, status=_FETCH_FAILURE_STATUS, body=""
+            )
+            return _CachedEntry(
+                parser=failure_parser,
+                fetched_at=self._clock(),
+                fetched_at_wallclock=self._wallclock(),
+                status=_FETCH_FAILURE_STATUS,
+                robots_url=robots_url,
+                body=None,
+            )
         parser = _build_parser(robots_url=robots_url, status=result.status, body=result.body)
         # Preserve the original body for synthesised parsers as ``None``
         # (404 → allow-all, 5xx → disallow-all). For 200 responses the
@@ -201,6 +258,7 @@ class UrllibRobotsParser:
         return _CachedEntry(
             parser=parser,
             fetched_at=self._clock(),
+            fetched_at_wallclock=self._wallclock(),
             status=result.status,
             robots_url=robots_url,
             body=body_for_cache,
@@ -227,11 +285,18 @@ class UrllibRobotsParser:
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             status = int(meta["status"])
-            fetched_at = float(meta["fetched_at"])
+            fetched_at_wallclock = float(meta["fetched_at_wallclock"])
             robots_url = str(meta["robots_url"])
         except (OSError, ValueError, KeyError):
             return None
-        if (now - fetched_at) >= self._ttl:
+        # TTL math against persisted entries uses wall-clock so it is
+        # valid across process restarts (codex iter-2 important —
+        # ``monotonic`` is process-relative and was previously
+        # persisted in error).
+        wall_now = self._wallclock()
+        elapsed_wall = wall_now - fetched_at_wallclock
+        ttl = self._failure_ttl if status == _FETCH_FAILURE_STATUS else self._ttl
+        if elapsed_wall < 0 or elapsed_wall >= ttl:
             return None
         # Body file may be absent for synthesised parsers (404 / 5xx
         # caches don't preserve a body — see ``body_for_cache`` above).
@@ -242,9 +307,13 @@ class UrllibRobotsParser:
             except OSError:
                 return None
         parser = _build_parser(robots_url=robots_url, status=status, body=body or "")
+        # Project the wall-clock age back onto the in-memory monotonic
+        # clock so the in-memory TTL math behaves identically whether
+        # the entry came from disk or from a live fetch.
         return _CachedEntry(
             parser=parser,
-            fetched_at=fetched_at,
+            fetched_at=now - elapsed_wall,
+            fetched_at_wallclock=fetched_at_wallclock,
             status=status,
             robots_url=robots_url,
             body=body,
@@ -263,15 +332,16 @@ class UrllibRobotsParser:
                 # a faithful round-trip (codex iter-1 important).
                 body_path.write_text(entry.body, encoding="utf-8")
             else:
-                # Synthesised parser (404 / 5xx) — clean up any prior
-                # body file so reads see "absent" consistently.
+                # Synthesised parser (404 / 5xx / fetch-failure) —
+                # clean up any prior body file so reads see "absent"
+                # consistently.
                 if body_path.exists():
                     body_path.unlink()
             meta_path.write_text(
                 json.dumps(
                     {
                         "status": entry.status,
-                        "fetched_at": entry.fetched_at,
+                        "fetched_at_wallclock": entry.fetched_at_wallclock,
                         "robots_url": entry.robots_url,
                     }
                 ),
@@ -320,14 +390,18 @@ def _safe_filename(cache_key: str) -> str:
     # via UA strings that could contain ``/`` or other separator
     # characters. The hash is used purely as a stable key — collisions
     # would only mean a fresh re-fetch.
-    import hashlib
-
     digest = hashlib.sha1(cache_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
     return digest
 
 
 def _build_parser(*, robots_url: str, status: int, body: str) -> RobotFileParser:
     parser = RobotFileParser(robots_url)
+    if status == _FETCH_FAILURE_STATUS:
+        # Cached fetch-failure marker: synthesise a disallow-all parser
+        # so any read fails closed even before the wrapper checks the
+        # status sentinel.
+        parser.parse(["User-agent: *", "Disallow: /"])
+        return parser
     if status == 404:
         # IETF guidance: 404 means "no rules" → allow all. We achieve
         # this by feeding an empty rule set.
@@ -379,8 +453,51 @@ def _advice_from_parser(
     )
 
 
+def make_httpx_robots_fetcher(
+    *,
+    timeout_s: float = 10.0,
+    transport: httpx.BaseTransport | None = None,
+) -> RobotsFetcher:
+    """Production-grade robots.txt fetcher.
+
+    Returns a callable that satisfies :data:`RobotsFetcher`. The
+    returned fetcher uses a **dedicated** :class:`httpx.Client` that
+    does **not** consult any :class:`RobotsPort` — this is the only
+    way to break the recursion otherwise implied by
+    "fetch ``robots.txt`` before fetching anything else"
+    (codex iter-2 critical). Callers must not wire
+    :class:`StdlibHttpSourceAdapter` here: that adapter now consults
+    :class:`RobotsPort` before every fetch, so using it to retrieve
+    ``/robots.txt`` would loop.
+
+    The fetcher honors the ``user_agent`` argument (so the single
+    source-of-truth UA is preserved end to end) and a small per-request
+    timeout. It does not implement retries, redirect following, or
+    the broader :class:`StdlibHttpSourceAdapter` policy machinery —
+    those layers belong to the caller-side fetch, not to robots
+    discovery. Network-level failures and non-2xx responses are
+    surfaced via :class:`RobotsFetchResult` so the caller's fail-closed
+    semantics apply uniformly.
+    """
+
+    def fetch(robots_url: str, user_agent: str) -> RobotsFetchResult:
+        client_kwargs: dict[str, object] = {
+            "timeout": httpx.Timeout(timeout_s),
+            "headers": {"User-Agent": user_agent},
+            "follow_redirects": False,
+        }
+        if transport is not None:
+            client_kwargs["transport"] = transport
+        with httpx.Client(**client_kwargs) as client:  # type: ignore[arg-type]
+            response = client.get(robots_url)
+            return RobotsFetchResult(status=int(response.status_code), body=response.text)
+
+    return fetch
+
+
 __all__ = [
     "RobotsFetchResult",
     "RobotsFetcher",
     "UrllibRobotsParser",
+    "make_httpx_robots_fetcher",
 ]

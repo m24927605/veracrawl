@@ -26,7 +26,12 @@ from veracrawl.contracts.enums import AdapterType
 from veracrawl.contracts.network import NetworkRequest
 from veracrawl.contracts.source_adapter import SourceAdapterCommand
 from veracrawl.fetch.acquisition import source_adapter_spec
-from veracrawl.ports.robots import RobotsAdvice
+from veracrawl.ports.robots import NoopRobotsPort, RobotsAdvice
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    with_runtime_mode,
+)
 
 
 def _make_request(url: str = "https://example.test/p/1") -> NetworkRequest:
@@ -229,6 +234,54 @@ def test_robots_blocked_error_is_value_error_subclass() -> None:
     """
 
     assert issubclass(RobotsBlockedError, ValueError)
+
+
+# -- codex iter-2 regression: production-mode gate ----------------
+
+
+def test_production_mode_with_default_noop_port_fails_closed() -> None:
+    """Codex iter-2 critical: ``NoopRobotsPort`` default in production
+    silently bypasses robots. The adapter must fail closed when
+    constructed under ``RuntimeMode.PRODUCTION`` with no real port.
+    """
+
+    with with_runtime_mode(RuntimeMode.PRODUCTION):
+        with pytest.raises(ProductionRuntimeNotImplemented) as exc:
+            StdlibHttpSourceAdapter(
+                _make_request("https://example.test/p/1"),
+                transport=_ok_transport(),
+            )
+    assert exc.value.backend == "robots"
+
+
+def test_production_mode_with_real_port_succeeds() -> None:
+    """Production mode must accept any non-noop port — the gate only
+    refuses to silently bypass; it does not refuse legitimate wiring."""
+
+    real_port = _StubRobotsPort(advice=RobotsAdvice(is_allowed=True))
+    with with_runtime_mode(RuntimeMode.PRODUCTION):
+        adapter = StdlibHttpSourceAdapter(
+            _make_request("https://example.test/p/1"),
+            config=HttpClientConfig(robots_port=real_port),
+            transport=_ok_transport(),
+        )
+    result = adapter.execute(_make_command())
+    assert result.status.value == "succeeded"
+
+
+def test_fixture_mode_with_noop_port_keeps_working() -> None:
+    """Fixture mode keeps the design's "default no-op for boundary
+    acceptance" — the gate is production-only.
+    """
+
+    with with_runtime_mode(RuntimeMode.FIXTURE):
+        adapter = StdlibHttpSourceAdapter(
+            _make_request("https://example.test/p/1"),
+            config=HttpClientConfig(robots_port=NoopRobotsPort()),
+            transport=_ok_transport(),
+        )
+    result = adapter.execute(_make_command())
+    assert result.status.value == "succeeded"
 
 
 def test_acquisition_layer_handler_catches_robots_blocked_error() -> None:

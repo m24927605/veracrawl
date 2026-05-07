@@ -31,6 +31,7 @@ from pathlib import Path
 from veracrawl.adapters.network.urllib_robots import (
     RobotsFetchResult,
     UrllibRobotsParser,
+    make_httpx_robots_fetcher,
 )
 from veracrawl.ports.robots import RobotsPort
 
@@ -223,24 +224,28 @@ def test_concurrent_fetch_is_collapsed_to_one(tmp_path: Path) -> None:
 def test_on_disk_cache_persists_across_parser_instances(tmp_path: Path) -> None:
     counter: list[tuple[str, str]] = []
     fetcher = _make_fetcher(_allow_all_robots(), counter=counter)
-    clock = [1000.0]
+    monotonic_clock = [1000.0]
+    wallclock = [1_700_000_000.0]
 
     parser_a = UrllibRobotsParser(
         fetcher=fetcher,
         cache_dir=tmp_path,
         ttl_seconds=60.0,
-        clock_fn=lambda: clock[0],
+        clock_fn=lambda: monotonic_clock[0],
+        wallclock_fn=lambda: wallclock[0],
     )
     parser_a.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
     assert len(counter) == 1
 
     # New process / new parser instance — fetcher should NOT be hit
-    # because the on-disk entry is fresh.
+    # because the on-disk entry is fresh. We advance both clocks by
+    # the same amount so the wall-clock TTL on disk is still valid.
     parser_b = UrllibRobotsParser(
         fetcher=fetcher,
         cache_dir=tmp_path,
         ttl_seconds=60.0,
-        clock_fn=lambda: clock[0] + 30.0,  # within TTL
+        clock_fn=lambda: monotonic_clock[0] + 30.0,
+        wallclock_fn=lambda: wallclock[0] + 30.0,
     )
     parser_b.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
     assert len(counter) == 1
@@ -249,21 +254,25 @@ def test_on_disk_cache_persists_across_parser_instances(tmp_path: Path) -> None:
 def test_on_disk_cache_re_fetch_after_ttl(tmp_path: Path) -> None:
     counter: list[tuple[str, str]] = []
     fetcher = _make_fetcher(_allow_all_robots(), counter=counter)
-    clock = [1000.0]
+    monotonic_clock = [1000.0]
+    wallclock = [1_700_000_000.0]
 
     parser_a = UrllibRobotsParser(
         fetcher=fetcher,
         cache_dir=tmp_path,
         ttl_seconds=60.0,
-        clock_fn=lambda: clock[0],
+        clock_fn=lambda: monotonic_clock[0],
+        wallclock_fn=lambda: wallclock[0],
     )
     parser_a.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
 
+    # Past TTL on the wall clock — disk cache must not satisfy the read.
     parser_b = UrllibRobotsParser(
         fetcher=fetcher,
         cache_dir=tmp_path,
         ttl_seconds=60.0,
-        clock_fn=lambda: clock[0] + 200.0,  # past TTL
+        clock_fn=lambda: monotonic_clock[0] + 200.0,
+        wallclock_fn=lambda: wallclock[0] + 200.0,
     )
     parser_b.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
     assert len(counter) == 2
@@ -327,6 +336,106 @@ def test_distinct_user_agents_each_trigger_a_fetch() -> None:
     assert len(counter) == 2
     # Each fetch carried its own UA — the fetcher saw both.
     assert {ua for _, ua in counter} == {"VeraCrawlA/1", "VeraCrawlB/1"}
+
+
+# -- codex iter-2 regression tests --------------------------------
+
+
+def test_failed_fetch_is_cached_for_short_ttl() -> None:
+    """Transport failures cache a fail-closed marker for a short TTL.
+
+    Codex iter-2 important: returning ``None`` without caching meant
+    every URL on a host triggered a fresh failing fetch during an
+    outage, breaking the fetch-once-per-host guarantee.
+    """
+
+    counter = [0]
+
+    def failing_fetcher(robots_url: str, user_agent: str) -> RobotsFetchResult:
+        counter[0] += 1
+        raise RuntimeError("transport down")
+
+    monotonic_clock = [1000.0]
+    parser = UrllibRobotsParser(
+        fetcher=failing_fetcher,
+        ttl_seconds=3600.0,
+        failure_ttl_seconds=60.0,
+        clock_fn=lambda: monotonic_clock[0],
+        wallclock_fn=lambda: 1_700_000_000.0 + (monotonic_clock[0] - 1000.0),
+    )
+    # Three evaluations during the outage → one fetch attempt.
+    parser.evaluate("https://example.test/a", user_agent=_DEFAULT_UA)
+    parser.evaluate("https://example.test/b", user_agent=_DEFAULT_UA)
+    parser.evaluate("https://example.test/c", user_agent=_DEFAULT_UA)
+    assert counter[0] == 1
+
+
+def test_failure_cache_expires_after_failure_ttl_and_retries() -> None:
+    counter = [0]
+
+    def flapping_fetcher(robots_url: str, user_agent: str) -> RobotsFetchResult:
+        counter[0] += 1
+        raise RuntimeError("transport down")
+
+    monotonic_clock = [1000.0]
+    parser = UrllibRobotsParser(
+        fetcher=flapping_fetcher,
+        ttl_seconds=3600.0,
+        failure_ttl_seconds=60.0,
+        clock_fn=lambda: monotonic_clock[0],
+    )
+    parser.evaluate("https://example.test/a", user_agent=_DEFAULT_UA)
+    monotonic_clock[0] = 1100.0  # past failure_ttl
+    parser.evaluate("https://example.test/b", user_agent=_DEFAULT_UA)
+    assert counter[0] == 2
+
+
+def test_disk_cache_metadata_uses_wallclock_not_monotonic(tmp_path: Path) -> None:
+    """On-disk metadata uses wall-clock time so it survives process restarts.
+
+    Codex iter-2 important: monotonic time is process-relative, so a
+    persisted ``monotonic()`` timestamp is meaningless to the next
+    process. Reading the meta file should be a wall-clock value.
+    """
+
+    counter: list[tuple[str, str]] = []
+    fetcher = _make_fetcher(_allow_all_robots(), counter=counter)
+
+    parser = UrllibRobotsParser(
+        fetcher=fetcher,
+        cache_dir=tmp_path,
+        ttl_seconds=3600.0,
+        clock_fn=lambda: 1000.0,  # monotonic — small number
+        wallclock_fn=lambda: 1_700_000_000.0,  # wall clock — epoch-scale
+    )
+    parser.evaluate("https://example.test/", user_agent=_DEFAULT_UA)
+
+    meta_files = list(tmp_path.glob("*.meta.json"))
+    assert len(meta_files) == 1
+    import json as _json  # local import — keep test surface obvious
+
+    meta = _json.loads(meta_files[0].read_text(encoding="utf-8"))
+    assert "fetched_at_wallclock" in meta
+    assert meta["fetched_at_wallclock"] >= 1_000_000_000.0
+    # Crucially: no leftover monotonic field on disk.
+    assert "fetched_at" not in meta or meta.get("fetched_at") is None
+
+
+def test_make_httpx_robots_fetcher_returns_callable_with_correct_signature() -> None:
+    """The production helper returns a fetcher with the documented shape.
+
+    Codex iter-2 critical: production callers must use a low-level
+    fetcher that does not consult ``RobotsPort``; this helper exists
+    so the recursion isn't possible by construction.
+    """
+
+    fetcher = make_httpx_robots_fetcher(timeout_s=5.0)
+    # Callable with the (robots_url, user_agent) -> RobotsFetchResult shape.
+    import inspect
+
+    sig = inspect.signature(fetcher)
+    params = list(sig.parameters)
+    assert len(params) == 2
 
 
 def test_disk_cache_preserves_original_body_verbatim(tmp_path: Path) -> None:

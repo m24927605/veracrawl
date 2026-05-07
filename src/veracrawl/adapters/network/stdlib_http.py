@@ -51,6 +51,11 @@ from veracrawl.contracts.network import NetworkRequest, NetworkResponse, Redirec
 from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapterResult
 from veracrawl.ports.network import NetworkClientResult
 from veracrawl.ports.robots import NoopRobotsPort, RobotsPort
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
+)
 
 _DEFAULT_CHROME_UA: Final[str] = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -325,6 +330,20 @@ class StdlibHttpSourceAdapter:
     ) -> None:
         self.request = request
         self._config = config or _default_config_from_request(request)
+        # Production-mode robots gate (codex iter-2 critical): the
+        # default ``HttpClientConfig.robots_port`` is ``NoopRobotsPort``
+        # so existing fixture tests keep passing. In production the
+        # no-op would silently bypass robots enforcement, which the
+        # cooperative-crawler charter (``docs/09:116``) forbids; raise
+        # so an unwired production deployment fails closed instead of
+        # quietly fetching robots-blocked URLs.
+        if current_mode() == RuntimeMode.PRODUCTION and isinstance(
+            self._config.robots_port, NoopRobotsPort
+        ):
+            raise ProductionRuntimeNotImplemented(
+                backend="robots",
+                gate="StdlibHttpSourceAdapter",
+            )
         self._sleep = sleep_fn
         self._jitter: Callable[[], float] = (
             jitter_fn if jitter_fn is not None else lambda: random.uniform(0, 1)
