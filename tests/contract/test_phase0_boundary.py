@@ -347,6 +347,146 @@ def test_credential_scope_violation_redacts_tainted_reason(tainted_reason: str) 
     assert err.reason == tainted_reason
 
 
+# Codex iter-2 important: scope_ref redaction --------------------
+
+
+@pytest.mark.parametrize(
+    "tainted_scope",
+    [
+        "raw_secret:ebay-api-prod",
+        "password=hunter2",
+        "token=eyJhbGc",
+        "api_key=sk-XXX",
+        "Bearer eyJhbGc.payload.sig",
+    ],
+)
+def test_credential_scope_violation_redacts_tainted_scope_ref(tainted_scope: str) -> None:
+    """Even though the contract docs require scope_ref to be an
+    opaque handle, the constructor must not depend on another
+    validator to enforce that — a caller could plausibly pass an
+    unvalidated string."""
+    err = CredentialScopeViolation(
+        scope_ref=tainted_scope,
+        requested_origin="https://api.ebay.com",
+        requested_route="/items",
+        requested_method="GET",
+        reason="not in scope",
+    )
+    msg = str(err)
+    for leak in ("password=", "token=", "api_key=", "Bearer ", "raw_secret:", "eyJhbGc", "sk-XXX"):
+        assert leak.lower() not in msg.lower(), (
+            f"CredentialScopeViolation leaked {leak!r} from tainted "
+            f"scope_ref {tainted_scope!r}: msg={msg}"
+        )
+    # Structured attribute keeps the raw value (audit pipeline's
+    # responsibility to redact again before persisting).
+    assert err.scope_ref == tainted_scope
+
+
+# Codex iter-2 important: route query/fragment unconditional strip
+
+
+@pytest.mark.parametrize(
+    "tainted_route",
+    [
+        "/items?session=abc123",  # session id (not in marker tuple)
+        "/items?sid=def456",
+        "/items?access_token=XXX",  # access_token (not in marker tuple)
+        "/items?code=oauth-grant-123",  # OAuth code
+        "/items?email=user@example.test",  # PII
+        "/items?jwt=eyJhbGc.payload.sig",
+        "/items#access_token=XXX",  # fragment-bearing
+        "/items?user=alice&session=abc",  # multiple params
+    ],
+)
+def test_credential_scope_violation_strips_route_query_unconditionally(
+    tainted_route: str,
+) -> None:
+    """Beyond the small marker list, query strings carry session ids,
+    OAuth codes, JWTs, email addresses, and other PII that the
+    substring matcher does not recognise. Route fields must be
+    treated as URL paths and have query / fragment dropped
+    regardless of content."""
+    err = CredentialScopeViolation(
+        scope_ref="credential-scope:ebay",
+        requested_origin="https://api.ebay.com",
+        requested_route=tainted_route,
+        requested_method="GET",
+        reason="x",
+    )
+    msg = str(err)
+    # Neither ``?`` nor ``#`` should appear in the formatted route
+    # (they're stripped); none of the parameter values should leak.
+    for leak in (
+        "session=",
+        "sid=",
+        "access_token=",
+        "code=",
+        "email=",
+        "jwt=",
+        "user=",
+        "abc123",
+        "def456",
+        "oauth-grant-123",
+        "user@example",
+        "eyJhbGc",
+    ):
+        assert leak.lower() not in msg.lower(), (
+            f"CredentialScopeViolation leaked {leak!r} from tainted "
+            f"route {tainted_route!r}: msg={msg}"
+        )
+
+
+# Codex iter-2 important: malformed URL must not crash constructor
+
+
+@pytest.mark.parametrize(
+    "malformed_origin",
+    [
+        "https://example.com:bad/path",  # non-numeric port
+        "https://example.com:99999/path",  # out-of-range port
+        "https://[invalid-ipv6/path",
+        "https://",
+    ],
+)
+def test_credential_scope_violation_handles_malformed_origin(
+    malformed_origin: str,
+) -> None:
+    """The constructor must produce a policy exception even on
+    malformed caller input — crashing with an unrelated ValueError
+    here would prevent ``StrictAllowlistScope`` from raising the
+    typed scope refusal at all."""
+    err = CredentialScopeViolation(
+        scope_ref="credential-scope:ebay",
+        requested_origin=malformed_origin,
+        requested_route="/items",
+        requested_method="GET",
+        reason="malformed origin",
+    )
+    # Constructor produced a real exception with the structured
+    # attribute preserved.
+    assert isinstance(err, CredentialScopeViolation)
+    assert err.requested_origin == malformed_origin
+
+
+# Codex iter-2 minor: provider-neutral message ------------------
+
+
+def test_model_provider_error_message_is_provider_neutral() -> None:
+    """After moving ``ModelProviderError`` to the provider-neutral
+    module, the formatted message must not mention OpenAI (it would
+    mislabel future Anthropic / other-provider raises)."""
+    from veracrawl.adapters.model_providers.errors import ModelProviderError
+
+    err = ModelProviderError(status_code=500, error_code="SERVER_ERROR", request_id="req_x")
+    msg = str(err)
+    assert "openai" not in msg.lower()
+    assert "model provider" in msg.lower()
+    assert "500" in msg
+    assert "SERVER_ERROR" in msg
+    assert "req_x" in msg
+
+
 # Catch-compatibility lockdown for the three new subclasses.
 
 

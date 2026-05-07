@@ -51,8 +51,13 @@ class ModelProviderError(RuntimeError):
         self.error_code = error_code
         self.request_id = request_id
         request_id_repr = request_id if request_id is not None else "<none>"
+        # Provider-neutral message (codex iter-2 minor): the v2
+        # ModelProviderPort is provider-blind, so its base exception
+        # cannot privilege one provider in the message text. Concrete
+        # adapters that want a provider-flavored message can subclass
+        # and override.
         super().__init__(
-            f"OpenAI Responses API error: status={status_code} "
+            f"model provider error: status={status_code} "
             f"code={error_code} request_id={request_id_repr}"
         )
 

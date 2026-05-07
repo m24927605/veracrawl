@@ -74,11 +74,21 @@ def _redact_url(value: str) -> str:
     """Strip query / fragment / userinfo from a URL before logging.
 
     URL paths are usually safe; URL queries frequently carry API keys
-    (``?api_key=...``), session tokens, or PII. Phase 0 cannot tell
-    which, so the safest move is to drop the query and fragment
-    entirely. Userinfo (``user:pass@host``) is always credential-
-    bearing; strip it too. A field that doesn't parse as a URL is
-    redacted as a plain string.
+    (``?api_key=...``), session tokens, or PII (``email=`` /
+    ``code=`` / ``access_token=`` / ``jwt=`` / ``sid=``...). Phase 0
+    cannot enumerate every safe parameter name, so the policy is
+    drop-everything: the formatted message keeps only scheme + host +
+    path, with userinfo (``user:pass@host``) stripped because it is
+    always credential-bearing.
+
+    Defensive parsing: ``urlsplit`` itself does not raise on the
+    inputs we care about, but reading ``parts.port`` raises
+    ``ValueError`` for malformed authorities like ``host:bad``. Wrap
+    the access so a malformed URL becomes a plain ``[REDACTED]``
+    instead of an unrelated ``ValueError`` that would prevent the
+    policy exception from being raised at all (codex iter-2
+    important: an exception constructor must not crash on caller
+    input).
     """
     if "://" not in value:
         return _redact_field(value)
@@ -87,10 +97,31 @@ def _redact_url(value: str) -> str:
     except ValueError:
         return _redact_field(value)
     netloc = parts.hostname or ""
-    if parts.port is not None:
-        netloc = f"{netloc}:{parts.port}"
+    try:
+        port = parts.port
+    except ValueError:
+        # Malformed authority — fall back to bare hostname, no port.
+        port = None
+    if port is not None:
+        netloc = f"{netloc}:{port}"
     sanitized = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
     return _redact_field(sanitized)
+
+
+def _redact_route(value: str) -> str:
+    """Strip query / fragment from a route path before logging.
+
+    A route is a URL path component (no scheme / host) — the typical
+    leak vector is ``?session=...`` / ``?api_key=...`` / ``#code=...``
+    appended to a real route. Treating the route as plain text via
+    ``_redact_field`` only catches the small marker list and lets
+    other PII parameter names slip through. Drop the query and
+    fragment unconditionally instead, then run the path-only result
+    through the marker check as a final safety net.
+    """
+    path = value.split("#", 1)[0]
+    path = path.split("?", 1)[0]
+    return _redact_field(path)
 
 
 class RetryableError(Exception):
@@ -214,11 +245,19 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
         self.requested_route = requested_route
         self.requested_method = requested_method
         self.reason = reason
+        # Even though the contract requires scope_ref to be an opaque
+        # vault handle (``CredentialScope`` validator already enforces
+        # this), this exception's constructor is public — caller code
+        # could plausibly pass a bogus handle. Run scope_ref through
+        # the redactor too so this exception type's contract (no
+        # secrets in the formatted message) does not depend on a
+        # different validator's behavior (codex iter-2 important).
+        safe_scope = _redact_field(scope_ref)
         safe_origin = _redact_url(requested_origin)
-        safe_route = _redact_field(requested_route)
+        safe_route = _redact_route(requested_route)
         safe_reason = _redact_field(reason)
         safe_method = _redact_field(requested_method)
         super().__init__(
             f"credential scope refused {safe_method} "
-            f"{safe_origin}{safe_route} (scope={scope_ref}): {safe_reason}"
+            f"{safe_origin}{safe_route} (scope={safe_scope}): {safe_reason}"
         )
