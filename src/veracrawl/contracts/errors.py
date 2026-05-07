@@ -102,3 +102,41 @@ class AdapterConformanceError(VeraCrawlError):
 
 class ImportBoundaryError(VeraCrawlError):
     """Raised when a core package imports forbidden dependencies."""
+
+
+class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
+    """Raised when ``StrictAllowlistScope`` (Phase 2 step 2.2) refuses
+    a credential-bearing request because its origin / route pattern /
+    method falls outside the ``CredentialScope`` allowlist.
+
+    Inherits :class:`VeraCrawlError` so existing
+    ``except VeraCrawlError`` handlers continue to match, and mixes in
+    :class:`PolicyViolation` so generic dispatch
+    (``except PolicyViolation:``) catches scope refusals alongside
+    other policy refusals (egress / redirect / token-budget /
+    structured-output).
+
+    The exception carries the (opaque) credential scope ref and the
+    requested origin / route / method so the audit trail can pinpoint
+    *which* request the policy refused without exposing the credential
+    value.
+    """
+
+    def __init__(
+        self,
+        *,
+        scope_ref: str,
+        requested_origin: str,
+        requested_route: str,
+        requested_method: str,
+        reason: str,
+    ) -> None:
+        self.scope_ref = scope_ref
+        self.requested_origin = requested_origin
+        self.requested_route = requested_route
+        self.requested_method = requested_method
+        self.reason = reason
+        super().__init__(
+            f"credential scope refused {requested_method} "
+            f"{requested_origin}{requested_route} (scope={scope_ref}): {reason}"
+        )

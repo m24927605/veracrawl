@@ -35,7 +35,7 @@ import httpx
 
 from veracrawl.contracts.agent import ModelRequest, ModelResponse
 from veracrawl.contracts.common import stable_hash
-from veracrawl.contracts.errors import FatalError, RetryableError
+from veracrawl.contracts.errors import FatalError, PolicyViolation, RetryableError
 
 _RESPONSES_ENDPOINT: Final[str] = "https://api.openai.com/v1/responses"
 _REQUEST_ID_HEADER: Final[str] = "x-request-id"
@@ -99,6 +99,30 @@ class ProviderAdapterFailure(ModelProviderError, FatalError):
     """Catch-all for transport / decode failures the adapter could not classify."""
 
 
+class TokenBudgetExceeded(ModelProviderError, PolicyViolation):
+    """Raised when a model call would push run-level token usage past
+    the declared ``TokenBudget`` (Phase 4 ``OutboxBackedBudget``).
+
+    The exception is a ``PolicyViolation`` rather than a ``RetryableError``
+    because retrying without changing the budget would just trigger the
+    same refusal. Phase 5 ``RecoveryPort`` is expected to map this to
+    ``RecoveryDecisionKind.ABANDON`` or ``REQUEST_REVIEW``.
+    """
+
+
+class StructuredOutputViolation(ModelProviderError, PolicyViolation):
+    """Raised when a model returns JSON that does not validate against
+    the declared ``ResponseFormat.json_schema`` (Phase 4 OpenAI / Anthropic
+    adapters apply this on the parsed payload).
+
+    Marker is ``PolicyViolation``: the contract requires schema-valid
+    output and the adapter's job is to surface the contract breach,
+    not silently coerce or retry. Recovery may legitimately ask the
+    same model again with a follow-up prompt, but that's a Phase 5
+    runtime decision, not the contract layer's call.
+    """
+
+
 _ERROR_CODE_TO_CLASS: dict[str, type[ModelProviderError]] = {
     "AUTH_FAILED": ProviderAuthFailed,
     "RATE_LIMITED": ProviderRateLimited,
@@ -106,6 +130,8 @@ _ERROR_CODE_TO_CLASS: dict[str, type[ModelProviderError]] = {
     "BAD_REQUEST": ProviderBadRequest,
     "NOT_FOUND": ProviderNotFound,
     "ADAPTER_FAILURE": ProviderAdapterFailure,
+    "TOKEN_BUDGET_EXCEEDED": TokenBudgetExceeded,
+    "STRUCTURED_OUTPUT_VIOLATION": StructuredOutputViolation,
 }
 
 
@@ -213,9 +239,7 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
             request.id,
             f"context_bundle_ref={request.context_bundle_id}",
         )
-        response = self._create_response(
-            request=request, context_payload=context_payload
-        )
+        response = self._create_response(request=request, context_payload=context_payload)
         response_id = str(response.get("id", f"response:{request.id}"))
         output_text = _extract_output_text(response)
         self._token_usage[request.id] = _extract_usage(response)
@@ -266,9 +290,7 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
         last_response: httpx.Response | None = None
         for attempt in range(1, self._max_attempts + 1):
             try:
-                http_response = self._client.post(
-                    self._endpoint, json=body, headers=headers
-                )
+                http_response = self._client.post(self._endpoint, json=body, headers=headers)
             except httpx.HTTPError as exc:
                 if attempt >= self._max_attempts or not _is_retryable_transport(exc):
                     raise classify_provider_error(
@@ -283,9 +305,7 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
                 last_response = http_response
                 if attempt >= self._max_attempts:
                     break
-                wait = _parse_retry_after(
-                    http_response.headers.get(_RETRY_AFTER_HEADER)
-                )
+                wait = _parse_retry_after(http_response.headers.get(_RETRY_AFTER_HEADER))
                 if wait is None:
                     wait = _backoff_seconds(attempt, jitter=self._jitter)
                 wait = min(wait, _RETRY_AFTER_CAP_S)
@@ -342,9 +362,7 @@ def build_model_provider(
 ) -> OpenAIResponsesModelProviderRuntimeAdapter:
     resolved_key = api_key or os.getenv("OPENAI_API_KEY")
     if not resolved_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY is required for OpenAI Responses API adapter"
-        )
+        raise RuntimeError("OPENAI_API_KEY is required for OpenAI Responses API adapter")
     resolved_model = model_id or os.getenv("VERACRAWL_OPENAI_MODEL")
     if not resolved_model:
         raise RuntimeError(
