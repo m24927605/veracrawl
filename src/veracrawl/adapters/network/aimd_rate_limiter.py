@@ -39,6 +39,7 @@ can be layered on later without changing the contract surface.
 
 from __future__ import annotations
 
+import math
 import random
 import threading
 import time
@@ -52,6 +53,7 @@ from veracrawl.contracts.enums import AdapterType, RouteClass
 from veracrawl.ports.rate_limiter import (
     RateLimitFloor,
     RateLimitPermit,
+    RateLimitProhibited,
 )
 from veracrawl.runtime_support.logging import get_logger
 
@@ -185,6 +187,15 @@ class InMemoryAimdLimiter:
 
         normalized_origin = _normalize_origin(origin)
         bucket_key = (normalized_origin, route_class, adapter_type)
+        # Codex iter-1 important: refuse the request before acquiring
+        # the semaphore slot when the floor signals a full prohibition
+        # (currently ``Request-rate: 0/N`` → infinite interval). Sleeping
+        # forever inside ``_wait_for_grant`` would hang a worker and
+        # also strand the per-origin concurrency slot.
+        if floor is not None and not _is_finite_interval(floor.strictest_interval_seconds):
+            raise RateLimitProhibited(
+                f"floor signals full prohibition for origin {normalized_origin!r}"
+            )
         sem = self._semaphore_for(normalized_origin)
         sem.acquire()
         permit_released = threading.Event()
@@ -215,6 +226,13 @@ class InMemoryAimdLimiter:
             raise
 
     def report_success(self, *, permit: RateLimitPermit) -> None:
+        # Codex iter-1 important: AIMD state mutation is one-shot per
+        # permit. ``mark_reported`` returns ``True`` only for the first
+        # caller; duplicate reports become no-ops so the success
+        # counter cannot be inflated and an additive-increase tick
+        # cannot fire spuriously.
+        if not permit.mark_reported():
+            return
         bucket = self._lookup_bucket(permit.bucket_key)
         if bucket is None:
             return
@@ -233,6 +251,11 @@ class InMemoryAimdLimiter:
         permit: RateLimitPermit,
         retry_after_seconds: float | None = None,
     ) -> None:
+        # Codex iter-1 important: same one-shot guarantee as
+        # ``report_success`` — duplicate report calls must not stack
+        # multiplicative decreases or repeatedly extend the cooldown.
+        if not permit.mark_reported():
+            return
         bucket = self._lookup_bucket(permit.bucket_key)
         if bucket is None:
             return
@@ -324,9 +347,17 @@ def _normalize_origin(origin: str) -> str:
     The bucket key is the origin, not the URL — two URLs on the same
     host share the bucket. We accept either a bare ``host``, a
     ``scheme://host`` origin, or a full URL and reduce them to the
-    canonical ``scheme://host[:port]`` form for keying. ``host`` alone
-    keeps the lowered host (no scheme) as the key — the limiter does
-    not synthesise a scheme it cannot prove.
+    canonical ``scheme://host[:port]`` form for keying.
+
+    Schemeless inputs (``example.com``, ``example.com/path?x=1``) are
+    interpreted host-first: the host is the substring up to the first
+    ``/``, ``?`` or ``#``. Codex iter-1 minor: without this
+    normalization, ``example.com/listing`` and ``example.com/detail``
+    became distinct origins, which would silently split per-origin
+    AIMD state and bypass the concurrency cap. We never synthesise a
+    scheme the caller did not provide — schemeless inputs key on bare
+    host so two callers cannot accidentally share a bucket because
+    one passed ``http://`` and the other passed ``https://``.
     """
 
     if not origin:
@@ -334,7 +365,19 @@ def _normalize_origin(origin: str) -> str:
     parts = urlsplit(origin)
     if parts.scheme and parts.netloc:
         return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
-    return origin.lower()
+    # Schemeless: split host from any path/query/fragment.
+    schemeless = origin.lower()
+    for sep in ("/", "?", "#"):
+        idx = schemeless.find(sep)
+        if idx >= 0:
+            schemeless = schemeless[:idx]
+    return schemeless
+
+
+def _is_finite_interval(seconds: float) -> bool:
+    """Return ``True`` if ``seconds`` is a finite, non-NaN number."""
+
+    return math.isfinite(seconds)
 
 
 __all__ = ["InMemoryAimdLimiter"]

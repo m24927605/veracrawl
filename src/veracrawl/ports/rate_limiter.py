@@ -41,6 +41,7 @@ exactly once and the AIMD state stays consistent.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
@@ -48,6 +49,19 @@ from types import TracebackType
 from typing import Protocol, runtime_checkable
 
 from veracrawl.contracts.enums import AdapterType, RouteClass
+
+
+class RateLimitProhibited(Exception):
+    """Raised when the floor signals a full prohibition for the bucket.
+
+    Triggered when :attr:`RateLimitFloor.strictest_interval_seconds`
+    is infinite — currently the ``Request-rate: 0/N`` directive,
+    which the robots.txt spec interprets as "do not fetch". The
+    cooperative crawler must abandon (or re-route) instead of
+    sleeping forever; raising lets callers map the failure to a typed
+    ``RobotsBlockedError`` / refusal at the adapter layer rather than
+    silently hanging a worker.
+    """
 
 
 @dataclass(frozen=True)
@@ -107,28 +121,55 @@ class RateLimitPermit:
 
     Holds the bucket key plus a release callback so :meth:`release`
     (or context-manager exit) returns the concurrency slot. The permit
-    is one-shot: ``release`` and the report methods are idempotent on
-    a single permit but the limiter state mutation (success-count++ /
-    multiplicative-decrease) only fires once.
+    is one-shot: ``release`` is idempotent (safe to call repeatedly),
+    and AIMD-state mutations via ``report_success`` / ``report_throttled``
+    are guarded by :meth:`mark_reported` so duplicate report calls on
+    the same permit do not double-count successes or repeatedly halve
+    the rate. ``mark_reported`` is thread-safe: it returns ``True`` for
+    the first caller and ``False`` for every subsequent caller.
     """
 
     bucket_key: tuple[str, RouteClass, AdapterType]
     granted_at_monotonic: float
     _released: bool = field(default=False, repr=False)
+    _reported: bool = field(default=False, repr=False)
     _release_callback: Callable[[], None] | None = field(default=None, repr=False)
+    _state_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def release(self) -> None:
         """Return the concurrency slot. Idempotent."""
 
-        if self._released:
-            return
-        self._released = True
-        if self._release_callback is not None:
-            self._release_callback()
+        with self._state_lock:
+            if self._released:
+                return
+            self._released = True
+            callback = self._release_callback
+        if callback is not None:
+            callback()
+
+    def mark_reported(self) -> bool:
+        """Return ``True`` if this caller is the first to report; ``False`` otherwise.
+
+        Used by limiter implementations to make AIMD state mutation
+        one-shot: the *first* ``report_success`` / ``report_throttled``
+        wins and applies its mutation; subsequent calls observe
+        ``False`` and become no-ops. Thread-safe by the permit's
+        internal lock.
+        """
+
+        with self._state_lock:
+            if self._reported:
+                return False
+            self._reported = True
+            return True
 
     @property
     def released(self) -> bool:
         return self._released
+
+    @property
+    def reported(self) -> bool:
+        return self._reported
 
     def __enter__(self) -> RateLimitPermit:
         return self
@@ -218,6 +259,10 @@ class NoopRateLimiter:
         )
 
     def report_success(self, *, permit: RateLimitPermit) -> None:
+        # Mark reported so duplicate report calls on the same permit
+        # become no-ops — same one-shot guarantee the production impl
+        # offers, so callers can treat the port uniformly.
+        permit.mark_reported()
         permit.release()
 
     def report_throttled(
@@ -227,6 +272,7 @@ class NoopRateLimiter:
         retry_after_seconds: float | None = None,
     ) -> None:
         del retry_after_seconds
+        permit.mark_reported()
         permit.release()
 
 
@@ -234,5 +280,6 @@ __all__ = [
     "NoopRateLimiter",
     "RateLimitFloor",
     "RateLimitPermit",
+    "RateLimitProhibited",
     "RateLimiterPort",
 ]

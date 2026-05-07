@@ -33,7 +33,7 @@ import pytest
 
 from veracrawl.adapters.network.aimd_rate_limiter import InMemoryAimdLimiter
 from veracrawl.contracts.enums import AdapterType, RouteClass
-from veracrawl.ports.rate_limiter import RateLimitFloor
+from veracrawl.ports.rate_limiter import RateLimitFloor, RateLimitProhibited
 
 
 class _FakeClock:
@@ -449,34 +449,85 @@ def test_concurrency_cap_blocks_excess_acquires_per_origin() -> None:
     in_flight_lock = threading.Lock()
     observed_max = 0
     observed_max_lock = threading.Lock()
+    worker_errors: list[BaseException] = []
+    worker_errors_lock = threading.Lock()
+    completed = 0
+    completed_lock = threading.Lock()
     barrier = threading.Barrier(parties=4)
 
     def worker() -> None:
-        nonlocal in_flight, observed_max
-        barrier.wait()
-        with limiter.acquire(
-            origin="https://example.com",
-            route_class=RouteClass.LISTING,
-            adapter_type=AdapterType.HTTP,
-        ) as permit:
-            with in_flight_lock:
-                in_flight += 1
-                current = in_flight
-            with observed_max_lock:
-                if current > observed_max:
-                    observed_max = current
-            # Hold the permit briefly so peers contend on the semaphore.
-            threading.Event().wait(0.05)
-            with in_flight_lock:
-                in_flight -= 1
-            limiter.report_success(permit=permit)
+        nonlocal in_flight, observed_max, completed
+        try:
+            barrier.wait()
+            with limiter.acquire(
+                origin="https://example.com",
+                route_class=RouteClass.LISTING,
+                adapter_type=AdapterType.HTTP,
+            ) as permit:
+                with in_flight_lock:
+                    in_flight += 1
+                    current = in_flight
+                with observed_max_lock:
+                    if current > observed_max:
+                        observed_max = current
+                # Hold the permit briefly so peers contend on the semaphore.
+                threading.Event().wait(0.05)
+                with in_flight_lock:
+                    in_flight -= 1
+                limiter.report_success(permit=permit)
+            with completed_lock:
+                completed += 1
+        except BaseException as exc:  # noqa: BLE001 — capture for assertion
+            with worker_errors_lock:
+                worker_errors.append(exc)
 
     threads = [threading.Thread(target=worker) for _ in range(4)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=5.0)
+    # Codex iter-1 minor: the original test only checked the
+    # observed-max bound, so a deadlock or worker exception would have
+    # left ``observed_max <= 2`` and silently passed. Now we assert
+    # all four workers completed cleanly and no exceptions slipped.
+    assert worker_errors == []
+    assert all(not t.is_alive() for t in threads)
+    assert completed == 4
     assert observed_max <= 2
+
+
+def test_infinite_floor_raises_prohibited_before_semaphore_acquire() -> None:
+    # Codex iter-1 important: ``RateLimitFloor(request_rate=(0, N))``
+    # produces an infinite interval; the limiter must refuse before
+    # taking a semaphore slot so a worker cannot hang forever inside
+    # ``time.sleep(inf)`` while holding the per-origin slot.
+    limiter = InMemoryAimdLimiter(
+        initial_rate_per_second=1.0,
+        min_rate_per_second=0.1,
+        max_rate_per_second=10.0,
+        additive_increase_per_second=0.5,
+        multiplicative_factor=2.0,
+        cooldown_seconds=0.0,
+        cooldown_jitter_seconds=0.0,
+        successes_to_additive_increase=10,
+        max_concurrency_per_origin=1,
+    )
+    floor = RateLimitFloor(request_rate=(0, 60))
+    with pytest.raises(RateLimitProhibited):
+        with limiter.acquire(
+            origin="https://example.com",
+            route_class=RouteClass.LISTING,
+            adapter_type=AdapterType.HTTP,
+            floor=floor,
+        ):
+            pass
+    # Slot must still be free — verify by acquiring without the floor.
+    with limiter.acquire(
+        origin="https://example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ):
+        pass
 
 
 def test_concurrency_slot_released_when_with_block_raises() -> None:
@@ -531,3 +582,119 @@ def test_report_methods_do_not_double_release_permit() -> None:
     # Calling report_* explicitly does not pre-empt the with-block's
     # auto-release; the permit is released exactly once on context exit.
     assert permit.released is True
+
+
+def test_duplicate_report_success_is_noop() -> None:
+    # Codex iter-1 important: a permit's AIMD mutation must fire at
+    # most once. Calling ``report_success`` 12 times on the same
+    # permit (with threshold=10) must not trigger an additive
+    # increase, because only the first call is counted.
+    fake = _FakeClock()
+    limiter = _make_limiter(
+        fake,
+        initial_rate_per_second=2.0,
+        successes_to_additive_increase=10,
+    )
+    bucket = dict(
+        origin="https://example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    )
+    with limiter.acquire(**bucket) as permit:
+        for _ in range(12):
+            limiter.report_success(permit=permit)
+    # Exactly one success counted; rate unchanged.
+    assert limiter.current_rate_per_second(**bucket) == pytest.approx(2.0)
+
+
+def test_duplicate_report_throttled_is_noop() -> None:
+    # Codex iter-1 important: ``report_throttled`` is also one-shot.
+    # Two calls on the same permit must halve the rate exactly once.
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=4.0)
+    with limiter.acquire(
+        origin="https://example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_throttled(permit=permit)
+        limiter.report_throttled(permit=permit)
+        limiter.report_throttled(permit=permit)
+    # Halved exactly once: 4.0 → 2.0 (not 0.5).
+    assert limiter.current_rate_per_second(
+        origin="https://example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) == pytest.approx(2.0)
+
+
+def test_report_throttled_after_report_success_is_noop() -> None:
+    # Cross-method one-shot: once ``report_success`` lands, a later
+    # ``report_throttled`` on the same permit must not also fire.
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(
+        fake,
+        initial_rate_per_second=4.0,
+        successes_to_additive_increase=1,
+    )
+    bucket = dict(
+        origin="https://example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    )
+    with limiter.acquire(**bucket) as permit:
+        limiter.report_success(permit=permit)
+        # Threshold=1 so the success already triggered an additive
+        # increase: 4.0 → 4.5. The throttle must be ignored.
+        limiter.report_throttled(permit=permit)
+    assert limiter.current_rate_per_second(**bucket) == pytest.approx(4.5)
+
+
+def test_schemeless_origin_with_path_normalizes_to_host() -> None:
+    # Codex iter-1 minor: schemeless inputs with paths previously
+    # became distinct origins; the limiter would split AIMD state
+    # and bypass the per-origin concurrency cap.
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    with limiter.acquire(
+        origin="example.com/path?x=1",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_throttled(permit=permit)
+    fake.sleeps.clear()
+    # ``example.com/other`` shares the bucket with the throttled one.
+    with limiter.acquire(
+        origin="example.com/other",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ):
+        pass
+    assert sum(fake.sleeps) > 0.0
+
+
+def test_schemeless_does_not_synthesize_scheme() -> None:
+    # Schemeless inputs key on bare host so two callers cannot share
+    # a bucket because one passed ``http://`` and the other passed
+    # ``https://``.
+    fake = _FakeClock()
+    fake.set_uniform(0.0)
+    limiter = _make_limiter(fake, initial_rate_per_second=2.0)
+    with limiter.acquire(
+        origin="example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ) as permit:
+        limiter.report_throttled(permit=permit)
+    fake.sleeps.clear()
+    # Different scheme is a different origin → no cooldown.
+    with limiter.acquire(
+        origin="https://example.com",
+        route_class=RouteClass.LISTING,
+        adapter_type=AdapterType.HTTP,
+    ):
+        pass
+    assert sum(fake.sleeps) == 0.0
