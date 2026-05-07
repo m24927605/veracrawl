@@ -237,17 +237,110 @@ class PlaywrightBrowserObservationAdapter:
         """Construct a ``BrowserContext`` with the rendering-stability
         config, optionally re-hydrated from a prior run's
         ``storage_state.json``.
+
+        Read-path privacy boundary (codex iter-5 important): the
+        ``storage_state_dir`` may be on shared / less-trusted storage
+        across runs. Before passing a prior file to Playwright, the
+        adapter validates that the path is a regular file (not a
+        symlink — defends against an attacker planting a link to a
+        cookie jar they control) and on POSIX that the mode is
+        ``0o600`` (owner-only — refuses to ingest a file the writer
+        already exposed to other users). Files that fail these checks
+        are quarantined to ``<path>.untrusted-{ts}`` and the session
+        falls through to a fresh context without prior state.
+
+        Corrupt-state recovery (codex iter-5 important): persisted
+        storage_state is a cache, not canonical state. If
+        ``new_context(storage_state=...)`` raises (truncated JSON,
+        Playwright schema mismatch, etc.), the session quarantines
+        the file and retries ``new_context()`` without prior state
+        rather than aborting the whole run. The fresh context is
+        what session callers want when the cache is bad — they can
+        always re-authenticate.
         """
-        context_kwargs: dict[str, Any] = {
+        base_kwargs: dict[str, Any] = {
             "java_script_enabled": True,
             "ignore_https_errors": False,
             "user_agent": self.user_agent,
             "locale": "en-US",
             "extra_http_headers": {"Accept-Language": "en-US,en;q=0.9"},
         }
+        validated_path: Path | None = None
         if storage_state_path is not None and storage_state_path.exists():
-            context_kwargs["storage_state"] = str(storage_state_path)
-        return browser.new_context(**context_kwargs)
+            if self._storage_state_path_is_trusted(storage_state_path):
+                validated_path = storage_state_path
+            else:
+                self._quarantine_storage_state(
+                    storage_state_path, reason="untrusted_permissions_or_symlink"
+                )
+        if validated_path is not None:
+            try:
+                return browser.new_context(**base_kwargs, storage_state=str(validated_path))
+            except Exception:  # noqa: BLE001
+                _logger.exception(
+                    "browser_storage_state_hydrate_failed",
+                    storage_state_path=str(validated_path),
+                )
+                self._quarantine_storage_state(validated_path, reason="hydrate_failed")
+                # Fall through to fresh-context retry below.
+        return browser.new_context(**base_kwargs)
+
+    @staticmethod
+    def _storage_state_path_is_trusted(path: Path) -> bool:
+        """Return True iff ``path`` is a regular file with owner-only
+        permissions (POSIX) — safe to hand to Playwright as
+        ``storage_state``.
+
+        Uses ``lstat`` so a symlink is detected and rejected without
+        following it. On non-POSIX systems the mode check is skipped
+        (Windows ACLs are not portably introspectable) but the
+        regular-file requirement still applies.
+        """
+        try:
+            info = path.lstat()
+        except OSError:
+            return False
+        # Regular file, not a symlink: ``lstat`` returns the link's own
+        # stat, so a symlink shows up as ``S_IFLNK`` rather than
+        # ``S_IFREG``. Anything that is not a regular file is refused.
+        import stat as _stat_module
+
+        if not _stat_module.S_ISREG(info.st_mode):
+            return False
+        if os.name == "posix":
+            mode = info.st_mode & 0o777
+            if mode != _STORAGE_STATE_FILE_MODE:
+                return False
+        return True
+
+    @staticmethod
+    def _quarantine_storage_state(path: Path, *, reason: str) -> None:
+        """Rename a storage_state file out of the active directory.
+
+        Used both for paths that fail the privacy check and for
+        paths Playwright failed to hydrate from. Quarantining
+        instead of deleting preserves the artifact for the
+        operator to inspect; a timestamp suffix prevents
+        successive failures from clobbering each other. Failure to
+        rename (e.g., read-only filesystem) is logged but does not
+        propagate — the caller is already on a recovery path.
+        """
+        timestamp = int(time.time())
+        dest = path.with_suffix(path.suffix + f".quarantined-{reason}-{timestamp}")
+        try:
+            os.replace(str(path), str(dest))
+            _logger.warning(
+                "browser_storage_state_quarantined",
+                source=str(path),
+                dest=str(dest),
+                reason=reason,
+            )
+        except OSError:
+            _logger.exception(
+                "browser_storage_state_quarantine_failed",
+                path=str(path),
+                reason=reason,
+            )
 
     @contextmanager
     def open_session(self, *, run_ref: Ref) -> Iterator[BrowserSession]:

@@ -375,12 +375,16 @@ def test_storage_state_loaded_into_context_on_session_open(tmp_path: Path) -> No
     """If a prior run wrote ``storage_state.json``, the next session
     re-hydrates the new context with it via ``new_context(storage_state=...)``.
     This is how cookies survive across runs."""
-    # Simulate a prior run by pre-creating the file.
+    # Simulate a prior run by pre-creating the file. The file MUST be
+    # owner-only (0o600) on POSIX or the iter-5 read-path privacy
+    # check quarantines it as untrusted.
     state_file = tmp_path / _storage_state_filename("run:rehydrate")
     state_file.write_text(
         json.dumps({"cookies": [{"name": "from-prior-run", "value": "x"}]}),
         encoding="utf-8",
     )
+    if os.name == "posix":
+        os.chmod(state_file, 0o600)
 
     captured: dict[str, Any] = {}
 
@@ -1055,3 +1059,199 @@ def test_storage_state_write_loops_until_complete(
     # And the slow writer was actually exercised (otherwise the test
     # would not validate the loop behavior).
     assert write_call_count["count"] > 1
+
+
+# Codex iter-5 important: read-path privacy boundary --------------
+
+
+def test_storage_state_with_broad_permissions_is_quarantined(tmp_path: Path) -> None:
+    """A pre-existing ``storage_state.json`` with mode broader than
+    0o600 must NOT be ingested — it could have been written by a
+    different user / a buggy producer / an attacker. Quarantine
+    it and start the session with a fresh context."""
+    if os.name != "posix":  # noqa: SIM103 — explicit Windows skip
+        pytest.skip("POSIX-only file mode check")
+    captured: dict[str, Any] = {}
+
+    @contextmanager
+    def capturing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        captured["pw"] = pw
+        yield pw
+
+    # Plant a world-readable storage_state file the attacker could
+    # have written.
+    state_file = tmp_path / _storage_state_filename("run:broad")
+    state_file.write_text(
+        json.dumps({"cookies": [{"name": "from-attacker", "value": "x"}]}),
+        encoding="utf-8",
+    )
+    os.chmod(state_file, 0o644)  # broader than the 0o600 floor
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: capturing_factory,
+    )
+    with adapter.open_session(run_ref="run:broad") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+
+    pw: _FakePlaywright = captured["pw"]
+    context = pw.browsers[0].contexts[0]
+    # The attacker-readable file was NOT loaded into the new context.
+    assert "storage_state" not in context.init_kwargs
+    # The original file got quarantined out of the active path. The
+    # new session does write its own state file at session close, so
+    # the active path is non-empty again — what we verify is that a
+    # quarantined copy exists with the attacker's content.
+    quarantined = list(tmp_path.glob("*.quarantined-untrusted_permissions_or_symlink-*"))
+    assert len(quarantined) == 1
+    assert json.loads(quarantined[0].read_text(encoding="utf-8")) == {
+        "cookies": [{"name": "from-attacker", "value": "x"}]
+    }
+
+
+def test_storage_state_symlink_is_quarantined(tmp_path: Path) -> None:
+    """A symlink at ``storage_state_path`` must NOT be followed —
+    an attacker could plant a symlink to a sensitive file and
+    coerce Playwright into ingesting it as cookie state."""
+    if os.name != "posix":  # noqa: SIM103 — explicit Windows skip
+        pytest.skip("POSIX-only symlink check")
+
+    captured: dict[str, Any] = {}
+
+    @contextmanager
+    def capturing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        captured["pw"] = pw
+        yield pw
+
+    # Real file with valid JSON ...
+    real_file = tmp_path / "elsewhere.json"
+    real_file.write_text(
+        json.dumps({"cookies": [{"name": "elsewhere", "value": "x"}]}),
+        encoding="utf-8",
+    )
+    # ... and a symlink at the storage_state path that points at it.
+    state_path = tmp_path / _storage_state_filename("run:symlink")
+    state_path.symlink_to(real_file)
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: capturing_factory,
+    )
+    with adapter.open_session(run_ref="run:symlink") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+
+    pw: _FakePlaywright = captured["pw"]
+    context = pw.browsers[0].contexts[0]
+    assert "storage_state" not in context.init_kwargs
+    # The symlink got renamed out of the active path; verify a
+    # quarantined entry exists. The session's own close writes a
+    # fresh state file at the original path, so the path itself is
+    # populated again — but with a regular file, not a symlink.
+    quarantined = list(tmp_path.glob("*.quarantined-untrusted_permissions_or_symlink-*"))
+    assert len(quarantined) == 1
+    # The session-end write produced a regular file at the active
+    # path, not a symlink (the symlink was moved out before the
+    # write).
+    if state_path.exists():
+        assert state_path.is_file() and not state_path.is_symlink()
+
+
+# Codex iter-5 important: corrupt-state recovery ------------------
+
+
+def test_corrupt_storage_state_is_quarantined_and_session_continues(
+    tmp_path: Path,
+) -> None:
+    """If ``browser.new_context(storage_state=...)`` raises (truncated
+    JSON, schema mismatch, anything Playwright cannot parse), the
+    adapter quarantines the bad file and retries ``new_context()``
+    without prior state rather than aborting the run. Persisted
+    state is a cache; a stale cache should not break the session."""
+
+    captured: dict[str, Any] = {}
+
+    # Plant a storage_state file with the right permissions but
+    # invalid content shape — pass the privacy check, fail the
+    # hydrate.
+    state_file = tmp_path / _storage_state_filename("run:corrupt")
+    state_file.write_text("{not really valid storage_state}", encoding="utf-8")
+    if os.name == "posix":
+        os.chmod(state_file, 0o600)
+
+    class _CorruptHydrateBrowser(_FakeBrowser):
+        def new_context(self, **kwargs: Any) -> _FakeContext:
+            # Record the attempt before raising so the test can
+            # introspect both the failed (with storage_state=...) and
+            # subsequent (without) calls.
+            ctx = _FakeContext(self, kwargs)
+            self.contexts.append(ctx)
+            if "storage_state" in kwargs:
+                # Simulate Playwright parse failure on hydrate.
+                raise RuntimeError("simulated playwright storage_state parse failure")
+            return ctx
+
+    class _CorruptHydrateChromium:
+        def __init__(self, parent: _FakePlaywright) -> None:
+            self._parent = parent
+
+        def launch(self, *, headless: bool) -> _FakeBrowser:
+            assert headless is True
+            browser = _CorruptHydrateBrowser()
+            self._parent.browsers.append(browser)
+            return browser
+
+    @contextmanager
+    def failing_factory() -> Iterator[_FakePlaywright]:
+        pw = _FakePlaywright()
+        pw.chromium = _CorruptHydrateChromium(pw)  # type: ignore[assignment]
+        captured["pw"] = pw
+        yield pw
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-1",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        playwright_factory=lambda: failing_factory,
+    )
+    # Session must NOT raise — corrupt cache → fresh context.
+    with adapter.open_session(run_ref="run:corrupt") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+
+    pw: _FakePlaywright = captured["pw"]
+    browser = pw.browsers[0]
+    # First new_context attempt (with storage_state) raised; the
+    # adapter retried without storage_state. Both attempts are
+    # recorded against the fake browser.
+    assert len(browser.contexts) == 2
+    first, second = browser.contexts
+    assert "storage_state" in first.init_kwargs
+    assert "storage_state" not in second.init_kwargs
+    # The adapter quarantined the bad file before retry; the session
+    # close then wrote a NEW file at the original path, so checking
+    # the path itself is non-discriminating. The discriminating
+    # check is that a quarantined copy exists with the original
+    # corrupt content.
+    quarantined = list(tmp_path.glob("*.quarantined-hydrate_failed-*"))
+    assert len(quarantined) == 1
+    assert quarantined[0].read_text(encoding="utf-8") == "{not really valid storage_state}"
