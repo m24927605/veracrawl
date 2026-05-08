@@ -35,10 +35,9 @@ v2 production-authorized-source-crawler 的剩餘 33 個 steps
 | 0.4 | DONE_WITH_RESERVATIONS | `8d27548` | 5 |
 | 1.1 | DONE_WITH_RESERVATIONS | `5aa008a` | 5 |
 
-**Master HEAD 應為 `5aa008a` 或更新**。如果不是,先停下來通知用戶
-(可能 ait land 出錯)。
+**Master HEAD 應為 `aa6990e` 或更新**(最後一個 commit 是 reassessment-20260507T181555Z.md)。如果不是,先停下來通知用戶。
 
-# 累計 Reservations(3/5,觸發停損上限為 5)
+# 累計 Reservations(5/8,2026-05-07 reassessment 後上限調整為 8)
 
 1. **step 0.3**: 運行時 ReDoS hardening (timeout / alt regex engine)
    → Phase 2 step 2.2 follow-up
@@ -47,10 +46,18 @@ v2 production-authorized-source-crawler 的剩餘 33 個 steps
 3. **step 1.1**: `tests/unit/test_browser_session_storage_state.py`
    refactor (>1000 行,fake browser 變體重複) → 純 code-quality
    follow-up,非 phase-tagged
+4. **step 1.2**: 高並發 DNS resolution shaping for robots fetcher
+   → Phase 1 step 1.6 live tests follow-up
+5. **step 1.3**: post-iter-5 fix-up (1bf75d9) 處理 `RateLimitProhibited`
+   contextmanager wrapping + malformed-port fallback userinfo strip,
+   但無 iter-6 形式驗證 → Phase 1 step 1.6 live tests follow-up
 
-如果再累計 2 個 reservation 觸發停損,寫
+如果再累計 3 個 reservation 觸發停損(8 上限),寫
 `docs/plans/production-authorized-source-crawler/reassessment-{timestamp}.md`
 並通知用戶。
+
+詳細 reassessment 紀錄在
+`docs/plans/production-authorized-source-crawler/reassessment-20260507T181555Z.md`。
 
 # 我的 ait attempt id
 
@@ -127,11 +134,39 @@ test_logging_import_boundary.py` 擋下來。
 找該 step 的 deliverables / acceptance criteria / dependencies。
 Deliverables 模糊或衝突 → 停下來通知用戶,不要 improvise。
 
+## 1.5 iter1 Pre-flight 6-點 mental scan(2026-05-07 reassessment 加入)
+
+寫 test 之前必跑。觀察:codex iter5 仍出 important findings
+比例約 83%,主因是 iter1 缺乏系統性 threat-modelling。在腦中
+(不寫檔案)走一遍下面 6 維度,並在 commit message 的 WHY
+段落裡明示**已檢查過**這 6 點,讓 codex 看得到覆蓋面:
+
+1. **攻擊者控制輸入**:URL / origin / headers / robots body /
+   port / userinfo / 任何字串字段在我的 code 裡的流向 + 例外
+   字串是否 sanitise(避免 leak credentials / PII)。
+2. **執行時序**:contextmanager / generator body / property /
+   `__enter__` 何時跑;callback 在哪個 thread / lock 下執行;
+   `@contextmanager` 的 yield 前後分別在 `__enter__` /
+   `__exit__` 執行。
+3. **並發**:mutable state 在多執行緒下的 race;permit / lock
+   / semaphore 的 fairness + 失敗釋放;property reads 是否需要
+   lock。
+4. **失敗模式**:partial write、resolver failure、network
+   error、disk full、信任 `Path.exists()` 而沒 `lstat()`、
+   symlink、permission、corrupt persisted state 後的 retry 路徑。
+5. **PRODUCTION mode**:我的 default 在 `RuntimeMode.PRODUCTION`
+   是否 fail closed?有沒有 `ProductionRuntimeNotImplemented`
+   gate?fixture 的測試走過的 path 是否真的是 production path?
+6. **API 對稱性**:noop impl 跟 production impl 的 lifecycle /
+   semantics 是否一致(release 誰負責、報告何時 mark、
+   idempotency、permit 跨多 thread 的安全性)。
+
 ## 2. TDD red → green
 
 1. 先寫 test (`tests/contract/test_step_X_Y_*.py` 或
    `tests/unit/test_step_X_Y_*.py`),每個 acceptance criterion 至少
-   一個 test case。
+   一個 test case。**並對 1.5 6 點掃描中發現的攻擊面 / 失敗模式
+   / 並發 race 額外加測試**。
 2. 跑 test 確認紅(import error 或 assertion 失敗均可)。
 3. 實作,讓 test 變綠。
 4. 跑這四個全綠才繼續:
@@ -231,9 +266,10 @@ git -C /Users/sin-chengchen/products/veracrawler/veracrawl reset --hard HEAD  # 
    評估是 design.md 缺陷 / dependency 沒滿足 / codex 標準太嚴。
 3. 通知用戶。
 
-## 累計 5 個 step 都 DONE_WITH_RESERVATIONS
+## 累計 8 個 step 都 DONE_WITH_RESERVATIONS
 
-當前已 3/5。再 2 個就停,寫 reassessment,通知用戶。
+當前已 5/8(2026-05-07 reassessment 後上限從 5 調整為 8)。
+再 3 個就停,寫 reassessment,通知用戶。
 
 ## 環境問題(uv / mypy / ruff / playwright / codex 失敗)
 

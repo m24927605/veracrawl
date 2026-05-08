@@ -89,9 +89,22 @@ VeraCrawl 由 AI agent 撰寫;吞吐量不是約束。**正確性、設計符合
 
 如果 deliverables 模糊、依賴衝突、或 charter 邊界不明 → **停下來通知用戶**,不要 improvise。
 
+## 2.0 iter1 Pre-flight 6-點 mental scan(每個 step 寫 test 之前必跑)
+
+2026-05-07 reassessment 加入。觀察:codex iter5 仍出 important findings 的比例約 83%,主因是 iter1 缺乏系統性 threat-modelling。寫 test 前,在腦中(不寫檔案)走一遍下面 6 維度,並在 commit message 的 WHY 段落明示**已檢查過**這 6 點 — 讓 codex 看得到覆蓋面:
+
+1. **攻擊者控制輸入**:URL / origin / headers / robots body / port / userinfo / 任何字串字段在我的 code 裡的流向 + 例外字串是否 sanitise(避免 leak credentials / PII)。
+2. **執行時序**:contextmanager / generator body / property / `__enter__` 何時跑;callback 在哪個 thread / lock 下執行;`@contextmanager` 的 yield 前後分別在 `__enter__` / `__exit__` 執行。
+3. **並發**:mutable state 在多執行緒下的 race;permit / lock / semaphore 的 fairness + 失敗釋放;property reads 是否需要 lock。
+4. **失敗模式**:partial write、resolver failure、network error、disk full、信任 `Path.exists()` 而沒 `lstat()`、symlink、permission、corrupt persisted state 後的 retry 路徑。
+5. **PRODUCTION mode**:我的 default 在 `RuntimeMode.PRODUCTION` 是否 fail closed?有沒有 `ProductionRuntimeNotImplemented` gate?fixture 的測試走過的 path 是否真的是 production path?
+6. **API 對稱性**:noop impl 跟 production impl 的 lifecycle / semantics 是否一致(release 誰負責、報告何時 mark、idempotency、permit 跨多 thread 的安全性)。
+
+不寫 checklist 檔案 — 增加 session overhead 沒意義;但**這 6 點走一遍後再寫 test 才能繼續**。
+
 ## 2. TDD 實作
 
-1. 寫測試(red)— 必須對 deliverables 的每個 acceptance criterion 有對應 test case
+1. 寫測試(red)— 必須對 deliverables 的每個 acceptance criterion 有對應 test case;**並對 2.0 6 點掃描中發現的攻擊面 / 失敗模式 / 並發 race 額外加測試**
 2. 實作(green)
 3. refactor(如必要)
 4. 跑:
@@ -165,13 +178,17 @@ git -C /Users/sin-chengchen/products/veracrawler/veracrawl merge --ff-only p0-fi
 3. 寫一份 reassessment markdown 到 `docs/plans/production-authorized-source-crawler/reassessment-{timestamp}.md`
 4. 通知用戶等指示,不繼續
 
-## 5 個 step 都用 `DONE_WITH_RESERVATIONS` 結尾
+## 8 個 step 都用 `DONE_WITH_RESERVATIONS` 結尾
 
-即使沒連續失敗,但累積 5 個 reservations 表示 design 或 codex review 標準有系統性偏差:
+即使沒連續失敗,但累積 8 個 reservations 表示 design 或 codex review 標準有系統性偏差:
 
 1. 停下來
 2. 寫 reassessment
 3. 通知用戶
+
+注意:上限從 5 調整為 8(2026-05-07 reassessment 後,reassessment-20260507T181555Z.md)。
+原因是 codex 嚴格度匹配 production 標準,iter5 仍出 important 的比例約 83%,
+5 上限太緊。剩 31 step 預估會用掉 5-7 個 reservation,8 上限留 1-3 個緩衝。
 
 ## 環境問題(`uv` / `mypy` / `ruff` / `playwright` 安裝失敗)
 
