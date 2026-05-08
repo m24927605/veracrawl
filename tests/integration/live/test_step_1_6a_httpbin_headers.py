@@ -5,9 +5,11 @@ Chrome UA reaches origin."
 
 Validates that the production HTTP adapter wiring (real
 :class:`UrllibRobotsParser` + :class:`InMemoryAimdLimiter` +
-:class:`InMemoryConditionalCache` + :class:`InMemoryCookieJar`)
-actually reaches a public test origin and that the headers we
-configured (Chrome User-Agent, ``Accept-Language``) arrive at the
+:class:`InMemoryConditionalCache` + :class:`InMemoryCookieJar`,
+plus the production egress / private-network policy:
+``egress_allowlist={"https://httpbin.org"}``,
+``allow_private_network=False``) actually reaches a public test
+origin and that the configured Chrome User-Agent arrives at the
 target. ``httpbin.org/headers`` echoes the request headers back
 as JSON, so we can assert what the origin saw.
 
@@ -84,25 +86,31 @@ def _make_request(url: str = "https://httpbin.org/headers") -> NetworkRequest:
     )
 
 
-def _make_command() -> SourceAdapterCommand:
+def _make_command(url: str = "https://httpbin.org/headers") -> SourceAdapterCommand:
     return SourceAdapterCommand(
         command_envelope_id="cmd:live:step-1-6a",
         adapter_spec=source_adapter_spec(AdapterType.HTTP),
-        source_ref="https://httpbin.org/headers",
+        source_ref=url,
         policy_snapshot_ref="policy:live:step-1-6a:default",
         deterministic_clock_ref="clock:live:step-1-6a",
         randomness_seed_ref="random:live:step-1-6a",
     )
 
 
+_HTTPBIN_ALLOWLIST: frozenset[str] = frozenset({"https://httpbin.org"})
+
+
 def _real_robots_port() -> UrllibRobotsParser:
-    """Build the production robots port with a public-internet egress allowance."""
+    """Build the production robots port with the same egress /
+    private-network policy the adapter uses (codex iter-3
+    important): only ``httpbin.org`` is allowed, private networks
+    are refused. The robots fetcher must follow the same policy
+    as the main fetch path or the policy boundary is asymmetric."""
 
     fetcher = make_httpx_robots_fetcher(
         timeout_s=10.0,
         max_redirects=5,
-        # No egress allowlist for the live test — we accept any
-        # origin the test target redirects to (none expected).
+        egress_allowlist=_HTTPBIN_ALLOWLIST,
         allow_private_network=False,
     )
     return UrllibRobotsParser(fetcher=fetcher)
@@ -111,21 +119,31 @@ def _real_robots_port() -> UrllibRobotsParser:
 def _production_config(
     *,
     rate_limiter: InMemoryAimdLimiter | None = None,
+    conditional_cache: InMemoryConditionalCache | None = None,
 ) -> HttpClientConfig:
     """Build the full production wiring for the HTTP adapter.
 
-    Codex iter-1 important: tests run under
-    ``RuntimeMode.PRODUCTION`` so production-only gates don't
-    silently break. Every port is a real impl — robots fetcher,
-    AIMD limiter, conditional cache, cookie jar.
+    Codex iter-1/3 important: tests run under
+    ``RuntimeMode.PRODUCTION`` AND with the production egress /
+    private-network policy (``egress_allowlist`` set, private
+    network denied). Every port is a real impl.
     """
 
     return HttpClientConfig(
         robots_port=_real_robots_port(),
-        rate_limiter=rate_limiter or InMemoryAimdLimiter(),
-        conditional_cache=InMemoryConditionalCache(),
+        # Explicit ``is None`` check, not ``or``: ``InMemoryConditionalCache``
+        # defines ``__len__``, so an empty instance is falsy and the
+        # ``or`` short-circuit would silently replace it with a fresh
+        # one. Same defensive pattern for the rate limiter for
+        # symmetry.
+        rate_limiter=rate_limiter if rate_limiter is not None else InMemoryAimdLimiter(),
+        conditional_cache=(
+            conditional_cache if conditional_cache is not None else InMemoryConditionalCache()
+        ),
         cookie_jar=InMemoryCookieJar(),
         route_class=RouteClass.LISTING,
+        egress_allowlist=_HTTPBIN_ALLOWLIST,
+        allow_private_network=False,
     )
 
 
@@ -208,25 +226,22 @@ def test_httpbin_real_conditional_cache_round_trip_with_304_short_circuit() -> N
     """
 
     cache = InMemoryConditionalCache()
-    config = HttpClientConfig(
-        robots_port=_real_robots_port(),
-        rate_limiter=InMemoryAimdLimiter(),
-        conditional_cache=cache,
-        cookie_jar=InMemoryCookieJar(),
-    )
+    config = _production_config(conditional_cache=cache)
     url = "https://httpbin.org/etag/test-step-1-6a"
     with with_runtime_mode(RuntimeMode.PRODUCTION):
         adapter1 = StdlibHttpSourceAdapter(_make_request(url), config=config)
-        adapter1.execute(_make_command())
+        adapter1.execute(_make_command(url))
         first_result = adapter1.last_result
         assert first_result is not None
         first_artifact_ref = first_result.artifact_refs[0]
+        # Diagnostic: print cache state if assertion fails so the
+        # test failure is easier to triage.
         cached = cache.get(run_ref="run:live:step-1-6a", url=url)
         assert cached is not None
         assert cached.etag is not None and "test-step-1-6a" in cached.etag
 
         adapter2 = StdlibHttpSourceAdapter(_make_request(url), config=config)
-        adapter2.execute(_make_command())
+        adapter2.execute(_make_command(url))
         second_result = adapter2.last_result
         assert second_result is not None
         # Same artifact_ref as the first fetch — replay traceability.
