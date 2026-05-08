@@ -178,17 +178,42 @@ git -C /Users/sin-chengchen/products/veracrawler/veracrawl merge --ff-only p0-fi
 3. 寫一份 reassessment markdown 到 `docs/plans/production-authorized-source-crawler/reassessment-{timestamp}.md`
 4. 通知用戶等指示,不繼續
 
-## 8 個 step 都用 `DONE_WITH_RESERVATIONS` 結尾
+## 16 個 step 都用 `DONE_WITH_RESERVATIONS` 結尾
 
-即使沒連續失敗,但累積 8 個 reservations 表示 design 或 codex review 標準有系統性偏差:
+即使沒連續失敗,但累積 16 個 reservations 表示 design 或 codex review 標準有系統性偏差:
 
 1. 停下來
 2. 寫 reassessment
 3. 通知用戶
 
-注意:上限從 5 調整為 8(2026-05-07 reassessment 後,reassessment-20260507T181555Z.md)。
-原因是 codex 嚴格度匹配 production 標準,iter5 仍出 important 的比例約 83%,
-5 上限太緊。剩 31 step 預估會用掉 5-7 個 reservation,8 上限留 1-3 個緩衝。
+注意:上限從 5 → 8 → 16(reassessment-20260507T181555Z.md / reassessment-20260508T091513Z.md)。
+原因是 codex 嚴格度匹配 production 標準,iter5 仍出 important 的比例 83% → 100%。
+雖然每輪都修真實 bug,但 step surface area 大時 5 輪 codex 不夠收斂。
+配合「必須拆 sub-step 規則」(下節),預估剩 26 logical step (拆後 ~34) 用掉 12-17 個 reservation,
+16 上限留 0-4 緩衝。
+
+## 必須拆 sub-step 規則(2026-05-08 reassessment #2 加入)
+
+以下任一條件成立的 step 必須拆成 sub-step:
+
+(i) 同時引入 ≥2 個新 port + 新 adapter
+(ii) 同時把 ≥2 個既有 port 接線到 existing adapter
+(iii) 是 live test / DR drill / production gate step
+(iv) 含「重寫」既有大模組(>500 lines src code)
+
+**拆分原則**:每個 sub-step 仍走完整 5-iter codex review;sub-step 之間互為 dependency
+但 reservation 各自累計。
+
+**已預先拆分的 step**(剩 26 step → 拆後 ~34):
+
+- **1.6** (live tests #1-#3) → **1.6a** (httpbin headers) / **1.6b** (httpbin redirect-to) / **1.6c** (example.com) [規則 iii]
+- **2.2** (SessionScopePolicy + 0.3/0.4 reservation) → **2.2a** (StrictAllowlistScope) / **2.2b** (CredentialScopeViolation 結構化 reason) / **2.2c** (ReDoS runtime hardening) [規則 i + 既有 reservation]
+- **2.5** (Agent runtime credential + live test) → **2.5a** (lifecycle) / **2.5b** (live test) [規則 iii]
+- **4.6** (schema_runtime 重寫) → **4.6a** (LLM-driven extraction core) / **4.6b** (anchor-grounded citations) / **4.6c** (V1 retire + registry rename) [規則 iv]
+- **6.3** (DR live drill) → **6.3a** (Postgres restore) / **6.3b** (Redis restore) / **6.3c** (S3 restore) [規則 iii]
+- **6.4** (7+ live integration tests) → **6.4a** (test scope design) / **6.4b** (跑通各 test) [規則 iii]
+
+其他 phase 暫不拆;寫 step 時若發現 surface 太大再拆(寫進當下 step 的 commit log)。
 
 ## 環境問題(`uv` / `mypy` / `ruff` / `playwright` 安裝失敗)
 

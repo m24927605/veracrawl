@@ -35,14 +35,14 @@ v2 production-authorized-source-crawler 的剩餘 33 個 steps
 | 0.4 | DONE_WITH_RESERVATIONS | `8d27548` | 5 |
 | 1.1 | DONE_WITH_RESERVATIONS | `5aa008a` | 5 |
 
-**Master HEAD 應為 `aa6990e` 或更新**(最後一個 commit 是 reassessment-20260507T181555Z.md)。如果不是,先停下來通知用戶。
+**Master HEAD 應為 `7673807` 或更新**(最後一個 commit 是 reassessment-20260508T091513Z.md)。如果不是,先停下來通知用戶。
 
-# 累計 Reservations(5/8,2026-05-07 reassessment 後上限調整為 8)
+# 累計 Reservations(8/16,2026-05-08 reassessment #2 後上限調整為 16)
 
 1. **step 0.3**: 運行時 ReDoS hardening (timeout / alt regex engine)
-   → Phase 2 step 2.2 follow-up
+   → Phase 2 step 2.2c
 2. **step 0.4**: 結構化 `CredentialScopeViolation.reason` (取代 marker
-   tuple) → Phase 2 step 2.2 follow-up
+   tuple) → Phase 2 step 2.2b
 3. **step 1.1**: `tests/unit/test_browser_session_storage_state.py`
    refactor (>1000 行,fake browser 變體重複) → 純 code-quality
    follow-up,非 phase-tagged
@@ -51,13 +51,20 @@ v2 production-authorized-source-crawler 的剩餘 33 個 steps
 5. **step 1.3**: post-iter-5 fix-up (1bf75d9) 處理 `RateLimitProhibited`
    contextmanager wrapping + malformed-port fallback userinfo strip,
    但無 iter-6 形式驗證 → Phase 1 step 1.6 live tests follow-up
+6. **step 1.4**: 多項 Phase 6 / 後續 step follow-up (source-of-truth
+   對齊 / per-attempt 隔離 / tracing.start scope / size streaming /
+   constant 重複) → Phase 6
+7. **step 1.5**: 多項 follow-up (sensitive-header 共用常數 / kw_only /
+   conformance tests / streaming-spool put / ordered cookies /
+   jar production-mode gate) → Phase 6 / code-quality
 
-如果再累計 3 個 reservation 觸發停損(8 上限),寫
+如果再累計 8 個 reservation 觸發停損(16 上限),寫
 `docs/plans/production-authorized-source-crawler/reassessment-{timestamp}.md`
 並通知用戶。
 
 詳細 reassessment 紀錄在
-`docs/plans/production-authorized-source-crawler/reassessment-20260507T181555Z.md`。
+`docs/plans/production-authorized-source-crawler/reassessment-20260507T181555Z.md`(第一次 5/5 → 8 + iter1 6-點 scan)
+和 `reassessment-20260508T091513Z.md`(第二次 8/8 → 16 + 拆 sub-step 規則)。
 
 # 我的 ait attempt id
 
@@ -266,10 +273,26 @@ git -C /Users/sin-chengchen/products/veracrawler/veracrawl reset --hard HEAD  # 
    評估是 design.md 缺陷 / dependency 沒滿足 / codex 標準太嚴。
 3. 通知用戶。
 
-## 累計 8 個 step 都 DONE_WITH_RESERVATIONS
+## 累計 16 個 step 都 DONE_WITH_RESERVATIONS
 
-當前已 5/8(2026-05-07 reassessment 後上限從 5 調整為 8)。
-再 3 個就停,寫 reassessment,通知用戶。
+當前已 8/16(2026-05-08 reassessment #2 後上限從 8 調整為 16,
+配合「必須拆 sub-step 規則」)。再 8 個就停,寫 reassessment,通知用戶。
+
+### 必須拆 sub-step 規則(2026-05-08 加入)
+
+以下任一條件成立的 step 必須拆成 sub-step,每個 sub-step 仍走完整
+5-iter codex review:
+
+(i) 同時引入 ≥2 個新 port + 新 adapter
+(ii) 同時把 ≥2 個既有 port 接線到 existing adapter
+(iii) 是 live test / DR drill / production gate step
+(iv) 含「重寫」既有大模組(>500 lines src code)
+
+已預先拆分:1.6 → 1.6a/b/c, 2.2 → 2.2a/b/c, 2.5 → 2.5a/b,
+4.6 → 4.6a/b/c, 6.3 → 6.3a/b/c, 6.4 → 6.4a/b。其他 phase 寫 step
+時若發現 surface 太大再拆(寫進 commit log)。
+
+詳細在 `implementation-prompt.md` + reassessment-20260508T091513Z.md。
 
 ## 環境問題(uv / mypy / ruff / playwright / codex 失敗)
 
