@@ -32,10 +32,12 @@ the full registry.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+import string
+from collections.abc import Iterable, Mapping
 from typing import Any, Final
 
 from veracrawl.contracts.errors import PolicyViolation, VeraCrawlError
+from veracrawl.ports.credential_vault import CredentialValue
 
 # Detects the credential redaction marker emitted by
 # ``CredentialValue.__repr__`` / ``__str__`` / ``__format__``
@@ -47,6 +49,71 @@ from veracrawl.contracts.errors import PolicyViolation, VeraCrawlError
 _CREDENTIAL_MARKER_RE: Final[re.Pattern[str]] = re.compile(
     r"<credential:redacted:[A-Z0-9_]+>"
 )
+
+# Hard cap on context-walk recursion depth. Practical contexts are
+# shallow (<= 3 nested levels); the cap bounds work on accidentally
+# cyclic / pathologically deep inputs.
+_MAX_CONTEXT_DEPTH: Final[int] = 12
+
+
+def _context_contains_credential(value: Any, depth: int = 0) -> bool:
+    """Recursively walk ``value`` looking for a
+    :class:`CredentialValue` instance. Depth-bounded to avoid
+    pathological inputs.
+
+    Walks dict / list / tuple / set / frozenset containers. Custom
+    objects are NOT walked: a caller wrapping a credential inside
+    a custom class still leaks if a template author drills into
+    the wrapper via ``{wrapper.attr_chain}``, but the format-spec
+    scan below refuses any complex field name traversal — so the
+    only reachable surface from a template is the bare context
+    keys, which this walk covers.
+    """
+
+    if depth >= _MAX_CONTEXT_DEPTH:
+        return False
+    if isinstance(value, CredentialValue):
+        return True
+    if isinstance(value, dict):
+        return any(_context_contains_credential(v, depth + 1) for v in value.values())
+    if isinstance(value, list | tuple | set | frozenset):
+        return any(_context_contains_credential(v, depth + 1) for v in value)
+    return False
+
+
+def _template_uses_complex_field_access(template: str) -> bool:
+    """Return ``True`` if the template references any field with
+    attribute (``{name.attr}``) or item (``{name[idx]}``) traversal.
+
+    Such traversal lets a template author drill into private
+    attributes of context values — e.g., ``{cred._value}`` would
+    return the raw secret string of a ``CredentialValue`` because
+    Python's ``string.Formatter`` resolves ``.attr`` via
+    ``getattr`` and there is no language-level access control on
+    private slots. Refusing complex field access at the boundary
+    keeps the contract "only the bare context keys reach
+    ``__format__``" so the credential redaction overrides do
+    their job.
+    """
+
+    formatter = string.Formatter()
+    try:
+        parsed: Iterable[tuple[str, str | None, str | None, str | None]] = (
+            formatter.parse(template)
+        )
+    except ValueError:
+        # Malformed template — let format_map raise the
+        # ``ValueError`` later so the caller sees the template-
+        # author error rather than a confusing "complex field"
+        # refusal. Treat malformed as "no complex fields" here;
+        # the actual format_map call will fail naturally.
+        return False
+    for _literal, field_name, _format_spec, _conversion in parsed:
+        if field_name is None:
+            continue
+        if "." in field_name or "[" in field_name:
+            return True
+    return False
 
 
 class PromptCredentialLeakError(VeraCrawlError, PolicyViolation):
@@ -110,14 +177,33 @@ class RedactedPromptContext:
     def render(self, template: str, *, template_ref: str) -> str:
         """Format ``template`` against the context; refuse credential leaks.
 
-        Raises :class:`PromptCredentialLeakError` if the rendered
-        output contains a credential redaction marker.
-        Re-raises :class:`KeyError` from
-        :meth:`str.format_map` unchanged when the template
-        references a variable not in the context (a template-author
-        error that should surface loudly, not be silently dropped).
+        Three layered defenses:
+
+        1. *Structural context check*: walk the context recursively
+           through dict / list / tuple / set containers; if any
+           :class:`CredentialValue` is reachable, raise.
+        2. *Template field-access scan*: refuse templates that use
+           attribute (``{name.attr}``) or item (``{name[idx]}``)
+           field access, which would let a template author drill
+           into private slots of context values (e.g.,
+           ``{cred._value}`` would emit the raw secret string).
+        3. *Rendered-output marker scan*: catches a literal
+           credential marker baked into the template string itself
+           or surfaced via a path the structural walk does not
+           cover.
+
+        Raises :class:`PromptCredentialLeakError` if any of the
+        three trip. Re-raises :class:`KeyError` /
+        :class:`ValueError` from :meth:`str.format_map` unchanged
+        for template-author errors (missing variable, malformed
+        template); silent drop would mask production bugs.
         """
 
+        for value in self._context.values():
+            if _context_contains_credential(value):
+                raise PromptCredentialLeakError(template_ref=template_ref)
+        if _template_uses_complex_field_access(template):
+            raise PromptCredentialLeakError(template_ref=template_ref)
         rendered = template.format_map(self._context)
         if _CREDENTIAL_MARKER_RE.search(rendered):
             raise PromptCredentialLeakError(template_ref=template_ref)

@@ -137,6 +137,83 @@ def test_credential_alongside_plain_string_still_refused() -> None:
         ctx.render("hello {name}, your token is {token}", template_ref="prompt:mixed")
 
 
+def test_render_refuses_attribute_traversal_into_private_slot() -> None:
+    """Codex iter-1 critical: ``{cred._value}`` drills into the
+    private slot via ``getattr`` (Python's ``string.Formatter``
+    has no access control on private attributes). The boundary
+    must refuse the template before format_map runs — otherwise
+    the raw secret string lands in the rendered output and the
+    marker regex never fires."""
+
+    secret = "sk-live-private-slot-leak"
+    cred = CredentialValue(value=secret, scope_ref="X")
+    ctx = RedactedPromptContext(cred=cred)
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("token={cred._value}", template_ref="prompt:slot-attack")
+
+
+def test_render_refuses_attribute_traversal_into_public_property() -> None:
+    """Even ``{cred.scope_ref}`` (which would NOT leak the secret —
+    scope_ref is non-secret by design) is refused. The contract
+    is "no credential reaches the prompt at all" — even via a
+    non-secret accessor — so callers cannot accidentally develop
+    a habit of relying on credential properties in prompts."""
+
+    cred = CredentialValue(value="x", scope_ref="EBAY_PROD")
+    ctx = RedactedPromptContext(cred=cred)
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("scope={cred.scope_ref}", template_ref="prompt:scope")
+
+
+def test_render_refuses_item_subscript_access() -> None:
+    """``{name[0]}`` is the subscript form of complex field
+    access. Refused for the same reason as ``.attr``: subscript
+    can index into list-of-credentials or dict-of-credentials
+    structures past the structural-walk's container check."""
+
+    ctx = RedactedPromptContext(items=["a", "b"])
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("first={items[0]}", template_ref="prompt:subscript")
+
+
+def test_render_refuses_format_spec_truncation_of_marker() -> None:
+    """Codex iter-1 important: ``{cred:.5}`` truncates the
+    rendered marker to ``<cred`` — the marker regex would not fire
+    on the truncated form, but the structural context walk catches
+    the ``CredentialValue`` BEFORE format_map runs so no
+    interpolation happens at all."""
+
+    cred = CredentialValue(value="secret", scope_ref="X")
+    ctx = RedactedPromptContext(cred=cred)
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("trunc={cred:.5}", template_ref="prompt:trunc")
+
+
+def test_render_refuses_credential_nested_in_dict_context() -> None:
+    """Structural walk catches a credential nested inside a dict
+    value — the template might never reach it, but having a
+    credential in the context at all is a contract violation."""
+
+    cred = CredentialValue(value="x", scope_ref="X")
+    ctx = RedactedPromptContext(config={"auth": {"token": cred}})
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("static template", template_ref="prompt:nested-dict")
+
+
+def test_render_refuses_credential_nested_in_list_context() -> None:
+    cred = CredentialValue(value="x", scope_ref="X")
+    ctx = RedactedPromptContext(tokens=[cred, "fake"])
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("static template", template_ref="prompt:nested-list")
+
+
+def test_render_refuses_credential_nested_in_tuple_context() -> None:
+    cred = CredentialValue(value="x", scope_ref="X")
+    ctx = RedactedPromptContext(pair=("api_key", cred))
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("static template", template_ref="prompt:nested-tuple")
+
+
 def test_template_with_literal_marker_is_refused() -> None:
     """A template author who pre-bakes the marker into the
     template string is also refused — no path through the
