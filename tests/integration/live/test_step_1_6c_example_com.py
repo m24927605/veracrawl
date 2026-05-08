@@ -32,9 +32,17 @@ from veracrawl.contracts.enums import BrowserSideEffectClass
 from veracrawl.runtime_support.runtime_mode import RuntimeMode, with_runtime_mode
 
 
-def _chromium_available() -> bool:
-    """Return ``True`` when ``playwright install chromium`` ran in
-    this env; ``False`` otherwise so the live test skips cleanly."""
+@pytest.fixture
+def chromium_required() -> None:
+    """Skip the test when ``playwright install chromium`` has not
+    been run.
+
+    Codex iter-1 important: the previous module-level check
+    launched Chromium at collection time, slowing every default
+    ``-m 'not live'`` invocation that imported this file. The
+    fixture defers the launch attempt to the moment the test
+    actually runs, so unselected live tests cost nothing.
+    """
 
     try:
         from playwright.sync_api import sync_playwright
@@ -42,15 +50,8 @@ def _chromium_available() -> bool:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             browser.close()
-        return True
-    except Exception:
-        return False
-
-
-_CHROMIUM_REQUIRED = pytest.mark.skipif(
-    not _chromium_available(),
-    reason="Chromium not installed; run `python -m playwright install chromium`",
-)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"Chromium not available: {exc}")
 
 
 def _sandbox() -> BrowserSandboxPolicy:
@@ -82,8 +83,7 @@ def _build_adapter(tmp_path: Path) -> PlaywrightBrowserObservationAdapter:
 
 
 @pytest.mark.live
-@_CHROMIUM_REQUIRED
-def test_example_com_dom_contains_example_domain(tmp_path: Path) -> None:
+def test_example_com_dom_contains_example_domain(chromium_required: None, tmp_path: Path) -> None:
     """Acceptance (design.md §6 step 6.4 #3): the rendered DOM
     contains the well-known stable string ``Example Domain``."""
 
@@ -106,8 +106,7 @@ def test_example_com_dom_contains_example_domain(tmp_path: Path) -> None:
 
 
 @pytest.mark.live
-@_CHROMIUM_REQUIRED
-def test_example_com_screenshot_bytes_non_empty(tmp_path: Path) -> None:
+def test_example_com_screenshot_bytes_non_empty(chromium_required: None, tmp_path: Path) -> None:
     """Acceptance (design.md §6 step 6.4 #3): a full-page screenshot
     is captured and reported as non-empty PNG bytes."""
 
@@ -126,8 +125,9 @@ def test_example_com_screenshot_bytes_non_empty(tmp_path: Path) -> None:
 
 
 @pytest.mark.live
-@_CHROMIUM_REQUIRED
-def test_example_com_har_persisted_via_evidence_store(tmp_path: Path) -> None:
+def test_example_com_har_persisted_via_evidence_store(
+    chromium_required: None, tmp_path: Path
+) -> None:
     """The browser adapter's HAR pipeline (Playwright
     ``record_har_path`` → ``redact_har_payload`` →
     ``EvidenceArtifactStorePort.put``) must run end-to-end against a
