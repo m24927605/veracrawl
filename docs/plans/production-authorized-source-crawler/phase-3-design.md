@@ -38,26 +38,69 @@ viable starting point. Phase 3 does not orchestrate the
 re-evaluation; the run-control layer (Phase 5 / `AgentRunRequest`
 lifecycle) does.
 
+## Codebase ground-truth (verified at iter-3)
+
+| Symbol | Actual location | Correction from iter-2 |
+|---|---|---|
+| `Ref` | `veracrawl.contracts.common` | iter-2 said `contracts.shared` (does not exist) |
+| `NetworkAdapterError` | `veracrawl.adapters.network.stdlib_http` | OK |
+| `RobotsBlockedError`, `RedirectDeniedError`, `EgressDeniedError`, `RetryExhaustedError`, `AdapterFailureError`, `RateBudgetExceededError`, `PrivateNetworkDeniedError`, `SizeBudgetExceededError`, `UnsafeBrowserSideEffectError`, `MissingNetworkArtifactError`, `NetworkTimeoutError` | `veracrawl.adapters.network.stdlib_http` | iter-2 referenced non-existent `NetworkPolicyForbiddenError` |
+| `AccessControlBlocked`, `AdapterEscalationDecision`, `AdapterEscalationPolicy`, `AccessControlProvider` | `veracrawl.contracts.network` / `source_adapter` / `enums` (Phase 0) | OK |
+| `_REDACTABLE_MARKERS` (Phase 0.4) | `veracrawl.contracts.errors` (private) | iter-2 implied importable; **action**: Phase 3 step 3.5 must FIRST expose a public re-export `veracrawl.contracts.errors.REDACTABLE_MARKERS` (no underscore) before consuming |
+| `SourceCoverageAdapterExecutionRecord`, `SourceCoverageAdapterReport` | `veracrawl.contracts.source_coverage` (Phase 0) | iter-2 invented `SourceCoverageRunRecord`; **action**: Phase 3 step 3.3 integrates with existing types |
+| `AuthorizedSessionAdapter` | NOT YET IMPLEMENTED (Phase 2 step 2.4b dependency) | step 3.6 builds on step 2.4b; phases must execute in order |
+
+`NetworkAdapterError` itself is the parent for all transport
+failures. The `FatalError` mixin (`RetryExhaustedError`,
+`AdapterFailureError`, `SizeBudgetExceededError`,
+`MissingNetworkArtifactError`) is what Phase 3 step 3.2 inspects via
+`isinstance(failure, FatalError)`. Concrete 401/403/404 status
+mapping is the orchestrator's responsibility (it builds the
+`NetworkAdapterError` from the response status); Phase 3 does NOT
+introduce a new "ForbiddenError" class.
+
 ## Substep boundaries
 
 Per the new "logical-boundary-only" splitting rule, Phase 3 ships
-6 sub-steps. Each is a single cohesive concern; no further split
-is justified.
+7 sub-steps (3.5 split into 3.5a/3.5b at iter-3 because LWA + SigV4
+signing IS a true logical boundary distinct from pagination
+mechanics). Each is a single cohesive concern.
 
 | Sub-step | Title | LOC est | Logical boundary |
 |---|---|---|---|
 | 3.1 | `AccessControlClassifierPort` + `HeuristicClassifier` | ~250 | Pure detection — no I/O, no policy |
 | 3.2 | `AdapterEscalationPort` + `PolicyDrivenEscalator` | ~300 | Pure decision — consumes typed failures, emits typed decisions |
-| 3.3 | `source_coverage_gate` revert to evaluative | ~150 | Refactor: remove live-decision branches; keep evidence-completeness validation |
-| 3.4 | eBay OAuth token cache (`FileBackedEbayTokenCache`) | ~200 | File-backed cache + cross-worktree lock, isolated from rest of Phase 3 |
-| 3.5 | Amazon SP-API pagination + token refresh + partial-batch | ~350 | Single Amazon-specific adapter; cohesive feature set (3 features only meaningful together) |
-| 3.6 | Live test #5: eBay browse-by-keyword | ~150 | Live test, gated by `@pytest.mark.live` |
+| 3.3 | `source_coverage_gate` revert to evaluative | ~250 | Refactor: integrate with existing `SourceCoverageAdapterExecutionRecord` / `SourceCoverageAdapterReport`; add cross-record consistency assertions |
+| 3.4 | eBay OAuth token cache (`EbayTokenCachePort` + `FileBackedEbayTokenCache`) | ~250 | File-backed cache + cross-worktree lock, isolated from rest of Phase 3 |
+| **3.5a** | Amazon SP-API paginator (transport-only) | ~300 | Pure pagination over a pre-signed transport; injectable transport for tests |
+| **3.5b** | LWA + AWS SigV4 signing transport (`AmazonSpApiSignedTransport`) | ~250 | Real production credential / signing path — wraps an inner `httpx.BaseTransport` to add LWA token + SigV4 headers; talks to AWS STS for IAM role; **WIRED but not live-tested in Phase 3** — the live exercise is Phase 6 |
+| 3.6 | eBay browse adapter + live test #5 | ~250 | eBay OAuth fetcher + browse adapter + `@pytest.mark.live` test |
 
-3.5 explicitly stays merged: pagination yields a token, token
-refresh runs on 401 mid-pagination, partial-batch tolerance handles
-the case where token refresh succeeds for some pages but not
-others. Splitting them would force test fixtures to share a fake
-SP-API harness across files — false separation.
+iter-3 codex finding: a single SP-API "list" call requires regional
+host + LWA token + AWS SigV4 — the iter-2 sketch glossed this. 3.5
+splits into:
+
+- **3.5a** ships the *paginator* (cursor pagination + 401 refresh
+  + partial-batch result + budget) over an injectable
+  `httpx.BaseTransport`. Tests inject a `MockTransport` that
+  doesn't sign anything. The paginator is provider-neutral
+  (rebrandable as `CursorPaginatedAdapter` for a future eBay
+  Inventory API or similar — no Amazon specifics).
+
+- **3.5b** ships the *signed transport* — a `BaseTransport` wrapper
+  that fetches LWA tokens from `https://api.amazon.com/auth/o2/token`,
+  fetches AWS STS credentials via `AssumeRole`, and signs each
+  outgoing request with SigV4. Production-only; tests for 3.5b are
+  fixture-mode against canned LWA / STS responses. **Live-validation
+  of full 3.5b stack is deferred to Phase 6 step 6.4** because real
+  STS / LWA credentials require a deployed AWS IAM role and SP-API
+  developer-account approval — not available in CI.
+
+This split lets 3.5a ship cleanly with full unit-test coverage; 3.5b
+ships with full unit coverage but its end-to-end live correctness
+is acknowledged as a Phase 6 dependency. The capability-cliff goal
+("walks API_SOURCE → HTTP fall-through") is achieved by 3.5a + 3.5b
+together; 3.5a alone is a usable demo / regression harness.
 
 ## Step 3.1 — `AccessControlClassifierPort` + `HeuristicClassifier`
 
@@ -72,7 +115,7 @@ import httpx
 
 # Phase 0 contract module
 from veracrawl.contracts.network import AccessControlBlocked
-from veracrawl.contracts.shared import Ref
+from veracrawl.contracts.common import Ref
 
 @runtime_checkable
 class AccessControlClassifierPort(Protocol):
@@ -103,9 +146,47 @@ class AccessControlClassifierPort(Protocol):
     ) -> AccessControlBlocked | None: ...
 ```
 
-`Ref` lives at `veracrawl.contracts.shared`; existing Phase 0
-types use it. `AccessControlBlocked` is the Phase 0 record at
-`veracrawl.contracts.network`.
+`Ref` lives at `veracrawl.contracts.common` (verified — see
+ground-truth table at top); `AccessControlBlocked` is the Phase 0
+record at `veracrawl.contracts.network`.
+
+### ID generation strategy (replay-deterministic)
+
+Phase 0 contracts (`AccessControlBlocked`, `AdapterEscalationDecision`)
+require stable `id` fields. Strategy: each ID is the SHA-256 hex of
+a canonical-form composite key:
+
+```
+classifier_id = sha256(
+    f"{run_ref}|{request_url}|{response_status}|{detected_provider.value}|"
+    f"{','.join(sorted(detection_signal_refs))}"
+).hexdigest()[:32]
+
+decision_id = sha256(
+    f"{run_ref}|{from_adapter_type.value}|{to_adapter_type.value}|"
+    f"{failure_signature}|{triggered_by_ref}|{escalations_used}"
+).hexdigest()[:32]
+```
+
+Truncated to 32 hex chars (128 bits). Replay determinism: same
+inputs → same ID. `policy_ref` for the decision comes from the
+caller (the orchestrator already has the policy in scope before
+calling `decide()`); add as required parameter:
+
+```python
+def decide(
+    *,
+    from_adapter_type: AdapterType,
+    failure: ...,
+    js_render_evidence_ref: Ref | None,
+    policy: AdapterEscalationPolicy,
+    policy_ref: Ref,                 # NEW iter-3: from caller
+    run_ref: Ref,
+    escalations_used: int,
+    scope_covers_authorized_session: bool,
+    review_provider: ReviewProviderPort | None = None,  # see requires_review below
+) -> AdapterEscalationDecision | None: ...
+```
 
 ### Detection rules (HeuristicClassifier default impl)
 
@@ -316,6 +397,59 @@ decide(from, failure, policy, escalations_used, scope_covers_session, document_i
   return None
 ```
 
+### `requires_review` flag handling
+
+The Phase 0 `AdapterEscalationPolicy.requires_review: bool` flag,
+when `True`, gates every escalation behind operator approval.
+The escalator integrates as follows:
+
+```
+# After step 4 / 5 / 6 in decide() determines a target adapter:
+if policy.requires_review:
+    if review_provider is None:
+        # Caller forgot to wire review channel for a review-required policy
+        raise RuntimeError(
+            "AdapterEscalationPolicy.requires_review=True but no review_provider passed; "
+            "wire OperatorReviewProviderPort or set requires_review=False"
+        )
+    approval = review_provider.request_approval(
+        run_ref=run_ref,
+        from_adapter_type=from,
+        to_adapter_type=target,
+        failure_signature=signature,
+        triggered_by_ref=triggered_by_ref,
+    )
+    if approval is None:
+        return None  # operator denied OR timed out
+return decision(from, target, signature, triggered_by_ref, policy_ref)
+```
+
+`OperatorReviewProviderPort` (Protocol):
+
+```python
+@runtime_checkable
+class OperatorReviewProviderPort(Protocol):
+    """Phase 3 ships ``NoopOperatorReviewProvider`` (always returns
+    None — denial). Phase 6 swaps in ``OtelOperatorReviewProvider``
+    that pages a real Slack / queue channel and waits for approval."""
+
+    def request_approval(
+        self,
+        *,
+        run_ref: Ref,
+        from_adapter_type: AdapterType,
+        to_adapter_type: AdapterType,
+        failure_signature: str,
+        triggered_by_ref: Ref,
+    ) -> Ref | None: ...  # approval_decision_ref or None
+```
+
+Test coverage in 3.2 acceptance list (added):
+
+- `test_requires_review_with_no_provider_raises_runtimeerror`
+- `test_requires_review_with_noop_provider_returns_none` (denial)
+- `test_requires_review_with_approving_provider_returns_decision`
+
 ### Each transition explicitly defined
 
 The capability-cliff chain
@@ -388,69 +522,86 @@ free-form caller string lands on the exception or in audit logs.
 
 ## Step 3.3 — `source_coverage_gate` revert to evaluative
 
-Existing `source_coverage_gate` runs live decisions; design says it
-should be evaluative only (validate recorded chain's evidence
-completeness, never run the chain itself). This is a refactor:
-identify the live-decision call sites, replace with assertions over
-the run record's structured event sequence.
+Existing `source_coverage_gate` (`src/veracrawl/source_coverage_gate.py`)
+runs live decisions; design says it should be evaluative only
+(validate recorded chain's evidence completeness, never run the
+chain itself). This is a refactor: identify the live-decision
+call sites, replace with assertions over the existing Phase 0
+records (`SourceCoverageAdapterExecutionRecord` per adapter +
+`SourceCoverageAdapterReport` per run).
 
-### Run-record schema for evaluation
+### Integration with existing schema (codex iter-3 important)
 
-The gate consumes a `SourceCoverageRunRecord` (existing Phase 0
-type if present; otherwise NEW for Phase 3 step 3.3 — verify at
-implementation time and add to Phase 0 contracts file in the same
-commit if missing). Required ordering rule: the record carries an
-`events: list[SourceCoverageEvent]` list in **emission order**
-(monotonic by `timestamp` field, ties broken by insertion index).
-Each `SourceCoverageEvent` is a tagged-union via `event_kind`:
+iter-2 invented `SourceCoverageRunRecord` / `SourceCoverageEvent`,
+which contradicted the Phase 0 contracts already in
+`src/veracrawl/contracts/source_coverage.py`. Phase 0 ships:
 
-```python
-class SourceCoverageEventKind(StrEnum):
-    ATTEMPT_STARTED = "attempt_started"          # adapter starts a fetch
-    ATTEMPT_EVIDENCE = "attempt_evidence"        # NetworkAttemptEvidence ref
-    ACCESS_CONTROL_BLOCKED = "access_control_blocked"  # AccessControlBlocked ref
-    ESCALATION_DECIDED = "escalation_decided"    # AdapterEscalationDecision ref
-    ATTEMPT_FAILED = "attempt_failed"            # typed failure ref + class name
-    ATTEMPT_SUCCEEDED = "attempt_succeeded"      # adapter result ref
+* `SourceCoverageAdapterExecutionRecord` — per-adapter execution,
+  fields include `adapter_type`, `fetch_attempt_refs`,
+  `policy_decision_refs`, `credential_audit_refs`,
+  `replay_bundle_ref`, `result: CompletenessResult`.
+* `SourceCoverageAdapterReport` — per-run summary, fields include
+  `adapter_execution_refs`, `verified_adapter_types`,
+  `policy_decision_refs`, `replay_bundle_ref`,
+  `completion_result`.
 
-@dataclass(frozen=True, slots=True)
-class SourceCoverageEvent:
-    timestamp: datetime  # tz-aware
-    sequence_index: int  # monotonically increasing per run, tie-break
-    event_kind: SourceCoverageEventKind
-    adapter_type: AdapterType
-    payload_ref: Ref  # points to the corresponding contract record
+The Phase 3 evaluative gate therefore consumes these existing
+records and validates **cross-record consistency** without
+introducing new Phase 0 types:
 
-    # Denormalized fields required for the gate to validate without
-    # ref-resolution. Populated by the orchestrator when it appends
-    # the event; the original payload_ref still points to the
-    # canonical contract record for audit.
-    failure_signature: str | None = None       # set on ESCALATION_DECIDED + ATTEMPT_FAILED
-    from_adapter_type: AdapterType | None = None  # set on ESCALATION_DECIDED
-    to_adapter_type: AdapterType | None = None    # set on ESCALATION_DECIDED
-    failure_class_name: str | None = None      # set on ATTEMPT_FAILED (e.g., "NetworkPolicyForbiddenError", "ApiSourceOutageError")
-```
+1. For each `SourceCoverageAdapterExecutionRecord` in the report's
+   `adapter_execution_refs`, follow `policy_decision_refs` and
+   load any `AdapterEscalationDecision` records (Phase 0).
+2. Build an in-memory chain by ordering execution records by
+   their `created_at` timestamp (already on `TimestampedModel`),
+   with ties broken by execution-record `id` lexicographic order
+   for replay determinism.
+3. For each escalation decision: assert the preceding execution
+   record's `adapter_type == decision.from_adapter_type`, AND
+   that the preceding record contains either (a) a fetch_attempt
+   ref pointing at a `NetworkAttemptEvidence` whose
+   `failure_type` matches the `decision.failure_signature`, OR
+   (b) a policy_decision_ref pointing at an `AccessControlBlocked`
+   for the access-control branch.
+4. Assert chain length (count of escalation decisions in
+   `report.policy_decision_refs`) ≤ the policy's
+   `max_escalations_per_run` (loaded from the policy registry via
+   the run's `runtime_spec`).
+5. Assert `verified_adapter_types` is a subset of the actual
+   adapters that succeeded (no fabricated success claims).
 
-The denormalization keeps the gate stateless and ref-resolution-
-free: it inspects only the flattened event sequence. The original
-contract refs (`payload_ref`) remain for downstream audit /
-replay tooling that needs the full record.
-
-"Preceding evidence/failure" in the test list below means: scan
-events backward from the `ESCALATION_DECIDED` event, find the most
-recent `ATTEMPT_FAILED` or `ACCESS_CONTROL_BLOCKED` event whose
-`adapter_type` matches `decision.from_adapter_type`. If no such
-event exists, the escalation is unjustified.
+The existing record fields carry enough information that no
+denormalized event-list schema is needed.
 
 ### Acceptance tests (`tests/unit/test_step_3_3_source_coverage_gate_evaluative.py`)
 
 1. `test_gate_no_longer_invokes_classifier_or_escalator` — gate run on a fixture record raises 0 `Mock.call`s on classifier/escalator stubs
-2. `test_gate_reports_missing_attempt_evidence` — record with `ESCALATION_DECIDED` event but no preceding `ATTEMPT_EVIDENCE` from the same `from_adapter_type` is flagged
-3. `test_gate_reports_unjustified_escalation` — `ESCALATION_DECIDED` whose `failure_signature` doesn't correspond to any preceding `ATTEMPT_FAILED` / `ACCESS_CONTROL_BLOCKED` event flagged
-4. `test_gate_uses_sequence_index_for_ordering` — events with identical timestamps are ordered by `sequence_index`
-5. `test_gate_chain_length_at_most_max_escalations_per_run` — count of `ESCALATION_DECIDED` events ≤ policy's `max_escalations_per_run` (orchestrator-level invariant moved here per codex iter-1 minor)
-6. `test_gate_passes_complete_chain` — well-formed record passes
-7. `test_gate_idempotent` — same input → same output
+2. `test_gate_reports_unjustified_escalation_decision` — fixture has an `AdapterEscalationDecision` whose `from_adapter_type` doesn't match the preceding execution record's adapter_type
+3. `test_gate_reports_missing_fetch_attempt_for_http_to_browser_escalation` — escalation decision JS_RENDERED_DOCUMENT but the HTTP execution record's `fetch_attempt_refs` is empty
+4. `test_gate_reports_chain_exceeds_max_escalations_per_run` — chain has 3 decisions, policy says `max_escalations_per_run=1`
+5. `test_gate_orders_executions_by_timestamp_then_id` — two execution records with identical timestamps; assert deterministic ordering by id
+6. `test_gate_passes_complete_chain` — well-formed report with valid escalation chain
+7. `test_gate_idempotent` — same input → same output / `CompletenessResult`
+8. `test_gate_replay_property_same_input_yields_same_final_adapter` (codex iter-3 important — parent design property test): construct two structurally-equal reports → gate produces identical `verified_adapter_types`
+9. `test_gate_replay_property_evidence_digest_stable` (codex iter-3 important — parent design property test): hash of all `fetch_attempt_refs` ∪ `page_snapshot_refs` ∪ `credential_audit_refs` is stable across runs of the gate on the same input
+
+### Non-introduction of new Phase 0 contracts
+
+This step is a refactor of the gate plus possibly an enrichment
+of `SourceCoverageAdapterExecutionRecord` if and only if a
+required cross-reference cannot be resolved with the current
+fields. **At implementation time**, verify whether existing fields
+suffice:
+
+- `adapter_type` ✓
+- `policy_decision_refs` (escalation decisions ride here) ✓
+- `fetch_attempt_refs` (network evidence) ✓
+- `replay_bundle_ref` ✓
+- timestamp (via TimestampedModel) ✓
+
+If implementation discovers a gap, it lands as a Phase 0 contract
+extension with a separate design.md note + commit, NOT an
+opportunistic addition during step 3.3 refactor.
 
 ### Codex recurring concerns coverage
 
@@ -610,10 +761,15 @@ the orchestrator sees both pieces.
 # src/veracrawl/adapters/sources/amazon_sp_api.py
 
 @dataclass(frozen=True, slots=True)
-class AmazonSpApiPaginationBudget:
-    """Per-list-call budget. Distinct from RunBudget — RunBudget is
-    the run-level total; this is the call-level cap so a single
-    pathological endpoint cannot consume the run budget alone."""
+class PaginationBudget:
+    """Per-list-call budget. Generic — used by AmazonSpApiPaginator
+    AND eBay browse adapter. Distinct from RunBudget (run-level
+    total); this is the call-level cap so a single pathological
+    endpoint cannot consume the run budget alone.
+
+    Lives at ``veracrawl.contracts.adapter_pagination`` (NEW Phase 3
+    contract module — the file is created when step 3.5a lands).
+    """
 
     max_pages: int                # hard cap on pages fetched per call
     max_runtime_seconds: float    # wall-clock cap on the whole pagination loop
@@ -645,7 +801,7 @@ class AmazonSpApiAdapter:
         params: Mapping[str, str],
         scope_ref: str,
         run_ref: Ref,
-        budget: AmazonSpApiPaginationBudget,
+        budget: PaginationBudget,
     ) -> AmazonSpApiPaginatedResult: ...
 ```
 
@@ -732,8 +888,8 @@ list(endpoint, params, scope_ref, run_ref, budget):
 
 | Surface | Risk | Mitigation |
 |---|---|---|
-| `params` (caller dict) | could carry credential string | At `list()` entry (NOT construction — `params` is a per-call argument): walk values; refuse if any value `isinstance(CredentialValue)` (typed leak) OR if any value matches a credential-marker substring per Phase 0 step 0.4's `_REDACTABLE_MARKERS` tuple (`password`, `token=`, `api_key`, `aws_access_key`, ...). Raise `TypeError` for the typed case; raise `ValueError` for the marker-shaped string case. The marker-tuple check is best-effort and documented as not catching arbitrary unrecognized secrets — callers are still responsible for not passing raw secrets through non-vault paths. |
-| `endpoint` | path injection / canonicalization mismatch | Validate by parsing through `urllib.parse.urlsplit`; require `scheme == ""`, `netloc == ""`, `path` starts with `/`, path matches `^/[A-Za-z0-9_\-/.]+$` (allow case + dot, but no `..`/`%2e`/`%2f`/`\` per Phase 2 step 2.2a ambiguous-path rules). Reject `//` doubled slashes. SP-API paths in practice: `/listings/2021-08-01/items/{sellerId}/{sku}`, `/orders/v0/orders` — both pass. Test list explicitly covers a few real-world SP-API paths. |
+| `params` (caller dict) | could carry credential string | At `list()` entry (NOT construction — `params` is a per-call argument): walk values; refuse if any value `isinstance(CredentialValue)` (typed leak) OR if any value matches a credential-marker substring per the **public** `veracrawl.contracts.errors.REDACTABLE_MARKERS` constant. Raise `TypeError` for the typed case; raise `ValueError` for the marker-shaped string case. The marker-tuple check is best-effort and documented as not catching arbitrary unrecognized secrets — callers are still responsible for not passing raw secrets through non-vault paths. **Prerequisite (must land in step 3.5a's first commit)**: re-export `_REDACTABLE_MARKERS` (Phase 0.4 private) as `REDACTABLE_MARKERS` (no underscore) in `veracrawl.contracts.errors`'s `__all__`. The underscore prefix on the original was an implementation detail; the constant is intentionally stable. The re-export is a one-line addition that doesn't change the value or alphabetize the markers. |
+| `endpoint` | path injection / canonicalization mismatch | Validate by parsing through `urllib.parse.urlsplit`; require `scheme == ""`, `netloc == ""`, `path` starts with `/`, path matches `^/[A-Za-z0-9_\-/.]+$` (allow case + dot, but no `..`/`%2e`/`%2f`/`\` per Phase 2 step 2.2a ambiguous-path rules). Reject `//` doubled slashes via a separate explicit check (`"//" not in path`) since the regex does not exclude doubled slashes. SP-API paths in practice: `/listings/2021-08-01/items/{sellerId}/{sku}`, `/orders/v0/orders` — both pass. Test list explicitly covers a few real-world SP-API paths. |
 | `nextToken` from server | could be malicious shape | treat as opaque string; pass through; cap length at 4 KiB |
 | 401 refresh loop | runaway if refresh+retry both 401 | hard cap: 1 refresh per `list()` call (state on the call, not the adapter) |
 
@@ -795,6 +951,22 @@ This step ships **two** files:
    `@pytest.mark.skipif(...)` if any of the required credentials
    are absent so CI without secrets cleanly skips.
 
+   **Runtime mode** (codex iter-3 critical — `EnvVarVault` raises
+   `ProductionRuntimeNotImplemented` under PRODUCTION; iter-2
+   said the live test ran under PRODUCTION which contradicted the
+   Phase 2 step 2.1 vault gate). Resolution: the live test runs
+   under `RuntimeMode.FIXTURE` against a real network endpoint.
+   Phase 1 step 1.6 live tests (`tests/integration/live/test_step_1_6*.py`)
+   established this precedent — issuing real HTTP requests under
+   fixture mode is acceptable when the test exercises a
+   capability that needs a live endpoint to validate (vendor
+   detection, real OAuth round-trip, real eBay Browse API
+   surface) without claiming "production runtime correctness".
+   Production runtime correctness for eBay browse lives in
+   Phase 6 step 6.4 once `OutboxVaultClient` (Phase 2 step 2.4a)
+   ships and a vault adapter that DOES allow PRODUCTION reads
+   (e.g., HashiCorp Vault sidecar) is wired in.
+
    Credential contract (codex iter-2 important — explicit definition):
    - `VERACRAWL_CRED_EBAY_PROD__CLIENT_ID` (Phase 2 step 2.1 env-var
      vault format) — eBay OAuth client ID.
@@ -818,7 +990,7 @@ This step ships **two** files:
 
    Issues a browse query for a benign keyword (`"laptop"`); asserts
    ≥1 product returned within
-   `AmazonSpApiPaginationBudget(max_pages=10, max_runtime_seconds=30)`
+   `PaginationBudget(max_pages=10, max_runtime_seconds=30)`
    (the `EbayBrowseAdapter` reuses the same budget shape since the
    pagination semantics are equivalent).
 
@@ -910,13 +1082,13 @@ process.
 | c | `_private` slot `__dir__` filter | No new `_private` slots holding secrets in Phase 3 |
 | d | Cycle detection / depth cap | N/A — no recursion |
 | e | `from None` + `__context__` | N/A — no re-raise |
-| f | Caller-supplied identifier shape | 3.5 `endpoint` validated `^[a-z0-9/-]+$`; `scope_ref` already validated by Phase 2 step 2.1 |
+| f | Caller-supplied identifier shape | 3.5 `endpoint` validated `^/[A-Za-z0-9_\-/.]+$` + explicit `"//" not in path` check + Phase 2 step 2.2a ambiguous-path rules (no `..` / `%2e` / `%2f` / `\`); `scope_ref` already validated by Phase 2 step 2.1 |
 | g | Unbounded loop wall-clock budget | 3.5 pagination capped by `policy.max_escalations_per_run`-equivalent (`max_pages` from `RunBudget`); 3.5 401 refresh hard-capped at 1 |
 | h | `getattr` on user object | N/A |
 | i | URL handling defensive | 3.1 reads URL only via Phase 0 `_is_http_url`; 3.5 `endpoint` regex-validated |
 | j | Third-party dep upper bound | No new third-party deps |
 | k | Private-module dep | N/A |
-| l | Path canonicalization | 3.5 `endpoint` regex refuses `..`/`.`/encoded slashes |
+| l | Path canonicalization | 3.5 `endpoint` regex refuses `..` / `.` / `%2e` / `%2f` / `%5c` / `\` plus rejects `//` doubled slashes |
 | m | Free-form `reason` | All Phase 3 reason fields use structured enums (`EscalationFailureSignature`, `AmazonPaginationFailureKind`) |
 | n | Exception `__dict__` | 3.4 cache errors report file metadata only, not paths/contents |
 | o | Real-engine timing | 3.4 + 3.5 inject `clock`; live tests assert wall-clock budget without micro-asserts |
