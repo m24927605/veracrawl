@@ -479,7 +479,11 @@ decision + replay event per `docs/09:128`.
 - `SessionScopePolicy` (default `StrictAllowlistScope`): enforces
   (host pattern, path pattern, allowed actions, expiry) per
   credential. Out-of-scope use raises `CredentialScopeViolation`
-  (PolicyViolation).
+  (PolicyViolation) carrying a structured `CredentialScopeReason`
+  enum (`origin_not_allowed` / `route_not_allowed` /
+  `method_not_allowed` / `expired`); free-form refusal strings
+  were retired in Phase 2 step 2.2b to close a residual leak path
+  (Phase 0 step 0.4 reservation pull-forward — see STATUS.md).
 - `RedactedPromptContext`: a wrapper that any credential value
   passing into `prompt_template_ref` resolution / model adapter is
   replaced with the literal `<credential:redacted:<scope>>` before

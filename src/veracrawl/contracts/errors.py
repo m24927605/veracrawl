@@ -365,10 +365,9 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
                 raise ValueError(
                     "CredentialScopeViolation.reason must be a "
                     "CredentialScopeReason enum value (or its string "
-                    "form); got an unknown value (length="
-                    f"{len(reason) if isinstance(reason, str) else 0}, "
-                    "redacted) — free-form reasons were retired in "
-                    "Phase 2 step 2.2b to close a residual leak path"
+                    "form); got an unknown value (redacted) — "
+                    "free-form reasons were retired in Phase 2 step "
+                    "2.2b to close a residual leak path"
                 ) from None
             self.reason = CredentialScopeReason(reason)
         super().__init__(

@@ -24,16 +24,17 @@ step wires the runtime path:
 
 What lives in step 2.2a vs later sub-steps:
 
-* **2.2a (this step)**: pure-logic matcher + port. No structured
-  refusal-reason redesign and no runtime ReDoS hardening — the
-  free-form ``reason`` string carries the refusal class
-  (``origin_not_allowed`` / ``route_not_allowed`` /
-  ``method_not_allowed`` / ``expired``) and ``CredentialScopeViolation``
-  redacts it at the exception boundary.
-* **2.2b**: replaces the free-form ``reason`` with a structured
-  enum so ``CredentialScopeViolation`` cannot leak even if a future
-  caller pipes raw user input into the field
-  (Phase 0 step 0.4 reservation pull-forward).
+* **2.2a**: pure-logic matcher + port. The matcher emits a
+  :class:`~veracrawl.contracts.errors.CredentialScopeReason` enum
+  value as the refusal class.
+* **2.2b** (now landed): replaced the original free-form ``reason``
+  string with a structured ``CredentialScopeReason`` enum so
+  ``CredentialScopeViolation`` cannot leak even if a future caller
+  pipes raw user input into the field
+  (Phase 0 step 0.4 reservation pull-forward). Implementations of
+  ``SessionScopePolicy`` that ship after step 2.2b must use the
+  enum — free-form strings raise :class:`ValueError` at exception
+  construction.
 * **2.2c**: layers a runtime ReDoS defense (per-match timeout /
   ``re2`` engine / glob-only DSL) over the regex matcher so an
   attacker-controlled URL cannot wedge the matcher even though
