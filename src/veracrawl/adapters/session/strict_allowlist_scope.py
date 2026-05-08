@@ -347,10 +347,17 @@ class StrictAllowlistScope:
             # ``regex.match`` anchors at position 0 (same semantics
             # as stdlib ``re.match``) and accepts a ``timeout=``
             # kwarg that aborts the match when wall-clock spent
-            # inside the engine exceeds the budget — the bounded
-            # matcher codex iter 2-5 of step 2.2a flagged. Refuse
-            # the request on timeout (treat as ``ROUTE_NOT_ALLOWED``)
-            # rather than let the worker hang on a hostile input.
+            # inside the engine exceeds the budget. The ``regex``
+            # package raises the Python builtin :class:`TimeoutError`
+            # on budget overrun (verified for the pinned
+            # ``regex>=2024.5,<2027`` range — see test
+            # ``tests/unit/test_step_2_2c_redos_hardening.py``).
+            # Refuse the request on timeout (treat as
+            # ``ROUTE_NOT_ALLOWED``) rather than let the worker
+            # hang on a hostile input. Catching the bare builtin
+            # is intentional: ``regex.error`` covers compile
+            # failures, which must surface loudly rather than
+            # silently degrade to a refusal.
             per_match_timeout = min(_MATCH_TIMEOUT_SECONDS, remaining)
             try:
                 matched = regex.match(pattern, route, timeout=per_match_timeout)

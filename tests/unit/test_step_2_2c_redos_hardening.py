@@ -75,18 +75,51 @@ def test_happy_path_non_match_completes_without_timeout() -> None:
     assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
 
 
-def test_catastrophic_backtracking_pattern_bounded_by_timeout() -> None:
-    """The classic ReDoS regression: ``(a+)+`` or ``(a|a)*`` against
-    a long ``aaa...!`` string would backtrack for minutes under
-    stdlib ``re``. The contract layer's AST guard refuses
-    ``(a+)+`` outright, but ``(a|aa)+`` is contract-valid (no
-    structurally nested quantifiers) and still ReDoS-able. With
-    the 50 ms timeout, the match must abort and surface as a
-    ``ROUTE_NOT_ALLOWED`` refusal — never wedge the worker."""
+def test_timeout_error_translates_to_typed_refusal_via_monkeypatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex iter-2 important: deterministically verify the
+    timeout-translation path. Patch ``regex.match`` to raise
+    :class:`TimeoutError` unconditionally; the matcher must
+    translate that to ``CredentialScopeViolation(ROUTE_NOT_ALLOWED)``,
+    not let the raw ``TimeoutError`` escape the policy boundary.
+    Real-engine timing tests below are supplemental — the
+    ``regex`` package's optimizer can converge quickly on patterns
+    that would have hung stdlib ``re``, so a wall-clock assertion
+    is not a reliable test of the translation path.
+    """
 
-    # ``regex.compile("/(a|aa)+")`` is valid; the AST guard accepts
-    # it because no quantifier is nested inside another. Adversarial
-    # input ``"/" + "a" * 35 + "!"`` triggers exponential backtracking.
+    def _always_timeout(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise TimeoutError("simulated regex.match timeout")
+
+    monkeypatch.setattr(
+        "veracrawl.adapters.session.strict_allowlist_scope.regex.match",
+        _always_timeout,
+    )
+
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _scope_with_pattern("^/v1/items"),
+            request_url="https://api.example.com/v1/items",
+            method="GET",
+        )
+    assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
+
+
+def test_known_backtracking_pattern_does_not_hang_the_worker() -> None:
+    """Sanity check (supplemental to the deterministic monkeypatch
+    test above): a known ReDoS-shaped pattern + adversarial input
+    must complete in bounded time, regardless of whether the
+    ``regex`` engine optimizes the match away (returning ``None``)
+    or actually hits the timeout. Either outcome is acceptable —
+    the contract is that the worker is not wedged."""
+
+    # ``regex.compile("/(a|aa)+")`` is contract-valid (no
+    # structurally nested quantifiers); ``regex`` may optimize
+    # this and return ``None`` faster than the timeout fires.
+    # We don't care which path runs — only that the credential
+    # gate doesn't hang on this kind of input.
     backtracking_pattern = "^/(a|aa)+$"
     adversarial_path = "/" + ("a" * 60) + "!"
 
@@ -100,11 +133,11 @@ def test_catastrophic_backtracking_pattern_bounded_by_timeout() -> None:
     elapsed = time.monotonic() - start
 
     # 200 ms regression budget — generous over the 50 ms internal
-    # timeout to account for test-runner overhead. A pre-2.2c
-    # matcher would have run for many seconds (or hung the worker).
+    # timeout for test-runner overhead. A truly hung matcher would
+    # blow this budget.
     assert elapsed < 0.2, (
-        f"matcher took {elapsed:.3f}s — expected <0.2s under the "
-        "regex.match timeout"
+        f"matcher took {elapsed:.3f}s on a backtracking-shaped "
+        "pattern — expected <0.2s either by optimization or timeout"
     )
     assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
 
