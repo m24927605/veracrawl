@@ -302,6 +302,31 @@ class InMemoryAimdLimiter:
         with bucket.lock:
             return bucket.rate_per_second
 
+    def success_count_for(
+        self,
+        *,
+        origin: str,
+        route_class: RouteClass,
+        adapter_type: AdapterType,
+    ) -> int:
+        """Return the success counter for the bucket; ``0`` if the
+        bucket has never been touched.
+
+        Non-mutating: unlike :meth:`current_rate_per_second`, this
+        accessor does NOT create the bucket on first read. Used by
+        live tests to verify the limiter's ``report_success`` was
+        actually called by the adapter (a no-op limiter would never
+        construct a bucket; success_count_for returns ``0`` and
+        the test fails).
+        """
+
+        key = (_normalize_origin(origin), route_class, adapter_type)
+        bucket = self._lookup_bucket(key)
+        if bucket is None:
+            return 0
+        with bucket.lock:
+            return bucket.success_count
+
     # -- Internals ---------------------------------------------------
 
     def _semaphore_for(self, origin: str) -> threading.BoundedSemaphore:

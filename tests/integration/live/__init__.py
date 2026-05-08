@@ -16,6 +16,10 @@ Live tests:
   outage / our regression / flake — a live failure must be tagged
   per design.md §6 step 6.5 ``Live failure classification``.
 
-Phase 1 step 1.6 ships live tests #1-#3 (httpbin headers /
-redirect-to / example.com); the rest land in later phases.
+Phase 1 step 1.6 was split into sub-steps (reassessment-20260508T091513Z.md):
+- 1.6a: httpbin headers (this test file)
+- 1.6b: httpbin redirect-to (later)
+- 1.6c: example.com (later)
+The rest of the live integration tests land in later phases per
+design.md §6 step 6.4.
 """

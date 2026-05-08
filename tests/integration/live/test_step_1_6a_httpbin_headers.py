@@ -58,9 +58,6 @@ from veracrawl.adapters.network.urllib_robots import (
     UrllibRobotsParser,
     make_httpx_robots_fetcher,
 )
-from veracrawl.adapters.object_stores.local_fs_evidence_store import (
-    LocalFsEvidenceArtifactStore,
-)
 from veracrawl.contracts.enums import AdapterType, RouteClass
 from veracrawl.contracts.network import NetworkRequest
 from veracrawl.contracts.source_adapter import SourceAdapterCommand
@@ -114,7 +111,6 @@ def _real_robots_port() -> UrllibRobotsParser:
 def _production_config(
     *,
     rate_limiter: InMemoryAimdLimiter | None = None,
-    evidence_store: LocalFsEvidenceArtifactStore | None = None,
 ) -> HttpClientConfig:
     """Build the full production wiring for the HTTP adapter.
 
@@ -167,17 +163,15 @@ def test_httpbin_headers_chrome_ua_reaches_origin_in_production_mode() -> None:
 
 
 @pytest.mark.live
-def test_httpbin_real_aimd_limiter_state_changes_per_fetch() -> None:
-    """Codex iter-1 important: prove the real AIMD limiter is
-    actually engaged by the live path — observe limiter state
-    (success counter / rate) directly instead of relying on
-    wall-clock timing (which is dominated by network latency
-    and could pass even with a no-op limiter).
+def test_httpbin_real_aimd_limiter_engaged_via_success_count() -> None:
+    """Codex iter-1/2 important: prove the real AIMD limiter is
+    actually engaged by the live path. Use the non-mutating
+    ``success_count_for`` accessor (which returns ``0`` when no
+    bucket exists) so a no-op-limiter regression — where
+    ``report_success`` is never called — fails this test.
 
-    Two successful fetches should advance the per-bucket success
-    counter by 2 (without crossing the additive-increase
-    threshold of 10), so the rate stays at the initial value
-    but the success_count is observable as 2.
+    Two successful fetches → success_count == 2 (under threshold
+    10, so no additive-increase reset).
     """
 
     limiter = InMemoryAimdLimiter(initial_rate_per_second=2.0)
@@ -187,32 +181,30 @@ def test_httpbin_real_aimd_limiter_state_changes_per_fetch() -> None:
         adapter1.execute(_make_command())
         adapter2 = StdlibHttpSourceAdapter(_make_request(), config=config)
         adapter2.execute(_make_command())
-    # The limiter's bucket for (httpbin origin, LISTING, HTTP)
-    # exists after the fetches; rate stays at 2.0 (no additive
-    # increase yet because successes_to_additive_increase=10).
-    rate = limiter.current_rate_per_second(
+    # Non-mutating read: returns 0 if the bucket was never
+    # constructed (no-op limiter regression).
+    success_count = limiter.success_count_for(
         origin="https://httpbin.org",
         route_class=RouteClass.LISTING,
         adapter_type=AdapterType.HTTP,
     )
-    assert rate == pytest.approx(2.0)
-    # The bucket exists (would be at initial rate either way; the
-    # observable signal is that the limiter built a bucket for
-    # this specific (origin, route_class, adapter_type) — proving
-    # it was consulted at acquire time, not bypassed).
-    bucket_key = ("https://httpbin.org", RouteClass.LISTING, AdapterType.HTTP)
-    assert bucket_key in limiter._buckets  # noqa: SLF001 — test-only access
+    assert success_count == 2, (
+        f"expected limiter.report_success called twice, got success_count={success_count} "
+        "(zero would indicate the limiter was bypassed)"
+    )
 
 
 @pytest.mark.live
-def test_httpbin_real_conditional_cache_caches_etag() -> None:
-    """The real conditional cache should cache the ETag returned by
-    httpbin so a subsequent fetch sends ``If-None-Match`` /
-    ``If-Modified-Since``. ``httpbin.org/headers`` doesn't return
-    ETag for ``/headers``, so use ``/etag/v1`` which does.
+def test_httpbin_real_conditional_cache_round_trip_with_304_short_circuit() -> None:
+    """Codex iter-2 important: a single fetch only proves caching,
+    not the conditional-fetch round trip. This test does TWO
+    fetches against ``httpbin.org/etag/<v>`` and asserts:
 
-    Codex iter-1 minor: removed the dead Accept-Language code and
-    focuses each test on one claim.
+    1. First fetch: 200 response, ETag cached, body artifact_ref
+       emitted on the result.
+    2. Second fetch: ``If-None-Match`` sent, server returns 304,
+       adapter short-circuits to the same body and reuses the
+       cached body's ``artifact_ref`` — replay traceability.
     """
 
     cache = InMemoryConditionalCache()
@@ -222,13 +214,23 @@ def test_httpbin_real_conditional_cache_caches_etag() -> None:
         conditional_cache=cache,
         cookie_jar=InMemoryCookieJar(),
     )
-    request = _make_request("https://httpbin.org/etag/test-step-1-6a")
-    command = _make_command()
+    url = "https://httpbin.org/etag/test-step-1-6a"
     with with_runtime_mode(RuntimeMode.PRODUCTION):
-        adapter = StdlibHttpSourceAdapter(request, config=config)
-        adapter.execute(command)
-    cached = cache.get(run_ref="run:live:step-1-6a", url="https://httpbin.org/etag/test-step-1-6a")
-    # httpbin /etag/<value> returns ETag: "<value>" — stored in cache.
-    assert cached is not None
-    assert cached.etag is not None
-    assert "test-step-1-6a" in cached.etag
+        adapter1 = StdlibHttpSourceAdapter(_make_request(url), config=config)
+        adapter1.execute(_make_command())
+        first_result = adapter1.last_result
+        assert first_result is not None
+        first_artifact_ref = first_result.artifact_refs[0]
+        cached = cache.get(run_ref="run:live:step-1-6a", url=url)
+        assert cached is not None
+        assert cached.etag is not None and "test-step-1-6a" in cached.etag
+
+        adapter2 = StdlibHttpSourceAdapter(_make_request(url), config=config)
+        adapter2.execute(_make_command())
+        second_result = adapter2.last_result
+        assert second_result is not None
+        # Same artifact_ref as the first fetch — replay traceability.
+        assert second_result.artifact_refs == [first_artifact_ref]
+        # Per-attempt evidence captures the wire 304.
+        statuses = [ev.response_status for ev in second_result.attempt_evidences]
+        assert 304 in statuses
