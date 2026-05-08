@@ -109,9 +109,9 @@ packages = ["src/veracrawl"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q"
+addopts = "-q -m 'not live'"
 markers = [
-  "live: tests that hit real external services (HTTP, LLM APIs, etc.); skipped in regular CI via ``-m 'not live'``",
+  "live: tests that hit real external services (HTTP, LLM APIs, etc.); skipped in regular CI; run with `pytest -m live`",
 ]
 
 [tool.ruff]
