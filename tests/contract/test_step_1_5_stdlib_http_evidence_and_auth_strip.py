@@ -305,6 +305,49 @@ def test_conditional_fetch_caches_etag_and_replays_if_none_match() -> None:
     assert "cached-body" in second_body
 
 
+def test_304_short_circuit_reuses_cached_body_artifact_ref() -> None:
+    """Iter-1 important #1: ``NetworkClientResult.artifact_refs`` on a
+    304-served response must reuse the cached body's
+    ``artifact_ref`` so replay records point back at the original
+    artifact rather than a fresh fabricated ref each fetch."""
+
+    cache = InMemoryConditionalCache()
+
+    def _handler_serve(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"<html>cached</html>",
+            headers={"etag": '"v1"', "content-type": "text/html"},
+        )
+
+    config = HttpClientConfig(conditional_cache=cache, run_ref="run:reuse")
+    StdlibHttpSourceAdapter(
+        _make_request(),
+        config=config,
+        transport=httpx.MockTransport(_handler_serve),
+    ).execute(_make_command())
+    # Capture the first-fetch artifact_ref.
+    cached = cache.get(run_ref="run:reuse", url="https://a.test/p/1")
+    assert cached is not None
+    cached_ref = cached.body_artifact_ref
+
+    def _handler_304(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("if-none-match") == '"v1"':
+            return httpx.Response(304, headers={"content-type": "text/html"})
+        return httpx.Response(200, content=b"<html>x</html>", headers={"content-type": "text/html"})
+
+    adapter2 = StdlibHttpSourceAdapter(
+        _make_request(),
+        config=config,
+        transport=httpx.MockTransport(_handler_304),
+    )
+    adapter2.execute(_make_command())
+    result = adapter2.last_result
+    assert result is not None
+    # Reuses the cached body's artifact_ref.
+    assert result.artifact_refs == [cached_ref]
+
+
 def test_conditional_fetch_uses_last_modified_when_no_etag() -> None:
     cache = InMemoryConditionalCache()
     captured_headers: list[dict[str, str]] = []

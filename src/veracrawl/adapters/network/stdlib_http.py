@@ -525,6 +525,14 @@ class StdlibHttpSourceAdapter:
         self._last_result: NetworkClientResult | None = None
         self._redirect_hops: list[RedirectHop] = []
         self._attempt_evidences: list[NetworkAttemptEvidence] = []
+        # When a 304 short-circuit produces a synthesized response,
+        # we stash the cached entry's ``body_artifact_ref`` here so
+        # ``execute`` can re-use it instead of fabricating a fresh
+        # artifact ref. ``None`` means the response was a live fetch
+        # and a new ref should be computed (codex iter-1 important
+        # #1: replay traceability requires the cached ref to flow
+        # through to ``NetworkClientResult.artifact_refs``).
+        self._cached_artifact_ref_for_response: str | None = None
         # Working copy of the outgoing extra headers for this fetch.
         # Reset at the start of each ``execute`` call from
         # ``self._config.extra_headers``; mutated by
@@ -554,6 +562,7 @@ class StdlibHttpSourceAdapter:
         )
         self._redirect_hops = []
         self._attempt_evidences = []
+        self._cached_artifact_ref_for_response = None
         # Snapshot the extra-headers config for this fetch so a
         # cross-origin strip on this fetch does not mutate the
         # adapter's persistent config across calls.
@@ -576,7 +585,15 @@ class StdlibHttpSourceAdapter:
         body_text = body.decode("utf-8", errors="replace")
         final_url = str(response.url)
         digest = stable_hash({"url": final_url, "body": body_text})
-        artifact_ref = f"artifact:{self.request.id}:raw-html:{digest[:12]}"
+        # Codex iter-1 important #1: when a 304 short-circuit served
+        # the response, reuse the cached body's artifact_ref so
+        # replay records point at the original artifact instead of
+        # fabricating a fresh one each time. Live (non-cached)
+        # responses keep fabricating a new ref.
+        if self._cached_artifact_ref_for_response is not None:
+            artifact_ref = self._cached_artifact_ref_for_response
+        else:
+            artifact_ref = f"artifact:{self.request.id}:raw-html:{digest[:12]}"
         response_contract = NetworkResponse(
             id=f"network-response:{self.request.id}",
             request_ref=self.request.id,
@@ -810,18 +827,15 @@ class StdlibHttpSourceAdapter:
             # Phase 1 acceptance ("304 short-circuits to cached
             # body") at the adapter boundary.
             if response.status_code == 304:
-                cached = self._config.conditional_cache.get(
-                    run_ref=self._config.run_ref, url=url
-                )
+                cached = self._config.conditional_cache.get(run_ref=self._config.run_ref, url=url)
                 if cached is not None:
                     response.read()  # drain the empty 304 body
+                    self._cached_artifact_ref_for_response = cached.body_artifact_ref
                     return self._synthesize_from_cached(cached_url=url, cached=cached)
                 # Server responded 304 but we have nothing cached
                 # — fail closed: treat as a network adapter error
                 # since we cannot produce a usable body.
-                raise AdapterFailureError(
-                    f"server returned 304 but no cached body for url={url!r}"
-                )
+                raise AdapterFailureError(f"server returned 304 but no cached body for url={url!r}")
 
             # 2xx: store ETag / Last-Modified for next time.
             if 200 <= response.status_code < 300:
@@ -853,14 +867,10 @@ class StdlibHttpSourceAdapter:
         headers: dict[str, str] = {"User-Agent": self._config.user_agent}
         for name, value in self._current_extra_headers.items():
             headers[name] = value
-        cookies = self._config.cookie_jar.cookies_for(
-            run_ref=self._config.run_ref, url=url
-        )
+        cookies = self._config.cookie_jar.cookies_for(run_ref=self._config.run_ref, url=url)
         if cookies:
             headers["Cookie"] = "; ".join(f"{n}={v}" for n, v in cookies.items())
-        cached = self._config.conditional_cache.get(
-            run_ref=self._config.run_ref, url=url
-        )
+        cached = self._config.conditional_cache.get(run_ref=self._config.run_ref, url=url)
         if cached is not None:
             if cached.etag:
                 headers["If-None-Match"] = cached.etag

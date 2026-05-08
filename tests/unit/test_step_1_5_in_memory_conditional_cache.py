@@ -111,6 +111,96 @@ def test_max_entries_must_be_positive() -> None:
         InMemoryConditionalCache(max_entries=0)
 
 
+def test_max_entry_bytes_skips_oversized_payload() -> None:
+    """Iter-1 important #4: a body larger than ``max_entry_bytes``
+    is silently dropped at ``put`` so the cache stays bounded."""
+
+    cache = InMemoryConditionalCache(max_entry_bytes=10, max_total_bytes=100)
+    cache.put(
+        run_ref="run:r",
+        url="https://example.test/big",
+        entry=_entry(body=b"X" * 100),  # exceeds 10-byte cap
+    )
+    assert cache.get(run_ref="run:r", url="https://example.test/big") is None
+    assert cache.total_bytes() == 0
+
+
+def test_max_total_bytes_evicts_oldest() -> None:
+    """When the total exceeds the byte budget, evict oldest first.
+
+    Cap = 10 bytes total, per-entry up to 10. Insert 6-byte entry,
+    then 4-byte entry; touch /a (LRU bump); insert 2-byte entry →
+    total would be 12, exceeds cap → evict oldest (/b)."""
+
+    cache = InMemoryConditionalCache(max_entry_bytes=10, max_total_bytes=10)
+    cache.put(
+        run_ref="run:r",
+        url="https://example.test/a",
+        entry=_entry(body=b"AAAAAA"),  # 6 bytes
+    )
+    cache.put(
+        run_ref="run:r",
+        url="https://example.test/b",
+        entry=_entry(body=b"BBBB"),  # 4 bytes (total 10)
+    )
+    # 6 + 4 = 10 == cap, both fit.
+    assert cache.get(run_ref="run:r", url="https://example.test/a") is not None
+    assert cache.get(run_ref="run:r", url="https://example.test/b") is not None
+    # /b was just touched (LRU) so /a is older and gets evicted.
+    cache.put(
+        run_ref="run:r",
+        url="https://example.test/c",
+        entry=_entry(body=b"CC"),  # 2 bytes
+    )
+    assert cache.get(run_ref="run:r", url="https://example.test/a") is None
+    assert cache.get(run_ref="run:r", url="https://example.test/b") is not None
+    assert cache.get(run_ref="run:r", url="https://example.test/c") is not None
+
+
+def test_total_bytes_invariants_on_replace() -> None:
+    """Replacing an entry under the same key must not double-count."""
+
+    cache = InMemoryConditionalCache(max_entry_bytes=100, max_total_bytes=100)
+    cache.put(
+        run_ref="run:r",
+        url="https://example.test/p",
+        entry=_entry(body=b"AAAAAA"),
+    )
+    assert cache.total_bytes() == 6
+    cache.put(
+        run_ref="run:r",
+        url="https://example.test/p",
+        entry=_entry(body=b"BBB"),
+    )
+    assert cache.total_bytes() == 3
+
+
+def test_clear_run_releases_byte_budget() -> None:
+    cache = InMemoryConditionalCache(max_entry_bytes=100, max_total_bytes=100)
+    cache.put(
+        run_ref="run:a",
+        url="https://example.test/p",
+        entry=_entry(body=b"AAAAA"),
+    )
+    cache.put(
+        run_ref="run:b",
+        url="https://example.test/p",
+        entry=_entry(body=b"BBB"),
+    )
+    cache.clear_run(run_ref="run:a")
+    assert cache.total_bytes() == 3
+
+
+def test_max_entry_bytes_must_be_positive() -> None:
+    with pytest.raises(ValueError):
+        InMemoryConditionalCache(max_entry_bytes=0)
+
+
+def test_max_entry_bytes_must_not_exceed_max_total_bytes() -> None:
+    with pytest.raises(ValueError):
+        InMemoryConditionalCache(max_entry_bytes=100, max_total_bytes=50)
+
+
 def test_clear_run_drops_only_run_entries() -> None:
     cache = InMemoryConditionalCache()
     cache.put(run_ref="run:a", url="https://example.test/p", entry=_entry(b"a"))

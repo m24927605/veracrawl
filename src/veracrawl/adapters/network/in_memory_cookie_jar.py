@@ -56,6 +56,50 @@ def _path_for(url: str) -> str:
     return path
 
 
+def _default_cookie_path(request_url: str) -> str:
+    """RFC 6265 §5.1.4 default-path computation.
+
+    Codex iter-1 important #2: when a Set-Cookie omits the
+    ``Path`` attribute, the default is the *directory* of the
+    request URL, NOT the full request path. So a cookie set by
+    ``https://example.test/admin/login`` defaults to ``/admin``
+    (not ``/admin/login``), so the cookie matches subsequent
+    requests to ``/admin/dashboard``. Algorithm:
+
+    1. Let ``uri-path`` be the path of the request.
+    2. If ``uri-path`` is empty or doesn't start with ``/``,
+       return ``/``.
+    3. If ``uri-path`` contains no ``/`` other than the leading
+       one, return ``/``.
+    4. Return everything from the start up to (but not
+       including) the rightmost ``/`` character.
+    """
+
+    parts = urlsplit(request_url)
+    path = parts.path or ""
+    if not path.startswith("/"):
+        return "/"
+    last_slash = path.rfind("/")
+    if last_slash == 0:
+        return "/"
+    return path[:last_slash]
+
+
+def _normalize_cookie_path(path_attr: str | None, request_url: str) -> str:
+    """Apply RFC 6265 path validation + fall back to default-path.
+
+    Codex iter-1 important #3: server-supplied ``Path=`` values
+    that are empty, missing, or do not start with ``/`` must fall
+    back to the default-path computation. Storing the raw value
+    verbatim (e.g. ``Path=admin``) creates cookies that never
+    match, masking a misconfiguration as a silent failure.
+    """
+
+    if path_attr is None or not path_attr or not path_attr.startswith("/"):
+        return _default_cookie_path(request_url)
+    return path_attr
+
+
 def _path_matches_cookie_path(request_path: str, cookie_path: str) -> bool:
     """RFC 6265 §5.1.4 path-match: cookie sent if cookie-path is a
     prefix of request-path with a ``/`` separator (or cookie-path
@@ -171,7 +215,7 @@ class InMemoryCookieJar:
         new_cookies: list[CookieRecord] = []
         for name, morsel in morsels.items():
             value = morsel.value
-            path = morsel["path"] or _path_for(url)
+            path = _normalize_cookie_path(morsel["path"] or None, url)
             secure = bool(morsel["secure"])
             http_only = bool(morsel["httponly"])
             expires = _resolve_expiry(

@@ -116,6 +116,76 @@ def test_max_age_positive_then_expires() -> None:
     assert cookies == {}
 
 
+def test_default_path_is_directory_per_rfc_6265() -> None:
+    """Iter-1 important #2: cookie set by ``/admin/login`` without
+    a Path attribute defaults to the *directory* ``/admin``, not
+    the request path. The cookie should match
+    ``/admin/dashboard``."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/admin/login",
+        set_cookie_value="session=abc",
+    )
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/admin/dashboard")
+    assert cookies == {"session": "abc"}
+
+
+def test_default_path_for_root_request_is_root() -> None:
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=abc",
+    )
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/anywhere")
+    assert cookies == {"session": "abc"}
+
+
+def test_default_path_for_single_segment_request_is_root() -> None:
+    """``/login`` has a single ``/`` (the leading one) so default
+    path falls back to ``/``."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/login",
+        set_cookie_value="session=abc",
+    )
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/dashboard")
+    assert cookies == {"session": "abc"}
+
+
+def test_invalid_path_attribute_falls_back_to_default() -> None:
+    """Iter-1 important #3: ``Path=admin`` (no leading ``/``) is
+    invalid and must fall back to the default-path."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/admin/login",
+        set_cookie_value="session=abc; Path=admin",  # no leading /
+    )
+    # Default-path is ``/admin`` (request directory).
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/admin/dashboard")
+    assert cookies == {"session": "abc"}
+    # Outside the default-path scope, no cookie.
+    outside = jar.cookies_for(run_ref="run:r", url="https://example.test/public")
+    assert outside == {}
+
+
+def test_empty_path_attribute_falls_back_to_default() -> None:
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/admin/login",
+        set_cookie_value="session=abc; Path=",
+    )
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/admin/dashboard")
+    assert cookies == {"session": "abc"}
+
+
 def test_path_matching_root_cookie_sent_everywhere() -> None:
     jar = InMemoryCookieJar()
     jar.accept_set_cookie(
