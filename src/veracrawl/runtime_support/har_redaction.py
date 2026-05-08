@@ -46,6 +46,7 @@ fields.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -65,6 +66,7 @@ _HAR_EXTRA_SENSITIVE_KEYS: tuple[str, ...] = (
     "sid",
     "sessionid",
     "session_id",
+    "session_token",
     "apikey",
     "api_key",
     "authtoken",
@@ -82,14 +84,35 @@ _HAR_EXTRA_SENSITIVE_KEYS: tuple[str, ...] = (
 def _is_har_sensitive_key(name: str) -> bool:
     """Combine the project-wide sensitive-key matcher with HAR extras.
 
-    Both checks are case-insensitive; the extras match the full
-    name (after lowercasing), not a substring, to avoid false
-    positives like ``state_code`` or ``description``.
+    Both checks are case-insensitive. CamelCase keys
+    (``accessToken``, ``refreshToken``, ``sessionToken``,
+    ``idToken``, ``apiKey``, ``authToken``) are normalized to
+    snake_case before the extras lookup so a value like
+    ``?accessToken=secret`` is treated the same as
+    ``?access_token=secret`` (codex iter-5 critical: the previous
+    extras were only snake_case + lowercase, so camelCase
+    OAuth/OIDC tokens persisted verbatim).
+
+    The extras match the *normalized* full name, not a substring,
+    to avoid false positives like ``state_code`` or
+    ``description``.
     """
 
     if is_sensitive_key(name):
         return True
-    return name.lower() in _HAR_EXTRA_SENSITIVE_KEYS
+    lower = name.lower()
+    if lower in _HAR_EXTRA_SENSITIVE_KEYS:
+        return True
+    # camelCase → snake_case: insert ``_`` before any uppercase
+    # letter that follows a lowercase letter, then lowercase.
+    # ``accessToken`` → ``access_token``; ``apiKey`` → ``api_key``.
+    snake = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", name).lower()
+    if snake in _HAR_EXTRA_SENSITIVE_KEYS:
+        return True
+    # Also strip non-alphanumerics so ``access-token`` /
+    # ``access.token`` collapse to ``access_token``.
+    collapsed = re.sub(r"[^a-z0-9]+", "_", snake).strip("_")
+    return collapsed in _HAR_EXTRA_SENSITIVE_KEYS
 
 
 REDACTED_VALUE = "<redacted>"
@@ -162,12 +185,21 @@ def _scrub_canary(value: str, canaries: tuple[str, ...]) -> str:
 def _redact_name_value_array(
     items: list[dict[str, Any]], canaries: tuple[str, ...]
 ) -> list[dict[str, Any]]:
-    """Walk a HAR ``[{"name": ..., "value": ...}, ...]`` array."""
+    """Walk a HAR ``[{"name": ..., "value": ...}, ...]`` array.
+
+    Codex iter-5 critical: malformed entries (a string like
+    ``"Authorization: Bearer secret"`` instead of a ``{name, value}``
+    dict) used to pass through verbatim, defeating the privacy
+    contract. Now: any non-dict entry, or any dict without the
+    expected ``name`` / ``value`` shape, is **replaced wholesale**
+    with a redaction marker dict — fail-closed because we cannot
+    prove the malformed shape doesn't carry credentials.
+    """
 
     out: list[dict[str, Any]] = []
     for entry in items:
         if not isinstance(entry, dict):
-            out.append(entry)
+            out.append({"name": REDACTED_VALUE, "value": REDACTED_VALUE})
             continue
         name = entry.get("name")
         value = entry.get("value")
@@ -176,6 +208,10 @@ def _redact_name_value_array(
             new_entry["value"] = REDACTED_VALUE
         elif isinstance(value, str):
             new_entry["value"] = _scrub_canary(value, canaries)
+        elif value is not None:
+            # Non-string value of unknown shape — redact wholesale
+            # rather than guessing whether it's safe to emit.
+            new_entry["value"] = REDACTED_VALUE
         out.append(new_entry)
     return out
 
@@ -201,7 +237,10 @@ def _redact_cookie_array(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for entry in items:
         if not isinstance(entry, dict):
-            out.append(entry)
+            # Fail-closed on malformed cookie entries (codex iter-5
+            # critical applied uniformly): replace with a redaction
+            # marker rather than passing through unknown shapes.
+            out.append({"name": REDACTED_VALUE, "value": REDACTED_VALUE})
             continue
         new_entry = dict(entry)
         if "value" in new_entry:

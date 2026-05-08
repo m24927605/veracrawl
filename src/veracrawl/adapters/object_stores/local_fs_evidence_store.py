@@ -118,25 +118,62 @@ class LocalFsEvidenceArtifactStore:
         """
 
         self._max_payload_bytes = max_payload_bytes
-        # Reject a symlink at the configured root. This is a
-        # sensitive evidence location; if someone configured the
-        # store against a symlink we'd ``chmod`` the link's target
-        # below and trust the link's resolution for the lifetime
-        # of the store. ``lstat`` does not follow links.
+        # Codex iter-5 critical: open the root once with
+        # ``O_NOFOLLOW | O_DIRECTORY`` and keep the fd for the
+        # lifetime of the store. Subsequent ``put`` / ``get`` calls
+        # use this fd as their starting ``dir_fd``, so a local
+        # process that swaps ``self._root`` (or its parent) for a
+        # symlink AFTER construction cannot redirect operations:
+        # the kernel object behind the fd doesn't change.
         import stat as _stat
 
-        if root.is_symlink() or (root.exists() and not _stat.S_ISDIR(root.lstat().st_mode)):
-            raise EvidenceArtifactStoreError(
-                f"evidence-store root must be a real directory, not a symlink: {root}"
-            )
+        # Pre-create the dir if missing. Use lstat to detect
+        # symlinks before the open below so we never momentarily
+        # operate through a swapped link. Note: an attacker that
+        # swaps between this lstat and the open below (TOCTOU) is
+        # still caught by O_NOFOLLOW on the open call.
+        if root.exists() or root.is_symlink():
+            if root.is_symlink() or not _stat.S_ISDIR(root.lstat().st_mode):
+                raise EvidenceArtifactStoreError(
+                    f"evidence-store root must be a real directory, not a symlink: {root}"
+                )
+        else:
+            root.mkdir(parents=True, exist_ok=True, mode=_DIR_MODE)
         self._root = root
-        self._root.mkdir(parents=True, exist_ok=True, mode=_DIR_MODE)
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        directory_flag = getattr(os, "O_DIRECTORY", 0)
         try:
-            os.chmod(self._root, _DIR_MODE)
+            self._root_fd = os.open(
+                str(self._root),
+                os.O_RDONLY | directory_flag | nofollow,
+            )
+        except OSError as exc:
+            raise EvidenceArtifactStoreError(
+                f"failed to open evidence-store root with O_NOFOLLOW: {exc}"
+            ) from exc
+        # Confirm via fstat that the open really hit a directory
+        # (in case O_DIRECTORY isn't honored on the platform).
+        info = os.fstat(self._root_fd)
+        if not _stat.S_ISDIR(info.st_mode):
+            os.close(self._root_fd)
+            raise EvidenceArtifactStoreError(
+                f"evidence-store root is not a directory after open: {root}"
+            )
+        # Tighten mode via fchmod so we never path-chmod through a
+        # potentially-swapped name.
+        try:
+            os.fchmod(self._root_fd, _DIR_MODE)
         except OSError:
-            # Windows / non-POSIX may not honor chmod; we accept the
-            # filesystem default ACLs there.
             _logger.debug("evidence_store_root_chmod_unsupported", path=str(self._root))
+
+    def __del__(self) -> None:
+        # Best-effort fd cleanup if the store goes out of scope.
+        fd = getattr(self, "_root_fd", None)
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
     def put(
         self,
@@ -174,21 +211,16 @@ class LocalFsEvidenceArtifactStore:
         # check validated. ``os.O_NOFOLLOW`` makes the open fail
         # (ELOOP) if a component is a symlink, even after a post-
         # check swap.
-        directory_flag = getattr(os, "O_DIRECTORY", 0)
-        try:
-            root_fd = os.open(str(self._root), os.O_RDONLY | directory_flag)
-        except OSError as exc:
-            raise EvidenceArtifactStoreError(f"failed to open evidence-store root: {exc}") from exc
         run_fd: int | None = None
         attempt_fd: int | None = None
         try:
-            run_fd = self._mkdir_and_open(root_fd, run_safe)
+            run_fd = self._mkdir_and_open(self._root_fd, run_safe)
             attempt_fd = self._mkdir_and_open(run_fd, attempt_safe)
             self._write_atomic(attempt_fd, filename, payload)
         except OSError as exc:
             raise EvidenceArtifactStoreError(f"failed to persist evidence artifact: {exc}") from exc
         finally:
-            for fd in (attempt_fd, run_fd, root_fd):
+            for fd in (attempt_fd, run_fd):
                 if fd is not None:
                     try:
                         os.close(fd)
@@ -308,13 +340,12 @@ class LocalFsEvidenceArtifactStore:
         parts = relative.parts
         if not parts:
             return None
-        # Open the root directly without O_NOFOLLOW (we trust the
-        # configured root path itself; symlink hardening kicks in
-        # below the root).
-        try:
-            root_fd = os.open(str(self._root), os.O_RDONLY | directory_flag)
-        except OSError:
-            return None
+        # Use the persistent ``_root_fd`` opened in __init__ rather
+        # than re-opening from path. A local process that swapped
+        # the root path post-construction cannot redirect this
+        # operation — the kernel object behind ``_root_fd`` is
+        # fixed.
+        root_fd = self._root_fd
         try:
             current_fd = root_fd
             # Descend into intermediate directories. The last
@@ -369,15 +400,13 @@ class LocalFsEvidenceArtifactStore:
             finally:
                 os.close(leaf_fd)
         finally:
+            # NOTE: ``root_fd`` is ``self._root_fd`` — do not close
+            # it here; it lives for the store's lifetime.
             if current_fd != root_fd:
                 try:
                     os.close(current_fd)
                 except OSError:
                     pass
-            try:
-                os.close(root_fd)
-            except OSError:
-                pass
 
     def _fallback_lstat_read(self, *, artifact_ref: str, path: Path) -> bytes | None:
         """Fallback for systems without ``O_NOFOLLOW``.

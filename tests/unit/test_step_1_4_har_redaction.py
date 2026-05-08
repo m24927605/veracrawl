@@ -183,6 +183,118 @@ def test_cookie_and_set_cookie_redacted() -> None:
     assert b'"value": "xyz"' not in redacted
 
 
+def test_camelcase_credential_keys_redacted() -> None:
+    """Iter-5 critical: camelCase OAuth/OIDC tokens (``accessToken``,
+    ``refreshToken``, ``idToken``, ``sessionToken``, ``apiKey``,
+    ``authToken``) must hit the same redaction path as snake_case."""
+
+    payload = _har(
+        [
+            _entry(
+                query_string=[
+                    {"name": "accessToken", "value": "atok_secret_1"},
+                    {"name": "refreshToken", "value": "rtok_secret_2"},
+                    {"name": "idToken", "value": "itok_secret_3"},
+                    {"name": "sessionToken", "value": "stok_secret_4"},
+                    {"name": "apiKey", "value": "ak_secret_5"},
+                    {"name": "authToken", "value": "atok_secret_6"},
+                    {"name": "page", "value": "1"},  # benign
+                ]
+            )
+        ]
+    )
+    redacted = redact_har_payload(payload)
+    for token in (
+        b"atok_secret_1",
+        b"rtok_secret_2",
+        b"itok_secret_3",
+        b"stok_secret_4",
+        b"ak_secret_5",
+        b"atok_secret_6",
+    ):
+        assert token not in redacted, f"camelCase token leaked: {token!r}"
+    out = json.loads(redacted)
+    qs = out["log"]["entries"][0]["request"]["queryString"]
+    assert next(q for q in qs if q["name"] == "page")["value"] == "1"
+
+
+def test_kebabcase_credential_keys_also_redacted() -> None:
+    """``access-token`` / ``access.token`` collapse to ``access_token``."""
+
+    payload = _har(
+        [
+            _entry(
+                query_string=[
+                    {"name": "access-token", "value": "kebab_secret_1"},
+                    {"name": "access.token", "value": "dot_secret_2"},
+                ]
+            )
+        ]
+    )
+    redacted = redact_har_payload(payload)
+    assert b"kebab_secret_1" not in redacted
+    assert b"dot_secret_2" not in redacted
+
+
+def test_malformed_header_array_entry_redacted_wholesale() -> None:
+    """Iter-5 critical: a non-dict entry in a header array (e.g. a
+    raw string ``"Authorization: Bearer secret"``) used to pass
+    through verbatim. Must now be replaced wholesale with a
+    redaction marker."""
+
+    parsed = {
+        "log": {
+            "version": "1.2",
+            "entries": [
+                {
+                    "request": {
+                        "method": "GET",
+                        "url": "https://example.test/",
+                        "headers": [
+                            "Authorization: Bearer LEAKED_RAW_STRING_77",
+                            {"name": "User-Agent", "value": "TestUA"},
+                        ],
+                    },
+                    "response": {"status": 200},
+                }
+            ],
+        }
+    }
+    payload = json.dumps(parsed).encode("utf-8")
+    redacted = redact_har_payload(payload)
+    assert b"LEAKED_RAW_STRING_77" not in redacted
+    out = json.loads(redacted)
+    headers = out["log"]["entries"][0]["request"]["headers"]
+    # First entry was a raw string → replaced with redaction marker dict.
+    assert headers[0] == {"name": REDACTED_VALUE, "value": REDACTED_VALUE}
+    # Second entry stays.
+    assert headers[1]["name"] == "User-Agent"
+
+
+def test_malformed_cookie_array_entry_redacted_wholesale() -> None:
+    parsed = {
+        "log": {
+            "version": "1.2",
+            "entries": [
+                {
+                    "request": {
+                        "method": "GET",
+                        "url": "https://example.test/",
+                        "cookies": [
+                            "session=LEAKED_COOKIE_88",
+                            {"name": "theme", "value": "dark"},
+                        ],
+                    },
+                    "response": {"status": 200},
+                }
+            ],
+        }
+    }
+    payload = json.dumps(parsed).encode("utf-8")
+    redacted = redact_har_payload(payload)
+    assert b"LEAKED_COOKIE_88" not in redacted
+
+
 def test_x_api_key_and_x_auth_token_redacted() -> None:
     payload = _har(
         [
