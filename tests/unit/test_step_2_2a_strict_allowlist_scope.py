@@ -219,6 +219,54 @@ def test_refuses_unknown_method_with_method_not_allowed_reason() -> None:
     assert excinfo.value.reason == "method_not_allowed"
 
 
+@pytest.mark.parametrize(
+    "credentialed_url",
+    [
+        "https://user:pass@api.example.com/v1/items",
+        "https://user@api.example.com/v1/items",
+        "https://:pass@api.example.com/v1/items",
+    ],
+)
+def test_refuses_userinfo_in_request_url_as_origin_not_allowed(
+    credentialed_url: str,
+) -> None:
+    """A credential-bearing request URL must be refused before the
+    vault credential is attached, regardless of whether the origin
+    / route / method would otherwise match. Two failure modes
+    motivate this:
+
+    * Ambiguous auth precedence — the URL's userinfo and the vault
+      credential would both hit the wire.
+    * Audit / logging surprises — userinfo passes through every
+      logging path that doesn't redact URL credentials.
+    """
+
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _make_scope(),
+            request_url=credentialed_url,
+            method="GET",
+        )
+    assert excinfo.value.reason == "origin_not_allowed"
+
+
+def test_refuses_path_longer_than_runtime_cap_with_route_not_allowed() -> None:
+    """Bound the worst-case work the regex engine does on an
+    attacker-controlled URL — even a well-formed pattern combined
+    with an unbounded path is a runtime concern (step 2.2c will
+    layer per-match timeout / re2 / glob-only DSL; this 4 KiB cap
+    is the floor that ships in 2.2a)."""
+
+    long_path = "/v1/items/" + ("x" * 5000)
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _make_scope(allowed_route_patterns=["/v1/items"]),
+            request_url=f"https://api.example.com{long_path}",
+            method="GET",
+        )
+    assert excinfo.value.reason == "route_not_allowed"
+
+
 def test_refuses_unanchored_route_prefix_match() -> None:
     """Path-anchored grammar: a contract-valid pattern like
     ``/v1/items`` must NOT match ``/prefix/v1/items``. ``re.search``

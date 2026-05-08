@@ -30,18 +30,23 @@ def _scope() -> CredentialScope:
     )
 
 
-def test_strict_allowlist_scope_satisfies_protocol() -> None:
-    """``StrictAllowlistScope`` is a runtime-checkable
-    ``SessionScopePolicy``."""
+def test_strict_allowlist_scope_has_check_attribute() -> None:
+    """Smoke test only — runtime-checkable ``Protocol``'s
+    ``isinstance`` check verifies attribute presence, not signature
+    or behavior. Behavioral coverage lives in the unit tests.
+    Static type-checking is what enforces signature compatibility."""
 
     policy: SessionScopePolicy = StrictAllowlistScope()
     assert isinstance(policy, SessionScopePolicy)
+    assert callable(policy.check)
 
 
-def test_in_memory_test_double_satisfies_protocol() -> None:
-    """A minimal allow-everything double also satisfies the Protocol —
-    proves the surface is small enough that test fixtures can fake
-    it without inheriting from the production class."""
+def test_in_memory_test_double_has_check_attribute() -> None:
+    """A minimal allow-everything double exposes the same surface —
+    proves the port is small enough that test fixtures can fake
+    it without inheriting from the production class. Same caveat
+    as the test above: ``isinstance`` only checks attribute
+    presence."""
 
     class _AlwaysAllow:
         def check(
@@ -57,6 +62,7 @@ def test_in_memory_test_double_satisfies_protocol() -> None:
 
     policy: SessionScopePolicy = _AlwaysAllow()
     assert isinstance(policy, SessionScopePolicy)
+    assert callable(policy.check)
 
 
 def test_refusal_is_credential_scope_violation_not_value_error() -> None:

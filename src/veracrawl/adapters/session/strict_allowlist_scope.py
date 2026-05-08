@@ -45,10 +45,24 @@ from veracrawl.contracts.security_privacy import CredentialScope
 
 _DEFAULT_PORTS: Final[dict[str, int]] = {"http": 80, "https": 443}
 
+# Hard cap on the route path length the matcher will run against.
+# Combined with the contract-layer nested-quantifier AST guard
+# (``_validate_route_pattern``), this bounds the maximum work a
+# single ``re.match`` call can do — even a degenerate pattern that
+# slipped past the AST guard cannot wedge the matcher on an
+# attacker-controlled URL because the input is short. Step 2.2c will
+# layer a stronger defense (per-match timeout / ``re2`` / glob-only
+# DSL); this cap is the floor that ships in 2.2a so the credential
+# gate is not relying solely on contract-time validation.
+_MAX_ROUTE_LENGTH: Final[int] = 4096
 
-def _safe_urlsplit(value: str) -> tuple[str, str | None, int | None, str] | None:
-    """Defensive ``urlsplit`` that returns ``(scheme, host, port, path)``
-    or ``None`` if any access raises.
+
+def _safe_urlsplit(
+    value: str,
+) -> tuple[str, str | None, int | None, str, bool] | None:
+    """Defensive ``urlsplit`` that returns
+    ``(scheme, host, port, path, has_userinfo)`` or ``None`` if any
+    access raises.
 
     ``urlsplit`` itself rarely raises, but reading ``.port`` raises
     ``ValueError`` for malformed authorities (``host:bad`` port,
@@ -69,7 +83,8 @@ def _safe_urlsplit(value: str) -> tuple[str, str | None, int | None, str] | None
         # Malformed authority (e.g., ``host:bad`` port or
         # ``host:99999`` out-of-range).
         return None
-    return parts.scheme, parts.hostname, port, parts.path
+    has_userinfo = bool(parts.username) or bool(parts.password)
+    return parts.scheme, parts.hostname, port, parts.path, has_userinfo
 
 
 def _normalize_origin(request_url: str) -> str | None:
@@ -87,10 +102,17 @@ def _normalize_origin(request_url: str) -> str | None:
     parsed = _safe_urlsplit(request_url)
     if parsed is None:
         return None
-    scheme, host, port, _ = parsed
+    scheme, host, port, _path, has_userinfo = parsed
     if scheme not in {"http", "https"}:
         return None
     if not host:
+        return None
+    if has_userinfo:
+        # Refuse credential-bearing URLs at the origin gate. A
+        # ``user:pass@host`` URL would otherwise land in the
+        # ``Authorization`` builder alongside the vault credential
+        # and create ambiguous auth precedence + audit-log
+        # surprises. Treat as ``origin_not_allowed``.
         return None
     host = host.lower()
     if port is not None and port == _DEFAULT_PORTS.get(scheme):
@@ -115,7 +137,7 @@ def _normalize_allowed_origin(origin: str) -> str:
         # belt-and-suspenders default. Return a sentinel that
         # cannot match any normalized request origin.
         return f"<invalid-allowed-origin:{len(origin)}>"
-    scheme, host, port, _ = parsed
+    scheme, host, port, _path, _userinfo = parsed
     host = (host or "").lower()
     if port is not None and port == _DEFAULT_PORTS.get(scheme):
         port = None
@@ -139,6 +161,10 @@ def _route_of(request_url: str) -> str:
     if parsed is None:
         return ""
     return parsed[3] or "/"
+
+
+def _route_too_long(route: str) -> bool:
+    return len(route) > _MAX_ROUTE_LENGTH
 
 
 class StrictAllowlistScope:
@@ -196,6 +222,20 @@ class StrictAllowlistScope:
             )
 
         route = _route_of(request_url)
+        if _route_too_long(route):
+            # Bound the worst-case work the regex engine will do on
+            # an attacker-controlled URL. The contract-layer AST
+            # guard already refuses pathological *patterns*, but
+            # combining well-formed patterns with a hostile input
+            # of unbounded length is still a runtime concern. Step
+            # 2.2c will replace this with a per-match timeout / re2
+            # / glob-only DSL.
+            self._raise(
+                scope=scope,
+                request_url=request_url,
+                method=method,
+                reason="route_not_allowed",
+            )
         for pattern in scope.allowed_route_patterns:
             # ``re.match`` anchors at position 0 — required because
             # ``re.search`` would let ``/v1/items`` match
