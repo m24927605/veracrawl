@@ -155,6 +155,7 @@ def _normalize_allowed_origin(origin: str) -> str:
         parsed is None
         or parsed[0] not in {"http", "https"}
         or not parsed[1]
+        or parsed[4]  # has_userinfo — must never appear in an allowed origin
     ):
         # Contract layer rejects this shape; reaching here means a
         # ``CredentialScope`` was constructed bypassing
@@ -162,9 +163,14 @@ def _normalize_allowed_origin(origin: str) -> str:
         # ``model_construct``). Fail loudly so the issue surfaces
         # as an internal invariant violation rather than degrading
         # silently into a confusing ``origin_not_allowed`` refusal.
+        # Userinfo in an allowed origin is especially bad: the
+        # request normalizer would strip it, and the policy would
+        # then authorize requests under that origin even though
+        # the scope nominally restricted them to a credentialed
+        # ``user:pass@host`` (which the contract layer rejects).
         raise RuntimeError(
             "StrictAllowlistScope: scope.allowed_origins contains a value "
-            f"that is not a valid http(s) origin; len={len(origin)} "
+            f"that is not a valid bare http(s) origin; len={len(origin)} "
             "(contract layer should have rejected this — looks like a "
             "validation bypass)"
         )

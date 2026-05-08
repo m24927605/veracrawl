@@ -260,7 +260,7 @@ def test_refuses_userinfo_in_request_url_as_origin_not_allowed(
     [
         "/v1/items/../admin",  # dot-dot escape
         "/v1/items/./private",  # dot segment
-        "/v1/items/%2e%2e/admin",  # URL-encoded but our split sees raw -> still has ".."? No: it's %2e%2e literally
+        "/v1/items/%2e%2e/admin",  # encoded dot-dot
         "/v1/items/sub%2fpath",  # encoded slash
         "/v1/items/sub%2Fpath",  # encoded slash uppercase
         "/v1/items%5cadmin",  # encoded backslash
@@ -302,6 +302,24 @@ def test_refuses_dotdot_path_traversal_attempt() -> None:
             method="GET",
         )
     assert excinfo.value.reason == "route_not_allowed"
+
+
+def test_userinfo_in_allowed_origin_raises_internal_invariant() -> None:
+    """A ``CredentialScope`` whose ``allowed_origins`` contains a
+    userinfo-bearing origin (a contract-validation bypass) must
+    surface as an internal invariant violation. Otherwise the
+    normalizer would silently strip the userinfo and the policy
+    would authorize requests against the bare origin — defeating
+    the credential-scope guarantee."""
+
+    scope = _make_scope()
+    object.__setattr__(scope, "allowed_origins", ["https://user:pass@api.example.com"])
+    with pytest.raises(RuntimeError, match="validation bypass"):
+        StrictAllowlistScope().check(
+            scope,
+            request_url="https://api.example.com/v1/items",
+            method="GET",
+        )
 
 
 def test_invalid_allowed_origin_raises_internal_invariant() -> None:
