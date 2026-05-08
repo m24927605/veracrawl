@@ -1,5 +1,113 @@
 # Phase 3 design supplement — Access-control classification + escalation
 
+## Status
+
+| Field | Value |
+|---|---|
+| Phase | 3 (of 0..6) |
+| Sub-steps | 7 (3.1, 3.2, 3.3, 3.4, 3.5a, 3.5b, 3.6) |
+| Plan-review iter | 5 (post-iter-5 fix-up applied; DONE_WITH_RESERVATIONS at iter-5 cap) |
+| Implementation status | NOT STARTED |
+| Authoritative parent spec | `design.md` §4 Phase 3 |
+| Depends on | Phase 0 contracts; Phase 1 transport; Phase 2 step 2.4b (`AuthorizedSessionAdapter`) for step 3.6 only |
+
+## Why
+
+`design.md` §4 Phase 3 is ~60 lines of deliverables; codex review
+of Phase 0/1/2 implementation showed that 200-400 line design
+supplements per phase reduce iter-1 codex rejection rate from ~100%
+to ~50% by surfacing security/threat-model and contract-integration
+concerns at design time instead of at code-review time. This
+supplement is the first to be written under the new "front-load
+design" workflow (see `feedback_efficiency_directives.md`).
+
+## Scope — In
+
+- `AccessControlClassifierPort` + `HeuristicClassifier` (3.1)
+- `AdapterEscalationPort` + `PolicyDrivenEscalator` (3.2)
+- `source_coverage_gate` revert to evaluative role (3.3)
+- `EbayTokenCachePort` + `FileBackedEbayTokenCache` (3.4)
+- `AmazonSpApiPaginator` over injectable transport (3.5a)
+- `AmazonSpApiLwaTransport` LWA-only signing (3.5b — live deferred to Phase 6)
+- `EbayBrowseAdapter` + live test #5 (3.6)
+
+## Scope — Out (deferred or out of phase)
+
+- AWS SigV4 signing — **not required** for SP-API as of 2023-10-02 per Amazon's changelog; LWA-only.
+- Live SP-API integration test — Phase 6 step 6.4 (requires SP-API developer-account approval).
+- Operator review channel real delivery (Slack / queue / email) — Phase 6 `OtelObservabilityAdapter`.
+- Off-disk eBay token cache implementations (Vault sidecar / OS keychain) — Phase 6 deployment work.
+- Anthropic / OpenAI / other LLM provider integration — Phase 4.
+- Recovery / retry policy at the run-control layer — Phase 5.
+
+## Rollback
+
+Each sub-step lands as a single atomic commit (or 1 + post-iter-5
+fix-up). Rollback strategy:
+
+- **3.1, 3.2, 3.3** are pure-logic / refactor; revert the commit
+  to roll back. No data migration concern.
+- **3.4** writes a token cache file at `.veracrawl/cache/ebay-oauth-tokens.json`.
+  Rollback: revert + delete the cache file (no schema migration).
+- **3.5a, 3.5b** introduce new modules; revert the commit. No
+  downstream caller exists yet.
+- **3.6** wires the eBay adapter into the live test suite. Rollback:
+  revert + delete the live-test artifacts directory.
+
+The `REDACTABLE_MARKERS` re-export in `contracts/errors` is
+backwards-compatible (private `_REDACTABLE_MARKERS` still
+referenced by existing code); no rollback risk.
+
+## Open Questions
+
+1. **Operator review provider implementation timing**: Phase 3 ships
+   `NoopOperatorReviewProvider` (always-deny). Phase 6 ships the
+   real channel. If a deployment under `requires_review=True`
+   policy lands between Phase 3 and Phase 6, every escalation is
+   denied. Acceptable for the current design (Phase 3 acceptance
+   tests do not require Phase 6 wiring) but worth flagging in
+   STATUS.md when 3.2 lands.
+
+2. **HttpStatusFatalError construction surface**: see step 3.2
+   detailed spec below — the class needs a custom `__init__` that
+   accepts `status_code` directly rather than the
+   `(NetworkFailureType, detail)` shape `NetworkAdapterError`
+   uses. Resolution: subclass with explicit constructor. Verified
+   against Phase 1 `stdlib_http.classify_network_failure` —
+   the existing classes use a similar pattern.
+
+3. **Replay determinism for live tests**: step 3.6 is `@pytest.mark.live`
+   so real network responses cannot be made deterministic. Replay
+   tests for the chain stay at the unit level; live tests assert
+   minimal invariants only.
+
+## Test Strategy
+
+Per sub-step. Each sub-step has its own acceptance test list (see
+detailed sections below). All tests except `@pytest.mark.live`
+ones are deterministic; live tests use minimal-invariant
+assertions to avoid flakiness from real-target drift. Tests for
+the parent spec's property/replay requirements are routed to step
+3.3 (chain-replay-determinism + evidence-digest-stable property
+tests).
+
+## Acceptance Criteria — Phase-level
+
+The following must pass when all 7 sub-steps complete:
+
+- All sub-step acceptance test lists pass (mechanically: `uv run pytest`).
+- `mypy --strict` passes for all new modules.
+- Charter regression test stays green.
+- `source_coverage_gate` no longer references the classifier or
+  escalator modules (mechanical: import-graph check).
+- `tests/integration/live/test_step_3_6_ebay_browse_keyword.py` returns
+  ≥1 product when run with valid credentials (live; skipped without).
+- Phase 4 step 4.1 can begin without Phase 3 reservations blocking it.
+
+---
+
+## Background
+
 This supplement expands `design.md` §4 Phase 3 (~60 lines) into
 implementation-ready detail. Phase 0 already shipped the contracts
 this phase consumes (`AccessControlBlocked`, `AccessControlProvider`,
@@ -62,9 +170,10 @@ introduce a new "ForbiddenError" class.
 ## Substep boundaries
 
 Per the new "logical-boundary-only" splitting rule, Phase 3 ships
-7 sub-steps (3.5 split into 3.5a/3.5b at iter-3 because LWA + SigV4
-signing IS a true logical boundary distinct from pagination
-mechanics). Each is a single cohesive concern.
+7 sub-steps (3.5 split into 3.5a/3.5b at iter-3 because LWA token
+acquisition / refresh / scope-policy / audit IS a true logical
+boundary distinct from pagination mechanics). Each is a single
+cohesive concern.
 
 | Sub-step | Title | LOC est | Logical boundary |
 |---|---|---|---|
@@ -77,8 +186,10 @@ mechanics). Each is a single cohesive concern.
 | 3.6 | eBay browse adapter + live test #5 | ~250 | eBay OAuth fetcher + browse adapter + `@pytest.mark.live` test |
 
 iter-3 codex finding: a single SP-API "list" call requires regional
-host + LWA token + AWS SigV4 — the iter-2 sketch glossed this. 3.5
-splits into:
+host + LWA token (NOT AWS SigV4 — that requirement was removed by
+Amazon effective 2023-10-02 per the SP-API changelog) + scope-policy
+check + CredentialUseRecord audit. The iter-2 sketch glossed all of
+this. 3.5 splits into:
 
 - **3.5a** ships the *paginator* (cursor pagination + 401 refresh
   + partial-batch result + budget) over an injectable
@@ -391,7 +502,79 @@ hierarchy:
 
 | Failure class | Inherits | Maps to |
 |---|---|---|
-| Status-fatal failure (NEW for Phase 3 step 3.2 — `HttpStatusFatalError(NetworkAdapterError, FatalError)`) | `NetworkAdapterError, FatalError` | terminal (401/403/404/410). Phase 3 introduces this single new class because Phase 1's `stdlib_http` covers transport-level failures (timeout, retry-exhausted, redirect-denied) but does NOT classify status-as-fatal — status mapping is the orchestrator / classifier layer's responsibility. The transport returns the response as-is for 4xx; the orchestrator constructs `HttpStatusFatalError(status_code=401)` (or 403 / 404 / 410 — the four codes design.md explicitly calls out as terminal) before invoking the escalator. Tests pass an `HttpStatusFatalError` instance directly. |
+| Status-fatal failure (NEW for Phase 3 step 3.2 — `HttpStatusFatalError(NetworkAdapterError, FatalError)`) | `NetworkAdapterError, FatalError` | terminal (401/403/404/410). |
+
+**`HttpStatusFatalError` exact definition** (codex iter-5 important — the existing `NetworkAdapterError.__init__` requires `(NetworkFailureType, detail)`, but the new class needs a `status_code` field; resolve via subclass with explicit constructor that maps internally):
+
+```python
+# src/veracrawl/adapters/network/stdlib_http.py (extend existing module)
+from veracrawl.contracts.enums import NetworkFailureType  # existing
+
+# Status codes that are unambiguously terminal per design.md §3.2.
+_HTTP_FATAL_STATUS_CODES: Final[frozenset[int]] = frozenset({401, 403, 404, 410})
+
+class HttpStatusFatalError(NetworkAdapterError, FatalError):
+    """Status-driven fatal failure: 401 / 403 / 404 / 410.
+
+    Constructor takes ``status_code: int`` and a free-form
+    ``request_url: str`` (URL is sanitized via the same redaction
+    helpers as the existing adapter errors — query / userinfo
+    stripped). Internally maps to ``NetworkFailureType.FATAL_STATUS``
+    (NEW enum value — must be added to ``contracts.enums.NetworkFailureType``
+    in the same commit) so the parent ``NetworkAdapterError``
+    invariants hold.
+
+    Public attributes:
+    * ``status_code: int`` — one of 401, 403, 404, 410. Constructor
+      raises ``ValueError`` for any other value.
+    * ``request_url: str`` — sanitized.
+    * ``failure_type: NetworkFailureType`` — always
+      ``NetworkFailureType.FATAL_STATUS``.
+
+    No raw caller-supplied data lands on ``__dict__`` other than
+    these three sanitized fields.
+    """
+
+    def __init__(self, *, status_code: int, request_url: str) -> None:
+        if status_code not in _HTTP_FATAL_STATUS_CODES:
+            raise ValueError(
+                f"HttpStatusFatalError requires status in "
+                f"{sorted(_HTTP_FATAL_STATUS_CODES)}; got {status_code}"
+            )
+        sanitized_url = _sanitize_url_for_logging(request_url)  # existing helper
+        super().__init__(NetworkFailureType.FATAL_STATUS, sanitized_url)
+        self.status_code = status_code
+        self.request_url = sanitized_url
+```
+
+**`ApiSourceOutageError` exact definition**:
+
+```python
+class ApiSourceOutageError(NetworkAdapterError, RetryableError):
+    """API source provider outage / quota exhaustion (e.g., SP-API
+    503 with ``X-EBAY-API-ERRORS`` quota indicator). RetryableError
+    so the transport's local retry budget can fire first; the
+    escalator only sees this if the transport's retry budget was
+    exhausted (then it's effectively terminal-for-this-adapter).
+
+    Constructor takes a sanitized ``provider: str`` (e.g.,
+    ``"ebay"``, ``"amazon-sp-api"``) and a ``request_url: str``.
+    Maps to ``NetworkFailureType.PROVIDER_OUTAGE`` (NEW enum value).
+    """
+
+    def __init__(self, *, provider: str, request_url: str) -> None:
+        if not provider.strip() or not provider.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("ApiSourceOutageError provider must be a sanitized identifier")
+        sanitized_url = _sanitize_url_for_logging(request_url)
+        super().__init__(NetworkFailureType.PROVIDER_OUTAGE, sanitized_url)
+        self.provider = provider
+        self.request_url = sanitized_url
+```
+
+Both classes land at `src/veracrawl/adapters/network/stdlib_http.py`
+(same module as Phase 1's other `NetworkAdapterError` subclasses).
+The two new `NetworkFailureType` enum values land at
+`src/veracrawl/contracts/enums.py` — single-line additions.
 | `NetworkTimeoutError` (existing) | `NetworkAdapterError, RetryableError` | retry on same adapter |
 | `AccessControlBlocked` (existing, Phase 0 contract — passed to escalator as a typed value, not raised) | dataclass / not exception | escalate to AUTHORIZED_SESSION when scope covers |
 | `ApiSourceOutageError` (NEW, Phase 3 step 3.2) | `NetworkAdapterError, RetryableError` | escalate to HTTP — distinct from generic transport timeout |
@@ -585,13 +768,29 @@ free-form caller string lands on the exception or in audit logs.
 
 ## Step 3.3 — `source_coverage_gate` revert to evaluative
 
-Existing `source_coverage_gate` (`src/veracrawl/source_coverage_gate.py`)
-runs live decisions; design says it should be evaluative only
-(validate recorded chain's evidence completeness, never run the
-chain itself). This is a refactor: identify the live-decision
-call sites, replace with assertions over the existing Phase 0
-records (`SourceCoverageAdapterExecutionRecord` per adapter +
-`SourceCoverageAdapterReport` per run).
+Existing `source_coverage_gate` lives at
+`src/veracrawl/fetch/source_coverage_gate.py` (verified at iter-5).
+Design.md says the gate should be evaluative only (validate
+recorded chain's evidence completeness).
+
+**iter-5 codex correction**: the existing gate is **not** running
+live decisions today — it is already fixture/evidence aggregation
+logic. The "revert to evaluative" wording from `design.md` is
+therefore aspirational — the actual scope of step 3.3 is *narrower*:
+
+- Add cross-record consistency assertions to the existing gate that
+  validate the new Phase 3 contracts (`AdapterEscalationDecision`,
+  `AccessControlBlocked`) are referenced consistently when present
+  in a run record.
+- Add property tests for chain-replay determinism + evidence-digest
+  stability (parent design `Acceptance` requirements).
+- Do NOT remove the existing fixture aggregation logic — it stays.
+
+The original "revert" framing in `design.md` was based on a
+misreading of the current gate's behavior; the actual deliverable
+is "add Phase 3 chain-consistency assertions to an already-
+evaluative gate". STATUS.md row at land-time should reflect the
+narrower scope.
 
 ### Integration with existing schema (codex iter-3 important)
 
@@ -643,17 +842,30 @@ gate validates the chain semantics, not the resolution.
    - Find the most recent execution at-or-before
      `decision.created_at` whose `adapter_type ==
      decision.from_adapter_type`. If none, **flag** as unjustified.
-   - For `failure_signature == ACCESS_CONTROL_BLOCKED`: assert
-     the preceding execution's `policy_decision_refs` contains a
-     ref equal to one of the input `access_control_blocks`'s
-     `id`s.
-   - For `failure_signature in (API_SOURCE_UNAVAILABLE,
-     JS_RENDERED_DOCUMENT)`: assert the preceding execution's
-     `fetch_attempt_refs` contains a ref equal to one of the
-     input `network_attempt_evidences`'s `id`s. For
-     `API_SOURCE_UNAVAILABLE`, additionally assert the matched
-     `NetworkAttemptEvidence.failure_class` (Phase 0 field —
-     verified at iter-4) equals `"ApiSourceOutageError"`.
+   - **Validate `decision.triggered_by_ref`** matches the right
+     evidence type per `failure_signature` (codex iter-5
+     important — the iter-4 wording confused
+     `policy_decision_refs` with `AccessControlBlocked.id`):
+     - For `failure_signature == ACCESS_CONTROL_BLOCKED`:
+       `decision.triggered_by_ref` must equal the `id` of one of
+       the input `access_control_blocks` records. The
+       `AccessControlBlocked` record is **not** stored in
+       `policy_decision_refs` — that field carries
+       `AdapterEscalationDecision` ids and other policy
+       decisions. The gate looks up the
+       `AccessControlBlocked` directly via the
+       `triggered_by_ref` against the resolved
+       `access_control_blocks` input list.
+     - For `failure_signature in (API_SOURCE_UNAVAILABLE,
+       JS_RENDERED_DOCUMENT)`: `decision.triggered_by_ref`
+       must equal the `id` of one of the input
+       `network_attempt_evidences` records. For
+       `API_SOURCE_UNAVAILABLE`, additionally assert the matched
+       `NetworkAttemptEvidence.failure_class` (Phase 0 field —
+       verified at iter-4) equals `"ApiSourceOutageError"`.
+   - **Separately**, assert the report's `policy_decision_refs`
+     contains the `decision.id` (the decision IS a policy
+     decision and belongs in that list).
 3. Assert `len(escalation_decisions) <=
    policy.max_escalations_per_run`.
 4. Assert `report.verified_adapter_types` is a subset of
@@ -880,11 +1092,9 @@ class AmazonSpApiAdapter:
     def __init__(
         self,
         *,
-        http_transport: httpx.BaseTransport,  # MockTransport in tests; AmazonSpApiLwaTransport in production
-        vault: CredentialVaultPort,
-        scope_policy: SessionScopePolicy,
+        http_transport: httpx.BaseTransport,  # MockTransport in tests; AmazonSpApiLwaTransport in production (handles LWA token + scope check + CredentialUseRecord emission)
         token_cache: SpApiLwaTokenCachePort,  # for invalidate-on-401 (vault has no invalidate method)
-        marketplace_endpoint: str,  # e.g., "https://sellingpartnerapi-na.amazon.com"; validated at __init__: must be https://*.amazon.com or https://sandbox.* per SP-API regional endpoints list
+        marketplace_endpoint: str,  # e.g., "https://sellingpartnerapi-na.amazon.com"; validated at __init__
         clock: Callable[[], datetime] = ...,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None: ...
@@ -899,6 +1109,28 @@ class AmazonSpApiAdapter:
         budget: PaginationBudget,
     ) -> AmazonSpApiPaginatedResult: ...
 ```
+
+**Architectural note (codex iter-5 important — separation of
+concerns)**: the iter-4 paginator interface accepted `vault`,
+`scope_policy`, and was tested for "writes credential_use_record
+per page". That mixed credential handling into the pagination
+loop. The iter-5 design moves credential handling and
+`CredentialUseRecord` emission **into the transport layer**
+(`AmazonSpApiLwaTransport`) where it belongs:
+
+- The transport sees every outgoing request, fetches the LWA
+  token, applies `SessionScopePolicy` against the final URL +
+  method, and writes a `CredentialUseRecord` to the outbox via
+  the Phase 2 step 2.4b `CredentialUseRecordPort`.
+- The paginator is now agnostic to credentials. Test 12
+  ("test_list_writes_credential_use_record_per_page") moves to
+  step 3.5b's test list.
+- This matches the Phase 2 step 2.4b architectural decision: the
+  `AuthorizedSessionAdapter` is the audit boundary; pagination
+  loops are not.
+
+The migration is one less responsibility on the paginator at the
+cost of one more on the transport — net win for cohesion.
 
 `marketplace_endpoint` is the regional SP-API base URL — see
 `developer-docs.amazon.com/sp-api/docs/marketplace-ids`. Production
@@ -963,7 +1195,13 @@ list(endpoint, params, scope_ref, run_ref, budget):
 
     page_params = {**params, "nextToken": next_token} if next_token else params
     try:
-      response = transport.handle_request(httpx.Request("GET", endpoint, params=page_params))
+      # Construct absolute URL from validated marketplace_endpoint
+      # + path-only endpoint. Both are pre-validated at __init__ /
+      # call entry; this is the canonical join point for production.
+      absolute_url = httpx.URL(self._marketplace_endpoint).join(endpoint)
+      response = transport.handle_request(
+          httpx.Request("GET", absolute_url, params=page_params)
+      )
     except FatalError as exc:
       return AmazonSpApiPaginatedResult(pages, AmazonSpApiPaginationFailure(
           kind=FATAL, triggered_by=exc))
