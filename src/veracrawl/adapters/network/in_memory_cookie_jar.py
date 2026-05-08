@@ -26,6 +26,16 @@ from veracrawl.runtime_support.logging import get_logger
 
 _logger = get_logger(__name__)
 
+# Per-(run_ref, origin) cookie count cap. Above this, oldest
+# cookies are evicted in insertion order (codex iter-2 important
+# #4). 64 covers all real-world cookie usage; mass-Set-Cookie
+# attacks won't exhaust process memory.
+_DEFAULT_MAX_COOKIES_PER_BUCKET: int = 64
+# Per-cookie value byte cap. RFC 6265 doesn't mandate a max but
+# real browsers cap around 4 KiB; we use 8 KiB to leave headroom
+# for legitimate signed-token cookies.
+_DEFAULT_MAX_COOKIE_VALUE_BYTES: int = 8 * 1024
+
 
 def _origin_for(url: str) -> str | None:
     """Return canonical ``scheme://host[:port]`` or ``None`` on bad URL."""
@@ -152,8 +162,16 @@ class InMemoryCookieJar:
         self,
         *,
         clock_fn: Callable[[], float] = time.time,
+        max_cookies_per_bucket: int = _DEFAULT_MAX_COOKIES_PER_BUCKET,
+        max_cookie_value_bytes: int = _DEFAULT_MAX_COOKIE_VALUE_BYTES,
     ) -> None:
+        if max_cookies_per_bucket <= 0:
+            raise ValueError("max_cookies_per_bucket must be positive")
+        if max_cookie_value_bytes <= 0:
+            raise ValueError("max_cookie_value_bytes must be positive")
         self._clock = clock_fn
+        self._max_cookies_per_bucket = max_cookies_per_bucket
+        self._max_cookie_value_bytes = max_cookie_value_bytes
         self._lock = threading.Lock()
         # (run_ref, origin) → list[CookieRecord]
         self._jar: dict[tuple[str, str], list[CookieRecord]] = {}
@@ -213,10 +231,38 @@ class InMemoryCookieJar:
             )
             return
         new_cookies: list[CookieRecord] = []
+        request_secure = origin.startswith("https://")
         for name, morsel in morsels.items():
             value = morsel.value
             path = _normalize_cookie_path(morsel["path"] or None, url)
             secure = bool(morsel["secure"])
+            # Codex iter-2 critical: RFC 6265bis §5.6 — ignore a
+            # ``Set-Cookie`` with the ``Secure`` attribute when it
+            # arrives over an insecure (non-HTTPS) channel.
+            # Otherwise an HTTP response can plant a Secure cookie
+            # that the jar later ships on HTTPS requests, even
+            # though the per-origin scope means the cookies live in
+            # different buckets — a Set-Cookie header itself can
+            # still be a covert channel into the credential surface.
+            if secure and not request_secure:
+                _logger.warning(
+                    "cookie_jar_ignored_secure_over_insecure",
+                    run_ref=run_ref,
+                    origin=origin,
+                    cookie_name=name,
+                )
+                continue
+            # Codex iter-2 important #4: cap cookie value size so
+            # an oversized Set-Cookie cannot exhaust process memory.
+            if len(value.encode("utf-8")) > self._max_cookie_value_bytes:
+                _logger.warning(
+                    "cookie_jar_value_oversize_dropped",
+                    run_ref=run_ref,
+                    origin=origin,
+                    cookie_name=name,
+                    value_bytes=len(value.encode("utf-8")),
+                )
+                continue
             http_only = bool(morsel["httponly"])
             expires = _resolve_expiry(
                 morsel["max-age"] or None,
@@ -252,6 +298,13 @@ class InMemoryCookieJar:
                 if cookie.expires_epoch is not None and cookie.expires_epoch <= now:
                     continue
                 replaced.append(cookie)
+            # Codex iter-2 important #4: cap per-bucket cookie
+            # count. Above the cap, drop oldest (FIFO at the
+            # head of the list) so a malicious or runaway server
+            # cannot pump unbounded Set-Cookies into one origin.
+            if len(replaced) > self._max_cookies_per_bucket:
+                overflow = len(replaced) - self._max_cookies_per_bucket
+                replaced = replaced[overflow:]
             self._jar[(run_ref, origin)] = replaced
 
     def cookies_in_jar(self, *, run_ref: str) -> CookieJarSnapshot:

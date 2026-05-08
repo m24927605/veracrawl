@@ -473,6 +473,72 @@ def test_cookie_jar_isolated_across_runs() -> None:
 # -- Boundary acceptance -----------------------------------------------
 
 
+def test_jar_cookies_suppressed_on_cross_origin_redirect() -> None:
+    """Iter-2 important #3: when a cross-origin redirect strips
+    the caller's credentials, the jar's cookies for the redirect
+    target must NOT be auto-injected on that very next hop."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://b.test/",
+        set_cookie_value="session=preexisting",
+    )
+
+    captured_headers: list[dict[str, str]] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured_headers.append(dict(request.headers))
+        url = str(request.url)
+        if url == "https://a.test/p/1":
+            return httpx.Response(
+                301,
+                headers={"location": "https://b.test/q", "content-type": "text/plain"},
+            )
+        return httpx.Response(
+            200, content=b"<html>ok</html>", headers={"content-type": "text/html"}
+        )
+
+    StdlibHttpSourceAdapter(
+        _make_request("https://a.test/p/1"),
+        config=HttpClientConfig(
+            cookie_jar=jar,
+            run_ref="run:r",
+            extra_headers={"Authorization": "Bearer secret"},
+        ),
+        transport=httpx.MockTransport(_handler),
+    ).execute(_make_command())
+    # Cross-origin redirect: jar cookie for b.test must NOT be
+    # auto-injected on this hop.
+    assert "cookie" not in captured_headers[1]
+
+
+def test_extra_headers_immune_to_external_mutation() -> None:
+    """Iter-2 important #5: a caller mutating its own
+    ``HttpClientConfig.extra_headers`` dict mid-flight cannot
+    affect already-constructed adapters."""
+
+    captured_headers: list[dict[str, str]] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured_headers.append(dict(request.headers))
+        return httpx.Response(
+            200, content=b"<html>ok</html>", headers={"content-type": "text/html"}
+        )
+
+    headers_dict = {"Authorization": "Bearer ORIGINAL"}
+    config = HttpClientConfig(extra_headers=headers_dict)
+    adapter = StdlibHttpSourceAdapter(
+        _make_request(),
+        config=config,
+        transport=httpx.MockTransport(_handler),
+    )
+    # Caller now mutates the dict externally.
+    headers_dict["Authorization"] = "Bearer TAMPERED"
+    adapter.execute(_make_command())
+    assert captured_headers[0].get("authorization") == "Bearer ORIGINAL"
+
+
 def test_default_config_uses_noop_cache_and_jar() -> None:
     config = HttpClientConfig()
     from veracrawl.ports.conditional_cache import NoopConditionalCache

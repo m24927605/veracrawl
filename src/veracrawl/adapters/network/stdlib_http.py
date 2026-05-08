@@ -478,6 +478,14 @@ class StdlibHttpSourceAdapter:
     ) -> None:
         self.request = request
         self._config = config or _default_config_from_request(request)
+        # Codex iter-2 important #5: ``extra_headers`` is a mutable
+        # ``dict`` field on a frozen dataclass. A caller that
+        # mutates the dict after passing it in would leak credentials
+        # across adapter instances / executions. Snapshot now into
+        # an internal frozen copy that ``execute`` re-uses; the
+        # adapter never reads ``self._config.extra_headers``
+        # directly after this.
+        self._frozen_extra_headers: dict[str, str] = dict(self._config.extra_headers)
         # Production-mode robots gate: the default
         # ``HttpClientConfig.robots_port`` is ``NoopRobotsPort`` so
         # existing fixture tests keep passing. In production the
@@ -540,6 +548,16 @@ class StdlibHttpSourceAdapter:
         # Authorization / Cookie / Proxy-Authorization for the next
         # hop.
         self._current_extra_headers: dict[str, str] = {}
+        # Codex iter-2 important #3: when a cross-origin redirect
+        # strips the caller's credentials, also suppress the cookie
+        # jar's emission for the **next** request. Otherwise a
+        # caller who set ``Cookie`` in ``extra_headers`` (intended
+        # for origin A) sees that cookie stripped on the redirect
+        # to origin B, but the jar's cookies for B replace it —
+        # which is a different credential boundary the caller did
+        # not authorize. Treat cross-origin as a credentials-reset
+        # for the next hop; subsequent hops can re-establish.
+        self._suppress_jar_cookies_for_next_request: bool = False
         # Counter for unique attempt IDs across retries / hops.
         self._attempt_counter: int = 0
         # Retry-After observed during the most recent ``_send_with_retry``.
@@ -563,10 +581,14 @@ class StdlibHttpSourceAdapter:
         self._redirect_hops = []
         self._attempt_evidences = []
         self._cached_artifact_ref_for_response = None
+        self._suppress_jar_cookies_for_next_request = False
         # Snapshot the extra-headers config for this fetch so a
         # cross-origin strip on this fetch does not mutate the
-        # adapter's persistent config across calls.
-        self._current_extra_headers = dict(self._config.extra_headers)
+        # adapter's persistent state across calls. Read from the
+        # frozen copy taken at __init__ (codex iter-2 important #5)
+        # so a caller mutating their own ``HttpClientConfig.extra_headers``
+        # dict mid-flight cannot affect us.
+        self._current_extra_headers = dict(self._frozen_extra_headers)
         self._attempt_counter = 0
         response = self._fetch_with_redirects(
             self.request.url, policy_decision_refs=policy_decision_refs
@@ -652,6 +674,9 @@ class StdlibHttpSourceAdapter:
                 self._current_extra_headers = _strip_cross_origin_headers(
                     self._current_extra_headers
                 )
+                # Suppress jar cookies on the next request too —
+                # codex iter-2 important #3.
+                self._suppress_jar_cookies_for_next_request = True
             # Cross-redirect robots re-check: design.md §4 Phase 1
             # explicitly requires "enforce on initial URL **and** every
             # redirect target". The check runs on every hop, not only
@@ -867,9 +892,17 @@ class StdlibHttpSourceAdapter:
         headers: dict[str, str] = {"User-Agent": self._config.user_agent}
         for name, value in self._current_extra_headers.items():
             headers[name] = value
-        cookies = self._config.cookie_jar.cookies_for(run_ref=self._config.run_ref, url=url)
-        if cookies:
-            headers["Cookie"] = "; ".join(f"{n}={v}" for n, v in cookies.items())
+        if self._suppress_jar_cookies_for_next_request:
+            # Cross-origin redirect just stripped credentials. Don't
+            # re-introduce them via jar cookies for the redirect
+            # target on this very next hop. Reset the flag so
+            # subsequent hops use the jar normally (codex iter-2
+            # important #3).
+            self._suppress_jar_cookies_for_next_request = False
+        else:
+            cookies = self._config.cookie_jar.cookies_for(run_ref=self._config.run_ref, url=url)
+            if cookies:
+                headers["Cookie"] = "; ".join(f"{n}={v}" for n, v in cookies.items())
         cached = self._config.conditional_cache.get(run_ref=self._config.run_ref, url=url)
         if cached is not None:
             if cached.etag:
@@ -942,8 +975,17 @@ class StdlibHttpSourceAdapter:
         # Read body before caching — httpx Response body is
         # streamed and ``response.content`` materializes it.
         body_bytes = response.content
-        digest = stable_hash({"url": url, "body": body_bytes.decode("utf-8", errors="replace")})
-        body_artifact_ref = f"artifact:{self.request.id}:cached:{digest[:12]}"
+        body_text = body_bytes.decode("utf-8", errors="replace")
+        # Codex iter-2 important #2: store the SAME artifact_ref
+        # shape that ``execute()`` will emit for this body so a
+        # later 304 short-circuit can reuse it. Earlier we stored
+        # ``cached:`` while ``execute()`` emitted ``raw-html:``,
+        # creating a ref that never appeared in any prior result.
+        # ``execute()`` keys the digest on
+        # ``{"url": final_url, "body": body_text}`` — we mirror that
+        # so the digest matches.
+        digest = stable_hash({"url": url, "body": body_text})
+        body_artifact_ref = f"artifact:{self.request.id}:raw-html:{digest[:12]}"
         content_type_header = response.headers.get("content-type", "")
         content_type = (
             content_type_header.split(";", 1)[0]

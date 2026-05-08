@@ -3,9 +3,13 @@
 
 Per-(run_ref, url) entry; thread-safe via a single coarse lock
 (cooperative crawl is not contention-bound, so a finer-grained
-scheme is over-engineered for Phase 1). Bounded by ``max_entries``
-to prevent unbounded growth — entries past the cap are evicted in
-insertion order (oldest first).
+scheme is over-engineered for Phase 1). Bounded by both
+``max_entries`` (count) and ``max_total_bytes`` (sum of body
+sizes); ``max_entry_bytes`` rejects oversized payloads at
+``put`` time. Eviction is **LRU** — entries are touched on
+``get`` and the least-recently-used entry is evicted first
+when either cap is exceeded (codex iter-2 minor: docstring
+previously claimed insertion-order eviction, which is wrong).
 """
 
 from __future__ import annotations

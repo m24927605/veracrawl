@@ -67,6 +67,63 @@ def test_scheme_difference_is_different_origin() -> None:
     assert http_cookies == {}
 
 
+def test_secure_cookie_from_http_response_ignored() -> None:
+    """Iter-2 critical: RFC 6265bis — Set-Cookie with Secure must
+    be ignored when received over an insecure (non-HTTPS) channel.
+    Otherwise an HTTP response can plant credentials the jar
+    later trusts on HTTPS requests."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="http://example.test/",
+        set_cookie_value="session=secret; Secure",
+    )
+    cookies_http = jar.cookies_for(run_ref="run:r", url="http://example.test/")
+    assert cookies_http == {}
+    snapshot = jar.cookies_in_jar(run_ref="run:r")
+    assert snapshot.cookies == []
+
+
+def test_oversized_cookie_value_dropped() -> None:
+    """Iter-2 important #4: per-cookie value cap drops oversized
+    Set-Cookie at acceptance time."""
+
+    jar = InMemoryCookieJar(max_cookie_value_bytes=10)
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=" + "X" * 100,
+    )
+    assert jar.cookies_for(run_ref="run:r", url="https://example.test/") == {}
+
+
+def test_per_bucket_cookie_count_cap() -> None:
+    """Iter-2 important #4: per-(run, origin) cookie-count cap
+    evicts oldest in insertion order."""
+
+    jar = InMemoryCookieJar(max_cookies_per_bucket=2)
+    for i in range(4):
+        jar.accept_set_cookie(
+            run_ref="run:r",
+            url="https://example.test/",
+            set_cookie_value=f"c{i}=v{i}",
+        )
+    snapshot = jar.cookies_in_jar(run_ref="run:r")
+    names = sorted(c.name for c in snapshot.cookies)
+    # Only the last 2 survive (c2 + c3).
+    assert names == ["c2", "c3"]
+
+
+def test_jar_init_validation() -> None:
+    import pytest
+
+    with pytest.raises(ValueError):
+        InMemoryCookieJar(max_cookies_per_bucket=0)
+    with pytest.raises(ValueError):
+        InMemoryCookieJar(max_cookie_value_bytes=0)
+
+
 def test_secure_attribute_blocks_http() -> None:
     jar = InMemoryCookieJar()
     jar.accept_set_cookie(
