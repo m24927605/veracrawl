@@ -160,14 +160,30 @@ def test_put_rejects_unredacted_har_payload(store: LocalFsEvidenceArtifactStore)
         )
 
 
-def test_put_accepts_unredacted_screenshot(store: LocalFsEvidenceArtifactStore) -> None:
+def test_put_rejects_unredacted_screenshot(store: LocalFsEvidenceArtifactStore) -> None:
+    """Iter-2 #6: every kind requires attestation; screenshots can
+    capture rendered PII / tokens, so the producer must affirm
+    lifecycle policy was applied."""
+
+    with pytest.raises(EvidenceRedactionRequired):
+        store.put(
+            run_ref="run:fixture",
+            attempt_ref="attempt:1",
+            kind=ArtifactKind.SCREENSHOT,
+            payload=b"\x89PNG\r\n\x1a\n",
+            content_type="image/png",
+            redaction_applied=False,
+        )
+
+
+def test_put_accepts_attested_screenshot(store: LocalFsEvidenceArtifactStore) -> None:
     result = store.put(
         run_ref="run:fixture",
         attempt_ref="attempt:1",
         kind=ArtifactKind.SCREENSHOT,
         payload=b"\x89PNG\r\n\x1a\n",
         content_type="image/png",
-        redaction_applied=False,
+        redaction_applied=True,
     )
     fetched = store.get(artifact_ref=result.artifact_ref)
     assert fetched == b"\x89PNG\r\n\x1a\n"

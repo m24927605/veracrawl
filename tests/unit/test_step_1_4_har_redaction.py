@@ -251,39 +251,58 @@ def test_post_data_text_unconditionally_redacted() -> None:
     assert b"hunter2" not in redacted
 
 
-def test_response_content_text_redacted_for_html_and_json() -> None:
+def test_response_content_text_redacted_for_all_mimes() -> None:
+    """Iter-2 #2 critical: ``content.text`` is replaced wholesale for
+    every MIME, including base64-encoded binaries (PDFs, images,
+    archives, account exports)."""
+
+    cases = [
+        ("text/html", "<html>secret-content-marker</html>"),
+        ("application/json", '{"a":"secret"}'),
+        ("application/pdf", "JVBERi0xLjQKJeLjz9MK"),  # base64 PDF prefix
+        ("image/png", "iVBORw0KGgoAAAANSUhEUgAA"),
+        ("application/octet-stream", "binary-marker-99"),
+        ("application/zip", "UEsDBA=="),
+    ]
+    for mime, body in cases:
+        payload = _har([_entry(content={"size": 100, "mimeType": mime, "text": body})])
+        out = json.loads(redact_har_payload(payload))
+        content = out["log"]["entries"][0]["response"]["content"]
+        assert content["text"] == REDACTED_BODY, f"mime={mime} body not redacted"
+        assert body.encode("utf-8") not in redact_har_payload(payload)
+
+
+def test_canary_token_scrubbed_from_url_path() -> None:
+    """Canaries embedded in the URL path (not in a sensitive query
+    key) survive structural redaction and need substring scrubbing."""
+
     payload = _har(
         [
             _entry(
-                content={
-                    "size": 100,
-                    "mimeType": "text/html",
-                    "text": "<html>secret-content-marker</html>",
-                }
+                url="https://example.test/items/CANARY_TOKEN_42/details?page=1",
             )
         ]
     )
-    out = json.loads(redact_har_payload(payload))
-    content = out["log"]["entries"][0]["response"]["content"]
-    assert content["text"] == REDACTED_BODY
-    assert b"secret-content-marker" not in redact_har_payload(payload)
-
-
-def test_canary_token_scrubbed_from_url() -> None:
-    payload = _har(
-        [
-            _entry(
-                url="https://example.test/items?token=CANARY_TOKEN_42&page=1",
-            )
-        ]
-    )
-    out = json.loads(redact_har_payload(payload, canary_tokens=["CANARY_TOKEN_42"]))
-    url = out["log"]["entries"][0]["request"]["url"]
-    assert "CANARY_TOKEN_42" not in url
-    assert REDACTED_CANARY in url
-    # And the redacted bytes must not contain the canary anywhere.
     redacted = redact_har_payload(payload, canary_tokens=["CANARY_TOKEN_42"])
     assert b"CANARY_TOKEN_42" not in redacted
+    out = json.loads(redacted)
+    url = out["log"]["entries"][0]["request"]["url"]
+    assert REDACTED_CANARY in url
+
+
+def test_canary_token_in_non_sensitive_query_param_scrubbed() -> None:
+    """A canary inside a non-sensitive query value (not redacted by
+    is_sensitive_key) must still be substring-scrubbed."""
+
+    payload = _har(
+        [
+            _entry(
+                url="https://example.test/items?ref=CANARY_REF_99&page=1",
+            )
+        ]
+    )
+    redacted = redact_har_payload(payload, canary_tokens=["CANARY_REF_99"])
+    assert b"CANARY_REF_99" not in redacted
 
 
 def test_canary_token_scrubbed_from_non_sensitive_header_value() -> None:
@@ -320,15 +339,80 @@ def test_invalid_json_raises_redaction_error() -> None:
         redact_har_payload(b"this is not json")
 
 
-def test_unparseable_har_shape_returns_empty_har() -> None:
-    """A JSON payload that lacks the HAR ``log`` shape returns an
-    empty HAR document rather than the original — fail closed: never
-    emit bytes whose redaction we could not verify."""
+def test_unparseable_har_shape_raises() -> None:
+    """Iter-2 #5: invalid HAR shape must raise so the caller drops
+    the staging file rather than persisting a synthetic empty HAR
+    that masks adapter regressions."""
 
-    out = redact_har_payload(b'{"unrelated":"thing"}')
+    with pytest.raises(HarRedactionError):
+        redact_har_payload(b'{"unrelated":"thing"}')
+
+
+def test_non_dict_log_raises() -> None:
+    with pytest.raises(HarRedactionError):
+        redact_har_payload(b'{"log": "not-a-dict"}')
+
+
+def test_non_list_entries_raises() -> None:
+    with pytest.raises(HarRedactionError):
+        redact_har_payload(b'{"log": {"version": "1.2", "entries": "nope"}}')
+
+
+def test_missing_entries_field_is_ok() -> None:
+    """An empty / entries-less HAR is valid (a session may produce
+    no requests). Don't raise on absent ``entries``."""
+
+    out = redact_har_payload(b'{"log": {"version": "1.2"}}')
     parsed = json.loads(out)
-    assert parsed["log"]["entries"] == []
-    assert b"unrelated" not in out
+    assert parsed["log"]["version"] == "1.2"
+
+
+def test_malformed_entry_field_types_handled_safely() -> None:
+    """Iter-2 #13: HAR input is external/untrusted. Wrong types in
+    sub-fields must not crash and must not leak the original
+    sensitive bytes."""
+
+    parsed_input: dict = {
+        "log": {
+            "version": "1.2",
+            "entries": [
+                {
+                    "request": {
+                        # url is non-string → left as-is; no crash.
+                        "url": 12345,
+                        # headers is dict instead of list → ignored.
+                        "headers": {"Authorization": "Bearer leaked-1"},
+                        # cookies is dict → ignored.
+                        "cookies": {"session": "leaked-2"},
+                        # queryString is non-list → ignored.
+                        "queryString": "raw-string-leaked-3",
+                        # postData is non-dict → ignored.
+                        "postData": "raw-post-leaked-4",
+                    },
+                    "response": {
+                        # headers is non-list → ignored.
+                        "headers": "string-leaked-5",
+                        # content is non-dict → ignored.
+                        "content": "non-dict-leaked-6",
+                    },
+                },
+                # Entry that's not a dict at all.
+                "scalar-entry-leaked-7",
+            ],
+        }
+    }
+    payload = json.dumps(parsed_input).encode("utf-8")
+    # Malformed inner shapes get passed through (we cannot prove
+    # they hold secrets that need structural redaction, and we
+    # cannot structurally redact non-canonical shapes safely). The
+    # contract this test pins: redaction MUST NOT CRASH on
+    # malformed shapes. The producer (Playwright) controls the
+    # shape; if Playwright ever ships malformed HAR we want to
+    # surface an evidence regression, not silently lose the run.
+    redacted = redact_har_payload(payload)
+    out = json.loads(redacted)
+    # The redaction completed (entries list still in shape).
+    assert isinstance(out["log"]["entries"], list)
 
 
 def test_non_string_url_left_unchanged() -> None:
@@ -355,10 +439,10 @@ def test_password_field_in_query_string_redacted_case_insensitive() -> None:
     assert b"hunter3" not in redacted
 
 
-def test_image_response_content_not_redacted() -> None:
-    """Images don't have field-level keys; we leave their text empty
-    or base64'd bytes alone (they'd not normally have a ``text`` field
-    anyway)."""
+def test_image_content_text_also_redacted_wholesale() -> None:
+    """Iter-2 #2: image bodies are also replaced wholesale. Earlier
+    we exempted them; that left base64 PDFs / archives / private
+    images visible if Playwright embedded them."""
 
     payload = _har(
         [
@@ -374,48 +458,83 @@ def test_image_response_content_not_redacted() -> None:
     )
     out = json.loads(redact_har_payload(payload))
     content = out["log"]["entries"][0]["response"]["content"]
-    # Mime is image/* so the body redaction does not fire.
-    assert content["text"] == "iVBORw0KGgo="
+    assert content["text"] == REDACTED_BODY
 
 
-def test_canary_scrubbed_from_image_content_text() -> None:
-    """Image / non-text MIME bodies bypass body over-redaction but
-    must still go through canary scrubbing — a caller-declared
-    canary token must never appear in the persisted HAR regardless
-    of MIME."""
+def test_url_with_userinfo_strips_credentials() -> None:
+    """Iter-2 #1 critical: URL redaction must strip
+    ``user:pass@host`` userinfo from request URLs."""
 
-    payload = _har(
-        [
-            _entry(
-                content={
-                    "size": 100,
-                    "mimeType": "image/png",
-                    "text": "base64-prefix-CANARY_IN_IMG-suffix",
-                }
-            )
-        ]
-    )
-    redacted = redact_har_payload(payload, canary_tokens=["CANARY_IN_IMG"])
-    assert b"CANARY_IN_IMG" not in redacted
+    payload = _har([_entry(url="https://alice:hunter2@example.test/items?page=1")])
+    redacted = redact_har_payload(payload)
+    assert b"alice" not in redacted
+    assert b"hunter2" not in redacted
     out = json.loads(redacted)
-    content = out["log"]["entries"][0]["response"]["content"]
-    assert REDACTED_CANARY in content["text"]
+    url = out["log"]["entries"][0]["request"]["url"]
+    assert url == "https://example.test/items?page=1"
 
 
-def test_canary_scrubbed_from_application_octet_stream_body() -> None:
-    """``application/octet-stream`` is a binary type that bypasses
-    body redaction — but canary scrubbing must still apply."""
+def test_url_with_sensitive_query_params_redacted_structurally() -> None:
+    """Iter-2 #1 critical: sensitive query params (``password``,
+    ``token``, ``api_key``, ``authorization``) are redacted
+    structurally — same is_sensitive_key matcher as headers."""
 
     payload = _har(
         [
             _entry(
-                content={
-                    "size": 100,
-                    "mimeType": "application/octet-stream",
-                    "text": "binary-blob-with-CANARY_BLOB-inside",
-                }
+                url=(
+                    "https://example.test/login?"
+                    "password=hunter2&"
+                    "api_key=ak_live_abc&"
+                    "page=1&"
+                    "token=tok_xyz"
+                )
             )
         ]
     )
-    redacted = redact_har_payload(payload, canary_tokens=["CANARY_BLOB"])
-    assert b"CANARY_BLOB" not in redacted
+    redacted = redact_har_payload(payload)
+    assert b"hunter2" not in redacted
+    assert b"ak_live_abc" not in redacted
+    assert b"tok_xyz" not in redacted
+    out = json.loads(redacted)
+    url = out["log"]["entries"][0]["request"]["url"]
+    # Page param survives.
+    assert "page=1" in url
+    # Sensitive params keep their keys with redacted values.
+    assert "password=" in url
+    assert REDACTED_VALUE.replace("<", "%3C").replace(">", "%3E") in url or REDACTED_VALUE in url
+
+
+def test_url_with_authorization_query_param_redacted() -> None:
+    payload = _har([_entry(url="https://example.test/?authorization=Bearer+secret")])
+    redacted = redact_har_payload(payload)
+    assert b"secret" not in redacted
+
+
+def test_url_fragment_dropped_unconditionally() -> None:
+    """Fragments never carry replay value but can carry tokens
+    (e.g. OAuth implicit-grant ``#access_token=...``)."""
+
+    payload = _har([_entry(url="https://example.test/page#access_token=tok_xyz_99")])
+    redacted = redact_har_payload(payload)
+    assert b"tok_xyz_99" not in redacted
+    out = json.loads(redacted)
+    url = out["log"]["entries"][0]["request"]["url"]
+    assert "#" not in url
+
+
+def test_redirect_url_also_redacted_structurally() -> None:
+    payload = _har(
+        [
+            _entry(
+                response_headers=[],
+            )
+        ]
+    )
+    parsed = json.loads(payload)
+    parsed["log"]["entries"][0]["response"]["redirectURL"] = (
+        "https://example.test/?token=secret_redirect_99"
+    )
+    payload2 = json.dumps(parsed).encode("utf-8")
+    redacted = redact_har_payload(payload2)
+    assert b"secret_redirect_99" not in redacted

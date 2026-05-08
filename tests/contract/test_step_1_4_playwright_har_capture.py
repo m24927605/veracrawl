@@ -434,10 +434,13 @@ def test_missing_har_file_after_close_does_not_raise(tmp_path: Path) -> None:
 def test_malformed_har_does_not_persist_plaintext(tmp_path: Path) -> None:
     """A malformed HAR file must trigger fail-closed: the staging file
     is deleted, no redacted payload is persisted, and the original
-    bytes never reach the evidence store."""
+    bytes never reach the evidence store under ANY artifact kind /
+    extension / path (iter-2 #11: scan the whole evidence root, not
+    just the HAR glob)."""
 
     store = LocalFsEvidenceArtifactStore(root=tmp_path / "evidence")
     har_dir = tmp_path / "har"
+    sentinel = "secret-marker-99"
     adapter = PlaywrightBrowserObservationAdapter(
         fixture_id="step-1-4-malformed",
         target_url="https://example.test/",
@@ -446,7 +449,7 @@ def test_malformed_har_does_not_persist_plaintext(tmp_path: Path) -> None:
         har_capture_dir=har_dir,
         evidence_artifact_store=store,
         playwright_factory=_fake_factory(
-            har_payload=b"this is not json at all -- secret-marker-99"
+            har_payload=f"this is not json at all -- {sentinel}".encode()
         ),
     )
     with adapter.open_session(run_ref="run:malformed") as session:
@@ -456,9 +459,18 @@ def test_malformed_har_does_not_persist_plaintext(tmp_path: Path) -> None:
             sandbox_policy=_sandbox(),
         )
     assert adapter.last_har_artifact_ref is None
-    # No evidence persisted under any ref.
-    evidence_files = list((tmp_path / "evidence").rglob("har-*.har.json"))
-    assert evidence_files == []
+    # Scan EVERY persisted file under the evidence root — not just
+    # the HAR glob. A buggy implementation that persisted under
+    # another kind / extension / path would still leak the sentinel.
+    leaked_files: list[Path] = []
+    for path in (tmp_path / "evidence").rglob("*"):
+        if path.is_file():
+            try:
+                if sentinel.encode() in path.read_bytes():
+                    leaked_files.append(path)
+            except OSError:
+                pass
+    assert leaked_files == []
     # Staging file deleted.
     assert list(har_dir.glob("*.har.json")) == []
 

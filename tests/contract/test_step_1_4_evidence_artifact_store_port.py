@@ -39,19 +39,28 @@ def test_artifact_kind_enum_values() -> None:
 
 
 @pytest.mark.parametrize(
-    "kind, expected",
+    "kind",
     [
-        (ArtifactKind.HAR, True),
-        (ArtifactKind.DOM, True),
-        (ArtifactKind.RESPONSE_HEADERS, True),
-        (ArtifactKind.REQUEST_HEADERS, True),
-        (ArtifactKind.TRACE, True),
-        (ArtifactKind.SCREENSHOT, False),
-        (ArtifactKind.OTHER, False),
+        ArtifactKind.HAR,
+        ArtifactKind.DOM,
+        ArtifactKind.RESPONSE_HEADERS,
+        ArtifactKind.REQUEST_HEADERS,
+        ArtifactKind.TRACE,
+        ArtifactKind.SCREENSHOT,
+        ArtifactKind.OTHER,
     ],
 )
-def test_kind_requires_redaction_table(kind: ArtifactKind, expected: bool) -> None:
-    assert kind_requires_redaction(kind) is expected
+def test_every_kind_requires_attestation(kind: ArtifactKind) -> None:
+    """Iter-2 #6: every kind requires ``redaction_applied=True``.
+
+    For HAR/DOM/headers it means structural redaction was applied;
+    for SCREENSHOT/TRACE/OTHER it means lifecycle policy was
+    acknowledged by the producer. Either way, ``put`` refuses
+    unattested persistence — earlier blanket exemption for
+    SCREENSHOT created a weak contract that leaked into Phase 6.
+    """
+
+    assert kind_requires_redaction(kind) is True
 
 
 def test_noop_satisfies_runtime_protocol() -> None:
@@ -111,10 +120,24 @@ def test_noop_put_rejects_unredacted_dom() -> None:
         )
 
 
-def test_noop_put_accepts_unredacted_screenshot() -> None:
-    """Image bytes have no field-level keys to redact — the kind is
-    exempt from the redaction-required check."""
+def test_noop_put_rejects_unredacted_screenshot() -> None:
+    """Iter-2 #6: screenshots also require attestation. Earlier
+    exemption was rejected because screenshots can capture rendered
+    PII / tokens / account UI."""
 
+    store = NoopEvidenceArtifactStore()
+    with pytest.raises(EvidenceRedactionRequired):
+        store.put(
+            run_ref="run:fixture",
+            attempt_ref="attempt:1",
+            kind=ArtifactKind.SCREENSHOT,
+            payload=b"\x89PNG\r\n\x1a\n...",
+            content_type="image/png",
+            redaction_applied=False,
+        )
+
+
+def test_noop_put_accepts_attested_screenshot() -> None:
     store = NoopEvidenceArtifactStore()
     result = store.put(
         run_ref="run:fixture",
@@ -122,10 +145,55 @@ def test_noop_put_accepts_unredacted_screenshot() -> None:
         kind=ArtifactKind.SCREENSHOT,
         payload=b"\x89PNG\r\n\x1a\n...",
         content_type="image/png",
-        redaction_applied=False,
+        redaction_applied=True,  # producer attests lifecycle policy applied
     )
-    assert result.redaction_applied is False
+    assert result.redaction_applied is True
     assert "screenshot" in result.artifact_ref
+
+
+def test_noop_put_artifact_ref_scoped_by_run_attempt_kind() -> None:
+    """Iter-2 #4: same payload under different run/attempt/kind must
+    yield different artifact_refs — production impl scopes by all
+    three, so the noop must too (otherwise unit tests rely on a
+    payload-only ref the production store would never emit)."""
+
+    store = NoopEvidenceArtifactStore()
+    payload = b'{"log":{"entries":[]}}'
+    base = store.put(
+        run_ref="run:a",
+        attempt_ref="attempt:1",
+        kind=ArtifactKind.HAR,
+        payload=payload,
+        content_type="application/json",
+        redaction_applied=True,
+    )
+    diff_run = store.put(
+        run_ref="run:b",
+        attempt_ref="attempt:1",
+        kind=ArtifactKind.HAR,
+        payload=payload,
+        content_type="application/json",
+        redaction_applied=True,
+    )
+    diff_attempt = store.put(
+        run_ref="run:a",
+        attempt_ref="attempt:2",
+        kind=ArtifactKind.HAR,
+        payload=payload,
+        content_type="application/json",
+        redaction_applied=True,
+    )
+    diff_kind = store.put(
+        run_ref="run:a",
+        attempt_ref="attempt:1",
+        kind=ArtifactKind.DOM,
+        payload=payload,
+        content_type="text/html",
+        redaction_applied=True,
+    )
+    assert base.artifact_ref != diff_run.artifact_ref
+    assert base.artifact_ref != diff_attempt.artifact_ref
+    assert base.artifact_ref != diff_kind.artifact_ref
 
 
 def test_noop_get_always_returns_none() -> None:
@@ -145,11 +213,16 @@ def test_noop_get_always_returns_none() -> None:
 
 
 def test_evidence_put_result_is_immutable() -> None:
+    """Frozen dataclass — assignment raises ``FrozenInstanceError``
+    (a subclass of ``AttributeError``)."""
+
+    from dataclasses import FrozenInstanceError
+
     result = EvidencePutResult(
         artifact_ref="artifact:noop:har:abc",
         content_digest_sha256="0" * 64,
         size_bytes=42,
         redaction_applied=True,
     )
-    with pytest.raises((AttributeError, Exception)):
+    with pytest.raises(FrozenInstanceError):
         result.size_bytes = 99  # type: ignore[misc]

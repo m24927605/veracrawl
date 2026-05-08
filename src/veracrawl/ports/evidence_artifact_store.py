@@ -17,15 +17,28 @@ Surface:
 * :meth:`EvidenceArtifactStorePort.get` retrieves bytes by
   ``artifact_ref``; returns ``None`` when absent.
 
-The ``redaction_applied`` flag on :meth:`put` is **load-bearing**:
-HAR / screenshot / DOM payloads frequently contain credentials, PII,
-session tokens, or canary inputs that must not be persisted in
-plaintext. Calling ``put(redaction_applied=False)`` for a
-``HAR`` / ``RESPONSE_HEADERS`` / ``DOM`` payload is a contract
-violation and the production default raises
-:class:`EvidenceRedactionRequired`. ``SCREENSHOT`` is exempt because
-image bytes have no field-level keys to redact (the policy decision
-for screenshot retention lives at the lifecycle layer, not here).
+The ``redaction_applied`` flag on :meth:`put` is **load-bearing**
+and required for **every** kind. Semantically the producer attests
+that the payload has passed the kind's safety policy:
+
+* ``HAR`` / ``DOM`` / ``RESPONSE_HEADERS`` / ``REQUEST_HEADERS``:
+  field-level structural redaction has been applied (e.g. via
+  :func:`redact_har_payload`). Bytes that fail this attestation
+  must never reach the store.
+* ``SCREENSHOT`` / ``TRACE`` / ``OTHER``: no field-level keys exist
+  to redact, but retention is governed by the Phase 6
+  ``ArtifactLifecycle`` gate (TTL, customer-withdrawal purge,
+  encrypted-at-rest). The producer attests
+  ``redaction_applied=True`` to acknowledge that lifecycle-policy
+  shape; the flag is a producer contract, not a content guarantee
+  for these kinds.
+
+Calling ``put(redaction_applied=False)`` always raises
+:class:`EvidenceRedactionRequired` — there is no kind where
+unattested persistence is allowed. The earlier blanket exemption
+for ``SCREENSHOT`` was rejected because screenshots can capture
+account UI, tokens rendered in DOM, and PII; treating them as
+categorically safe creates a weak contract that leaks into Phase 6.
 
 Path traversal hygiene is the *implementation*'s responsibility:
 ``run_ref`` and ``attempt_ref`` come from internal contracts but
@@ -65,24 +78,18 @@ class ArtifactKind(StrEnum):
     OTHER = "other"
 
 
-# Kinds where a field-level redaction pass is mandatory before
-# ``put`` accepts the payload. Image bytes are exempt because they
-# do not carry structured field keys.
-_REDACTION_REQUIRED_KINDS: frozenset[ArtifactKind] = frozenset(
-    {
-        ArtifactKind.HAR,
-        ArtifactKind.DOM,
-        ArtifactKind.RESPONSE_HEADERS,
-        ArtifactKind.REQUEST_HEADERS,
-        ArtifactKind.TRACE,
-    }
-)
-
-
 def kind_requires_redaction(kind: ArtifactKind) -> bool:
-    """Return ``True`` if ``put`` must reject ``redaction_applied=False``."""
+    """Return ``True`` for every kind — every put requires attestation.
 
-    return kind in _REDACTION_REQUIRED_KINDS
+    The function is kept as a public symbol because the previous
+    iteration of this module exposed it for caller use (and so a
+    field-level vs lifecycle-attestation distinction can be added
+    later without breaking callers). For now the policy is uniform:
+    ``put(redaction_applied=False)`` is always a contract violation.
+    """
+
+    del kind
+    return True
 
 
 class EvidenceArtifactStoreError(RuntimeError):
@@ -181,14 +188,21 @@ class NoopEvidenceArtifactStore:
         content_type: str,
         redaction_applied: bool,
     ) -> EvidencePutResult:
-        del run_ref, attempt_ref, content_type
+        del content_type
         if kind_requires_redaction(kind) and not redaction_applied:
             raise EvidenceRedactionRequired(f"kind={kind.value} requires redaction_applied=True")
         import hashlib
 
+        # Scope the ref by ``run_ref + attempt_ref + kind + payload``
+        # so two attempts with identical bytes still produce
+        # distinct refs — same shape the production impl returns,
+        # so unit tests cannot accidentally rely on a payload-only
+        # ref the production store would never emit.
+        scope = f"{run_ref}|{attempt_ref}|{kind.value}".encode("utf-8")
         digest = hashlib.sha256(payload).hexdigest()
+        scoped_digest = hashlib.sha256(scope + b"|" + digest.encode("ascii")).hexdigest()
         return EvidencePutResult(
-            artifact_ref=f"artifact:noop:{kind.value}:{digest[:16]}",
+            artifact_ref=f"artifact:noop:{kind.value}:{scoped_digest[:16]}",
             content_digest_sha256=digest,
             size_bytes=len(payload),
             redaction_applied=redaction_applied,

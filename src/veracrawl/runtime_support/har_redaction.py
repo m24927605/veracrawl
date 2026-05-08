@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from veracrawl.runtime_support._log_redaction import is_sensitive_key
 
@@ -51,24 +52,17 @@ REDACTED_VALUE = "<redacted>"
 REDACTED_BODY = "<redacted-body>"
 REDACTED_CANARY = "<redacted-canary>"
 
-# Mime-types whose ``content.text`` we always scrub. We err on the
-# side of over-redaction: HAR bodies are not the right place to read
-# response payloads — that's what the per-attempt response artifact
-# is for, and it gets its own redaction pass.
-_REDACT_BODY_MIME_PREFIXES: tuple[str, ...] = (
-    "text/",
-    "application/json",
-    "application/javascript",
-    "application/xml",
-    "application/x-www-form-urlencoded",
-)
-
-
-def _should_redact_body(mime: str | None) -> bool:
-    if not mime:
-        return True  # no mime → over-redact
-    lower = mime.lower()
-    return any(lower.startswith(prefix) for prefix in _REDACT_BODY_MIME_PREFIXES)
+# HAR ``content.text`` is the response body Playwright embeds in the
+# trace. Default policy: redact every present ``text`` field
+# regardless of MIME type. Earlier we tried a MIME allowlist (text /
+# json / form / xml) and left binary types alone, but Playwright
+# embeds base64 PDFs, images, archives, and downloaded artifacts via
+# the same field — those routinely carry PII (account exports,
+# private documents, signed download URLs). HAR is evidence, not a
+# response cache; the per-attempt artifact path is the right place
+# to hold full bodies (with its own redaction pass), so we keep the
+# HAR body slot empty and avoid the entire MIME-allowlist
+# correctness debate.
 
 
 def _scrub_canary(value: str, canaries: tuple[str, ...]) -> str:
@@ -149,31 +143,73 @@ def _redact_post_data(post_data: dict[str, Any], canaries: tuple[str, ...]) -> d
 
 
 def _redact_content(content: dict[str, Any], canaries: tuple[str, ...]) -> dict[str, Any]:
-    """Redact ``response.content.text`` based on mimeType.
+    """Redact ``response.content.text`` unconditionally.
 
-    Body MIMEs that may carry credentials / PII are unconditionally
-    replaced with ``<redacted-body>``. Image / binary bodies bypass
-    the over-redaction but **still go through canary scrubbing** —
-    a caller-declared canary token must never appear in the persisted
-    HAR regardless of MIME, otherwise the contract a test asserts
-    ("canary X is not in persisted bytes") would silently fail for
-    any non-text response.
+    Earlier versions exempted image / binary MIME types from body
+    redaction. That was wrong: Playwright HAR ``content.text`` for
+    binary types is a base64 blob that may embed PDFs, archives,
+    private images, account exports, signed download URLs, and so
+    on — none of which are safe to persist verbatim. The per-attempt
+    response artifact path (with its own redaction pass) is the
+    place to keep response bodies; HAR keeps them empty.
+
+    Canary scrubbing is unnecessary when the body is replaced
+    wholesale, but we keep the parameter for API uniformity (other
+    redactors here also take canaries).
     """
 
+    del canaries  # body is replaced wholesale; canaries can't survive
     out = dict(content)
-    text = out.get("text")
-    if isinstance(text, str):
-        if _should_redact_body(out.get("mimeType")):
-            out["text"] = REDACTED_BODY
-        elif canaries:
-            out["text"] = _scrub_canary(text, canaries)
+    if "text" in out:
+        out["text"] = REDACTED_BODY
     return out
 
 
 def _redact_url(url: Any, canaries: tuple[str, ...]) -> Any:
+    """Structurally redact a HAR URL.
+
+    URLs in HAR entries can carry credentials in three places:
+
+    * **Userinfo** (``https://user:pass@host``) — strip
+      unconditionally; presenting it in evidence has no replay value.
+    * **Sensitive query parameters** (``?password=hunter2&token=abc``,
+      ``?api_key=...``) — re-emit with the value replaced by
+      ``<redacted>`` whenever the key matches the project-wide
+      sensitive-key patterns. Same patterns used for header arrays.
+    * **Caller-declared canary substrings** — scrubbed across the
+      reconstructed URL after structural redaction (catches anything
+      the structural pass misses, e.g. canary embedded in path).
+    """
+
     if not isinstance(url, str):
         return url
-    return _scrub_canary(url, canaries)
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        # Malformed URL — never emit the original; return a
+        # fail-closed marker plus the canary scrub so canaries still
+        # do not leak through.
+        return _scrub_canary(REDACTED_VALUE, canaries)
+    # Strip userinfo: rebuild netloc from hostname + (port if present).
+    host = parts.hostname or ""
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    netloc = host if port is None else f"{host}:{port}"
+    # Walk the query string and redact sensitive keys structurally.
+    redacted_query: list[tuple[str, str]] = []
+    if parts.query:
+        for name, value in parse_qsl(parts.query, keep_blank_values=True):
+            if is_sensitive_key(name):
+                redacted_query.append((name, REDACTED_VALUE))
+            else:
+                redacted_query.append((name, value))
+    new_query = urlencode(redacted_query)
+    rebuilt = urlunsplit(
+        (parts.scheme, netloc, parts.path, new_query, "")
+    )  # also drop fragment — never carries replay value
+    return _scrub_canary(rebuilt, canaries)
 
 
 def _redact_request(request: dict[str, Any], canaries: tuple[str, ...]) -> dict[str, Any]:
@@ -269,20 +305,19 @@ def redact_har_payload(
 
     log = document.get("log") if isinstance(document, dict) else None
     if not isinstance(log, dict):
-        # Not a HAR shape — return a structurally-empty HAR so
-        # callers downstream don't choke, but never persist the
-        # original (which we cannot prove is safe).
-        empty = {
-            "log": {
-                "version": "1.2",
-                "creator": {"name": "veracrawl", "version": "0"},
-                "entries": [],
-            }
-        }
-        return json.dumps(empty, separators=(",", ":")).encode("utf-8")
+        # Not a HAR shape — fail closed. Returning a synthetic empty
+        # HAR would let an adapter regression silently persist a
+        # ``redaction_applied=True`` artifact that does not actually
+        # represent the captured trace, hiding the bug. The caller
+        # already handles :class:`HarRedactionError` by dropping the
+        # staging file without persistence (same behavior as a JSON
+        # parse failure).
+        raise HarRedactionError("HAR payload missing required ``log`` object")
+    entries = log.get("entries")
+    if entries is not None and not isinstance(entries, list):
+        raise HarRedactionError("HAR ``log.entries`` must be a list when present")
 
     new_log = dict(log)
-    entries = new_log.get("entries")
     if isinstance(entries, list):
         new_log["entries"] = [
             _redact_entry(entry, canaries) if isinstance(entry, dict) else entry
