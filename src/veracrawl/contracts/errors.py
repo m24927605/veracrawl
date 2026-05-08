@@ -346,8 +346,15 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
             self.reason: CredentialScopeReason = reason
         else:
             try:
-                self.reason = CredentialScopeReason(reason)
-            except ValueError as exc:
+                coerced = CredentialScopeReason(reason)
+            except ValueError:
+                # Suppress the chained ``CredentialScopeReason(reason)``
+                # exception with ``from None`` — its ``args`` carries
+                # the raw rejected value, which means a traceback log
+                # would leak credential-shaped strings even though
+                # ``str(excinfo.value)`` of the outer ``ValueError`` is
+                # sanitized. Drop the cause entirely; the outer message
+                # already states the contract.
                 raise ValueError(
                     "CredentialScopeViolation.reason must be a "
                     "CredentialScopeReason enum value (or its string "
@@ -355,7 +362,8 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
                     f"{len(reason) if isinstance(reason, str) else 0}, "
                     "redacted) — free-form reasons were retired in "
                     "Phase 2 step 2.2b to close a residual leak path"
-                ) from exc
+                ) from None
+            self.reason = coerced
         super().__init__(
             f"credential scope refused {self.requested_method} "
             f"{self.requested_origin}{self.requested_route} "

@@ -150,6 +150,34 @@ def test_violation_rejection_does_not_echo_bad_reason() -> None:
     assert "eyJhbGc" not in str(excinfo.value)
 
 
+def test_violation_rejection_does_not_chain_raw_reason_through_cause() -> None:
+    """Codex iter-1 important: ``raise ... from exc`` chained the
+    ``CredentialScopeReason(reason)`` lookup exception, whose
+    ``args`` carry the raw rejected value. A traceback log
+    (``logging.exception``, ``traceback.format_exc()``) would have
+    leaked the credential-shaped string even though
+    ``str(excinfo.value)`` is sanitized. Verify the outer
+    ``ValueError`` has no ``__cause__`` and no ``__context__`` that
+    would surface the raw reason in a formatted traceback."""
+
+    import traceback
+
+    secret_shaped = "Bearer eyJhbGciOiJIUzI1NiJ9.SECRET_PAYLOAD.SIG"
+    with pytest.raises(ValueError) as excinfo:
+        CredentialScopeViolation(
+            scope_ref="cred-scope-1",
+            requested_origin="https://api.example.com",
+            requested_route="/v1/items",
+            requested_method="GET",
+            reason=secret_shaped,
+        )
+    err = excinfo.value
+    assert err.__cause__ is None
+    formatted = "".join(traceback.format_exception(type(err), err, err.__traceback__))
+    assert secret_shaped not in formatted
+    assert "SECRET_PAYLOAD" not in formatted
+
+
 def test_violation_rejection_handles_non_string_reason() -> None:
     """A caller passing a non-string non-enum (e.g., an int from a
     deserialization bug) must also be rejected with the same typed
