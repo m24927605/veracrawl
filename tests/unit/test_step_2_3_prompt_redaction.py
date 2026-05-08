@@ -14,6 +14,8 @@ design.md §4 Phase 2 deliverable + acceptance:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from veracrawl.agents.prompt_redaction import (
@@ -152,28 +154,92 @@ def test_render_refuses_attribute_traversal_into_private_slot() -> None:
         ctx.render("token={cred._value}", template_ref="prompt:slot-attack")
 
 
-def test_render_refuses_attribute_traversal_into_public_property() -> None:
-    """Even ``{cred.scope_ref}`` (which would NOT leak the secret —
-    scope_ref is non-secret by design) is refused. The contract
-    is "no credential reaches the prompt at all" — even via a
-    non-secret accessor — so callers cannot accidentally develop
-    a habit of relying on credential properties in prompts."""
+def test_render_allows_attribute_access_on_non_credential_value() -> None:
+    """Codex iter-3 important: normal ``{url.hostname}`` style
+    templated formatting must work — only paths that actually reach
+    a credential trip the boundary. Refusing all attribute access
+    would over-restrict structured prompt contexts (URLs, lists,
+    metadata dicts) that legitimate templates rely on."""
 
-    cred = CredentialValue(value="x", scope_ref="EBAY_PROD")
-    ctx = RedactedPromptContext(cred=cred)
+    from urllib.parse import urlsplit
+
+    url = urlsplit("https://api.example.com/items")
+    ctx = RedactedPromptContext(url=url)
+    out = ctx.render("host={url.hostname}", template_ref="prompt:url")
+    assert out == "host=api.example.com"
+
+
+def test_render_allows_item_subscript_access_on_non_credential_value() -> None:
+    """``{items[0]}`` style subscript also legitimate when the
+    indexed value is not a credential."""
+
+    ctx = RedactedPromptContext(items=["alpha", "beta"])
+    out = ctx.render("first={items[0]}", template_ref="prompt:list")
+    assert out == "first=alpha"
+
+
+def test_render_refuses_attribute_traversal_through_custom_wrapper() -> None:
+    """Codex iter-3 important: a custom object that holds a
+    credential in its attributes is NOT walked by the structural
+    context walk (custom objects are out of scope for the dict /
+    list / tuple / set walk). The credential-aware formatter
+    catches it instead — by intercepting attribute traversal and
+    tripping the flag if any intermediate value is a
+    ``CredentialValue``."""
+
+    class _Wrapper:
+        def __init__(self, cred: CredentialValue) -> None:
+            self.cred = cred
+
+    cred = CredentialValue(value="secret", scope_ref="EBAY_PROD")
+    ctx = RedactedPromptContext(wrapper=_Wrapper(cred))
     with pytest.raises(PromptCredentialLeakError):
-        ctx.render("scope={cred.scope_ref}", template_ref="prompt:scope")
+        ctx.render("token={wrapper.cred}", template_ref="prompt:wrapped")
 
 
-def test_render_refuses_item_subscript_access() -> None:
-    """``{name[0]}`` is the subscript form of complex field
-    access. Refused for the same reason as ``.attr``: subscript
-    can index into list-of-credentials or dict-of-credentials
-    structures past the structural-walk's container check."""
+def test_render_refuses_drilling_into_credential_private_slot_via_wrapper() -> None:
+    """Even drilling past the credential into its private ``_value``
+    slot via a custom wrapper is caught — the intermediate
+    ``wrapper.cred`` is the ``CredentialValue``, which trips the
+    flag before traversal continues to ``_value``."""
 
-    ctx = RedactedPromptContext(items=["a", "b"])
+    class _Wrapper:
+        def __init__(self, cred: CredentialValue) -> None:
+            self.cred = cred
+
+    cred = CredentialValue(value="secret", scope_ref="X")
+    ctx = RedactedPromptContext(wrapper=_Wrapper(cred))
     with pytest.raises(PromptCredentialLeakError):
-        ctx.render("first={items[0]}", template_ref="prompt:subscript")
+        ctx.render("v={wrapper.cred._value}", template_ref="prompt:wrap-deep")
+
+
+def test_render_fails_closed_at_depth_cap() -> None:
+    """Codex iter-3 important: the structural walk's depth cap
+    must fail closed. Build a context graph that exceeds
+    ``_MAX_CONTEXT_DEPTH`` (12) before any credential is reached;
+    the walk must refuse rather than silently treat the deep
+    structure as credential-free."""
+
+    deep: Any = "leaf"
+    for _ in range(20):
+        deep = [deep]
+    ctx = RedactedPromptContext(structure=deep)
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("static template", template_ref="prompt:deep")
+
+
+def test_render_handles_cyclic_context_without_infinite_recursion() -> None:
+    """Cycle detection in the structural walk: a self-referential
+    list must not hang the walk. The walk should terminate (no
+    credential found in the visited set) and render proceeds."""
+
+    cyclic: list[Any] = []
+    cyclic.append(cyclic)
+    ctx = RedactedPromptContext(items=cyclic)
+    # Render against a static template — no traversal into the
+    # cyclic structure happens. The walk must terminate.
+    out = ctx.render("static", template_ref="prompt:cyclic")
+    assert out == "static"
 
 
 def test_render_refuses_format_spec_truncation_of_marker() -> None:
@@ -189,31 +255,25 @@ def test_render_refuses_format_spec_truncation_of_marker() -> None:
         ctx.render("trunc={cred:.5}", template_ref="prompt:trunc")
 
 
-def test_render_refuses_nested_field_inside_format_spec() -> None:
-    """Codex iter-2 critical: ``{name:{wrapper._private}}`` lets a
-    template author smuggle attribute traversal inside the format
-    spec. The outer field name is just ``name`` — top-level scan
-    misses it. The format-spec scan must recurse into nested
-    replacement fields and refuse any complex traversal anywhere
-    in the parse tree."""
+def test_render_refuses_credential_reached_through_nested_format_spec() -> None:
+    """Codex iter-2 critical: nested replacement fields inside
+    format specs (e.g., ``{name:{wrapper.cred}}``) are resolved
+    when format runs. If the inner traversal reaches a
+    ``CredentialValue``, the credential-aware formatter must trip
+    its flag — the same machinery that catches outer-field
+    traversal handles nested fields too because ``vformat``
+    recursively expands them."""
 
-    ctx = RedactedPromptContext(name="Alice", wrapper="benign")
+    class _Wrapper:
+        def __init__(self, cred: CredentialValue) -> None:
+            self.cred = cred
+
+    cred = CredentialValue(value="secret", scope_ref="X")
+    ctx = RedactedPromptContext(name="Alice", wrapper=_Wrapper(cred))
     with pytest.raises(PromptCredentialLeakError):
         ctx.render(
-            "name={name:{wrapper.something}}",
-            template_ref="prompt:nested-spec",
-        )
-
-
-def test_render_refuses_deeply_nested_field_inside_format_spec() -> None:
-    """Belt-and-suspenders: even at multiple nesting levels, the
-    recursive scan must still find complex field access."""
-
-    ctx = RedactedPromptContext(a="A", b="B", c="C", d="D")
-    with pytest.raises(PromptCredentialLeakError):
-        ctx.render(
-            "x={a:{b:{c.attr}}}",
-            template_ref="prompt:deeply-nested",
+            "name={name:{wrapper.cred}}",
+            template_ref="prompt:nested-cred",
         )
 
 

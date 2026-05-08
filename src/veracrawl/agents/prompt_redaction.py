@@ -31,9 +31,10 @@ the full registry.
 
 from __future__ import annotations
 
+import _string  # CPython-public field-name parser; same one ``string.Formatter`` uses internally
 import re
 import string
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import Any, Final
 
 from veracrawl.contracts.errors import PolicyViolation, VeraCrawlError
@@ -56,73 +57,96 @@ _CREDENTIAL_MARKER_RE: Final[re.Pattern[str]] = re.compile(
 _MAX_CONTEXT_DEPTH: Final[int] = 12
 
 
-def _context_contains_credential(value: Any, depth: int = 0) -> bool:
+def _context_contains_credential(
+    value: Any,
+    depth: int = 0,
+    seen: set[int] | None = None,
+) -> bool:
     """Recursively walk ``value`` looking for a
-    :class:`CredentialValue` instance. Depth-bounded to avoid
-    pathological inputs.
+    :class:`CredentialValue` instance.
 
     Walks dict / list / tuple / set / frozenset containers. Custom
-    objects are NOT walked: a caller wrapping a credential inside
-    a custom class still leaks if a template author drills into
-    the wrapper via ``{wrapper.attr_chain}``, but the format-spec
-    scan below refuses any complex field name traversal — so the
-    only reachable surface from a template is the bare context
-    keys, which this walk covers.
+    objects are NOT walked here — they get covered by the
+    credential-aware formatter at render time, which intercepts
+    every traversal step regardless of the parent type.
+
+    Cycle detection via ``id``-based ``seen`` set so the walk
+    terminates on accidentally cyclic structures. Depth cap is a
+    belt-and-suspenders bound on accidentally deep inputs;
+    **fail-closed** at the cap (treat as credential-bearing) so
+    a credential nested past the cap cannot silently slip through
+    (codex iter-3 important).
     """
 
     if depth >= _MAX_CONTEXT_DEPTH:
-        return False
+        return True  # fail closed
     if isinstance(value, CredentialValue):
         return True
+    if seen is None:
+        seen = set()
+    obj_id = id(value)
+    if obj_id in seen:
+        return False
     if isinstance(value, dict):
-        return any(_context_contains_credential(v, depth + 1) for v in value.values())
+        seen.add(obj_id)
+        return any(
+            _context_contains_credential(v, depth + 1, seen) for v in value.values()
+        )
     if isinstance(value, list | tuple | set | frozenset):
-        return any(_context_contains_credential(v, depth + 1) for v in value)
+        seen.add(obj_id)
+        return any(_context_contains_credential(v, depth + 1, seen) for v in value)
     return False
 
 
-def _template_uses_complex_field_access(template: str) -> bool:
-    """Return ``True`` if the template references any field with
-    attribute (``{name.attr}``) or item (``{name[idx]}``) traversal,
-    *including* nested replacement fields inside format specs.
+class _CredentialAwareFormatter(string.Formatter):
+    """``string.Formatter`` subclass that trips a flag whenever a
+    field resolution path passes through a :class:`CredentialValue`.
 
-    Such traversal lets a template author drill into private
-    attributes of context values — e.g., ``{cred._value}`` would
-    return the raw secret string of a ``CredentialValue`` because
-    Python's ``string.Formatter`` resolves ``.attr`` via
-    ``getattr`` and there is no language-level access control on
-    private slots. The format-spec micro-language ALSO supports
-    nested replacement fields — e.g., ``{name:{wrapper.cred._value}}``
-    resolves the inner ``wrapper.cred._value`` when format_map
-    runs, even though the outer ``field_name`` is just ``name``.
-    Recurse into ``format_spec`` so the boundary cannot be bypassed
-    via nested fields (codex iter-2 critical).
+    Overrides :meth:`get_field` to walk attribute / item traversal
+    manually (the same logic the stdlib uses, via
+    ``_string.formatter_field_name_split``); after every step,
+    checks whether the current value is a ``CredentialValue``. If
+    so, the formatter records the breach via ``credential_reached``
+    and returns a benign sentinel so render does not error
+    mid-format — :meth:`RedactedPromptContext.render` checks the
+    flag after ``vformat`` and raises :class:`PromptCredentialLeakError`.
 
-    Refusing complex field access at the boundary keeps the
-    contract "only the bare context keys reach ``__format__``" so
-    the credential redaction overrides do their job.
+    Why intercept at traversal: ``str.format_map`` (stdlib) goes
+    through C code that bypasses Python-level overrides. Using
+    ``string.Formatter().vformat`` instead routes through this
+    subclass so traversal is observable. Catches:
+
+    * ``{cred._value}`` (top-level credential, attribute traversal)
+    * ``{wrapper.cred}`` (custom object holding a credential)
+    * ``{wrapper.cred._value}`` (deeper traversal into a credential's
+      private slot — even though ``_value`` is a string, the
+      intermediate ``wrapper.cred`` is the credential and trips the
+      flag)
+    * ``{name:{wrapper.cred}}`` (nested replacement field in a
+      format spec — handled by the same ``vformat`` machinery)
     """
 
-    formatter = string.Formatter()
-    try:
-        parsed: Iterable[tuple[str, str | None, str | None, str | None]] = (
-            formatter.parse(template)
-        )
-    except ValueError:
-        # Malformed template — let format_map raise the
-        # ``ValueError`` later so the caller sees the template-
-        # author error rather than a confusing "complex field"
-        # refusal. Treat malformed as "no complex fields" here;
-        # the actual format_map call will fail naturally.
-        return False
-    for _literal, field_name, format_spec, _conversion in parsed:
-        if field_name is None:
-            continue
-        if "." in field_name or "[" in field_name:
-            return True
-        if format_spec and _template_uses_complex_field_access(format_spec):
-            return True
-    return False
+    def __init__(self) -> None:
+        super().__init__()
+        self.credential_reached = False
+
+    def get_field(
+        self,
+        field_name: str,
+        args: Any,
+        kwargs: Any,
+    ) -> tuple[Any, Any]:
+        first, rest = _string.formatter_field_name_split(field_name)
+        obj = self.get_value(first, args, kwargs)
+        if isinstance(obj, CredentialValue):
+            self.credential_reached = True
+            return "", first
+        for is_attr, i in rest:
+            obj = getattr(obj, i) if is_attr else obj[i]
+            if isinstance(obj, CredentialValue):
+                self.credential_reached = True
+                return "", first
+        return obj, first
 
 
 class PromptCredentialLeakError(VeraCrawlError, PolicyViolation):
@@ -188,32 +212,45 @@ class RedactedPromptContext:
 
         Three layered defenses:
 
-        1. *Structural context check*: walk the context recursively
-           through dict / list / tuple / set containers; if any
-           :class:`CredentialValue` is reachable, raise.
-        2. *Template field-access scan*: refuse templates that use
-           attribute (``{name.attr}``) or item (``{name[idx]}``)
-           field access, which would let a template author drill
-           into private slots of context values (e.g.,
-           ``{cred._value}`` would emit the raw secret string).
-        3. *Rendered-output marker scan*: catches a literal
-           credential marker baked into the template string itself
-           or surfaced via a path the structural walk does not
-           cover.
+        1. *Structural context walk* — recursively walks the
+           context through dict / list / tuple / set containers
+           with cycle detection and fail-closed depth cap; refuses
+           if any :class:`CredentialValue` is reachable. Catches
+           the common case of a credential supplied directly or
+           nested inside a structured config dict.
+        2. *Credential-aware formatter* — uses a
+           ``string.Formatter`` subclass that intercepts field-
+           name traversal (``{name.attr}`` / ``{name[idx]}`` /
+           nested replacement fields inside format specs) and
+           trips a flag if any traversal step reaches a
+           :class:`CredentialValue`. Catches the case of a custom
+           object in the context that holds a credential as an
+           attribute — the structural walk does not descend into
+           arbitrary objects, but the formatter does.
+        3. *Rendered-output marker scan* — catches a literal
+           credential marker baked into the template string
+           itself, plus belt-and-suspenders coverage if any
+           future ``__format__`` path emits the marker without
+           going through the formatter's tracked traversal.
 
-        Raises :class:`PromptCredentialLeakError` if any of the
-        three trip. Re-raises :class:`KeyError` /
-        :class:`ValueError` from :meth:`str.format_map` unchanged
-        for template-author errors (missing variable, malformed
-        template); silent drop would mask production bugs.
+        Normal templated formatting (``{url.hostname}``,
+        ``{items[0]}``, etc.) is **allowed**: only paths that
+        actually reach a credential value trip the boundary.
+
+        Raises :class:`PromptCredentialLeakError` if any defense
+        trips. Re-raises :class:`KeyError` / :class:`ValueError`
+        from the formatter unchanged for template-author errors
+        (missing variable, malformed template); silent drop would
+        mask production bugs.
         """
 
         for value in self._context.values():
             if _context_contains_credential(value):
                 raise PromptCredentialLeakError(template_ref=template_ref)
-        if _template_uses_complex_field_access(template):
+        formatter = _CredentialAwareFormatter()
+        rendered = formatter.vformat(template, (), self._context)
+        if formatter.credential_reached:
             raise PromptCredentialLeakError(template_ref=template_ref)
-        rendered = template.format_map(self._context)
         if _CREDENTIAL_MARKER_RE.search(rendered):
             raise PromptCredentialLeakError(template_ref=template_ref)
         return rendered

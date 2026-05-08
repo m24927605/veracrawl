@@ -153,3 +153,13 @@ disallow_untyped_defs = false
 [[tool.mypy.overrides]]
 module = ["regex"]
 ignore_missing_imports = true
+
+# ``_string`` is the CPython-internal helper module that exposes
+# ``formatter_field_name_split`` — the same parser ``string.Formatter``
+# uses internally. Phase 2 step 2.3's ``RedactedPromptContext``
+# needs it to walk template field names manually so the
+# credential-aware formatter can intercept attribute / item
+# traversal at every step. Mypy ships no stubs for ``_string``.
+[[tool.mypy.overrides]]
+module = ["_string"]
+ignore_missing_imports = true
