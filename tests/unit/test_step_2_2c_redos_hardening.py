@@ -1,0 +1,162 @@
+"""Unit tests for Phase 2 step 2.2c — runtime ReDoS hardening.
+
+Phase 0 step 0.3 reservation pull-forward + Phase 2 step 2.2a
+runtime-ReDoS reservation. Codex flagged across 4 of 5 step-2.2a
+iterations that the credential-bearing route matcher relied solely
+on a 4 KiB path-length cap + contract-time AST guard, leaving
+contract-valid patterns with ambiguous alternations
+(``(a|aa)+``) able to backtrack catastrophically on much shorter
+hostile inputs.
+
+Step 2.2c switches the matcher to the third-party ``regex``
+package, which supports a per-match wall-clock ``timeout=`` kwarg.
+A pattern that exceeds the budget raises :class:`TimeoutError`;
+``StrictAllowlistScope`` translates that to a typed
+``CredentialScopeViolation(ROUTE_NOT_ALLOWED)`` refusal.
+
+These tests verify:
+
+1. Happy-path matches still succeed without timeout.
+2. A known catastrophic-backtracking pattern + adversarial input
+   is bounded by the timeout (well under 1 s wall-clock).
+3. The refusal is the typed scope event, not a raw
+   :class:`TimeoutError` — callers that ``except
+   CredentialScopeViolation`` keep working.
+4. Timeout latency stays small enough for production load
+   (< 200 ms regression budget).
+"""
+
+from __future__ import annotations
+
+import time
+
+import pytest
+
+from veracrawl.adapters.session.strict_allowlist_scope import StrictAllowlistScope
+from veracrawl.contracts.errors import (
+    CredentialScopeReason,
+    CredentialScopeViolation,
+)
+from veracrawl.contracts.security_privacy import CredentialScope
+
+
+def _scope_with_pattern(pattern: str) -> CredentialScope:
+    return CredentialScope(
+        id="cred-scope-1",
+        credential_handle_ref="vault:test#1",
+        allowed_origins=["https://api.example.com"],
+        allowed_route_patterns=[pattern],
+        allowed_methods=["GET"],
+    )
+
+
+def test_happy_path_match_completes_without_timeout() -> None:
+    """A normal pattern + matching URL must succeed under the
+    timeout (no false-positive timeout on benign inputs)."""
+
+    StrictAllowlistScope().check(
+        _scope_with_pattern("^/v1/items"),
+        request_url="https://api.example.com/v1/items/123",
+        method="GET",
+    )
+
+
+def test_happy_path_non_match_completes_without_timeout() -> None:
+    """A normal pattern + non-matching URL must refuse with
+    ``ROUTE_NOT_ALLOWED`` under the timeout — same behavior as the
+    pre-2.2c matcher, just bounded by the timeout."""
+
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _scope_with_pattern("^/v1/items"),
+            request_url="https://api.example.com/v2/users",
+            method="GET",
+        )
+    assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
+
+
+def test_catastrophic_backtracking_pattern_bounded_by_timeout() -> None:
+    """The classic ReDoS regression: ``(a+)+`` or ``(a|a)*`` against
+    a long ``aaa...!`` string would backtrack for minutes under
+    stdlib ``re``. The contract layer's AST guard refuses
+    ``(a+)+`` outright, but ``(a|aa)+`` is contract-valid (no
+    structurally nested quantifiers) and still ReDoS-able. With
+    the 50 ms timeout, the match must abort and surface as a
+    ``ROUTE_NOT_ALLOWED`` refusal — never wedge the worker."""
+
+    # ``regex.compile("/(a|aa)+")`` is valid; the AST guard accepts
+    # it because no quantifier is nested inside another. Adversarial
+    # input ``"/" + "a" * 35 + "!"`` triggers exponential backtracking.
+    backtracking_pattern = "^/(a|aa)+$"
+    adversarial_path = "/" + ("a" * 60) + "!"
+
+    start = time.monotonic()
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _scope_with_pattern(backtracking_pattern),
+            request_url=f"https://api.example.com{adversarial_path}",
+            method="GET",
+        )
+    elapsed = time.monotonic() - start
+
+    # 200 ms regression budget — generous over the 50 ms internal
+    # timeout to account for test-runner overhead. A pre-2.2c
+    # matcher would have run for many seconds (or hung the worker).
+    assert elapsed < 0.2, (
+        f"matcher took {elapsed:.3f}s — expected <0.2s under the "
+        "regex.match timeout"
+    )
+    assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
+
+
+def test_timeout_does_not_escape_as_raw_timeout_error() -> None:
+    """A caller that ``except CredentialScopeViolation`` must catch
+    the timeout-induced refusal — never see a bare
+    :class:`TimeoutError` escape from the policy boundary."""
+
+    backtracking_pattern = "^/(a|aa)+$"
+    adversarial_path = "/" + ("a" * 60) + "!"
+    try:
+        StrictAllowlistScope().check(
+            _scope_with_pattern(backtracking_pattern),
+            request_url=f"https://api.example.com{adversarial_path}",
+            method="GET",
+        )
+    except CredentialScopeViolation:
+        pass  # Expected typed refusal.
+    except TimeoutError:
+        pytest.fail("raw TimeoutError escaped the policy boundary")
+
+
+def test_timeout_path_does_not_break_other_patterns_in_same_scope() -> None:
+    """If a scope has multiple ``allowed_route_patterns``, a timeout
+    on one MUST refuse the whole request rather than fall through
+    to the next pattern. Otherwise a hostile URL could ride a
+    permissive secondary pattern and bypass the protection.
+
+    Concretely: scope with ``[backtracking_pattern, "/v1/items"]``
+    and an adversarial input that times out on the first pattern —
+    the request must be refused, not allowed via the second."""
+
+    backtracking_pattern = "^/(a|aa)+$"
+    permissive_secondary = "/"  # would match anything, but contract
+    # layer rejects bare "/" as catch-all. Use a near-permissive
+    # pattern that the adversarial input also matches.
+    adversarial_path = "/" + ("a" * 60) + "!"
+
+    scope = CredentialScope(
+        id="cred-scope-1",
+        credential_handle_ref="vault:test#1",
+        allowed_origins=["https://api.example.com"],
+        allowed_route_patterns=[backtracking_pattern, "/a"],
+        allowed_methods=["GET"],
+    )
+    del permissive_secondary  # documented intent only
+
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            scope,
+            request_url=f"https://api.example.com{adversarial_path}",
+            method="GET",
+        )
+    assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED

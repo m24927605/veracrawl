@@ -19,49 +19,51 @@ exception sanitizes its public attributes at the boundary, so
 refusal logging / telemetry cannot leak credentials or PII even if
 a caller passes a credentialed URL.
 
-What is **out of scope** for 2.2a:
-
-* The matcher uses Python's ``re`` engine, which has no per-match
-  timeout. The contract layer's nested-quantifier AST guard
-  (``_validate_route_pattern``) refuses pathological *patterns*
-  before they land in a ``CredentialScope``. Step 2.2c adds a
-  runtime ReDoS defense (per-match timeout / ``re2`` / glob-only
-  DSL) so even a well-formed pattern cannot be wedged by an
-  attacker-controlled URL.
+Runtime ReDoS defense (Phase 2 step 2.2c, landed): the matcher
+uses the third-party ``regex`` package's ``match`` with a 50 ms
+``timeout=`` kwarg. The contract layer's nested-quantifier AST
+guard (``_validate_route_pattern``) already refuses pathological
+*patterns*; the per-match timeout closes the remaining gap where a
+contract-valid pattern with ambiguous alternations (``(a|aa)+``)
+could backtrack catastrophically on a hostile URL. On timeout the
+matcher refuses with ``ROUTE_NOT_ALLOWED`` rather than letting the
+worker hang.
 """
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from typing import Final
 from urllib.parse import urlsplit
+
+import regex
 
 from veracrawl.contracts.errors import CredentialScopeReason, CredentialScopeViolation
 from veracrawl.contracts.security_privacy import CredentialScope
 
 _DEFAULT_PORTS: Final[dict[str, int]] = {"http": 80, "https": 443}
 
-# Hard cap on the route path length the matcher will run against.
-# Combined with the contract-layer nested-quantifier AST guard
-# (``_validate_route_pattern``), this bounds the maximum work a
-# single ``re.match`` call can do — even a degenerate pattern that
-# slipped past the AST guard cannot wedge the matcher on an
-# attacker-controlled URL because the input is short.
-#
-# This is intentionally not a *complete* ReDoS defense: contract-valid
-# patterns with ambiguous alternations can still backtrack on much
-# shorter inputs. A per-match timeout (re2 engine, regex-module
-# ``timeout=`` kwarg, or signal.alarm in a worker) is required to
-# fully close that gap and lives in **step 2.2c** of the second-
-# reassessment plan split. Pulling it forward into 2.2a was
-# considered and rejected because it adds a third-party dependency
-# (``re2``/``regex``) or a worker-pool integration that is a meaningful
-# scope expansion for an atomic step. The 4 KiB cap + AST guard is
-# the floor that ships in 2.2a so the credential gate has *some*
-# runtime defense, with step 2.2c upgrading that floor to a hard
-# bound. See STATUS.md "v2 phase 2 step 2.2a reservations".
+# Hard cap on the route path length the matcher will run against
+# (defense in depth alongside the per-match timeout below).
 _MAX_ROUTE_LENGTH: Final[int] = 4096
+
+# Per-match timeout (seconds) for ``regex.match`` on each
+# ``allowed_route_pattern``. ``regex`` (the third-party package, not
+# stdlib ``re``) supports a ``timeout=`` kwarg that aborts a match
+# when wall-clock spent inside the engine exceeds the budget,
+# raising :class:`TimeoutError`. Combined with the contract-layer
+# nested-quantifier AST guard (``_validate_route_pattern``), this
+# closes the runtime ReDoS gap codex flagged across step 2.2a
+# iterations 2-5: contract-valid patterns with ambiguous
+# alternations (``(a|aa)+``) that backtrack on shorter inputs than
+# the path-length cap are now bounded by wall-clock time.
+#
+# 50 ms is generous for a path-anchored allowlist regex on a 4 KiB
+# input — typical match latency is microseconds. Any match taking
+# longer is almost certainly catastrophic backtracking on a hostile
+# input. The credential gate prefers refusing in that case (treat
+# as ``ROUTE_NOT_ALLOWED``) over letting the worker hang.
+_MATCH_TIMEOUT_SECONDS: Final[float] = 0.05
 
 
 def _safe_urlsplit(
@@ -302,13 +304,11 @@ class StrictAllowlistScope:
                 reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
             )
         if _route_too_long(route):
-            # Bound the worst-case work the regex engine will do on
-            # an attacker-controlled URL. The contract-layer AST
-            # guard already refuses pathological *patterns*, but
-            # combining well-formed patterns with a hostile input
-            # of unbounded length is still a runtime concern. Step
-            # 2.2c will replace this with a per-match timeout / re2
-            # / glob-only DSL.
+            # Belt-and-suspenders alongside the per-match timeout:
+            # an attacker-controlled URL of unbounded length is a
+            # runtime concern even with a working timeout because
+            # large inputs still tax the matcher and degrade
+            # latency for other workers.
             self._raise(
                 scope=scope,
                 request_url=request_url,
@@ -316,14 +316,23 @@ class StrictAllowlistScope:
                 reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
             )
         for pattern in scope.allowed_route_patterns:
-            # ``re.match`` anchors at position 0 — required because
-            # ``re.search`` would let ``/v1/items`` match
-            # ``/prefix/v1/items``, defeating the contract's
-            # path-anchored grammar (``allowed_route_pattern`` must
-            # start with ``/`` or ``^/``). Patterns that already
-            # carry an explicit ``^`` work identically under
-            # ``re.match``.
-            if re.match(pattern, route) is not None:
+            # ``regex.match`` anchors at position 0 (same semantics
+            # as stdlib ``re.match``) and accepts a ``timeout=``
+            # kwarg that aborts the match if wall-clock spent inside
+            # the engine exceeds the budget — the bounded matcher
+            # codex iter 2-5 of step 2.2a flagged. Refuse the
+            # request on timeout (treat as ``ROUTE_NOT_ALLOWED``)
+            # rather than let the worker hang on a hostile input.
+            try:
+                matched = regex.match(pattern, route, timeout=_MATCH_TIMEOUT_SECONDS)
+            except TimeoutError:
+                self._raise(
+                    scope=scope,
+                    request_url=request_url,
+                    method=method,
+                    reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
+                )
+            if matched is not None:
                 return None
         self._raise(
             scope=scope,

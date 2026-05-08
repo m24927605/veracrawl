@@ -12,6 +12,14 @@ dependencies = [
   "pydantic>=2.7,<3",
   "structlog>=24,<26",
   "httpx>=0.27,<1",
+  # ``regex`` provides per-match ``timeout=`` which stdlib ``re``
+  # lacks. ``StrictAllowlistScope`` (Phase 2 step 2.2c) uses it to
+  # bound the worst-case work a route-pattern match can do on an
+  # attacker-controlled URL: the contract-layer AST guard already
+  # refuses nested-quantifier patterns, but contract-valid ambiguous
+  # alternations (``(a|aa)+``) can still backtrack catastrophically
+  # without a timeout.
+  "regex>=2024.5",
 ]
 
 [project.optional-dependencies]
@@ -136,3 +144,12 @@ disallow_any_generics = false
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+# ``regex`` ships no type stubs (no ``types-regex``-equivalent on
+# PyPI) and the Phase 2 step 2.2c integration only uses two
+# names from it (``regex.match`` + ``TimeoutError``). Silence the
+# missing-stubs error rather than vendor a thin stub that would
+# rot when the upstream API moves.
+[[tool.mypy.overrides]]
+module = ["regex"]
+ignore_missing_imports = true
