@@ -312,11 +312,15 @@ class HttpClientConfig:
     # :class:`InMemoryCookieJar`. Scope: per-run + per-origin,
     # cleared at run boundary.
     cookie_jar: CookieJarPort = field(default_factory=NoopCookieJar)
-    # Run scope for the conditional cache + cookie jar. Defaults to
-    # ``"run:network-fixture"`` (the legacy fixture tests use this
-    # synthetic run id); production callers must set their actual
-    # ``run_ref`` so cache / jar scope matches the run lifecycle.
-    run_ref: str = "run:network-fixture"
+    # Run scope for the conditional cache + cookie jar. ``None``
+    # means "derive from ``NetworkRequest.run_ref`` at adapter
+    # construction" (codex iter-4 important: hardcoded fixture
+    # default leaked cache + cookies across runs when callers
+    # forgot to set this). An explicit string overrides the
+    # derivation — production callers can set this to a different
+    # run scope if needed (e.g., re-using cookies across two
+    # logical runs).
+    run_ref: str | None = None
     # Extra request headers (Authorization / X-Api-Key / etc.) the
     # adapter sends with every request. ``Authorization`` and
     # related credential-bearing names are STRIPPED on cross-origin
@@ -382,14 +386,22 @@ def _is_cross_origin(from_url: str, to_url: str) -> bool:
     return _canonical_origin(from_url) != _canonical_origin(to_url)
 
 
-# Header names to strip on a cross-origin redirect (RFC 7235 best
-# practice + cooperative-crawler hygiene). Lowercased; the actual
-# strip is case-insensitive.
+# Header names to strip on a cross-origin redirect. Codex iter-4
+# critical: aligned with the contract-layer ``_SENSITIVE_HEADER_NAMES``
+# set in ``contracts/network.py``. Custom credential headers
+# (``X-Api-Key`` / ``X-Auth-Token`` / ``X-Session-Token`` /
+# ``X-CSRF-Token``) are credential-bearing in the project's threat
+# model — letting them ride a cross-origin redirect leaks the
+# token. Lowercased; the actual strip is case-insensitive.
 _CROSS_ORIGIN_STRIP_HEADERS: Final[frozenset[str]] = frozenset(
     {
         "authorization",
         "proxy-authorization",
         "cookie",
+        "x-api-key",
+        "x-auth-token",
+        "x-session-token",
+        "x-csrf-token",
     }
 )
 
@@ -486,6 +498,12 @@ class StdlibHttpSourceAdapter:
         # adapter never reads ``self._config.extra_headers``
         # directly after this.
         self._frozen_extra_headers: dict[str, str] = dict(self._config.extra_headers)
+        # Codex iter-4 important: derive run scope from
+        # ``request.run_ref`` when ``HttpClientConfig.run_ref`` is
+        # not set. Hardcoded fixture default leaked cache + cookies
+        # across runs when callers forgot to override.
+        config_run_ref = self._config.run_ref
+        self._run_ref: str = config_run_ref if config_run_ref is not None else self.request.run_ref
         # Production-mode robots gate: the default
         # ``HttpClientConfig.robots_port`` is ``NoopRobotsPort`` so
         # existing fixture tests keep passing. In production the
@@ -852,7 +870,7 @@ class StdlibHttpSourceAdapter:
             # Phase 1 acceptance ("304 short-circuits to cached
             # body") at the adapter boundary.
             if response.status_code == 304:
-                cached = self._config.conditional_cache.get(run_ref=self._config.run_ref, url=url)
+                cached = self._config.conditional_cache.get(run_ref=self._run_ref, url=url)
                 if cached is not None:
                     response.read()  # drain the empty 304 body
                     self._cached_artifact_ref_for_response = cached.body_artifact_ref
@@ -900,10 +918,10 @@ class StdlibHttpSourceAdapter:
             # important #3).
             self._suppress_jar_cookies_for_next_request = False
         else:
-            cookies = self._config.cookie_jar.cookies_for(run_ref=self._config.run_ref, url=url)
+            cookies = self._config.cookie_jar.cookies_for(run_ref=self._run_ref, url=url)
             if cookies:
                 headers["Cookie"] = "; ".join(f"{n}={v}" for n, v in cookies.items())
-        cached = self._config.conditional_cache.get(run_ref=self._config.run_ref, url=url)
+        cached = self._config.conditional_cache.get(run_ref=self._run_ref, url=url)
         if cached is not None:
             if cached.etag:
                 headers["If-None-Match"] = cached.etag
@@ -934,7 +952,7 @@ class StdlibHttpSourceAdapter:
             response_headers_redacted = _redact_headers_for_evidence(resp_headers_dict)
         evidence = NetworkAttemptEvidence(
             id=attempt_id,
-            run_ref=self._config.run_ref,
+            run_ref=self._run_ref,
             request_ref=self.request.id,
             attempt_number=self._attempt_counter,
             request_method=self.request.method,
@@ -962,7 +980,7 @@ class StdlibHttpSourceAdapter:
             set_cookies = []
         for raw in set_cookies:
             self._config.cookie_jar.accept_set_cookie(
-                run_ref=self._config.run_ref,
+                run_ref=self._run_ref,
                 url=url,
                 set_cookie_value=raw,
             )
@@ -993,7 +1011,7 @@ class StdlibHttpSourceAdapter:
             else "application/octet-stream"
         )
         self._config.conditional_cache.put(
-            run_ref=self._config.run_ref,
+            run_ref=self._run_ref,
             url=url,
             entry=CachedConditional(
                 etag=etag,

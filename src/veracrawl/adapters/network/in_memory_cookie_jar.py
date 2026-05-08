@@ -307,13 +307,19 @@ class InMemoryCookieJar:
                 replaced = replaced[overflow:]
             self._jar[(run_ref, origin)] = replaced
 
-    def cookies_in_jar(self, *, run_ref: str) -> CookieJarSnapshot:
+    def cookies_in_jar(self, *, run_ref: str, include_values: bool = False) -> CookieJarSnapshot:
         with self._lock:
             cookies: list[CookieRecord] = []
             for (jar_run, _origin), records in self._jar.items():
                 if jar_run == run_ref:
                     cookies.extend(records)
-            return CookieJarSnapshot(cookies=cookies)
+            snapshot = CookieJarSnapshot(cookies=cookies)
+        # Default: redact values for safety (codex iter-4 important).
+        # ``include_values=True`` is explicit opt-in for tests /
+        # debug paths.
+        if include_values:
+            return snapshot
+        return snapshot.redacted()
 
     def clear_run(self, *, run_ref: str) -> None:
         with self._lock:

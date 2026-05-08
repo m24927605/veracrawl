@@ -83,8 +83,18 @@ class CachedConditional:
     status_code: int
 
     def __post_init__(self) -> None:
-        if self.etag is None and self.last_modified is None:
-            raise ValueError("CachedConditional requires at least one of etag / last_modified")
+        # Codex iter-4 important: also reject whitespace-only /
+        # empty-string conditional hints. ``etag=""`` would echo
+        # back as ``If-None-Match: ""`` — a string the server
+        # treats as "weak match anything" and that we cannot
+        # distinguish from a missing header anyway. Same for
+        # ``last_modified=""``.
+        etag_useable = self.etag is not None and bool(self.etag.strip())
+        last_mod_useable = self.last_modified is not None and bool(self.last_modified.strip())
+        if not etag_useable and not last_mod_useable:
+            raise ValueError(
+                "CachedConditional requires at least one non-empty etag / last_modified"
+            )
         if not self.body_artifact_ref:
             raise ValueError("CachedConditional.body_artifact_ref must be non-empty")
         if not self.content_type:
@@ -114,6 +124,17 @@ class ConditionalCachePort(Protocol):
         available to the very next ``get`` for the same key.
         """
 
+    def clear_run(self, *, run_ref: str) -> None:
+        """Release every cached body for ``run_ref``.
+
+        Codex iter-4 important: production stores keep response
+        bodies inline. Without a stable lifecycle method on the
+        port, long-lived processes retain prior-run page bodies
+        until implementation-specific eviction. ``clear_run``
+        gives the orchestrator a way to drop cached bodies at
+        run completion through the port surface.
+        """
+
 
 class NoopConditionalCache:
     """Permissive default — every ``get`` misses, every ``put`` is dropped.
@@ -137,6 +158,9 @@ class NoopConditionalCache:
         entry: CachedConditional,
     ) -> None:
         del run_ref, url, entry
+
+    def clear_run(self, *, run_ref: str) -> None:
+        del run_ref
 
 
 __all__ = [

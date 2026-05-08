@@ -154,8 +154,18 @@ class CookieJarPort(Protocol):
         cookie acceptance.
         """
 
-    def cookies_in_jar(self, *, run_ref: str) -> CookieJarSnapshot:
-        """Return a snapshot of ``run_ref``'s cookies (test helper)."""
+    def cookies_in_jar(self, *, run_ref: str, include_values: bool = False) -> CookieJarSnapshot:
+        """Return a snapshot of ``run_ref``'s cookies.
+
+        Codex iter-4 important: cookie values are credentials in
+        the project's threat model. The default
+        (``include_values=False``) returns a snapshot whose values
+        are replaced with ``<redacted>`` so audit / replay /
+        dashboard surfaces never see raw cookie material.
+        ``include_values=True`` is the explicit opt-in for tests
+        / debug paths that need raw values; production code should
+        not pass it.
+        """
 
     def clear_run(self, *, run_ref: str) -> None:
         """Release every cookie for ``run_ref``.
@@ -198,8 +208,8 @@ class NoopCookieJar:
     ) -> None:
         del run_ref, url, set_cookie_value, clock_now
 
-    def cookies_in_jar(self, *, run_ref: str) -> CookieJarSnapshot:
-        del run_ref
+    def cookies_in_jar(self, *, run_ref: str, include_values: bool = False) -> CookieJarSnapshot:
+        del run_ref, include_values
         return CookieJarSnapshot()
 
     def clear_run(self, *, run_ref: str) -> None:

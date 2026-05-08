@@ -369,6 +369,34 @@ def test_cookies_in_jar_returns_snapshot_for_run() -> None:
     assert names == {"a", "b"}
 
 
+def test_cookies_in_jar_default_redacts_values() -> None:
+    """Codex iter-4 important: default snapshot redacts cookie
+    values so observability surfaces don't leak credentials."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=SECRET_VALUE",
+    )
+    snapshot = jar.cookies_in_jar(run_ref="run:r")
+    assert all(c.value == "<redacted>" for c in snapshot.cookies)
+
+
+def test_cookies_in_jar_include_values_opt_in() -> None:
+    """Tests / debug paths can opt in to raw values."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=RAW_VALUE",
+    )
+    snapshot = jar.cookies_in_jar(run_ref="run:r", include_values=True)
+    values = {c.value for c in snapshot.cookies}
+    assert "RAW_VALUE" in values
+
+
 def test_no_cookie_for_invalid_url() -> None:
     jar = InMemoryCookieJar()
     assert jar.cookies_for(run_ref="run:r", url="ftp://example.test/") == {}
