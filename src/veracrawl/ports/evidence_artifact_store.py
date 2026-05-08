@@ -197,12 +197,16 @@ class NoopEvidenceArtifactStore:
         # so two attempts with identical bytes still produce
         # distinct refs — same shape the production impl returns,
         # so unit tests cannot accidentally rely on a payload-only
-        # ref the production store would never emit.
-        scope = f"{run_ref}|{attempt_ref}|{kind.value}".encode("utf-8")
+        # ref the production store would never emit. Use the full
+        # 64-hex-char SHA-256 digest so artifact identity is
+        # collision-resistant under adversarial input (codex iter-3
+        # important #8: 16 hex chars = 64 bits, realistically
+        # reachable at crawler scale).
+        scope = f"{run_ref}|{attempt_ref}|{kind.value}".encode()
         digest = hashlib.sha256(payload).hexdigest()
         scoped_digest = hashlib.sha256(scope + b"|" + digest.encode("ascii")).hexdigest()
         return EvidencePutResult(
-            artifact_ref=f"artifact:noop:{kind.value}:{scoped_digest[:16]}",
+            artifact_ref=f"artifact:noop:{kind.value}:{scoped_digest}",
             content_digest_sha256=digest,
             size_bytes=len(payload),
             redaction_applied=redaction_applied,

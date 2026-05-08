@@ -21,9 +21,13 @@ This module provides a structured pass over HAR 1.2 JSON that:
 3. **Walks ``request.postData.params``** (form-urlencoded body)
    and replaces sensitive field values.
 4. **Replaces ``content.text`` / ``postData.text``** unconditionally
-   with ``<redacted-body>`` when ``content.mimeType`` is HTML / JSON
-   / form-encoded — the body could carry rendered credentials,
-   tokens, or PII regardless of the HTTP layer headers.
+   with ``<redacted-body>`` for **every** MIME type. Earlier
+   versions exempted image / binary types but Playwright HAR
+   embeds base64 PDFs, archives, private images, and account
+   exports through the same field — none of those are safe to
+   persist verbatim in evidence. The per-attempt response artifact
+   path is the place to keep response bodies; HAR keeps them
+   empty.
 5. **Scrubs caller-supplied canary tokens**: any URL substring,
    header value substring, or text-body substring that matches one
    of ``canary_tokens`` is replaced with ``<redacted-canary>``.
@@ -325,7 +329,38 @@ def redact_har_payload(
         ]
     new_doc = dict(document)
     new_doc["log"] = new_log
+    # Codex iter-3 important #11: structural redaction covers the
+    # documented HAR entry paths but HAR JSON also contains creator
+    # / browser / page metadata, ``_`` extension fields, timings /
+    # serverIPAddress / comment / cache fields, and adapter-specific
+    # custom keys. A canary token landing in any of those would
+    # survive the structural pass. Apply a final recursive substring
+    # scrub over every string in the document so the contract
+    # ("canary token never appears in persisted HAR bytes") holds
+    # whole-document.
+    if canaries:
+        new_doc = _walk_scrub_canaries(new_doc, canaries)
     return json.dumps(new_doc, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _walk_scrub_canaries(value: Any, canaries: tuple[str, ...]) -> Any:
+    """Recursively walk ``value`` and scrub canaries from every string.
+
+    Final defense-in-depth pass: HAR shape evolves, vendors add
+    custom fields under ``_<name>`` keys, and structural redaction
+    only knows the documented paths. This walk guarantees the
+    canary contract holds across the entire document.
+    """
+
+    if isinstance(value, str):
+        return _scrub_canary(value, canaries)
+    if isinstance(value, dict):
+        return {k: _walk_scrub_canaries(v, canaries) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_walk_scrub_canaries(item, canaries) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_walk_scrub_canaries(item, canaries) for item in value)
+    return value
 
 
 __all__ = [

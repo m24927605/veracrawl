@@ -94,28 +94,33 @@ def test_noop_put_returns_deterministic_artifact_ref_for_same_payload() -> None:
     assert a.redaction_applied is True
 
 
-def test_noop_put_rejects_unredacted_har() -> None:
+@pytest.mark.parametrize(
+    "kind",
+    [
+        ArtifactKind.HAR,
+        ArtifactKind.DOM,
+        ArtifactKind.RESPONSE_HEADERS,
+        ArtifactKind.REQUEST_HEADERS,
+        ArtifactKind.SCREENSHOT,
+        ArtifactKind.TRACE,
+        ArtifactKind.OTHER,
+    ],
+)
+def test_noop_put_rejects_unattested_for_every_kind(kind: ArtifactKind) -> None:
+    """Iter-3 important #13: the attestation gate must apply to
+    every kind. A store could ignore ``kind_requires_redaction``
+    and accept ``redaction_applied=False`` for less-obvious kinds
+    (REQUEST_HEADERS / TRACE / OTHER); parametrise so every kind
+    surface is verified."""
+
     store = NoopEvidenceArtifactStore()
     with pytest.raises(EvidenceRedactionRequired):
         store.put(
             run_ref="run:fixture",
             attempt_ref="attempt:1",
-            kind=ArtifactKind.HAR,
-            payload=b'{"log": {}}',
-            content_type="application/json",
-            redaction_applied=False,
-        )
-
-
-def test_noop_put_rejects_unredacted_dom() -> None:
-    store = NoopEvidenceArtifactStore()
-    with pytest.raises(EvidenceRedactionRequired):
-        store.put(
-            run_ref="run:fixture",
-            attempt_ref="attempt:1",
-            kind=ArtifactKind.DOM,
-            payload=b"<html>...</html>",
-            content_type="text/html",
+            kind=kind,
+            payload=b"any-bytes",
+            content_type="application/octet-stream",
             redaction_applied=False,
         )
 

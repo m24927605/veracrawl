@@ -367,10 +367,13 @@ def test_missing_entries_field_is_ok() -> None:
     assert parsed["log"]["version"] == "1.2"
 
 
-def test_malformed_entry_field_types_handled_safely() -> None:
-    """Iter-2 #13: HAR input is external/untrusted. Wrong types in
-    sub-fields must not crash and must not leak the original
-    sensitive bytes."""
+def test_malformed_entry_field_types_dont_leak_secrets_via_canary_walk() -> None:
+    """Iter-3 critical #2: the recursive canary scrub walks the
+    entire document, so any caller-declared canary token survives
+    structural redaction even when sub-shapes are malformed and
+    structural redactors skipped them. Test that every injected
+    sensitive value, declared as a canary, is gone from the
+    persisted HAR."""
 
     parsed_input: dict = {
         "log": {
@@ -380,39 +383,78 @@ def test_malformed_entry_field_types_handled_safely() -> None:
                     "request": {
                         # url is non-string → left as-is; no crash.
                         "url": 12345,
-                        # headers is dict instead of list → ignored.
+                        # headers is dict instead of list → ignored
+                        # by structural redactor, but the canary walk
+                        # at the end still scrubs the leaked value.
                         "headers": {"Authorization": "Bearer leaked-1"},
-                        # cookies is dict → ignored.
                         "cookies": {"session": "leaked-2"},
-                        # queryString is non-list → ignored.
                         "queryString": "raw-string-leaked-3",
-                        # postData is non-dict → ignored.
                         "postData": "raw-post-leaked-4",
                     },
                     "response": {
-                        # headers is non-list → ignored.
                         "headers": "string-leaked-5",
-                        # content is non-dict → ignored.
                         "content": "non-dict-leaked-6",
                     },
                 },
-                # Entry that's not a dict at all.
                 "scalar-entry-leaked-7",
             ],
         }
     }
     payload = json.dumps(parsed_input).encode("utf-8")
-    # Malformed inner shapes get passed through (we cannot prove
-    # they hold secrets that need structural redaction, and we
-    # cannot structurally redact non-canonical shapes safely). The
-    # contract this test pins: redaction MUST NOT CRASH on
-    # malformed shapes. The producer (Playwright) controls the
-    # shape; if Playwright ever ships malformed HAR we want to
-    # surface an evidence regression, not silently lose the run.
-    redacted = redact_har_payload(payload)
+    canaries = [
+        "leaked-1",
+        "leaked-2",
+        "leaked-3",
+        "leaked-4",
+        "leaked-5",
+        "leaked-6",
+        "leaked-7",
+    ]
+    redacted = redact_har_payload(payload, canary_tokens=canaries)
+    # No leaked marker survives — the recursive canary walk catches
+    # everything the structural redactor didn't.
+    for canary in canaries:
+        assert canary.encode() not in redacted, f"canary {canary} leaked"
+    # Redaction completed without crashing.
     out = json.loads(redacted)
-    # The redaction completed (entries list still in shape).
     assert isinstance(out["log"]["entries"], list)
+
+
+def test_canary_in_creator_metadata_scrubbed() -> None:
+    """Iter-3 important #11: HAR creator / browser metadata are not
+    documented entry paths but the canary contract is whole-document.
+    Any canary in those fields must be scrubbed."""
+
+    payload = json.dumps(
+        {
+            "log": {
+                "version": "1.2",
+                "creator": {"name": "leaked-creator-CANARY_C", "version": "1.0"},
+                "browser": {"name": "leaked-browser-CANARY_B", "version": "1.0"},
+                "entries": [],
+            }
+        }
+    ).encode("utf-8")
+    redacted = redact_har_payload(payload, canary_tokens=["CANARY_C", "CANARY_B"])
+    assert b"CANARY_C" not in redacted
+    assert b"CANARY_B" not in redacted
+
+
+def test_canary_in_underscore_extension_field_scrubbed() -> None:
+    """HAR allows ``_<name>`` extension fields. Canaries there must
+    also be scrubbed."""
+
+    payload = json.dumps(
+        {
+            "log": {
+                "version": "1.2",
+                "_vendor_extra": "embedded-CANARY_X-here",
+                "entries": [],
+            }
+        }
+    ).encode("utf-8")
+    redacted = redact_har_payload(payload, canary_tokens=["CANARY_X"])
+    assert b"CANARY_X" not in redacted
 
 
 def test_non_string_url_left_unchanged() -> None:

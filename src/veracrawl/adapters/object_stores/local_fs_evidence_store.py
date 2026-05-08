@@ -130,8 +130,15 @@ class LocalFsEvidenceArtifactStore:
         run_dir = self._root / _safe_component(run_ref)
         attempt_dir = run_dir / _safe_component(attempt_ref)
         try:
-            run_dir.mkdir(parents=True, exist_ok=True)
-            attempt_dir.mkdir(parents=True, exist_ok=True)
+            # Codex iter-3 important #6: ``mkdir(exist_ok=True)`` happily
+            # uses an existing symlink that points outside the root.
+            # Verify each directory we touch is a real directory (not a
+            # symlink) BEFORE writing through it. If a pre-existing
+            # entry is not a real dir, refuse the put — silently writing
+            # through a swapped symlink would land bytes outside the
+            # configured root.
+            self._ensure_real_dir(run_dir)
+            self._ensure_real_dir(attempt_dir)
             try:
                 os.chmod(run_dir, _DIR_MODE)
                 os.chmod(attempt_dir, _DIR_MODE)
@@ -141,7 +148,13 @@ class LocalFsEvidenceArtifactStore:
             raise EvidenceArtifactStoreError(f"failed to create evidence directory: {exc}") from exc
 
         extension = _EXTENSION_BY_KIND.get(kind, ".bin")
-        filename = f"{kind.value}-{digest[:16]}{extension}"
+        # Codex iter-3 important #5: ``digest[:16]`` gave only 64 bits
+        # of collision resistance in both filename + ref. At crawler
+        # scale a SHA-256 prefix collision is realistically reachable
+        # under adversarial input. Use the full 64-hex-char digest in
+        # both the filename and ``artifact_ref`` so the artifact
+        # identity matches the content-addressed contract.
+        filename = f"{kind.value}-{digest}{extension}"
         target = attempt_dir / filename
         # Atomic write: stage to a sibling tempfile, then ``os.replace``.
         # ``mkstemp`` opens with O_CREAT|O_EXCL|O_RDWR; on POSIX the
@@ -187,7 +200,7 @@ class LocalFsEvidenceArtifactStore:
 
         artifact_ref = (
             f"artifact:evidence:{kind.value}:{_safe_component(run_ref)}"
-            f":{_safe_component(attempt_ref)}:{digest[:16]}"
+            f":{_safe_component(attempt_ref)}:{digest}"
         )
         return EvidencePutResult(
             artifact_ref=artifact_ref,
@@ -196,19 +209,148 @@ class LocalFsEvidenceArtifactStore:
             redaction_applied=redaction_applied,
         )
 
+    @staticmethod
+    def _ensure_real_dir(path: Path) -> None:
+        """Refuse to operate through a symlink at ``path``.
+
+        Idempotent ``mkdir(parents=True, exist_ok=True, mode=0o700)``
+        if the path is missing; if the path exists, ``lstat``-check
+        that it is a regular directory. A symlink at this position
+        would let a compromised local process redirect writes
+        outside the configured root, so we raise instead of writing
+        through it.
+        """
+
+        import stat as _stat
+
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            path.mkdir(parents=True, exist_ok=True, mode=_DIR_MODE)
+            return
+        if not _stat.S_ISDIR(info.st_mode):
+            raise OSError(
+                f"evidence-store directory is not a real directory: {path} "
+                f"(mode={oct(info.st_mode)}); refusing to write through it"
+            )
+
     def get(self, *, artifact_ref: str) -> bytes | None:
+        """Read an evidence artifact by ref.
+
+        Symlink-safe + TOCTOU-safe (codex iter-3 important #7):
+
+        * Walk from the configured root down to the artifact using
+          ``os.open(O_NOFOLLOW | O_DIRECTORY)`` for each directory
+          component and ``os.open(O_NOFOLLOW | O_RDONLY)`` for the
+          file. ``O_NOFOLLOW`` makes the open fail (``ELOOP``) when
+          the target component is a symlink, even if a concurrent
+          process swaps it between our check and our open.
+        * The descriptor is the same kernel object the open
+          validated, so a post-open swap (``replace`` or rename
+          underneath us) cannot redirect the read elsewhere.
+        * On systems where ``O_NOFOLLOW`` is not defined (rare
+          today), we degrade to ``lstat``-then-``read_bytes`` with
+          a documented TOCTOU window — the path is still
+          containment-checked.
+        """
+
         path = self._path_for_ref(artifact_ref)
         if path is None:
             return None
-        # Symlink-safe read: refuse to follow any symlink at the
-        # target or any directory on the way down. A malicious or
-        # compromised local process could replace ``run_dir`` /
-        # ``attempt_dir`` / the artifact file itself with a symlink
-        # pointing outside the configured root, causing
-        # ``read_bytes()`` to read sensitive files. ``lstat`` does
-        # not follow links; ``S_ISREG`` on the lstat-returned mode
-        # rejects anything that is not a real regular file at that
-        # path.
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        directory_flag = getattr(os, "O_DIRECTORY", 0)
+        if nofollow is None:
+            return self._fallback_lstat_read(artifact_ref=artifact_ref, path=path)
+        # Compute components from root → leaf. ``path`` was
+        # constructed by us inside the configured root, so we know
+        # the prefix; we still re-derive it here to keep the
+        # traversal explicit and independent of construction.
+        try:
+            relative = path.relative_to(self._root)
+        except ValueError:
+            return None
+        parts = relative.parts
+        if not parts:
+            return None
+        # Open the root directly without O_NOFOLLOW (we trust the
+        # configured root path itself; symlink hardening kicks in
+        # below the root).
+        try:
+            root_fd = os.open(str(self._root), os.O_RDONLY | directory_flag)
+        except OSError:
+            return None
+        try:
+            current_fd = root_fd
+            # Descend into intermediate directories. The last
+            # component is the file; everything before it must be a
+            # directory.
+            for component in parts[:-1]:
+                try:
+                    next_fd = os.open(
+                        component,
+                        os.O_RDONLY | directory_flag | nofollow,
+                        dir_fd=current_fd,
+                    )
+                except OSError:
+                    _logger.warning(
+                        "evidence_store_get_refused_unsafe_ancestor",
+                        artifact_ref=artifact_ref,
+                        component=component,
+                    )
+                    return None
+                if current_fd != root_fd:
+                    os.close(current_fd)
+                current_fd = next_fd
+            # Open the leaf file with O_NOFOLLOW so a symlink at the
+            # leaf is rejected.
+            try:
+                leaf_fd = os.open(
+                    parts[-1],
+                    os.O_RDONLY | nofollow,
+                    dir_fd=current_fd,
+                )
+            except OSError:
+                _logger.warning(
+                    "evidence_store_get_refused_unsafe_leaf",
+                    artifact_ref=artifact_ref,
+                )
+                return None
+            try:
+                # Confirm regular file.
+                info = os.fstat(leaf_fd)
+                import stat as _stat
+
+                if not _stat.S_ISREG(info.st_mode):
+                    return None
+                # Read the whole file via the descriptor.
+                chunks: list[bytes] = []
+                while True:
+                    chunk = os.read(leaf_fd, 65536)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                return b"".join(chunks)
+            finally:
+                os.close(leaf_fd)
+        finally:
+            if current_fd != root_fd:
+                try:
+                    os.close(current_fd)
+                except OSError:
+                    pass
+            try:
+                os.close(root_fd)
+            except OSError:
+                pass
+
+    def _fallback_lstat_read(self, *, artifact_ref: str, path: Path) -> bytes | None:
+        """Fallback for systems without ``O_NOFOLLOW``.
+
+        Same lstat-based ancestor walk as the original implementation;
+        documented as TOCTOU-prone but better than nothing on
+        platforms where the kernel does not support no-follow opens.
+        """
+
         import stat as _stat
 
         try:
@@ -216,39 +358,15 @@ class LocalFsEvidenceArtifactStore:
         except OSError:
             return None
         if not _stat.S_ISREG(info.st_mode):
-            _logger.warning(
-                "evidence_store_get_refused_non_regular_file",
-                artifact_ref=artifact_ref,
-                mode=oct(info.st_mode),
-            )
             return None
-        # Containment check: resolve the path *without following
-        # symlinks*. ``Path.resolve(strict=True)`` would follow
-        # symlinks; instead, walk ``path.parents`` and verify each
-        # ancestor is also a regular directory under the root
-        # (lstat-based — same anti-symlink guard).
-        try:
-            root_real = self._root.resolve(strict=False)
-        except OSError:
-            return None
-        # ``Path.resolve()`` does follow symlinks but on a fixed
-        # ``self._root`` the resolution is one-time and trusted (we
-        # control how the root is configured). For the artifact path
-        # itself we walk parents and lstat-check each component.
         for parent in path.parents:
-            if parent == root_real or parent == self._root:
+            if parent == self._root:
                 break
             try:
                 p_info = parent.lstat()
             except OSError:
                 return None
             if not _stat.S_ISDIR(p_info.st_mode):
-                _logger.warning(
-                    "evidence_store_get_refused_non_dir_ancestor",
-                    artifact_ref=artifact_ref,
-                    ancestor=str(parent),
-                    mode=oct(p_info.st_mode),
-                )
                 return None
         try:
             return path.read_bytes()
@@ -260,7 +378,7 @@ class LocalFsEvidenceArtifactStore:
 
     def _path_for_ref(self, artifact_ref: str) -> Path | None:
         # ``artifact_ref`` shape:
-        #   artifact:evidence:<kind>:<run_safe>:<attempt_safe>:<digest12>
+        #   artifact:evidence:<kind>:<run_safe>:<attempt_safe>:<digest>
         parts = artifact_ref.split(":")
         if len(parts) != 6 or parts[0] != "artifact" or parts[1] != "evidence":
             return None
@@ -268,16 +386,21 @@ class LocalFsEvidenceArtifactStore:
             kind = ArtifactKind(parts[2])
         except ValueError:
             return None
-        run_safe, attempt_safe, digest_short = parts[3], parts[4], parts[5]
+        run_safe, attempt_safe, digest = parts[3], parts[4], parts[5]
         # Containment: each safe-component must be a single path
         # element (no separators / parents). The construction in
         # ``put`` guarantees this; we re-check here so a malicious
         # caller cannot read outside the root by hand-crafting a ref.
-        for component in (run_safe, attempt_safe, digest_short):
+        for component in (run_safe, attempt_safe, digest):
             if "/" in component or "\\" in component or component in {"", "..", "."}:
                 return None
+        # Validate digest shape: 64 lowercase hex chars (SHA-256 hex
+        # digest length). Refuse anything else so a hand-crafted ref
+        # cannot read a file with an unexpected name.
+        if len(digest) != 64 or not all(c in "0123456789abcdef" for c in digest):
+            return None
         extension = _EXTENSION_BY_KIND.get(kind, ".bin")
-        filename = f"{kind.value}-{digest_short}{extension}"
+        filename = f"{kind.value}-{digest}{extension}"
         return self._root / run_safe / attempt_safe / filename
 
 

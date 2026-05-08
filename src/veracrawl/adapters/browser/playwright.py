@@ -93,6 +93,10 @@ _DEFAULT_CHROME_UA: Final[str] = (
 
 _RUN_REF_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9_.-]+")
 _STORAGE_STATE_FILE_MODE: Final[int] = 0o600  # owner read/write only
+# HAR staging dir must be owner-only — between Playwright's write
+# and our post-processing read, the file holds unredacted cookies /
+# Authorization / response bodies (codex iter-3 critical).
+_HAR_STAGING_DIR_MODE: Final[int] = 0o700
 # Cap the human-readable prefix so the resulting filename stays well
 # inside POSIX ``NAME_MAX`` (255) and Windows ``MAX_PATH`` margins
 # regardless of how long the caller's run_ref happens to be (codex
@@ -254,6 +258,17 @@ class PlaywrightBrowserObservationAdapter:
         ):
             raise ProductionRuntimeNotImplemented(
                 backend="evidence_artifact_store",
+                gate="PlaywrightBrowserObservationAdapter",
+            )
+        # Codex iter-3 important #3: even with a real evidence store,
+        # missing ``har_capture_dir`` in PRODUCTION means HAR capture
+        # silently no-ops (``_pick_har_path`` returns None → no
+        # ``record_har_path`` is passed to Playwright). That violates
+        # the Phase 1 evidence contract just as the no-op store would.
+        # Fail closed at construction.
+        if current_mode() == RuntimeMode.PRODUCTION and self.har_capture_dir is None:
+            raise ProductionRuntimeNotImplemented(
+                backend="har_capture_dir",
                 gate="PlaywrightBrowserObservationAdapter",
             )
         # Tests override the playwright entry point with a mock that
@@ -547,6 +562,18 @@ class PlaywrightBrowserObservationAdapter:
         anyway, so we skip the on-disk staging too). When configured,
         the path lives under ``har_capture_dir`` with a SHA-256 +
         prefix-safe filename so two runs do not collide.
+
+        Privacy invariant (codex iter-3 critical): the unredacted
+        HAR exists on disk between Playwright's
+        ``record_har_path`` write and our post-processing read. The
+        staging directory must therefore be owner-only (``0o700``)
+        and must not be a symlink — a permissive shared dir or a
+        symlink to a writable location would expose unredacted
+        cookies / Authorization / response bodies during that
+        window. We refuse to stage if the directory is a symlink
+        or the mode is wider than ``0o700``; on the create path we
+        pass ``mode=0o700`` so the dir is born with the right
+        permissions.
         """
         if self.har_capture_dir is None:
             return None
@@ -555,7 +582,53 @@ class PlaywrightBrowserObservationAdapter:
             # skip the staging file so we don't write plaintext HAR
             # to disk for nothing.
             return None
-        self.har_capture_dir.mkdir(parents=True, exist_ok=True)
+        # Create the dir with owner-only mode if missing.
+        try:
+            self.har_capture_dir.mkdir(parents=True, exist_ok=True, mode=_HAR_STAGING_DIR_MODE)
+        except OSError:
+            _logger.exception(
+                "browser_har_staging_dir_create_failed",
+                har_capture_dir=str(self.har_capture_dir),
+            )
+            return None
+        # Re-validate: must be a real directory (not a symlink) with
+        # owner-only mode. A pre-existing dir that is too wide must
+        # be refused — silently staging unredacted HAR there would
+        # break the privacy contract.
+        try:
+            info = self.har_capture_dir.lstat()
+        except OSError:
+            return None
+        import stat as _stat
+
+        if not _stat.S_ISDIR(info.st_mode):
+            _logger.warning(
+                "browser_har_staging_dir_not_real_dir",
+                har_capture_dir=str(self.har_capture_dir),
+                mode=oct(info.st_mode),
+            )
+            return None
+        if os.name == "posix":
+            mode = info.st_mode & 0o777
+            if mode & 0o077:  # any group / other bit set → too wide
+                _logger.warning(
+                    "browser_har_staging_dir_mode_too_wide",
+                    har_capture_dir=str(self.har_capture_dir),
+                    mode=oct(mode),
+                )
+                # Tighten if we can; refuse if we cannot.
+                try:
+                    os.chmod(self.har_capture_dir, _HAR_STAGING_DIR_MODE)
+                except OSError:
+                    return None
+                # Re-stat to confirm — a concurrent process may have
+                # changed the mode again.
+                try:
+                    info = self.har_capture_dir.lstat()
+                except OSError:
+                    return None
+                if (info.st_mode & 0o777) & 0o077:
+                    return None
         return self.har_capture_dir / f"{_storage_state_filename(run_ref)}.har.json"
 
     def _postprocess_har(self, *, har_path: Path, run_ref: Ref) -> None:

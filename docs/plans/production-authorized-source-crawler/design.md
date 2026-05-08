@@ -406,8 +406,21 @@ evidence (HAR + headers redacted) per attempt.
   rate. Floor: respect strictest of `Retry-After` /
   `crawl_delay` / `request_rate`. Cap: configurable
   `max_concurrency_per_origin` (default 4).
-- HAR capture via Playwright `context.tracing.start({snapshots,
-  screenshots})`; written to `EvidenceArtifactStorePort`.
+- HAR capture via Playwright `record_har_path` (BrowserContext
+  constructor option); HAR JSON post-processed through structural
+  redaction (`runtime_support.har_redaction.redact_har_payload`) and
+  written to `EvidenceArtifactStorePort`. Note (2026-05-07 narrowing,
+  reassessment-20260507T181555Z.md): step 1.4 ships HAR via
+  `record_har_path` only; `context.tracing.start({snapshots,
+  screenshots})` for snapshots / screenshots is deferred to a P1
+  backlog item because (a) `record_har_path` produces the parseable
+  HAR JSON the acceptance criterion requires, and (b) Playwright
+  trace zips embed screenshots / DOM / network in a single archive
+  that cannot be field-level redacted (trace retention is a Phase 6
+  `ArtifactLifecycle` concern, not a Phase 1 capture concern). The
+  per-page `screenshot()` and DOM snapshot already captured by
+  `_observe_on_context` cover the screenshot / snapshot evidence
+  surface for Phase 1.
 - Per-attempt `NetworkAttemptEvidence` populated on
   `NetworkClientResult` (request method/URL/headers redacted,
   response status/headers redacted, elapsed_ms, attempt_number,
