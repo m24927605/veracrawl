@@ -512,6 +512,20 @@ class PlaywrightBrowserObservationAdapter:
                     )
                 except Exception:
                     _logger.exception("browser_context_create_failed", run_ref=run_ref)
+                    # Privacy invariant: if context creation raised
+                    # *after* Playwright started writing the HAR,
+                    # unredacted bytes can be on disk. Unlink the
+                    # staging file unconditionally before re-raising
+                    # so we never leave plaintext HAR behind on a
+                    # failed setup path.
+                    if har_path is not None:
+                        try:
+                            har_path.unlink(missing_ok=True)
+                        except OSError:
+                            _logger.exception(
+                                "browser_har_staging_unlink_failed_on_create",
+                                har_path=str(har_path),
+                            )
                     raise
                 session = BrowserSession(
                     adapter=self,
@@ -590,6 +604,15 @@ class PlaywrightBrowserObservationAdapter:
                 "browser_har_staging_dir_create_failed",
                 har_capture_dir=str(self.har_capture_dir),
             )
+            # In PRODUCTION mode this is a config error, not a
+            # silent skip — losing HAR evidence per attempt breaks
+            # the Phase 1 contract. Fail closed so the orchestrator
+            # surfaces the misconfiguration.
+            if current_mode() == RuntimeMode.PRODUCTION:
+                raise ProductionRuntimeNotImplemented(
+                    backend="har_capture_dir",
+                    gate="PlaywrightBrowserObservationAdapter._pick_har_path",
+                ) from None
             return None
         # Re-validate: must be a real directory (not a symlink) with
         # owner-only mode. A pre-existing dir that is too wide must
@@ -629,7 +652,29 @@ class PlaywrightBrowserObservationAdapter:
                     return None
                 if (info.st_mode & 0o777) & 0o077:
                     return None
-        return self.har_capture_dir / f"{_storage_state_filename(run_ref)}.har.json"
+        # Codex iter-4 important: a deterministic filename based only
+        # on ``run_ref`` could collide with stale plaintext left from
+        # a prior crash / retry, so the post-process step would read
+        # someone else's HAR and persist it as the current session's
+        # evidence (or leave the stale file if this session never
+        # writes). Append a per-call unique nonce
+        # (``os.urandom`` hex) so each session writes / reads /
+        # deletes its own file even when the run_ref repeats.
+        nonce = os.urandom(8).hex()
+        candidate = self.har_capture_dir / f"{_storage_state_filename(run_ref)}.{nonce}.har.json"
+        # Refuse to use the path if anything (file / dir / symlink)
+        # already exists at it — the nonce makes collision
+        # statistically impossible, so an existing entry signals
+        # tampering. Failing here means HAR capture is silently
+        # disabled for this session, which the caller catches via
+        # ``last_har_artifact_ref is None``.
+        if candidate.exists() or candidate.is_symlink():
+            _logger.warning(
+                "browser_har_staging_path_unexpectedly_exists",
+                har_path=str(candidate),
+            )
+            return None
+        return candidate
 
     def _postprocess_har(self, *, har_path: Path, run_ref: Ref) -> None:
         """Read the raw HAR, redact, persist, delete the staging file.

@@ -52,6 +52,46 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from veracrawl.runtime_support._log_redaction import is_sensitive_key
 
+# HAR-specific sensitive-key extras. The structured-log helper covers
+# generic patterns (``cookie`` / ``authorization`` / ``password`` /
+# ``token`` / etc.) but misses common web credential names that show
+# up in URL query / form / cookie arrays — ``session`` / ``sid`` /
+# ``apikey`` / ``api_key`` / ``authtoken`` / ``auth_token`` / ``code``
+# (OAuth code grant) / ``jwt`` / ``access_token`` / ``id_token`` /
+# ``refresh_token``. Codex iter-4 important: persisting these in a
+# HAR is a credential leak even when headers are clean.
+_HAR_EXTRA_SENSITIVE_KEYS: tuple[str, ...] = (
+    "session",
+    "sid",
+    "sessionid",
+    "session_id",
+    "apikey",
+    "api_key",
+    "authtoken",
+    "auth_token",
+    "access_token",
+    "id_token",
+    "refresh_token",
+    "code",
+    "jwt",
+    "state",  # OAuth state — opaque token, treat as sensitive
+    "nonce",  # OIDC nonce
+)
+
+
+def _is_har_sensitive_key(name: str) -> bool:
+    """Combine the project-wide sensitive-key matcher with HAR extras.
+
+    Both checks are case-insensitive; the extras match the full
+    name (after lowercasing), not a substring, to avoid false
+    positives like ``state_code`` or ``description``.
+    """
+
+    if is_sensitive_key(name):
+        return True
+    return name.lower() in _HAR_EXTRA_SENSITIVE_KEYS
+
+
 REDACTED_VALUE = "<redacted>"
 REDACTED_BODY = "<redacted-body>"
 REDACTED_CANARY = "<redacted-canary>"
@@ -69,13 +109,53 @@ REDACTED_CANARY = "<redacted-canary>"
 # correctness debate.
 
 
+def _canary_variants(canary: str) -> tuple[str, ...]:
+    """Return the canary plus its common percent-encoded forms.
+
+    A caller-declared canary like ``secret@example.com`` shows up in
+    persisted HARs as ``secret%40example.com`` whenever the value
+    rides through a URL query / form param. The substring scrub only
+    catches whichever literal form is present, so we also try the
+    URL-encoded variant. ``urllib.parse.quote`` covers the
+    encode-everything case; if the canary already contains percent
+    sequences, decoding back is unsafe (we can't tell apart
+    accidental ``%`` chars from real escapes), so we just emit the
+    encoded variant alongside.
+    """
+
+    from urllib.parse import quote
+
+    variants = [canary]
+    encoded = quote(canary, safe="")
+    if encoded != canary:
+        variants.append(encoded)
+    # Also handle the common ``+`` for space encoding seen in form
+    # bodies and query strings.
+    plus_encoded = encoded.replace("%20", "+")
+    if plus_encoded != encoded and plus_encoded not in variants:
+        variants.append(plus_encoded)
+    return tuple(variants)
+
+
 def _scrub_canary(value: str, canaries: tuple[str, ...]) -> str:
-    """Replace every occurrence of any canary in ``value`` with REDACTED_CANARY."""
+    """Replace every occurrence of any canary (and its encoded
+    variants) in ``value`` with REDACTED_CANARY.
+
+    Codex iter-4 important: a canary like ``secret@example.com``
+    appearing in a URL query value gets percent-encoded to
+    ``secret%40example.com`` by browsers. The substring scrub now
+    tries both the literal form and the URL-encoded variant so the
+    whole-document canary contract holds against encoding
+    transformations.
+    """
 
     out = value
     for canary in canaries:
-        if canary and canary in out:
-            out = out.replace(canary, REDACTED_CANARY)
+        if not canary:
+            continue
+        for variant in _canary_variants(canary):
+            if variant in out:
+                out = out.replace(variant, REDACTED_CANARY)
     return out
 
 
@@ -92,7 +172,7 @@ def _redact_name_value_array(
         name = entry.get("name")
         value = entry.get("value")
         new_entry = dict(entry)
-        if isinstance(name, str) and is_sensitive_key(name):
+        if isinstance(name, str) and _is_har_sensitive_key(name):
             new_entry["value"] = REDACTED_VALUE
         elif isinstance(value, str):
             new_entry["value"] = _scrub_canary(value, canaries)
@@ -205,7 +285,7 @@ def _redact_url(url: Any, canaries: tuple[str, ...]) -> Any:
     redacted_query: list[tuple[str, str]] = []
     if parts.query:
         for name, value in parse_qsl(parts.query, keep_blank_values=True):
-            if is_sensitive_key(name):
+            if _is_har_sensitive_key(name):
                 redacted_query.append((name, REDACTED_VALUE))
             else:
                 redacted_query.append((name, value))
@@ -355,7 +435,15 @@ def _walk_scrub_canaries(value: Any, canaries: tuple[str, ...]) -> Any:
     if isinstance(value, str):
         return _scrub_canary(value, canaries)
     if isinstance(value, dict):
-        return {k: _walk_scrub_canaries(v, canaries) for k, v in value.items()}
+        # Codex iter-4 important: scrub canaries in keys too, not
+        # just values. A canary in a HAR extension key
+        # (``_<vendor>``) or a custom adapter metadata key would
+        # otherwise survive in the persisted JSON bytes.
+        scrubbed: dict[Any, Any] = {}
+        for k, v in value.items():
+            new_k = _scrub_canary(k, canaries) if isinstance(k, str) else k
+            scrubbed[new_k] = _walk_scrub_canaries(v, canaries)
+        return scrubbed
     if isinstance(value, list):
         return [_walk_scrub_canaries(item, canaries) for item in value]
     if isinstance(value, tuple):

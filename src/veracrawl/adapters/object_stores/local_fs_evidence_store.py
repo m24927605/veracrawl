@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import tempfile
 from pathlib import Path
 from typing import Final
 
@@ -103,9 +102,35 @@ class LocalFsEvidenceArtifactStore:
     sibling tempfile and atomically renames it onto the final path.
     """
 
-    def __init__(self, *, root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        root: Path,
+        max_payload_bytes: int | None = 256 * 1024 * 1024,
+    ) -> None:
+        """``root``: store root dir (must not be a symlink).
+
+        ``max_payload_bytes``: optional per-artifact size cap (default
+        256 MiB). A bad caller or runaway capture should not exhaust
+        local disk; ``put`` raises :class:`EvidenceArtifactStoreError`
+        when the payload exceeds the cap. Pass ``None`` to disable the
+        cap (test fixtures may want this).
+        """
+
+        self._max_payload_bytes = max_payload_bytes
+        # Reject a symlink at the configured root. This is a
+        # sensitive evidence location; if someone configured the
+        # store against a symlink we'd ``chmod`` the link's target
+        # below and trust the link's resolution for the lifetime
+        # of the store. ``lstat`` does not follow links.
+        import stat as _stat
+
+        if root.is_symlink() or (root.exists() and not _stat.S_ISDIR(root.lstat().st_mode)):
+            raise EvidenceArtifactStoreError(
+                f"evidence-store root must be a real directory, not a symlink: {root}"
+            )
         self._root = root
-        self._root.mkdir(parents=True, exist_ok=True)
+        self._root.mkdir(parents=True, exist_ok=True, mode=_DIR_MODE)
         try:
             os.chmod(self._root, _DIR_MODE)
         except OSError:
@@ -126,54 +151,101 @@ class LocalFsEvidenceArtifactStore:
         del content_type  # extension comes from ``kind``; content_type is informational
         if kind_requires_redaction(kind) and not redaction_applied:
             raise EvidenceRedactionRequired(f"kind={kind.value} requires redaction_applied=True")
-        digest = hashlib.sha256(payload).hexdigest()
-        run_dir = self._root / _safe_component(run_ref)
-        attempt_dir = run_dir / _safe_component(attempt_ref)
-        try:
-            # Codex iter-3 important #6: ``mkdir(exist_ok=True)`` happily
-            # uses an existing symlink that points outside the root.
-            # Verify each directory we touch is a real directory (not a
-            # symlink) BEFORE writing through it. If a pre-existing
-            # entry is not a real dir, refuse the put — silently writing
-            # through a swapped symlink would land bytes outside the
-            # configured root.
-            self._ensure_real_dir(run_dir)
-            self._ensure_real_dir(attempt_dir)
-            try:
-                os.chmod(run_dir, _DIR_MODE)
-                os.chmod(attempt_dir, _DIR_MODE)
-            except OSError:
-                _logger.debug("evidence_store_dir_chmod_unsupported")
-        except OSError as exc:
-            raise EvidenceArtifactStoreError(f"failed to create evidence directory: {exc}") from exc
-
-        extension = _EXTENSION_BY_KIND.get(kind, ".bin")
-        # Codex iter-3 important #5: ``digest[:16]`` gave only 64 bits
-        # of collision resistance in both filename + ref. At crawler
-        # scale a SHA-256 prefix collision is realistically reachable
-        # under adversarial input. Use the full 64-hex-char digest in
-        # both the filename and ``artifact_ref`` so the artifact
-        # identity matches the content-addressed contract.
-        filename = f"{kind.value}-{digest}{extension}"
-        target = attempt_dir / filename
-        # Atomic write: stage to a sibling tempfile, then ``os.replace``.
-        # ``mkstemp`` opens with O_CREAT|O_EXCL|O_RDWR; on POSIX the
-        # mode is honored from the caller. We pass ``dir=`` so the
-        # tempfile sits on the same filesystem (atomic rename).
-        try:
-            fd, tmp_name = tempfile.mkstemp(
-                prefix=f".{filename}.",
-                suffix=".tmp",
-                dir=str(attempt_dir),
+        if self._max_payload_bytes is not None and len(payload) > self._max_payload_bytes:
+            raise EvidenceArtifactStoreError(
+                f"evidence payload exceeds max_payload_bytes "
+                f"({len(payload)} > {self._max_payload_bytes})"
             )
+        digest = hashlib.sha256(payload).hexdigest()
+        run_safe = _safe_component(run_ref)
+        attempt_safe = _safe_component(attempt_ref)
+        extension = _EXTENSION_BY_KIND.get(kind, ".bin")
+        # Use the full 64-hex-char digest in both filename and ref so
+        # the artifact identity is collision-resistant under
+        # adversarial input.
+        filename = f"{kind.value}-{digest}{extension}"
+        # Codex iter-4 critical: previous put used path-based ``lstat``
+        # checks then ``tempfile.mkstemp(dir=...)`` that follows the
+        # path again — TOCTOU window where a local process could swap
+        # ``run_dir`` / ``attempt_dir`` to a symlink between the
+        # check and the write. Use descriptor-based traversal:
+        # ``os.open(O_DIRECTORY | O_NOFOLLOW, dir_fd=...)`` for each
+        # component so each handle is bound to the kernel object the
+        # check validated. ``os.O_NOFOLLOW`` makes the open fail
+        # (ELOOP) if a component is a symlink, even after a post-
+        # check swap.
+        directory_flag = getattr(os, "O_DIRECTORY", 0)
+        try:
+            root_fd = os.open(str(self._root), os.O_RDONLY | directory_flag)
         except OSError as exc:
-            raise EvidenceArtifactStoreError(f"failed to stage evidence tempfile: {exc}") from exc
+            raise EvidenceArtifactStoreError(f"failed to open evidence-store root: {exc}") from exc
+        run_fd: int | None = None
+        attempt_fd: int | None = None
+        try:
+            run_fd = self._mkdir_and_open(root_fd, run_safe)
+            attempt_fd = self._mkdir_and_open(run_fd, attempt_safe)
+            self._write_atomic(attempt_fd, filename, payload)
+        except OSError as exc:
+            raise EvidenceArtifactStoreError(f"failed to persist evidence artifact: {exc}") from exc
+        finally:
+            for fd in (attempt_fd, run_fd, root_fd):
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+
+        artifact_ref = f"artifact:evidence:{kind.value}:{run_safe}:{attempt_safe}:{digest}"
+        return EvidencePutResult(
+            artifact_ref=artifact_ref,
+            content_digest_sha256=digest,
+            size_bytes=len(payload),
+            redaction_applied=redaction_applied,
+        )
+
+    @staticmethod
+    def _mkdir_and_open(parent_fd: int, name: str) -> int:
+        """Create + open a child directory under ``parent_fd``.
+
+        Uses ``os.mkdir(dir_fd=...)`` to create the directory under
+        the parent fd (relative path, no path traversal possible),
+        then ``os.open(O_DIRECTORY | O_NOFOLLOW, dir_fd=...)`` so a
+        post-create symlink swap cannot redirect the descriptor.
+        """
+
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        directory_flag = getattr(os, "O_DIRECTORY", 0)
+        try:
+            os.mkdir(name, mode=_DIR_MODE, dir_fd=parent_fd)
+        except FileExistsError:
+            pass  # idempotent
+        return os.open(
+            name,
+            os.O_RDONLY | directory_flag | nofollow,
+            dir_fd=parent_fd,
+        )
+
+    @staticmethod
+    def _write_atomic(parent_fd: int, filename: str, payload: bytes) -> None:
+        """Stage ``payload`` into a tempfile under ``parent_fd``,
+        then atomically rename onto ``filename``.
+
+        Tempfile is opened with ``O_CREAT | O_EXCL | O_NOFOLLOW |
+        O_RDWR`` relative to ``parent_fd`` — the descriptor is bound
+        to the staging file the kernel just created, so a concurrent
+        symlink swap cannot redirect the write. The final
+        ``os.rename(src, dst, src_dir_fd=, dst_dir_fd=)`` is also
+        descriptor-relative.
+        """
+
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        # Random tempfile name so concurrent writers don't collide.
+        tmp_name = f".{filename}.{os.urandom(8).hex()}.tmp"
+        flags = os.O_CREAT | os.O_EXCL | os.O_RDWR | nofollow
+        fd = os.open(tmp_name, flags, _FILE_MODE, dir_fd=parent_fd)
+        renamed = False
         try:
             try:
-                # Write through the raw fd — loop over partial writes
-                # so a short ``os.write`` never leaves a truncated
-                # artifact (same pattern step 1.1 uses for
-                # ``storage_state.json``).
                 written = 0
                 while written < len(payload):
                     chunk = os.write(fd, payload[written:])
@@ -186,53 +258,17 @@ class LocalFsEvidenceArtifactStore:
                 os.fsync(fd)
             finally:
                 os.close(fd)
-            try:
-                os.chmod(tmp_name, _FILE_MODE)
-            except OSError:
-                _logger.debug("evidence_store_tmp_chmod_unsupported")
-            os.replace(tmp_name, str(target))
-        except OSError as exc:
-            try:
-                Path(tmp_name).unlink(missing_ok=True)
-            except OSError:
-                pass
-            raise EvidenceArtifactStoreError(f"failed to persist evidence artifact: {exc}") from exc
-
-        artifact_ref = (
-            f"artifact:evidence:{kind.value}:{_safe_component(run_ref)}"
-            f":{_safe_component(attempt_ref)}:{digest}"
-        )
-        return EvidencePutResult(
-            artifact_ref=artifact_ref,
-            content_digest_sha256=digest,
-            size_bytes=len(payload),
-            redaction_applied=redaction_applied,
-        )
-
-    @staticmethod
-    def _ensure_real_dir(path: Path) -> None:
-        """Refuse to operate through a symlink at ``path``.
-
-        Idempotent ``mkdir(parents=True, exist_ok=True, mode=0o700)``
-        if the path is missing; if the path exists, ``lstat``-check
-        that it is a regular directory. A symlink at this position
-        would let a compromised local process redirect writes
-        outside the configured root, so we raise instead of writing
-        through it.
-        """
-
-        import stat as _stat
-
-        try:
-            info = path.lstat()
-        except FileNotFoundError:
-            path.mkdir(parents=True, exist_ok=True, mode=_DIR_MODE)
-            return
-        if not _stat.S_ISDIR(info.st_mode):
-            raise OSError(
-                f"evidence-store directory is not a real directory: {path} "
-                f"(mode={oct(info.st_mode)}); refusing to write through it"
-            )
+            os.rename(tmp_name, filename, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+            renamed = True
+        finally:
+            # Always clean up the staging file if we didn't get to
+            # rename it — partial writes / errors must not leave
+            # tempfiles cluttering the evidence dir.
+            if not renamed:
+                try:
+                    os.unlink(tmp_name, dir_fd=parent_fd)
+                except OSError:
+                    pass
 
     def get(self, *, artifact_ref: str) -> bytes | None:
         """Read an evidence artifact by ref.
