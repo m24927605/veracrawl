@@ -51,6 +51,7 @@ class CredentialAccessOutcome(StrEnum):
     INTERNAL = "internal"
     BLANK_VALUE = "blank_value"
     INVALID_IDENTIFIER = "invalid_identifier"
+    PRODUCTION_GATE_REFUSED = "production_gate_refused"
 
 
 @runtime_checkable

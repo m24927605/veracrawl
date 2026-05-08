@@ -401,10 +401,18 @@ def test_production_runtime_not_implemented_propagates_through_client() -> None:
     with with_runtime_mode(RuntimeMode.PRODUCTION):
         with pytest.raises(ProductionRuntimeNotImplemented):
             client.get(scope_ref="X", key="K")
-    # Wiring-regression hard-fail is loud; no audit row written
-    # for the credential access (the production gate fires before
-    # we can record anything meaningful).
-    assert audit.records == []
+    # Codex iter-5 critical: even a wiring regression is a credential
+    # access attempt — the audit trail must record it. Hard-fail
+    # stays loud (the exception still propagates) but the audit row
+    # captures the unsafe configuration with PRODUCTION_GATE_REFUSED
+    # outcome.
+    assert len(audit.records) == 1
+    assert (
+        audit.records[0]["outcome"] is CredentialAccessOutcome.PRODUCTION_GATE_REFUSED
+    )
+    # Hashed refs (not raw "X" / "K") for consistency with other paths.
+    assert audit.records[0]["scope_ref"] == _expected_hashed_ref("X")
+    assert audit.records[0]["key"] == _expected_hashed_ref("K")
 
 
 def test_unexpected_backend_exception_audits_internal_and_raises_not_found() -> None:

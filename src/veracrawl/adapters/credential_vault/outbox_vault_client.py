@@ -240,14 +240,35 @@ class OutboxVaultClient:
             backend_failure_kind = exc.kind
             raw = None
         except ProductionRuntimeNotImplemented:
-            # Codex iter-4 important: ProductionRuntimeNotImplemented
-            # signals a wiring regression (a fixture backend like
+            # Wiring regression (a fixture backend like
             # ``InMemoryVaultBackend`` was wired into PRODUCTION).
-            # Translating it to CredentialNotFoundError + INTERNAL
-            # audit would silently mask the unsafe configuration.
-            # Hard-fail by re-raising; the caller (orchestrator)
-            # handles the gate at startup so the production run
-            # cannot proceed with an unsafe wiring.
+            # Hard-fail must still emit an audit row — a credential
+            # access attempt under unsafe configuration is itself a
+            # security-relevant event the operator wants in the
+            # audit trail (codex iter-5 critical). Audit with the
+            # PRODUCTION_GATE_REFUSED outcome BEFORE re-raising so
+            # the trail is preserved.
+            try:
+                self._audit_record(
+                    scope_ref_for_audit=_hashed_ref(scope_ref),
+                    key_for_audit=_hashed_ref(key),
+                    outcome=CredentialAccessOutcome.PRODUCTION_GATE_REFUSED,
+                    timestamp=pre_flight_ts,
+                )
+            except Exception:
+                # Best-effort audit before the hard fail. If the
+                # audit writer itself fails, still log the gap and
+                # re-raise the original ProductionRuntimeNotImplemented;
+                # we don't want to swallow the wiring regression
+                # because the audit sink also broke.
+                _logger.error(  # noqa: TRY400
+                    "credential_access_audit_failed",
+                    scope_ref_hash=_hashed_ref(scope_ref),
+                    credential_key_hash=_hashed_ref(key),
+                    attempted_outcome=CredentialAccessOutcome.PRODUCTION_GATE_REFUSED.value,
+                    run_ref=self._run_ref,
+                    timestamp_iso=pre_flight_ts.isoformat(),
+                )
             raise
         except Exception:
             # Codex iter-2 important: any non-VaultBackendError
