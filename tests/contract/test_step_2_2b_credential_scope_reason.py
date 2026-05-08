@@ -173,9 +173,36 @@ def test_violation_rejection_does_not_chain_raw_reason_through_cause() -> None:
         )
     err = excinfo.value
     assert err.__cause__ is None
+    # Codex iter-2 important: ``from None`` clears ``__cause__`` but
+    # Python automatically populates ``__context__`` when a re-raise
+    # happens inside an ``except`` block. A logging handler that
+    # walks ``__context__`` would still leak the rejected reason
+    # via the underlying enum-lookup exception's ``args``. The
+    # iter-2 fix validates via membership check so no chained
+    # exception ever exists.
+    assert err.__context__ is None
     formatted = "".join(traceback.format_exception(type(err), err, err.__traceback__))
     assert secret_shaped not in formatted
     assert "SECRET_PAYLOAD" not in formatted
+
+    # Walk both chains exhaustively — a logging handler that follows
+    # ``__cause__`` / ``__context__`` recursively must find no
+    # exception object whose ``args`` carries the rejected reason.
+    seen: set[int] = set()
+    chain: list[BaseException] = [err]
+    while chain:
+        node = chain.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        for arg in node.args:
+            if isinstance(arg, str):
+                assert secret_shaped not in arg
+                assert "SECRET_PAYLOAD" not in arg
+        if node.__cause__ is not None:
+            chain.append(node.__cause__)
+        if node.__context__ is not None:
+            chain.append(node.__context__)
 
 
 def test_violation_rejection_handles_non_string_reason() -> None:

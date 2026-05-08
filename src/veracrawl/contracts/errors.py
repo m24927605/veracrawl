@@ -262,6 +262,11 @@ class CredentialScopeReason(StrEnum):
     EXPIRED = "expired"
 
 
+_CREDENTIAL_SCOPE_REASON_VALUES: frozenset[str] = frozenset(
+    member.value for member in CredentialScopeReason
+)
+
+
 class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
     """Raised when ``StrictAllowlistScope`` (Phase 2 step 2.2) refuses
     a credential-bearing request because its origin / route pattern /
@@ -345,16 +350,18 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
         if isinstance(reason, CredentialScopeReason):
             self.reason: CredentialScopeReason = reason
         else:
-            try:
-                coerced = CredentialScopeReason(reason)
-            except ValueError:
-                # Suppress the chained ``CredentialScopeReason(reason)``
-                # exception with ``from None`` — its ``args`` carries
-                # the raw rejected value, which means a traceback log
-                # would leak credential-shaped strings even though
-                # ``str(excinfo.value)`` of the outer ``ValueError`` is
-                # sanitized. Drop the cause entirely; the outer message
-                # already states the contract.
+            # Validate by membership in a precomputed value set rather
+            # than ``CredentialScopeReason(reason)``. The enum's lookup
+            # error stores the raw rejected ``reason`` in its
+            # ``args``; even with ``from None`` clearing ``__cause__``,
+            # Python's automatic ``__context__`` chaining would still
+            # leak the credential-shaped input to any logging /
+            # telemetry path that walks ``__context__``. Membership
+            # check skips the lookup entirely so no chained exception
+            # ever exists, and the raise lives outside any ``except``
+            # block so ``__context__`` is also clean.
+            valid = isinstance(reason, str) and reason in _CREDENTIAL_SCOPE_REASON_VALUES
+            if not valid:
                 raise ValueError(
                     "CredentialScopeViolation.reason must be a "
                     "CredentialScopeReason enum value (or its string "
@@ -363,7 +370,7 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
                     "redacted) — free-form reasons were retired in "
                     "Phase 2 step 2.2b to close a residual leak path"
                 ) from None
-            self.reason = coerced
+            self.reason = CredentialScopeReason(reason)
         super().__init__(
             f"credential scope refused {self.requested_method} "
             f"{self.requested_origin}{self.requested_route} "
