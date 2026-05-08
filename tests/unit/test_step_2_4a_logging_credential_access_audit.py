@@ -43,11 +43,39 @@ def test_record_writes_structured_event() -> None:
     matched = [entry for entry in captured if entry.get("event") == "credential_access"]
     assert len(matched) == 1
     entry = matched[0]
-    assert entry["scope_ref"] == "EBAY_PROD"
-    assert entry["key"] == "API_KEY"
+    # Codex iter-4 important: field names use ``_hash`` suffix to
+    # avoid the global RedactSensitiveProcessor's redaction of any
+    # field literally named ``key``. The values are already hashed
+    # refs supplied by the OutboxVaultClient.
+    assert entry["scope_ref_hash"] == "EBAY_PROD"
+    assert entry["credential_key_hash"] == "API_KEY"
     assert entry["outcome"] == "success"
     assert entry["run_ref"] == "run:test:1"
     assert entry["timestamp_iso"] == "2026-05-09T12:00:00+00:00"
+
+
+def test_audit_field_names_survive_redact_sensitive_processor() -> None:
+    """Codex iter-4 important: the audit field names must not be
+    redacted by the global RedactSensitiveProcessor. Run a small
+    event_dict through the processor and assert the audit fields
+    pass through unchanged.
+    """
+
+    from veracrawl.runtime_support._log_redaction import RedactSensitiveProcessor
+
+    processor = RedactSensitiveProcessor()
+    event = {
+        "event": "credential_access",
+        "scope_ref_hash": "sha256:abc123",
+        "credential_key_hash": "sha256:def456",
+        "outcome": "success",
+        "run_ref": "run:test:1",
+        "timestamp_iso": "2026-05-09T12:00:00+00:00",
+    }
+    redacted = processor(None, "info", dict(event))
+    assert redacted["scope_ref_hash"] == "sha256:abc123"
+    assert redacted["credential_key_hash"] == "sha256:def456"
+    assert redacted["outcome"] == "success"
 
 
 def test_record_serializes_outcome_as_stable_string() -> None:
@@ -68,6 +96,8 @@ def test_record_serializes_outcome_as_stable_string() -> None:
         assert any(
             entry.get("event") == "credential_access"
             and entry.get("outcome") == outcome.value
+            and entry.get("scope_ref_hash") == "X"
+            and entry.get("credential_key_hash") == "K"
             for entry in captured
         ), f"missing log event for outcome {outcome}"
 

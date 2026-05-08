@@ -13,11 +13,15 @@ The structured fields emitted:
 
 * ``event``: ``"credential_access"`` (stable string for log
   aggregation grep).
-* ``scope_ref``: caller-supplied (env-var-safe shape, OR the
-  literal ``"[REDACTED]"`` placeholder when the original failed
-  identifier-shape validation).
-* ``key``: caller-supplied (env-var-safe shape, OR
-  ``"[REDACTED]"``).
+* ``scope_ref_hash``: hashed ref (or ``"[REDACTED]"`` placeholder
+  for invalid-identifier cases) — Phase 2 step 2.4a hashes the
+  caller-supplied scope_ref before the audit row is built.
+* ``credential_key_hash``: hashed ref of the credential key. The
+  field is named ``credential_key_hash`` rather than ``key``
+  because the global ``RedactSensitiveProcessor`` redacts any
+  top-level field named ``key``; using the descriptive name
+  bypasses the false-positive redaction so audit correlation
+  by credential key works in production logs.
 * ``outcome``: structured ``CredentialAccessOutcome`` value.
 * ``run_ref``: caller-supplied opaque identifier.
 * ``timestamp_iso``: ISO-8601 tz-aware string (deterministic
@@ -62,10 +66,20 @@ class LoggingCredentialAccessAuditWriter:
                 "credential access audit timestamp must be timezone-aware "
                 "(replay determinism)"
             )
+        # ``RedactSensitiveProcessor`` (runtime_support/_log_redaction.py)
+        # redacts any top-level field named ``key`` because that is
+        # the most common "credential value" leak vector. The audit
+        # row's per-credential identifier is a hashed ref (codex
+        # iter-2 important) — not a credential value — but the
+        # redaction processor cannot tell. Use the descriptive
+        # ``credential_key_hash`` field name to avoid the false-
+        # positive redaction so log aggregation can correlate by
+        # credential key (codex iter-4 important). Same reasoning
+        # for ``scope_ref`` → ``scope_ref_hash``.
         _logger.info(
             "credential_access",
-            scope_ref=scope_ref,
-            key=key,
+            scope_ref_hash=scope_ref,
+            credential_key_hash=key,
             outcome=outcome.value,
             run_ref=run_ref,
             timestamp_iso=timestamp.isoformat(),

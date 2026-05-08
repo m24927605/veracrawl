@@ -376,6 +376,37 @@ def test_multiple_gets_emit_independent_audit_rows() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_production_runtime_not_implemented_propagates_through_client() -> None:
+    """Codex iter-4 important: a ProductionRuntimeNotImplemented
+    from the backend (e.g., InMemoryVaultBackend wired into
+    PRODUCTION) signals a wiring regression. The client must
+    re-raise it instead of translating to CredentialNotFoundError
+    + INTERNAL audit; otherwise the unsafe configuration is masked.
+    """
+
+    from veracrawl.runtime_support.runtime_mode import (
+        ProductionRuntimeNotImplemented,
+        RuntimeMode,
+        with_runtime_mode,
+    )
+
+    backend = InMemoryVaultBackend(credentials={("X", "K"): "v"})
+    audit = _RecordingAudit()
+    client = OutboxVaultClient(
+        backend=backend,
+        audit=audit,
+        run_ref="r",
+        clock=lambda: _FROZEN_NOW,
+    )
+    with with_runtime_mode(RuntimeMode.PRODUCTION):
+        with pytest.raises(ProductionRuntimeNotImplemented):
+            client.get(scope_ref="X", key="K")
+    # Wiring-regression hard-fail is loud; no audit row written
+    # for the credential access (the production gate fires before
+    # we can record anything meaningful).
+    assert audit.records == []
+
+
 def test_unexpected_backend_exception_audits_internal_and_raises_not_found() -> None:
     """Codex iter-2 important: backend SDKs may raise non-typed
     exceptions (RuntimeError / TimeoutError / etc.). The client
@@ -507,11 +538,11 @@ def test_audit_writer_failure_after_fetch_refuses_credential_return() -> None:
     assert "secret-canary-DEADBEEF" not in text
 
 
-def test_audit_writer_failure_on_invalid_identifier_propagates() -> None:
-    """If the audit writer fails on the INVALID_IDENTIFIER row,
-    the original ValueError is replaced by the audit-failure
-    refusal. Either way no credential is returned, so the
-    "no access without audit" contract holds."""
+def test_audit_writer_failure_on_invalid_identifier_surfaces_sanitized_refusal() -> None:
+    """Codex iter-4 important: invalid-identifier audit failure
+    must surface a sanitized CredentialNotFoundError (consistent
+    with the post-fetch path), NOT propagate the raw audit-adapter
+    exception. Same "no access without audit" contract."""
 
     class _FailingAudit:
         def record(
@@ -524,7 +555,7 @@ def test_audit_writer_failure_on_invalid_identifier_propagates() -> None:
             timestamp: Any,
         ) -> None:
             del scope_ref, key, outcome, run_ref, timestamp
-            raise RuntimeError("simulated audit queue full")
+            raise RuntimeError("simulated audit queue full with sensitive details")
 
     backend = InMemoryVaultBackend()
     client = OutboxVaultClient(
@@ -533,10 +564,15 @@ def test_audit_writer_failure_on_invalid_identifier_propagates() -> None:
         run_ref="r",
         clock=lambda: _FROZEN_NOW,
     )
-    # Audit failure is what surfaces; the original identifier
-    # rejection is masked but the credential is still refused.
-    with pytest.raises(RuntimeError, match="simulated audit queue full"):
+    with pytest.raises(CredentialNotFoundError) as excinfo:
         client.get(scope_ref="lowercase", key="K")
+    err = excinfo.value
+    # No chain leak.
+    assert err.__cause__ is None
+    assert err.__context__ is None
+    text = " ".join(str(a) for a in err.args if isinstance(a, str))
+    assert "simulated audit queue full" not in text
+    assert "sensitive details" not in text
 
 
 def test_outbox_vault_client_satisfies_credential_vault_port() -> None:

@@ -55,6 +55,9 @@ from veracrawl.ports.vault_backend import (
     VaultBackendPort,
 )
 from veracrawl.runtime_support.logging import get_logger
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+)
 
 _SAFE_IDENT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9_]+$")
 _REDACTED_IDENT: Final[str] = "[REDACTED]"
@@ -184,17 +187,39 @@ class OutboxVaultClient:
         # raising the ValueError so operators can count
         # invalid-identifier attempts. Redacted placeholders
         # because the rejected values may carry secret-shaped
-        # strings.
+        # strings. Apply the same audit-failure protection as the
+        # post-fetch path (codex iter-4 important — consistency):
+        # if the audit writer fails on the INVALID_IDENTIFIER row,
+        # surface a sanitized refusal rather than letting the raw
+        # audit-adapter exception leak.
         if not _is_valid_identifier(scope_ref) or not _is_valid_identifier(key):
-            self._audit_record(
-                scope_ref_for_audit=_REDACTED_IDENT,
-                key_for_audit=_REDACTED_IDENT,
-                outcome=CredentialAccessOutcome.INVALID_IDENTIFIER,
-                timestamp=pre_flight_ts,
-            )
+            invalid_ident_audit_failed = False
+            try:
+                self._audit_record(
+                    scope_ref_for_audit=_REDACTED_IDENT,
+                    key_for_audit=_REDACTED_IDENT,
+                    outcome=CredentialAccessOutcome.INVALID_IDENTIFIER,
+                    timestamp=pre_flight_ts,
+                )
+            except Exception:
+                invalid_ident_audit_failed = True
+            if invalid_ident_audit_failed:
+                _logger.error(  # noqa: TRY400
+                    "credential_access_audit_failed",
+                    scope_ref_hash=_REDACTED_IDENT,
+                    credential_key_hash=_REDACTED_IDENT,
+                    attempted_outcome=CredentialAccessOutcome.INVALID_IDENTIFIER.value,
+                    run_ref=self._run_ref,
+                    timestamp_iso=pre_flight_ts.isoformat(),
+                )
+                raise CredentialNotFoundError(
+                    "credential access audit write failed on invalid-"
+                    "identifier rejection; refusing access (no access "
+                    "without audit)."
+                ) from None
             # Surface a typed shape error; identifier-shape failures
             # are caller-bug not vault-fail, so don't degrade to
-            # CredentialNotFoundError.
+            # CredentialNotFoundError on the happy-audit path.
             raise ValueError(
                 "scope_ref / key must match ``^[A-Z0-9_]+$`` (uppercase, "
                 "digits, underscore only); rejected values redacted "
@@ -214,6 +239,16 @@ class OutboxVaultClient:
         except VaultBackendError as exc:
             backend_failure_kind = exc.kind
             raw = None
+        except ProductionRuntimeNotImplemented:
+            # Codex iter-4 important: ProductionRuntimeNotImplemented
+            # signals a wiring regression (a fixture backend like
+            # ``InMemoryVaultBackend`` was wired into PRODUCTION).
+            # Translating it to CredentialNotFoundError + INTERNAL
+            # audit would silently mask the unsafe configuration.
+            # Hard-fail by re-raising; the caller (orchestrator)
+            # handles the gate at startup so the production run
+            # cannot proceed with an unsafe wiring.
+            raise
         except Exception:
             # Codex iter-2 important: any non-VaultBackendError
             # SDK panic must still produce one audit row and surface
@@ -284,8 +319,8 @@ class OutboxVaultClient:
             # a logging handler that walks the chain would surface).
             _logger.error(  # noqa: TRY400 — caller doesn't need our traceback
                 "credential_access_audit_failed",
-                scope_ref=scope_audit,
-                key=key_audit,
+                scope_ref_hash=scope_audit,
+                credential_key_hash=key_audit,
                 attempted_outcome=outcome.value,
                 run_ref=self._run_ref,
                 timestamp_iso=post_fetch_ts.isoformat(),
