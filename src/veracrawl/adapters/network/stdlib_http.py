@@ -48,8 +48,19 @@ from veracrawl.contracts.enums import (
     SourceAdapterResultType,
 )
 from veracrawl.contracts.errors import FatalError, PolicyViolation, RetryableError
-from veracrawl.contracts.network import NetworkRequest, NetworkResponse, RedirectHop
+from veracrawl.contracts.network import (
+    NetworkAttemptEvidence,
+    NetworkRequest,
+    NetworkResponse,
+    RedirectHop,
+)
 from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapterResult
+from veracrawl.ports.conditional_cache import (
+    CachedConditional,
+    ConditionalCachePort,
+    NoopConditionalCache,
+)
+from veracrawl.ports.cookie_jar import CookieJarPort, NoopCookieJar
 from veracrawl.ports.network import NetworkClientResult
 from veracrawl.ports.rate_limiter import (
     NoopRateLimiter,
@@ -237,7 +248,7 @@ def classify_network_failure(failure_type: NetworkFailureType, detail: str) -> N
     # known subclasses; mypy's view is the broader base type, so the
     # call-arg / arg-type signatures of the parent are reported
     # despite this being correct against every entry in the dict.
-    return cls(detail)  # type: ignore[call-arg]
+    return cls(detail)  # type: ignore[call-arg,arg-type]
 
 
 @dataclass(frozen=True)
@@ -287,6 +298,31 @@ class HttpClientConfig:
     # callers fetching detail / search / api / file should override
     # so AIMD state stays separated per route class.
     route_class: RouteClass = RouteClass.LISTING
+    # ``ConditionalCachePort`` (design.md §4 Phase 1 step 1.5). The
+    # default is :class:`NoopConditionalCache` so existing fixture
+    # tests without cache wiring continue to pass; production
+    # callers inject :class:`InMemoryConditionalCache` (or another
+    # real impl). The adapter consults the cache before each
+    # outgoing fetch to add ``If-None-Match`` / ``If-Modified-Since``
+    # and short-circuits on ``304`` to the cached body.
+    conditional_cache: ConditionalCachePort = field(default_factory=NoopConditionalCache)
+    # ``CookieJarPort`` (design.md §4 Phase 1 step 1.5). The default
+    # is :class:`NoopCookieJar` (no cookies stored or sent) — safe
+    # default for existing fixture tests. Production callers inject
+    # :class:`InMemoryCookieJar`. Scope: per-run + per-origin,
+    # cleared at run boundary.
+    cookie_jar: CookieJarPort = field(default_factory=NoopCookieJar)
+    # Run scope for the conditional cache + cookie jar. Defaults to
+    # ``"run:network-fixture"`` (the legacy fixture tests use this
+    # synthetic run id); production callers must set their actual
+    # ``run_ref`` so cache / jar scope matches the run lifecycle.
+    run_ref: str = "run:network-fixture"
+    # Extra request headers (Authorization / X-Api-Key / etc.) the
+    # adapter sends with every request. ``Authorization`` and
+    # related credential-bearing names are STRIPPED on cross-origin
+    # redirect (RFC 7235 best practice + cooperative-crawler
+    # hygiene). Default empty so existing tests are unchanged.
+    extra_headers: dict[str, str] = field(default_factory=dict)
 
 
 def _is_private_network_url(url: str) -> bool:
@@ -311,6 +347,94 @@ def _is_private_network_url(url: str) -> bool:
 def _origin(url: str) -> str:
     parsed = urlparse(url)
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _canonical_origin(url: str) -> tuple[str, str, int | None]:
+    """Return ``(scheme, host, port_or_default_None)`` for cross-origin
+    comparison per RFC 6454. Default port (80 for http, 443 for https)
+    normalizes to ``None`` so ``http://example.com`` and
+    ``http://example.com:80`` compare equal.
+    """
+
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if port is not None:
+        if (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
+            port = None
+    return scheme, host, port
+
+
+def _is_cross_origin(from_url: str, to_url: str) -> bool:
+    """``True`` when ``to_url`` is a different origin than ``from_url``.
+
+    RFC 6454: scheme + host + port must all match; a different
+    scheme (``http`` vs ``https``) is cross-origin even on the same
+    host. We use the canonical (default-port-normalized,
+    case-insensitive) form so cosmetic URL differences don't trick
+    the comparison.
+    """
+
+    return _canonical_origin(from_url) != _canonical_origin(to_url)
+
+
+# Header names to strip on a cross-origin redirect (RFC 7235 best
+# practice + cooperative-crawler hygiene). Lowercased; the actual
+# strip is case-insensitive.
+_CROSS_ORIGIN_STRIP_HEADERS: Final[frozenset[str]] = frozenset(
+    {
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+    }
+)
+
+
+def _strip_cross_origin_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Return a copy of ``headers`` with cross-origin-sensitive
+    headers removed (case-insensitive)."""
+
+    return {
+        name: value
+        for name, value in headers.items()
+        if name.lower() not in _CROSS_ORIGIN_STRIP_HEADERS
+    }
+
+
+# Header names whose values must be redacted when stored on
+# :class:`NetworkAttemptEvidence` (the contract validator enforces
+# the redaction marker; this list mirrors what the contract treats
+# as sensitive).
+_REDACTED_EVIDENCE_HEADER_MARKER: Final[str] = "[REDACTED]"
+_EVIDENCE_REDACT_HEADERS: Final[frozenset[str]] = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "proxy-authorization",
+        "x-api-key",
+        "x-auth-token",
+        "x-session-token",
+        "x-csrf-token",
+    }
+)
+
+
+def _redact_headers_for_evidence(headers: dict[str, str]) -> dict[str, str]:
+    """Return ``headers`` with credential-bearing values replaced
+    by the ``[REDACTED]`` marker the contract validator expects."""
+
+    out: dict[str, str] = {}
+    for name, value in headers.items():
+        if name.lower() in _EVIDENCE_REDACT_HEADERS:
+            out[name] = _REDACTED_EVIDENCE_HEADER_MARKER
+        else:
+            out[name] = value
+    return out
 
 
 def _parse_retry_after(value: str | None) -> float | None:
@@ -400,6 +524,16 @@ class StdlibHttpSourceAdapter:
         self._client = httpx.Client(**client_kwargs)
         self._last_result: NetworkClientResult | None = None
         self._redirect_hops: list[RedirectHop] = []
+        self._attempt_evidences: list[NetworkAttemptEvidence] = []
+        # Working copy of the outgoing extra headers for this fetch.
+        # Reset at the start of each ``execute`` call from
+        # ``self._config.extra_headers``; mutated by
+        # ``_fetch_with_redirects`` on cross-origin redirect to strip
+        # Authorization / Cookie / Proxy-Authorization for the next
+        # hop.
+        self._current_extra_headers: dict[str, str] = {}
+        # Counter for unique attempt IDs across retries / hops.
+        self._attempt_counter: int = 0
         # Retry-After observed during the most recent ``_send_with_retry``.
         # Reset at the start of each per-permit attempt so a stale hint
         # from a previous hop does not bleed into the next bucket's
@@ -419,6 +553,12 @@ class StdlibHttpSourceAdapter:
             else self.request.policy_decision_refs
         )
         self._redirect_hops = []
+        self._attempt_evidences = []
+        # Snapshot the extra-headers config for this fetch so a
+        # cross-origin strip on this fetch does not mutate the
+        # adapter's persistent config across calls.
+        self._current_extra_headers = dict(self._config.extra_headers)
+        self._attempt_counter = 0
         response = self._fetch_with_redirects(
             self.request.url, policy_decision_refs=policy_decision_refs
         )
@@ -455,6 +595,7 @@ class StdlibHttpSourceAdapter:
             redirect_hops=list(self._redirect_hops),
             body_text=body_text,
             artifact_refs=[artifact_ref],
+            attempt_evidences=list(self._attempt_evidences),
         )
         return SourceAdapterResult(
             id=f"source-result:{command.command_envelope_id}",
@@ -482,6 +623,18 @@ class StdlibHttpSourceAdapter:
                 raise RedirectDeniedError("redirect missing Location header")
             next_url = urljoin(current_url, location)
             self._validate_redirect_target(from_url=current_url, to_url=next_url)
+            # Phase 1 step 1.5: cross-redirect Authorization /
+            # Cookie / Proxy-Authorization strip (RFC 7235 best
+            # practice + cooperative-crawler hygiene). When the
+            # redirect crosses origins, drop credential-bearing
+            # headers from the working copy so they are not echoed
+            # to the new origin. Same-origin redirects keep the
+            # headers because the credential was scoped to that
+            # origin by the caller.
+            if _is_cross_origin(current_url, next_url):
+                self._current_extra_headers = _strip_cross_origin_headers(
+                    self._current_extra_headers
+                )
             # Cross-redirect robots re-check: design.md §4 Phase 1
             # explicitly requires "enforce on initial URL **and** every
             # redirect target". The check runs on every hop, not only
@@ -594,11 +747,24 @@ class StdlibHttpSourceAdapter:
         last_response: httpx.Response | None = None
         last_failure: NetworkFailureType = NetworkFailureType.NETWORK_TIMEOUT
         for attempt in range(1, self._config.max_attempts + 1):
+            request_headers = self._build_request_headers(url)
+            request_started_monotonic = time.monotonic()
             try:
-                response = self._client.request(self.request.method, url)
+                response = self._client.request(
+                    self.request.method,
+                    url,
+                    headers=request_headers,
+                )
             except httpx.HTTPError as exc:
                 failure = _classify_transport(exc)
                 last_failure = failure
+                self._record_attempt_evidence(
+                    url=url,
+                    request_headers=request_headers,
+                    response=None,
+                    failure_class=failure.value,
+                    started_monotonic=request_started_monotonic,
+                )
                 if (
                     failure is not NetworkFailureType.NETWORK_TIMEOUT
                     or attempt >= self._config.max_attempts
@@ -606,6 +772,15 @@ class StdlibHttpSourceAdapter:
                     raise classify_network_failure(failure, f"{type(exc).__name__}: {exc}") from exc
                 self._sleep(_backoff_seconds(attempt, jitter=self._jitter))
                 continue
+
+            self._record_attempt_evidence(
+                url=url,
+                request_headers=request_headers,
+                response=response,
+                failure_class=None,
+                started_monotonic=request_started_monotonic,
+            )
+            self._absorb_set_cookies(url=url, response=response)
 
             if response.status_code in _RETRYABLE_STATUSES:
                 last_response = response
@@ -629,6 +804,29 @@ class StdlibHttpSourceAdapter:
                 self._sleep(wait)
                 continue
 
+            # 304 Not Modified: synthesize a 200 response from the
+            # cached body so the rest of the pipeline doesn't have
+            # to special-case 304. This implements the design.md §4
+            # Phase 1 acceptance ("304 short-circuits to cached
+            # body") at the adapter boundary.
+            if response.status_code == 304:
+                cached = self._config.conditional_cache.get(
+                    run_ref=self._config.run_ref, url=url
+                )
+                if cached is not None:
+                    response.read()  # drain the empty 304 body
+                    return self._synthesize_from_cached(cached_url=url, cached=cached)
+                # Server responded 304 but we have nothing cached
+                # — fail closed: treat as a network adapter error
+                # since we cannot produce a usable body.
+                raise AdapterFailureError(
+                    f"server returned 304 but no cached body for url={url!r}"
+                )
+
+            # 2xx: store ETag / Last-Modified for next time.
+            if 200 <= response.status_code < 300:
+                self._maybe_cache_conditional(url=url, response=response)
+
             return response
 
         if last_response is not None:
@@ -636,6 +834,148 @@ class StdlibHttpSourceAdapter:
                 f"max_attempts={self._config.max_attempts} last_status={last_response.status_code}"
             )
         raise classify_network_failure(last_failure, f"max_attempts={self._config.max_attempts}")
+
+    def _build_request_headers(self, url: str) -> dict[str, str]:
+        """Combine UA + extra_headers + cookies + conditional-fetch
+        hints into the per-attempt outgoing header set.
+
+        Order:
+        1. Base ``User-Agent`` (from config)
+        2. ``self._current_extra_headers`` — Authorization etc.,
+           already stripped by ``_fetch_with_redirects`` if the
+           previous hop crossed origins.
+        3. ``Cookie`` from the cookie jar (per-run / per-origin /
+           per-path scope).
+        4. ``If-None-Match`` / ``If-Modified-Since`` from the
+           conditional cache.
+        """
+
+        headers: dict[str, str] = {"User-Agent": self._config.user_agent}
+        for name, value in self._current_extra_headers.items():
+            headers[name] = value
+        cookies = self._config.cookie_jar.cookies_for(
+            run_ref=self._config.run_ref, url=url
+        )
+        if cookies:
+            headers["Cookie"] = "; ".join(f"{n}={v}" for n, v in cookies.items())
+        cached = self._config.conditional_cache.get(
+            run_ref=self._config.run_ref, url=url
+        )
+        if cached is not None:
+            if cached.etag:
+                headers["If-None-Match"] = cached.etag
+            if cached.last_modified and "If-None-Match" not in headers:
+                headers["If-Modified-Since"] = cached.last_modified
+        return headers
+
+    def _record_attempt_evidence(
+        self,
+        *,
+        url: str,
+        request_headers: dict[str, str],
+        response: httpx.Response | None,
+        failure_class: str | None,
+        started_monotonic: float,
+    ) -> None:
+        elapsed_ms = max(0, int((time.monotonic() - started_monotonic) * 1000))
+        self._attempt_counter += 1
+        attempt_id = f"attempt-evidence:{self.request.id}:{self._attempt_counter}"
+        response_status: int | None = None
+        response_headers_redacted: dict[str, str] | None = None
+        if response is not None:
+            response_status = int(response.status_code)
+            try:
+                resp_headers_dict = dict(response.headers)
+            except Exception:  # noqa: BLE001
+                resp_headers_dict = {}
+            response_headers_redacted = _redact_headers_for_evidence(resp_headers_dict)
+        evidence = NetworkAttemptEvidence(
+            id=attempt_id,
+            run_ref=self._config.run_ref,
+            request_ref=self.request.id,
+            attempt_number=self._attempt_counter,
+            request_method=self.request.method,
+            request_url=url,
+            request_headers_redacted=_redact_headers_for_evidence(request_headers),
+            response_status=response_status,
+            response_headers_redacted=response_headers_redacted,
+            elapsed_ms=elapsed_ms,
+            failure_class=failure_class,
+            redirect_hop_count=len(self._redirect_hops),
+        )
+        self._attempt_evidences.append(evidence)
+
+    def _absorb_set_cookies(self, *, url: str, response: httpx.Response) -> None:
+        """Walk every ``Set-Cookie`` response header and store it.
+
+        ``httpx.Headers.get_list`` returns each ``Set-Cookie`` as a
+        separate value (multi-valued header). The cookie jar parses
+        each one; malformed values log + skip rather than raise.
+        """
+
+        try:
+            set_cookies = response.headers.get_list("set-cookie")
+        except AttributeError:
+            set_cookies = []
+        for raw in set_cookies:
+            self._config.cookie_jar.accept_set_cookie(
+                run_ref=self._config.run_ref,
+                url=url,
+                set_cookie_value=raw,
+            )
+
+    def _maybe_cache_conditional(self, *, url: str, response: httpx.Response) -> None:
+        etag = response.headers.get("etag")
+        last_modified = response.headers.get("last-modified")
+        if not etag and not last_modified:
+            return
+        # Read body before caching — httpx Response body is
+        # streamed and ``response.content`` materializes it.
+        body_bytes = response.content
+        digest = stable_hash({"url": url, "body": body_bytes.decode("utf-8", errors="replace")})
+        body_artifact_ref = f"artifact:{self.request.id}:cached:{digest[:12]}"
+        content_type_header = response.headers.get("content-type", "")
+        content_type = (
+            content_type_header.split(";", 1)[0]
+            if content_type_header
+            else "application/octet-stream"
+        )
+        self._config.conditional_cache.put(
+            run_ref=self._config.run_ref,
+            url=url,
+            entry=CachedConditional(
+                etag=etag,
+                last_modified=last_modified,
+                body_bytes=body_bytes,
+                body_artifact_ref=body_artifact_ref,
+                content_type=content_type,
+                status_code=int(response.status_code),
+            ),
+        )
+
+    def _synthesize_from_cached(
+        self, *, cached_url: str, cached: CachedConditional
+    ) -> httpx.Response:
+        """Build an ``httpx.Response`` from a cached entry (304 short-circuit).
+
+        The caller treats this exactly like a 2xx response from the
+        wire — the rest of the pipeline (DOM artifact, redirect-hop
+        bookkeeping, evidence) reads body / status / headers off
+        this synthesized object the same way it would for a live
+        response.
+
+        ``httpx.Response.read()`` requires an attached ``request``;
+        we synthesize a matching ``httpx.Request`` so the caller can
+        ``response.read()`` without `RuntimeError`.
+        """
+
+        request = httpx.Request(self.request.method, cached_url)
+        return httpx.Response(
+            status_code=cached.status_code,
+            headers={"content-type": cached.content_type},
+            content=cached.body_bytes,
+            request=request,
+        )
 
     def _validate_redirect_target(self, *, from_url: str, to_url: str) -> None:
         from_scheme = urlparse(from_url).scheme
