@@ -19,9 +19,9 @@ Live tests:
   per design.md §6 step 6.5 ``Live failure classification``.
 
 Phase 1 step 1.6 was split into sub-steps (reassessment-20260508T091513Z.md):
-- 1.6a: httpbin headers (this test file)
-- 1.6b: httpbin redirect-to (later)
-- 1.6c: example.com (later)
+- 1.6a: httpbin headers — landed in ``test_step_1_6a_httpbin_headers.py``
+- 1.6b: httpbin redirect-to — landed in ``test_step_1_6b_httpbin_redirect_to.py``
+- 1.6c: example.com — pending
 The rest of the live integration tests land in later phases per
 design.md §6 step 6.4.
 """

@@ -1,40 +1,22 @@
 """Live test #2 (Phase 1 step 1.6b) — ``httpbin.org/redirect-to``.
 
-design.md §6 step 6.4 deliverable #2: "``httpbin.org/redirect-to``
-— redirect chain hop evidence."
+design.md §6 step 6.4 deliverable #2: ``httpbin.org/redirect-to``
+— redirect chain hop evidence.
 
 Validates that the production HTTP adapter follows a server-issued
 redirect (302 + ``Location`` header) and records the hop in
 ``NetworkClientResult.redirect_hops`` plus a per-attempt
 ``NetworkAttemptEvidence`` for both the initial and the redirected
-fetch. Runs under ``RuntimeMode.PRODUCTION`` with the production
-egress / private-network policy.
+fetch. Same-origin redirect (httpbin → httpbin) — cross-origin
+credential strip lives in the fixture-mode tests where the
+contract has deterministic control. Runs under
+``RuntimeMode.PRODUCTION`` with the production egress allowlist
+and private-network denial.
 
 Gated by ``@pytest.mark.live``; default invocation excludes via
-``-m 'not live'``. Operators run with ``pytest -m live``.
-
-iter1 6-point pre-flight scan applied:
-
-1. **Attacker-controlled inputs**: ``httpbin.org/redirect-to``
-   accepts a ``url`` query param the test sets to another
-   ``httpbin.org`` path — same-origin redirect, so cross-origin
-   credential strip is not exercised here (that lives in the
-   fixture-mode tests where the cross-origin contract has
-   deterministic control).
-2. **Execution timing**: two HTTP round trips. The adapter's
-   default 10s timeout per request + the AIMD limiter's
-   floor-aware pacing keeps the test bounded.
-3. **Concurrency**: single fetch sequence, no concurrency.
-4. **Failure modes**: missing Location → ``RedirectDeniedError``;
-   redirect loop → ``RedirectDeniedError`` with the
-   ``max_redirects`` cap; covered by fixture-mode tests. Live
-   target down → flake (operator review per design.md §6
-   step 6.5).
-5. **PRODUCTION mode**: ``with_runtime_mode(RuntimeMode.PRODUCTION)``
-   so production-only gates apply.
-6. **API symmetry**: same wiring as live test #1 (real robots
-   parser + AIMD limiter + conditional cache + cookie jar +
-   egress allowlist + private-network denial).
+``-m 'not live'``. Operators run with ``pytest -m live``. Two
+HTTP round trips bounded by ``HttpClientConfig.connect_timeout_s``
+(10s default) + ``read_timeout_s`` (30s default).
 """
 
 from __future__ import annotations

@@ -14,6 +14,7 @@
 | 1.4 | EvidenceArtifactStorePort + LocalFsEvidenceArtifactStore + HAR capture (Playwright record_har_path) + structural HAR redaction | DONE_WITH_RESERVATIONS | b903217, 6d5c0bd, e72de1c, a2c7a4e, 9b75afe, 44e3169 | 5 (rejected at iter-5; iter-5 critical findings addressed in post-iter-5 commit 44e3169 but not re-reviewed) | 1 — see "v2 phase 1 step 1.4 reservations" below |
 | 1.5 | Per-attempt NetworkAttemptEvidence + cross-redirect Authorization/Cookie strip + ETag/Last-Modified conditional fetch + per-run/per-origin cookie jar | DONE_WITH_RESERVATIONS | 635e419, 290b51c, 360e934, 8006864, 5c2e2e6, 1e8ba28 | 5 (rejected at iter-5; iter-5 important findings addressed in post-iter-5 commit 1e8ba28 but not re-reviewed) | 1 — see "v2 phase 1 step 1.5 reservations" below |
 | 1.6a | Live test #1: httpbin.org/headers (Chrome UA reaches origin + AIMD limiter engaged + conditional cache populates ETag) | DONE_WITH_RESERVATIONS | 4f44ffb, 1e70b4c, 401f149, 87f4dc2, 42209c1, b8fb9cc | 5 (rejected at iter-5; iter-5 important findings addressed in post-iter-5 commit b8fb9cc but not re-reviewed) | 1 — see "v2 phase 1 step 1.6a reservations" below |
+| 1.6b | Live test #2: httpbin.org/redirect-to (redirect-hop evidence + per-attempt evidence per hop + redirect_hop_refs on response) | IN_PROGRESS (codex review) | 8954114 | 1 (in flight) | TBD |
 
 **Attempt id**: `0a4ea4442335e51ed8ba7fcd5b47e8a86d4a6eea:da7df723b19ab39d21915274fef71ecb:01KR0038H38F0MFMR0H7HGHEA4`
 
