@@ -119,6 +119,21 @@ def test_credential_value_rejects_whitespace_only_value(blank_value: str) -> Non
         CredentialValue(value=blank_value, scope_ref="X")
 
 
+def test_credential_value_dir_filters_private_slots() -> None:
+    """Casual ``dir(cred)`` (REPL / debugger / notebook browsing)
+    must not surface ``_value`` / ``_scope_ref`` as discoverable
+    attributes. The slot still exists — see threat model in the
+    class docstring — but the discovery path is closed."""
+
+    cred = CredentialValue(value="secret-dir-test", scope_ref="X")
+    listed = dir(cred)
+    assert "_value" not in listed
+    assert "_scope_ref" not in listed
+    # Public surface remains discoverable.
+    assert "reveal" in listed
+    assert "scope_ref" in listed
+
+
 def test_credential_value_invalid_scope_ref_error_does_not_echo_raw() -> None:
     """Codex iter-3 important: the ``ValueError`` raised when
     ``scope_ref`` fails the env-var-safe regex must not echo the

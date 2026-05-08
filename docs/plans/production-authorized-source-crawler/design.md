@@ -468,7 +468,10 @@ decision + replay event per `docs/09:128`.
 
 - `CredentialVaultPort` with two impls:
   - `EnvVarVault` for tests / fixtures (reads
-    `VERACRAWL_CRED_<scope>_<key>`).
+    `VERACRAWL_CRED_<scope>__<key>`; double-underscore separator
+    disambiguates `(scope='A_B', key='C')` from
+    `(scope='A', key='B_C')` since both `<scope>` and `<key>`
+    permit underscores).
   - `OutboxVaultClient` for production: retrieves a scoped
     credential, increments the audit counter, returns a value
     whose `__repr__` and `__str__` are

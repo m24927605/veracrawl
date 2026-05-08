@@ -178,6 +178,29 @@ def test_scope_key_underscore_ambiguity_disambiguated() -> None:
     assert vault.get(scope_ref="A", key="B_C").reveal() == "scope-A/key-B_C"
 
 
+def test_not_found_error_does_not_echo_raw_scope_or_key() -> None:
+    """The not-found error path must not echo the caller-supplied
+    ``scope_ref`` / ``key`` — uppercase-digit-only tokens can pass
+    the env-var-shape regex and still be real secrets, so the
+    exception text would otherwise leak them into logs."""
+
+    vault = EnvVarVault(environ={})
+    secret_shaped = "AKIAIOSFODNN7EXAMPLE"  # uppercase + digits — passes regex
+    with pytest.raises(CredentialNotFoundError) as excinfo:
+        vault.get(scope_ref=secret_shaped, key="API_KEY")
+    assert secret_shaped not in str(excinfo.value)
+
+
+def test_empty_value_error_does_not_echo_raw_scope_or_key() -> None:
+    """Same redaction rule for the empty-value branch."""
+
+    secret_shaped = "AKIAIOSFODNN7EXAMPLE"
+    vault = EnvVarVault(environ={f"VERACRAWL_CRED_{secret_shaped}__API_KEY": "   "})
+    with pytest.raises(CredentialNotFoundError) as excinfo:
+        vault.get(scope_ref=secret_shaped, key="API_KEY")
+    assert secret_shaped not in str(excinfo.value)
+
+
 def test_invalid_identifier_error_does_not_echo_raw_value() -> None:
     """Codex iter-3 minor: error text is credential-adjacent and
     must not echo the rejected identifier (caller may have handed

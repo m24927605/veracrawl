@@ -73,25 +73,38 @@ class CredentialNotFoundError(KeyError):
 class CredentialValue:
     """An opaque wrapper around a credential string.
 
-    The wrapper's default string conversions (``__repr__`` /
-    ``__str__`` / ``__format__``) emit a redaction marker so the
-    secret cannot leak via:
+    Threat model — what the wrapper protects against:
 
-    * f-strings (``f"token={cred}"``) — calls ``__format__``
-    * ``print(cred)`` / ``str(cred)`` — calls ``__str__``
-    * ``logger.info("got %s", cred)`` — calls ``__str__`` /
-      ``__repr__`` depending on the formatter
-    * ``repr(cred)`` / ``[cred]`` — calls ``__repr__``
+    * Default Python string conversions (``__repr__`` / ``__str__``
+      / ``__format__``) accidentally exposing the secret via
+      f-strings, ``print()``, ``%s`` logging, or ``repr()``.
+    * ``pickle.dumps`` silently emitting the secret to a stable
+      on-disk form (refused via ``__reduce__``).
+    * Equality-based timing or output leakage — identity-based
+      ``__eq__`` / ``__hash__`` mean two wrappers around the same
+      secret are *not* equal, so ``cred == known_value`` always
+      compares False against a plain string.
+    * Casual ``dir(cred)`` introspection in REPLs / debug consoles —
+      private slot names are filtered out of ``__dir__``.
 
-    The actual secret only escapes via :meth:`reveal`. Calling
-    code that hands the wrapper to a logger / repr / printer
-    cannot accidentally leak.
+    Threat model — what the wrapper does NOT protect against:
 
-    Equality / hashing default to identity (``object.__eq__`` /
-    ``object.__hash__``) so two wrappers around the same secret
-    are *not* considered equal — preventing a caller that
-    accidentally compares to a string from leaking the secret
-    via ``cred == known_value`` timing or output.
+    * Intentional attribute introspection. Python is not a
+      capability-secure language and nothing here can stop a
+      determined caller from doing ``object.__getattribute__(
+      cred, "_value")`` or reading ``cred.__slots__``. The
+      wrapper's contract is only that *accidental* paths
+      (logging, serialization, equality, casual ``dir``) cannot
+      leak. The :meth:`reveal` method exists so that the one
+      legitimate read site is the one that calls it explicitly.
+    * In-process memory inspection (a debugger, ``gc.get_referents``,
+      or another extension reading process memory). Secrets that
+      need that level of protection should be handled by an
+      external KMS / HSM, not by a Python wrapper.
+
+    The actual secret only escapes via :meth:`reveal`. Calling code
+    that hands the wrapper to a logger / repr / f-string / printer
+    cannot accidentally leak; intentional access remains possible.
     """
 
     __slots__ = ("_scope_ref", "_value")
@@ -177,6 +190,15 @@ class CredentialValue:
     def __deepcopy__(self, memo: dict[int, object]) -> CredentialValue:
         del memo
         return self.__copy__()
+
+    def __dir__(self) -> list[str]:
+        # Filter private slots out of casual REPL / debug-console
+        # ``dir(cred)`` listings so an operator browsing the object
+        # in a notebook / pdb session does not see ``_value`` as a
+        # discoverable attribute. (The slot still exists; this only
+        # protects the accidental-discovery path — see threat model
+        # in the class docstring.)
+        return [name for name in super().__dir__() if not name.startswith("_")]
 
 
 @runtime_checkable

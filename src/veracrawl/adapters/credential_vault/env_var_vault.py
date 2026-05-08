@@ -94,16 +94,23 @@ class EnvVarVault:
         env_name = f"{_ENV_PREFIX}{scope_ref}{_ENV_SEP}{key}"
         raw = self._environ.get(env_name)
         if raw is None:
+            # The validators only prove ``scope_ref`` / ``key`` are
+            # env-var-shaped, not non-secret. An UPPERCASE_DIGIT_ONLY
+            # caller-supplied identifier could be a real token; do
+            # not echo it in the exception text.
             raise CredentialNotFoundError(
-                f"no credential at env var {env_name} (scope_ref={scope_ref!r}, key={key!r})"
+                "no credential at requested env var "
+                f"(scope_ref length={len(scope_ref)}, key length={len(key)}, redacted)"
             )
         if not raw.strip():
             # An empty / whitespace-only value is indistinguishable
             # from a misconfiguration; fail closed rather than send
-            # empty Authorization upstream.
+            # empty Authorization upstream. Identifier redacted for
+            # the same reason as the not-found branch.
             raise CredentialNotFoundError(
-                f"credential at env var {env_name} is empty / whitespace-only "
-                "(treated as missing — fail-closed for cooperative crawler)"
+                "credential at requested env var is empty / whitespace-only "
+                f"(scope_ref length={len(scope_ref)}, key length={len(key)}, "
+                "redacted — treated as missing, fail-closed for cooperative crawler)"
             )
         return CredentialValue(value=raw, scope_ref=scope_ref)
 
