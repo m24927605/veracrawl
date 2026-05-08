@@ -69,7 +69,21 @@ from veracrawl.contracts.enums import (
 from veracrawl.contracts.source_adapter import SourceAdapterCommand, SourceAdapterResult
 from veracrawl.fetch.network_acquisition import url_origin
 from veracrawl.ports.browser import BrowserObservationResult
+from veracrawl.ports.evidence_artifact_store import (
+    ArtifactKind,
+    EvidenceArtifactStorePort,
+    NoopEvidenceArtifactStore,
+)
+from veracrawl.runtime_support.har_redaction import (
+    HarRedactionError,
+    redact_har_payload,
+)
 from veracrawl.runtime_support.logging import get_logger
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
+)
 
 _DEFAULT_CHROME_UA: Final[str] = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -197,6 +211,9 @@ class PlaywrightBrowserObservationAdapter:
         wait_until: str = "domcontentloaded",
         post_load_idle_ms: int = 250,
         storage_state_dir: Path | None = None,
+        evidence_artifact_store: EvidenceArtifactStorePort | None = None,
+        har_capture_dir: Path | None = None,
+        har_canary_tokens: Sequence[str] = (),
         playwright_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.fixture_id = fixture_id
@@ -211,16 +228,60 @@ class PlaywrightBrowserObservationAdapter:
         # ``None`` disables persistence (back-compat with one-shot
         # callers that do not declare a run-scoped storage location).
         self.storage_state_dir = storage_state_dir
+        # Phase 1 step 1.4: HAR capture + EvidenceArtifactStorePort.
+        # ``evidence_artifact_store`` defaults to :class:`NoopEvidenceArtifactStore`
+        # so existing fixture tests pass without configuration; the
+        # production-mode gate refuses the no-op default. ``har_capture_dir``
+        # is the working directory where Playwright writes the raw HAR
+        # before redaction; required when HAR capture is active. The
+        # ``har_canary_tokens`` list lets tests / authorized callers
+        # declare strings that must be scrubbed from the persisted HAR
+        # (e.g. test inputs the caller wants to verify never leak).
+        self.evidence_artifact_store: EvidenceArtifactStorePort = (
+            evidence_artifact_store
+            if evidence_artifact_store is not None
+            else NoopEvidenceArtifactStore()
+        )
+        self.har_capture_dir = har_capture_dir
+        self.har_canary_tokens: tuple[str, ...] = tuple(har_canary_tokens)
+        # Production-mode evidence-store gate: a no-op evidence store
+        # in production silently drops HAR / DOM / header artifacts, so
+        # mis-configured deployments lose evidence required for replay
+        # / audit. Fail closed at construction (same pattern as the
+        # robots / rate-limiter gates).
+        if current_mode() == RuntimeMode.PRODUCTION and isinstance(
+            self.evidence_artifact_store, NoopEvidenceArtifactStore
+        ):
+            raise ProductionRuntimeNotImplemented(
+                backend="evidence_artifact_store",
+                gate="PlaywrightBrowserObservationAdapter",
+            )
         # Tests override the playwright entry point with a mock that
         # does not require a real Chromium install.
         self._playwright_factory: Callable[[], Any] = (
             playwright_factory if playwright_factory is not None else _load_sync_playwright
         )
         self._last_result: BrowserObservationResult | None = None
+        # Most recently persisted HAR artifact_ref (per session). Read
+        # via :attr:`last_har_artifact_ref` for tests / replay records.
+        self._last_har_artifact_ref: str | None = None
 
     @property
     def last_result(self) -> BrowserObservationResult | None:
         return self._last_result
+
+    @property
+    def last_har_artifact_ref(self) -> str | None:
+        """Most recently persisted HAR ``artifact_ref`` (or ``None``).
+
+        Populated by :meth:`_open_session_internal` after the session's
+        ``BrowserContext`` closes, the HAR file is read, redacted via
+        :func:`redact_har_payload`, and persisted to
+        :attr:`evidence_artifact_store`. Phase 1 step 1.5 will fold
+        this into the per-attempt ``NetworkAttemptEvidence``; until
+        then callers can read it directly off the adapter.
+        """
+        return self._last_har_artifact_ref
 
     def _storage_state_path(self, run_ref: Ref) -> Path | None:
         """Resolve the per-run ``storage_state.json`` path or ``None``.
@@ -233,7 +294,13 @@ class PlaywrightBrowserObservationAdapter:
             return None
         return self.storage_state_dir / _storage_state_filename(run_ref)
 
-    def _new_context(self, browser: Any, *, storage_state_path: Path | None) -> Any:
+    def _new_context(
+        self,
+        browser: Any,
+        *,
+        storage_state_path: Path | None,
+        har_path: Path | None = None,
+    ) -> Any:
         """Construct a ``BrowserContext`` with the rendering-stability
         config, optionally re-hydrated from a prior run's
         ``storage_state.json``.
@@ -265,6 +332,15 @@ class PlaywrightBrowserObservationAdapter:
             "locale": "en-US",
             "extra_http_headers": {"Accept-Language": "en-US,en;q=0.9"},
         }
+        # Phase 1 step 1.4: when an evidence store is configured (i.e.
+        # not the no-op default), pass ``record_har_path`` so Playwright
+        # captures the network log. The file is post-processed (read +
+        # redacted + persisted to the evidence store + deleted) on
+        # session exit. ``record_har_content="embed"`` is the Playwright
+        # default; we keep it implicit so smaller engines (e.g. the
+        # mock playwright in tests) don't have to honor extra flags.
+        if har_path is not None:
+            base_kwargs["record_har_path"] = str(har_path)
         validated_path: Path | None = None
         if storage_state_path is not None and storage_state_path.exists():
             if self._storage_state_path_is_trusted(storage_state_path):
@@ -394,6 +470,12 @@ class PlaywrightBrowserObservationAdapter:
         """
         sync_playwright = self._playwright_factory()
         storage_state_path = self._storage_state_path(run_ref) if persist else None
+        # Phase 1 step 1.4: pre-pick a HAR file path under the configured
+        # capture directory. ``None`` disables HAR capture (the no-op
+        # store is the only configuration where this remains ``None``,
+        # so HAR is opt-in via ``har_capture_dir`` AND a real evidence
+        # store).
+        har_path = self._pick_har_path(run_ref) if persist else None
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             # Outer try owns the browser; inner try owns the context.
@@ -402,7 +484,11 @@ class PlaywrightBrowserObservationAdapter:
             # never outlives a failed setup (codex iter-3 important).
             try:
                 try:
-                    context = self._new_context(browser, storage_state_path=storage_state_path)
+                    context = self._new_context(
+                        browser,
+                        storage_state_path=storage_state_path,
+                        har_path=har_path,
+                    )
                 except Exception:
                     _logger.exception("browser_context_create_failed", run_ref=run_ref)
                     raise
@@ -429,12 +515,114 @@ class PlaywrightBrowserObservationAdapter:
                         context.close()
                     except Exception:  # noqa: BLE001
                         _logger.exception("browser_context_close_failed", run_ref=run_ref)
+                    # HAR post-processing happens *after* context.close()
+                    # because Playwright finalizes the file when the
+                    # context closes. Best-effort: a failure here must
+                    # not leak the browser. The unredacted HAR file is
+                    # always deleted (we never leave plaintext on disk).
+                    if har_path is not None:
+                        self._postprocess_har(
+                            har_path=har_path,
+                            run_ref=run_ref,
+                        )
                     session._closed = True  # noqa: SLF001
             finally:
                 try:
                     browser.close()
                 except Exception:  # noqa: BLE001
                     _logger.exception("browser_close_failed", run_ref=run_ref)
+
+    def _pick_har_path(self, run_ref: Ref) -> Path | None:
+        """Resolve the on-disk path Playwright writes the raw HAR to.
+
+        Returns ``None`` if HAR capture is not configured for this
+        adapter (no ``har_capture_dir`` or evidence store is the
+        no-op default — there is nowhere to persist the redacted HAR
+        anyway, so we skip the on-disk staging too). When configured,
+        the path lives under ``har_capture_dir`` with a SHA-256 +
+        prefix-safe filename so two runs do not collide.
+        """
+        if self.har_capture_dir is None:
+            return None
+        if isinstance(self.evidence_artifact_store, NoopEvidenceArtifactStore):
+            # The no-op store would discard the redacted bytes anyway;
+            # skip the staging file so we don't write plaintext HAR
+            # to disk for nothing.
+            return None
+        self.har_capture_dir.mkdir(parents=True, exist_ok=True)
+        return self.har_capture_dir / f"{_storage_state_filename(run_ref)}.har.json"
+
+    def _postprocess_har(self, *, har_path: Path, run_ref: Ref) -> None:
+        """Read the raw HAR, redact, persist, delete the staging file.
+
+        Best-effort — every step is independently guarded so a failure
+        in one does not leave plaintext on disk and never propagates
+        a HAR-side error to the caller (the browser session itself
+        succeeded; HAR is evidence, not result).
+
+        Privacy invariant: the unredacted HAR file is always deleted
+        before we return, even if redaction or persistence raises.
+        Leaving plaintext HAR on disk would defeat the structured
+        redaction the design (§4 Phase 1) requires.
+        """
+        try:
+            try:
+                raw = har_path.read_bytes()
+            except OSError:
+                # Playwright didn't write the file (browser crashed
+                # mid-trace, or the context was never navigated). Log
+                # and skip — there is nothing to redact.
+                _logger.warning(
+                    "browser_har_missing_after_close",
+                    run_ref=run_ref,
+                    har_path=str(har_path),
+                )
+                return
+            try:
+                redacted = redact_har_payload(
+                    raw, canary_tokens=self.har_canary_tokens
+                )
+            except HarRedactionError:
+                # Malformed HAR — never persist. Log and drop.
+                _logger.exception(
+                    "browser_har_redaction_failed",
+                    run_ref=run_ref,
+                    har_path=str(har_path),
+                )
+                return
+            try:
+                result = self.evidence_artifact_store.put(
+                    run_ref=str(run_ref),
+                    attempt_ref=f"{run_ref}:har",
+                    kind=ArtifactKind.HAR,
+                    payload=redacted,
+                    content_type="application/json",
+                    redaction_applied=True,
+                )
+            except Exception:  # noqa: BLE001
+                _logger.exception(
+                    "browser_har_evidence_persist_failed",
+                    run_ref=run_ref,
+                    har_path=str(har_path),
+                )
+                return
+            self._last_har_artifact_ref = result.artifact_ref
+            _logger.info(
+                "browser_har_persisted",
+                run_ref=run_ref,
+                artifact_ref=result.artifact_ref,
+                size_bytes=result.size_bytes,
+            )
+        finally:
+            # Always delete the staging file — never leave unredacted
+            # HAR bytes on disk.
+            try:
+                har_path.unlink(missing_ok=True)
+            except OSError:
+                _logger.exception(
+                    "browser_har_staging_unlink_failed",
+                    har_path=str(har_path),
+                )
 
     @staticmethod
     def _write_storage_state(context: Any, path: Path) -> None:
