@@ -219,6 +219,59 @@ def test_refuses_unknown_method_with_method_not_allowed_reason() -> None:
     assert excinfo.value.reason == "method_not_allowed"
 
 
+def test_refuses_unanchored_route_prefix_match() -> None:
+    """Path-anchored grammar: a contract-valid pattern like
+    ``/v1/items`` must NOT match ``/prefix/v1/items``. ``re.search``
+    would silently allow that; the runtime uses ``re.match`` so
+    matching anchors at the start of the path.
+    """
+
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _make_scope(allowed_route_patterns=["/v1/items"]),
+            request_url="https://api.example.com/prefix/v1/items",
+            method="GET",
+        )
+    assert excinfo.value.reason == "route_not_allowed"
+
+
+def test_allows_unanchored_route_pattern_at_path_start() -> None:
+    """The same pattern still matches at the start of the path —
+    the contract validator accepts ``/v1/items`` (it starts with
+    ``/``) and the runtime treats it as start-anchored."""
+
+    StrictAllowlistScope().check(
+        _make_scope(allowed_route_patterns=["/v1/items"]),
+        request_url="https://api.example.com/v1/items/123",
+        method="GET",
+    )
+
+
+@pytest.mark.parametrize(
+    "bad_authority_url",
+    [
+        "https://api.example.com:not-a-port/v1/items",
+        "https://api.example.com:99999/v1/items",  # port out of range
+        "https://[::1/v1/items",  # malformed IPv6 (no closing bracket)
+        "https://[::g]/v1/items",  # invalid IPv6 hex
+    ],
+)
+def test_refuses_malformed_authority_as_origin_not_allowed(bad_authority_url: str) -> None:
+    """``urlsplit`` itself or ``parts.port`` access raises
+    ``ValueError`` on malformed authorities; the runtime path must
+    surface those as ``CredentialScopeViolation(origin_not_allowed)``,
+    never as a plain ``ValueError`` (callers dispatch on typed
+    scope events)."""
+
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _make_scope(),
+            request_url=bad_authority_url,
+            method="GET",
+        )
+    assert excinfo.value.reason == "origin_not_allowed"
+
+
 def test_refuses_route_not_in_patterns_with_route_not_allowed_reason() -> None:
     with pytest.raises(CredentialScopeViolation) as excinfo:
         StrictAllowlistScope().check(

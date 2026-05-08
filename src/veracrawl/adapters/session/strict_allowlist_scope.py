@@ -46,6 +46,32 @@ from veracrawl.contracts.security_privacy import CredentialScope
 _DEFAULT_PORTS: Final[dict[str, int]] = {"http": 80, "https": 443}
 
 
+def _safe_urlsplit(value: str) -> tuple[str, str | None, int | None, str] | None:
+    """Defensive ``urlsplit`` that returns ``(scheme, host, port, path)``
+    or ``None`` if any access raises.
+
+    ``urlsplit`` itself rarely raises, but reading ``.port`` raises
+    ``ValueError`` for malformed authorities (``host:bad`` port,
+    out-of-range ``host:99999``, malformed IPv6 brackets). The
+    runtime policy promises every refusal is a typed
+    :class:`CredentialScopeViolation` — never a plain
+    :class:`ValueError` — so swallow parse failures here and let
+    the caller surface them as ``origin_not_allowed``.
+    """
+
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return None
+    try:
+        port = parts.port
+    except ValueError:
+        # Malformed authority (e.g., ``host:bad`` port or
+        # ``host:99999`` out-of-range).
+        return None
+    return parts.scheme, parts.hostname, port, parts.path
+
+
 def _normalize_origin(request_url: str) -> str | None:
     """Return ``scheme://host[:port]`` with default ports stripped, or
     ``None`` if the URL cannot be parsed as ``http(s)://host``.
@@ -58,30 +84,44 @@ def _normalize_origin(request_url: str) -> str | None:
     because the caller treats every refusal as a typed scope event.
     """
 
-    parts = urlsplit(request_url)
-    if parts.scheme not in {"http", "https"}:
+    parsed = _safe_urlsplit(request_url)
+    if parsed is None:
         return None
-    host = parts.hostname
+    scheme, host, port, _ = parsed
+    if scheme not in {"http", "https"}:
+        return None
     if not host:
         return None
     host = host.lower()
-    port = parts.port
-    if port is not None and port == _DEFAULT_PORTS.get(parts.scheme):
+    if port is not None and port == _DEFAULT_PORTS.get(scheme):
         port = None
     if port is None:
-        return f"{parts.scheme}://{host}"
-    return f"{parts.scheme}://{host}:{port}"
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
 
 
 def _normalize_allowed_origin(origin: str) -> str:
-    parts = urlsplit(origin)
-    host = (parts.hostname or "").lower()
-    port = parts.port
-    if port is not None and port == _DEFAULT_PORTS.get(parts.scheme):
+    """Normalize an ``allowed_origin`` from the scope.
+
+    The contract layer (``_is_valid_origin``) already validates the
+    shape, so a malformed value here would be a contract bug — but
+    the parse is defensive anyway so a future contract change cannot
+    crash the runtime path.
+    """
+
+    parsed = _safe_urlsplit(origin)
+    if parsed is None:
+        # Contract layer rejects this shape, so this branch is a
+        # belt-and-suspenders default. Return a sentinel that
+        # cannot match any normalized request origin.
+        return f"<invalid-allowed-origin:{len(origin)}>"
+    scheme, host, port, _ = parsed
+    host = (host or "").lower()
+    if port is not None and port == _DEFAULT_PORTS.get(scheme):
         port = None
     if port is None:
-        return f"{parts.scheme}://{host}"
-    return f"{parts.scheme}://{host}:{port}"
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
 
 
 def _route_of(request_url: str) -> str:
@@ -95,8 +135,10 @@ def _route_of(request_url: str) -> str:
     scope for the resource).
     """
 
-    parts = urlsplit(request_url)
-    return parts.path or "/"
+    parsed = _safe_urlsplit(request_url)
+    if parsed is None:
+        return ""
+    return parsed[3] or "/"
 
 
 class StrictAllowlistScope:
@@ -155,7 +197,14 @@ class StrictAllowlistScope:
 
         route = _route_of(request_url)
         for pattern in scope.allowed_route_patterns:
-            if re.search(pattern, route) is not None:
+            # ``re.match`` anchors at position 0 — required because
+            # ``re.search`` would let ``/v1/items`` match
+            # ``/prefix/v1/items``, defeating the contract's
+            # path-anchored grammar (``allowed_route_pattern`` must
+            # start with ``/`` or ``^/``). Patterns that already
+            # carry an explicit ``^`` work identically under
+            # ``re.match``.
+            if re.match(pattern, route) is not None:
                 return None
         self._raise(
             scope=scope,
