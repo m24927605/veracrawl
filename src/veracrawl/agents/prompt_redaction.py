@@ -83,17 +83,24 @@ def _context_contains_credential(value: Any, depth: int = 0) -> bool:
 
 def _template_uses_complex_field_access(template: str) -> bool:
     """Return ``True`` if the template references any field with
-    attribute (``{name.attr}``) or item (``{name[idx]}``) traversal.
+    attribute (``{name.attr}``) or item (``{name[idx]}``) traversal,
+    *including* nested replacement fields inside format specs.
 
     Such traversal lets a template author drill into private
     attributes of context values — e.g., ``{cred._value}`` would
     return the raw secret string of a ``CredentialValue`` because
     Python's ``string.Formatter`` resolves ``.attr`` via
     ``getattr`` and there is no language-level access control on
-    private slots. Refusing complex field access at the boundary
-    keeps the contract "only the bare context keys reach
-    ``__format__``" so the credential redaction overrides do
-    their job.
+    private slots. The format-spec micro-language ALSO supports
+    nested replacement fields — e.g., ``{name:{wrapper.cred._value}}``
+    resolves the inner ``wrapper.cred._value`` when format_map
+    runs, even though the outer ``field_name`` is just ``name``.
+    Recurse into ``format_spec`` so the boundary cannot be bypassed
+    via nested fields (codex iter-2 critical).
+
+    Refusing complex field access at the boundary keeps the
+    contract "only the bare context keys reach ``__format__``" so
+    the credential redaction overrides do their job.
     """
 
     formatter = string.Formatter()
@@ -108,10 +115,12 @@ def _template_uses_complex_field_access(template: str) -> bool:
         # refusal. Treat malformed as "no complex fields" here;
         # the actual format_map call will fail naturally.
         return False
-    for _literal, field_name, _format_spec, _conversion in parsed:
+    for _literal, field_name, format_spec, _conversion in parsed:
         if field_name is None:
             continue
         if "." in field_name or "[" in field_name:
+            return True
+        if format_spec and _template_uses_complex_field_access(format_spec):
             return True
     return False
 

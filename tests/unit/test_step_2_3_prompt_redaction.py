@@ -189,6 +189,34 @@ def test_render_refuses_format_spec_truncation_of_marker() -> None:
         ctx.render("trunc={cred:.5}", template_ref="prompt:trunc")
 
 
+def test_render_refuses_nested_field_inside_format_spec() -> None:
+    """Codex iter-2 critical: ``{name:{wrapper._private}}`` lets a
+    template author smuggle attribute traversal inside the format
+    spec. The outer field name is just ``name`` — top-level scan
+    misses it. The format-spec scan must recurse into nested
+    replacement fields and refuse any complex traversal anywhere
+    in the parse tree."""
+
+    ctx = RedactedPromptContext(name="Alice", wrapper="benign")
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render(
+            "name={name:{wrapper.something}}",
+            template_ref="prompt:nested-spec",
+        )
+
+
+def test_render_refuses_deeply_nested_field_inside_format_spec() -> None:
+    """Belt-and-suspenders: even at multiple nesting levels, the
+    recursive scan must still find complex field access."""
+
+    ctx = RedactedPromptContext(a="A", b="B", c="C", d="D")
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render(
+            "x={a:{b:{c.attr}}}",
+            template_ref="prompt:deeply-nested",
+        )
+
+
 def test_render_refuses_credential_nested_in_dict_context() -> None:
     """Structural walk catches a credential nested inside a dict
     value — the template might never reach it, but having a
