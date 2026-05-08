@@ -12,13 +12,31 @@ Phase 3 wires the classification + escalation runtime on top.
 
 ## Capability cliff
 
-A single `fetch this product` call walks
-`API_SOURCE → HTTP → AUTHORIZED_SESSION → BROWSER_SNAPSHOT → AUTHORIZED_SESSION`
-(through the design-allowed transitions only), classifies access-
-control challenges correctly, **never tries to evade them**, and
-emits a typed escalation decision per transition. The orchestrator
-sees a deterministic chain it can replay; the operator sees a
-typed audit trail of every escalation.
+A single `fetch this product` call walks the strict DAG:
+
+```
+API_SOURCE → HTTP
+HTTP → BROWSER_SNAPSHOT
+HTTP → AUTHORIZED_SESSION
+BROWSER_SNAPSHOT → AUTHORIZED_SESSION
+API_SOURCE → AUTHORIZED_SESSION
+```
+
+(`AUTHORIZED_SESSION` is terminal — Phase 0
+`_ALLOWED_ESCALATION_TRANSITIONS` does not list any outgoing
+transition.) The chain classifies access-control challenges
+correctly, **never tries to evade them**, and emits a typed
+escalation decision per transition. The orchestrator sees a
+deterministic chain it can replay; the operator sees a typed audit
+trail of every escalation.
+
+If a fetch needs to retry against an authorized session after the
+session itself fails (e.g., session token revoked), that is a
+**new run**, not a continuation of the same chain — `RunBudget` is
+re-evaluated, the chain starts over from the most-favourable
+viable starting point. Phase 3 does not orchestrate the
+re-evaluation; the run-control layer (Phase 5 / `AgentRunRequest`
+lifecycle) does.
 
 ## Substep boundaries
 
@@ -47,26 +65,47 @@ SP-API harness across files — false separation.
 
 ```python
 # src/veracrawl/ports/access_control_classifier.py
+from collections.abc import Mapping
 from typing import Protocol, runtime_checkable
+
+import httpx
+
+# Phase 0 contract module
+from veracrawl.contracts.network import AccessControlBlocked
+from veracrawl.contracts.shared import Ref
 
 @runtime_checkable
 class AccessControlClassifierPort(Protocol):
     """Classifies an HTTP response as either ``allowed`` or
     blocked-by-an-origin-protection. Pure logic — no I/O. Output
     is either ``None`` (not blocked) or :class:`AccessControlBlocked`.
+
+    ``response_headers`` accepts ``httpx.Headers`` (preferred — it
+    correctly represents multiple ``Set-Cookie`` values via
+    ``.get_list``) OR a plain ``Mapping[str, str]`` (single-value
+    fallback for fixture / test contexts where multi-value
+    headers are not exercised). The classifier internally calls
+    ``headers.get_list("set-cookie")`` when the input is an
+    ``httpx.Headers`` instance and falls back to
+    ``headers.get("set-cookie", "")`` (single value, document the
+    limitation in the docstring) for plain mappings.
     """
 
     def classify(
         self,
         *,
         response_status: int,
-        response_headers: Mapping[str, str],
+        response_headers: httpx.Headers | Mapping[str, str],
         response_body: bytes,
         request_url: str,
-        attempt_evidence_ref: Ref | None = None,
         run_ref: Ref,
+        attempt_evidence_ref: Ref | None = None,
     ) -> AccessControlBlocked | None: ...
 ```
+
+`Ref` lives at `veracrawl.contracts.shared`; existing Phase 0
+types use it. `AccessControlBlocked` is the Phase 0 record at
+`veracrawl.contracts.network`.
 
 ### Detection rules (HeuristicClassifier default impl)
 
@@ -184,12 +223,18 @@ class AdapterEscalationPort(Protocol):
         self,
         *,
         from_adapter_type: AdapterType,
-        failure: NetworkAdapterError | AccessControlBlocked,
+        # Exactly one of `failure` or `js_render_evidence_ref` is non-None.
+        # `failure` for the failure-driven branches; `js_render_evidence_ref`
+        # for the success-driven JS-render escalation (HTTP returned a
+        # 200 with a skeleton + <script> bundle, evidence captured by
+        # the orchestrator's HTML pre-parser, ref points at the
+        # NetworkAttemptEvidence + a serialized js_render_decision payload).
+        failure: NetworkAdapterError | AccessControlBlocked | None,
+        js_render_evidence_ref: Ref | None,
         policy: AdapterEscalationPolicy,
         run_ref: Ref,
         escalations_used: int,
         scope_covers_authorized_session: bool,
-        document_is_js_rendered: bool,
     ) -> AdapterEscalationDecision | None: ...
 ```
 
@@ -258,13 +303,15 @@ decide(from, failure, policy, escalations_used, scope_covers_session, document_i
   if isinstance(failure, RetryableError):
     return None
 
-  # 6. JS-rendered document path. Document detection is the orchestrator's
-  #    responsibility (parse HTML response from previous attempt, look for
-  #    skeleton + <script> bundle); the escalator only consumes the boolean.
-  if document_is_js and BROWSER_SNAPSHOT in policy.allowed_transitions.get(from, ()):
-    return decision(from, BROWSER_SNAPSHOT,
-                    signature=JS_RENDERED_DOCUMENT,
-                    triggered_by_ref=...)  # caller passes evidence ref
+  # 6. JS-rendered document path. Caller passes a non-None
+  #    `js_render_evidence_ref` exactly when its HTML pre-parser
+  #    classified the prior 200 response as a JS skeleton.
+  if js_render_evidence_ref is not None:
+    if BROWSER_SNAPSHOT in policy.allowed_transitions.get(from, ()):
+      return decision(from, BROWSER_SNAPSHOT,
+                      signature=JS_RENDERED_DOCUMENT,
+                      triggered_by_ref=js_render_evidence_ref)
+    return None
 
   return None
 ```
@@ -326,7 +373,7 @@ free-form caller string lands on the exception or in audit logs.
 8. `test_js_rendered_document_does_not_escalate_when_policy_disallows`
 9. `test_api_source_unavailable_escalates_to_http`
 10. `test_max_escalations_exhausted_returns_none` — `escalations_used == policy.max_escalations_per_run`
-11. `test_decision_carries_structured_failure_signature` — `decision.failure_signature` is an `EscalationFailureSignature` value
+11. `test_decision_carries_structured_failure_signature` — `decision.failure_signature == EscalationFailureSignature.X.value` for each refusal class. The `AdapterEscalationDecision.failure_signature` Phase 0 field is `str`; the escalator passes `enum.value` so the on-the-wire form is the stable string. Test asserts string equality (not type identity).
 12. `test_decision_returns_none_when_escalations_at_or_above_budget` — boundary test for `escalations_used` semantics (codex iter-1 minor: the property-test framing claimed mutation that the pure `decide()` API does not do; replace with the boundary-check tests above plus an orchestrator-level test in step 3.3 that asserts the orchestrator increments and the chain length is ≤ `max_escalations_per_run`)
 13. `test_decision_has_triggered_by_ref` — every decision references the failure that motivated it
 14. `test_api_source_outage_error_escalates_api_source_to_http` — `ApiSourceOutageError` (RetryableError subclass) on `from=API_SOURCE` returns decision to HTTP
@@ -373,7 +420,21 @@ class SourceCoverageEvent:
     event_kind: SourceCoverageEventKind
     adapter_type: AdapterType
     payload_ref: Ref  # points to the corresponding contract record
+
+    # Denormalized fields required for the gate to validate without
+    # ref-resolution. Populated by the orchestrator when it appends
+    # the event; the original payload_ref still points to the
+    # canonical contract record for audit.
+    failure_signature: str | None = None       # set on ESCALATION_DECIDED + ATTEMPT_FAILED
+    from_adapter_type: AdapterType | None = None  # set on ESCALATION_DECIDED
+    to_adapter_type: AdapterType | None = None    # set on ESCALATION_DECIDED
+    failure_class_name: str | None = None      # set on ATTEMPT_FAILED (e.g., "NetworkPolicyForbiddenError", "ApiSourceOutageError")
 ```
+
+The denormalization keeps the gate stateless and ref-resolution-
+free: it inspects only the flattened event sequence. The original
+contract refs (`payload_ref`) remain for downstream audit /
+replay tooling that needs the full record.
 
 "Preceding evidence/failure" in the test list below means: scan
 events backward from the `ESCALATION_DECIDED` event, find the most
@@ -402,6 +463,34 @@ client-credentials tokens issued by eBay so a single token serves
 multiple runs until its TTL expires (~7200 s typically); if a run
 hits 401 mid-pagination, the cache is invalidated for that key
 (scope_ref) and a fresh token fetched.
+
+### `EbayTokenCachePort` (Protocol — defined here, not at step 3.6)
+
+```python
+# src/veracrawl/ports/ebay_token_cache.py
+from typing import Protocol, runtime_checkable
+from datetime import datetime
+from veracrawl.ports.credential_vault import CredentialValue
+
+@runtime_checkable
+class EbayTokenCachePort(Protocol):
+    """Port for caching eBay OAuth tokens between runs.
+
+    The port surface is narrow: ``get`` returns a CredentialValue
+    or None; ``put`` stores a value with a tz-aware ``expires_at``;
+    ``invalidate`` removes a scope_ref entry. No streaming /
+    bulk operations — a per-call read-modify-write semantics is
+    sufficient for the typical 1 token / 24h flow."""
+
+    def get(self, scope_ref: str) -> CredentialValue | None: ...
+    def put(self, scope_ref: str, *, value: str, expires_at: datetime) -> None: ...
+    def invalidate(self, scope_ref: str) -> None: ...
+```
+
+Step 3.4 ships `FileBackedEbayTokenCache` as the default impl;
+step 3.6 wires it into `EbayBrowseAdapter`. Phase 6 deployment
+work can swap in a Vault-backed alternate impl without touching
+either module.
 
 ### Interface
 
@@ -435,7 +524,7 @@ representation cannot leak via logging.
 | Surface | Risk | Mitigation |
 |---|---|---|
 | Cache file on disk | secrets stored in plain JSON | File mode `0o600`; directory mode `0o700`; mode-tightening via `fchmod` (Phase 1 step 1.4 lesson — atomic open + tighten); production deployment override path documented below |
-| Concurrent worktree access | two runs racing on token refresh | `fcntl.flock(LOCK_EX)` on POSIX (Linux/macOS); see Platform support below |
+| Concurrent worktree access | two runs racing on token refresh | `fcntl.flock(LOCK_EX)` on a **separate stable lockfile** (`<cache>.lock`, never replaced); the cache `<cache>.json` itself uses temp + atomic `os.replace`. The lockfile is created at `__init__` time and never replaced, so the lock target stays stable across concurrent writers. Lock acquisition order: acquire flock on `<cache>.lock` → read current `<cache>.json` (or treat missing as empty) → write new content to `<cache>.json.tmp.<pid>` → `os.replace` into place → release flock. Tests cover the two-writer race (test 5 below). |
 | TTL skew | clock drift | inject `clock` for tests; production reads `datetime.now(UTC)` |
 | Cache corruption | bad JSON or partial write | atomic write via `os.O_TMPFILE`-style temp + rename; on read failure, fail-closed (treat as cache miss + emit a structured log event) |
 | Logged file path | `cache_dir` could carry user identifying info | Error / log messages report file existence + size + mode only, never absolute path; canary test asserts no `cache_dir` substring in any emitted log line |
@@ -487,14 +576,19 @@ checks `sys.platform`:
 2. `test_get_returns_none_for_missing_scope`
 3. `test_get_returns_none_after_ttl_expires` (inject clock)
 4. `test_invalidate_removes_entry`
-5. `test_concurrent_put_serialized_via_flock` — spawn 2 threads each calling `put`; assert no torn write (file readable as JSON after both complete)
+5. `test_concurrent_put_serialized_via_flock` — spawn 2 processes (subprocess) each calling `put` against same cache_dir; lockfile is created once and stable; assert no torn write (file readable as JSON after both complete) AND both writes' values are present (last writer wins, but neither produces corruption)
 6. `test_cache_file_mode_is_0600` — after `put`, `os.stat(cache_file).st_mode & 0o777 == 0o600`
 7. `test_cache_dir_mode_is_0700_when_created`
-8. `test_corrupt_cache_file_treated_as_miss` — write garbage to file, then `get` returns `None` and logs warning
-9. `test_atomic_write_no_partial_under_simulated_crash` — patch `os.replace` to raise after write; assert original file unchanged
-10. `test_credential_value_returned_does_not_leak_secret_via_repr`
-11. `test_clock_injection_works`
-12. `test_production_mode_gate` — under `RuntimeMode.PRODUCTION`, document this is acceptable for the eBay-specific path because the on-disk persistence is a documented operational decision (Vault sidecar override is left as a Phase 6 wiring concern); ship the cache without production gate but with explicit class docstring noting the on-disk limitation
+8. `test_lockfile_separate_from_cache_file` — `<cache>.lock` exists distinct from `<cache>.json`; lockfile is never replaced
+9. `test_corrupt_cache_file_treated_as_miss` — write garbage to file, then `get` returns `None` and emits a structured-log event
+10. `test_atomic_write_no_partial_under_simulated_crash` — patch `os.replace` to raise after temp write; assert original file unchanged
+11. `test_credential_value_returned_does_not_leak_secret_via_repr`
+12. `test_clock_injection_works`
+13. `test_owner_mismatch_raises_at_construction` — patch `os.geteuid()` to differ from `cache_dir.stat().st_uid`; `__init__` raises `RuntimeError`
+14. `test_directory_mode_too_permissive_raises_at_construction` — pre-create `cache_dir` with mode 0o755; `__init__` either tightens to 0o700 OR raises — pick "raise" (loud failure beats silent change)
+15. `test_log_messages_do_not_contain_absolute_cache_path` — capture all structured-log events during put + get + invalidate; assert no `cache_dir` substring appears
+16. `test_caplog_does_not_contain_cached_secret` — put a canary token (`canary-secret-DEADBEEF`); run get + invalidate; assert no `caplog.records` message body contains the canary
+17. `test_production_mode_does_not_raise` — under `RuntimeMode.PRODUCTION`, `__init__` succeeds when ownership/mode are correct (positive control for the production-acceptance contract)
 
 ### Codex recurring concerns coverage
 
@@ -638,8 +732,8 @@ list(endpoint, params, scope_ref, run_ref, budget):
 
 | Surface | Risk | Mitigation |
 |---|---|---|
-| `params` (caller dict) | could carry credential string | refuse `params` value of `CredentialValue` type at construction (raise `TypeError`) |
-| `endpoint` | path injection / attribute traversal | validate as `^[a-z0-9/-]+$` + must start with `/` |
+| `params` (caller dict) | could carry credential string | At `list()` entry (NOT construction — `params` is a per-call argument): walk values; refuse if any value `isinstance(CredentialValue)` (typed leak) OR if any value matches a credential-marker substring per Phase 0 step 0.4's `_REDACTABLE_MARKERS` tuple (`password`, `token=`, `api_key`, `aws_access_key`, ...). Raise `TypeError` for the typed case; raise `ValueError` for the marker-shaped string case. The marker-tuple check is best-effort and documented as not catching arbitrary unrecognized secrets — callers are still responsible for not passing raw secrets through non-vault paths. |
+| `endpoint` | path injection / canonicalization mismatch | Validate by parsing through `urllib.parse.urlsplit`; require `scheme == ""`, `netloc == ""`, `path` starts with `/`, path matches `^/[A-Za-z0-9_\-/.]+$` (allow case + dot, but no `..`/`%2e`/`%2f`/`\` per Phase 2 step 2.2a ambiguous-path rules). Reject `//` doubled slashes. SP-API paths in practice: `/listings/2021-08-01/items/{sellerId}/{sku}`, `/orders/v0/orders` — both pass. Test list explicitly covers a few real-world SP-API paths. |
 | `nextToken` from server | could be malicious shape | treat as opaque string; pass through; cap length at 4 KiB |
 | 401 refresh loop | runaway if refresh+retry both 401 | hard cap: 1 refresh per `list()` call (state on the call, not the adapter) |
 
@@ -650,19 +744,23 @@ list(endpoint, params, scope_ref, run_ref, budget):
 3. `test_401_first_call_triggers_refresh_and_succeeds_returns_full_result` — first 401 invalidates vault, second call (with fresh credential) returns 200; result contains all pages
 4. `test_401_after_refresh_returns_partial_result_with_failure` — first 401 → refresh → second 401 → result has accumulated pages + non-None `final_failure`
 5. `test_404_terminal_returns_partial_result_with_failure`
-6. `test_retryable_error_propagates_to_transport_layer`
-7. `test_credential_in_params_raises_type_error`
-8. `test_endpoint_with_dotdot_rejected`
-9. `test_endpoint_with_encoded_slash_rejected`
-10. `test_next_token_capped_at_4_kib`
-11. `test_pagination_uses_scope_policy_check_per_page` — mock scope policy, assert called once per page
-12. `test_list_writes_credential_use_record_per_page` — Phase 2 step 2.4b integration: each page emits one `CredentialUseRecord`
-13. `test_partial_result_replay_deterministic` — record + replay reproduces exact page set
-14. `test_clock_injection_for_token_refresh_timing`
-15. `test_budget_max_pages_exceeded_returns_partial` — budget says max 3, server has 10 pages → result has 3 pages + `BUDGET_PAGES_EXCEEDED`
-16. `test_budget_runtime_exceeded_returns_partial` — inject monotonic that advances past deadline; assert `BUDGET_RUNTIME_EXCEEDED`
-17. `test_503_at_first_page_returns_zero_pages_with_http_error` (subclass of partial-batch test, but `pages == []` end of accumulator)
-18. `test_policy_violation_propagates_unwrapped` — `transport.handle_request` raises `CredentialScopeViolation` → adapter does NOT swallow; propagates to caller
+6. `test_retryable_error_returns_partial_with_retry_exhausted_kind` — test 6 was named "propagates" in iter-1 but the transport contract says converted; test asserts the conversion (codex iter-2 important: align)
+7. `test_credential_value_in_params_raises_type_error`
+8. `test_marker_string_secret_in_params_raises_value_error` — params containing `"api_key=sk-..."` literal raises ValueError from the marker-substring check
+9. `test_endpoint_with_dotdot_rejected`
+10. `test_endpoint_with_encoded_slash_rejected`
+11. `test_endpoint_with_doubled_slashes_rejected`
+12. `test_endpoint_with_real_sp_api_orders_path_accepted` — `/orders/v0/orders` passes
+13. `test_endpoint_with_real_sp_api_listings_path_accepted` — `/listings/2021-08-01/items/A1/SKU-1` passes
+14. `test_next_token_capped_at_4_kib`
+15. `test_pagination_uses_scope_policy_check_per_page` — mock scope policy, assert called once per page
+16. `test_list_writes_credential_use_record_per_page` — Phase 2 step 2.4b integration: each page emits one `CredentialUseRecord`
+17. `test_partial_result_replay_deterministic` — record + replay reproduces exact page set
+18. `test_clock_injection_for_token_refresh_timing`
+19. `test_budget_max_pages_exceeded_returns_partial` — budget says max 3, server has 10 pages → result has 3 pages + `BUDGET_PAGES_EXCEEDED`
+20. `test_budget_runtime_exceeded_returns_partial` — inject monotonic that advances past deadline; assert `BUDGET_RUNTIME_EXCEEDED`
+21. `test_503_at_first_page_returns_zero_pages_with_http_error` (subclass of partial-batch test, but `pages == []` end of accumulator)
+22. `test_policy_violation_propagates_unwrapped` — `transport.handle_request` raises `CredentialScopeViolation` → adapter does NOT swallow; propagates to caller
 
 ### Codex recurring concerns coverage
 
@@ -693,9 +791,32 @@ This step ships **two** files:
    loop with budget; transport contract identical (see step 3.5).
 
 2. `tests/integration/live/test_step_3_6_ebay_browse_keyword.py` —
-   the live test. Marker `@pytest.mark.live`. Resolves credentials
-   from env (`VERACRAWL_CRED_EBAY_PROD__OAUTH`, Phase 2 step 2.1
-   contract). Issues a browse query for a benign keyword; asserts
+   the live test. Marker `@pytest.mark.live`. Marker
+   `@pytest.mark.skipif(...)` if any of the required credentials
+   are absent so CI without secrets cleanly skips.
+
+   Credential contract (codex iter-2 important — explicit definition):
+   - `VERACRAWL_CRED_EBAY_PROD__CLIENT_ID` (Phase 2 step 2.1 env-var
+     vault format) — eBay OAuth client ID.
+   - `VERACRAWL_CRED_EBAY_PROD__CLIENT_SECRET` — eBay OAuth client
+     secret.
+   - The test wires `FileBackedEbayTokenCache` (step 3.4) plus an
+     `EbayOAuthTokenFetcher` (small helper internal to step 3.6:
+     posts to `https://api.ebay.com/identity/v1/oauth2/token` with
+     `grant_type=client_credentials` + Basic-auth header built from
+     `client_id:client_secret`; returns access token + expires_in;
+     no scope_refs of its own — the cache's `scope_ref` is simply
+     `EBAY_PROD`). Token endpoint URL is hardcoded for the live test
+     because eBay's prod endpoint is the only relevant target.
+   - **No** `VERACRAWL_CRED_EBAY_PROD__OAUTH` — that was a misnomer in
+     iter-1. The live test fetches the OAuth token itself; an env
+     var carrying a pre-fetched access token would be redundant
+     (and short-lived since these tokens expire in 2h).
+   - Skipped if either CLIENT_ID or CLIENT_SECRET is missing; the
+     skip is loud (test prints a structured-log explaining the
+     skip reason).
+
+   Issues a browse query for a benign keyword (`"laptop"`); asserts
    ≥1 product returned within
    `AmazonSpApiPaginationBudget(max_pages=10, max_runtime_seconds=30)`
    (the `EbayBrowseAdapter` reuses the same budget shape since the
@@ -747,10 +868,38 @@ iter-1-style choice). Rationale: the orchestrator can use accumulated
 pages while flagging the gap; treating the whole batch as failed
 loses information already paid for.
 
-### Reservations carried forward
+### Expected reservations / explicit dependencies
 
-None expected. Phase 3 is mostly pure-logic + a single file-backed
-cache. The dataclass-heavy approach keeps surfaces narrow.
+Phase 3 is mostly pure-logic + a single file-backed cache, but
+two known dependencies remain unresolved at end of Phase 3 and
+are recorded here as explicit risks (codex iter-2 minor — "none
+expected" was overconfident given the items below):
+
+1. **Operator review channel for `UNKNOWN` access-control vendor**:
+   Phase 3 emits the typed `AccessControlBlocked(detected_provider=UNKNOWN)`
+   event, but the channel that *delivers* the operator review
+   request (Slack / email / queue / dashboard) lives in Phase 6's
+   `OtelObservabilityAdapter`. Phase 3 ships
+   `NoopOperatorReviewChannel` placeholder; Phase 6 swaps in real
+   delivery. **Risk**: under `RuntimeMode.PRODUCTION` between Phase
+   3 and Phase 6, an UNKNOWN classification is logged but no human
+   is paged. Mitigation: ship Phase 3 with a structured-log event
+   that an external alerting rule (e.g., Datadog / Splunk) can
+   match on, even before Phase 6 ships the canonical channel.
+
+2. **Alternate (off-disk) eBay token cache implementations**:
+   `FileBackedEbayTokenCache` is the only impl Phase 3 ships. A
+   Vault-sidecar / OS-keychain / KMS-backed alternate is Phase 6
+   deployment work. The `EbayTokenCachePort` (defined here) is the
+   substitution surface — alternate impls swap in via wiring.
+   **Risk**: deployments with stricter on-disk-secret prohibitions
+   block Phase 3 from production rollout until Phase 6 ships an
+   alternate. Mitigation: production-acceptance gate (test 17 in
+   step 3.4) explicitly documents the on-disk acceptance contract.
+
+If Phase 3 implementation surfaces additional reservations beyond
+these two, log them in STATUS.md per the standard reservation
+process.
 
 ## Codex recurring concerns — Phase-wide coverage
 
