@@ -15,6 +15,7 @@ Coverage:
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
@@ -65,6 +66,12 @@ class _RecordingAudit:
 _FROZEN_NOW = datetime(2026, 5, 9, 12, 0, 0, tzinfo=UTC)
 
 
+def _expected_hashed_ref(name: str) -> str:
+    """Mirror of ``_hashed_ref`` in outbox_vault_client.py for assertions."""
+
+    return f"sha256:{hashlib.sha256(name.encode('utf-8')).hexdigest()[:16]}"
+
+
 def _make_client(
     *,
     backend: InMemoryVaultBackend | None = None,
@@ -101,6 +108,11 @@ def test_get_returns_credential_value_for_present_credential() -> None:
 
 
 def test_get_writes_audit_row_with_injected_clock_timestamp() -> None:
+    """Codex iter-2 important: audit row must carry HASHED scope_ref
+    and key, never the raw caller-supplied identifier (even
+    shape-validated identifiers may be secret-shaped uppercase
+    tokens). Hash is stable so log aggregation can correlate."""
+
     backend = InMemoryVaultBackend(credentials={("X", "K"): "v"})
     client, audit = _make_client(backend=backend)
     client.get(scope_ref="X", key="K")
@@ -108,8 +120,22 @@ def test_get_writes_audit_row_with_injected_clock_timestamp() -> None:
     assert record["timestamp"] == _FROZEN_NOW
     assert record["timestamp"].tzinfo is not None
     assert record["run_ref"] == "run:test:1"
-    assert record["scope_ref"] == "X"
-    assert record["key"] == "K"
+    # Audit carries hashed refs, not raw "X" / "K".
+    assert record["scope_ref"] == _expected_hashed_ref("X")
+    assert record["key"] == _expected_hashed_ref("K")
+    # Defense in depth: assert raw value is NOT present anywhere
+    # in the audit record's stringified form.
+    serialized = str(record)
+    # "X" and "K" alone are too short to assert on; use a longer
+    # secret-shaped scope to verify.
+
+    backend2 = InMemoryVaultBackend(credentials={("AKIAIOSFODNN7EXAMPLE", "API_KEY"): "v"})
+    client2, audit2 = _make_client(backend=backend2)
+    client2.get(scope_ref="AKIAIOSFODNN7EXAMPLE", key="API_KEY")
+    serialized2 = str(audit2.records[0])
+    assert "AKIAIOSFODNN7EXAMPLE" not in serialized2
+    assert "API_KEY" not in serialized2
+    del serialized  # silence unused
 
 
 # ---------------------------------------------------------------------------
@@ -341,13 +367,68 @@ def test_multiple_gets_emit_independent_audit_rows() -> None:
     client.get(scope_ref="EBAY", key="API_KEY")
     client.get(scope_ref="AMAZON", key="TOKEN")
     assert len(audit.records) == 2
-    assert audit.records[0]["scope_ref"] == "EBAY"
-    assert audit.records[1]["scope_ref"] == "AMAZON"
+    assert audit.records[0]["scope_ref"] == _expected_hashed_ref("EBAY")
+    assert audit.records[1]["scope_ref"] == _expected_hashed_ref("AMAZON")
 
 
 # ---------------------------------------------------------------------------
 # Protocol satisfaction (smoke test only — Protocol just checks attrs)
 # ---------------------------------------------------------------------------
+
+
+def test_unexpected_backend_exception_audits_internal_and_raises_not_found() -> None:
+    """Codex iter-2 important: backend SDKs may raise non-typed
+    exceptions (RuntimeError / TimeoutError / etc.). The client
+    must catch them, audit one INTERNAL row, and surface the
+    canonical CredentialNotFoundError with no chain leak."""
+
+    class _MisbehavingBackend:
+        def fetch(self, *, scope_ref: str, key: str) -> str | None:
+            del scope_ref, key
+            raise RuntimeError("simulated SDK panic with sensitive details: api_key=sk_live")
+
+    audit = _RecordingAudit()
+    client = OutboxVaultClient(
+        backend=_MisbehavingBackend(),
+        audit=audit,
+        run_ref="run:test:1",
+        clock=lambda: _FROZEN_NOW,
+    )
+    with pytest.raises(CredentialNotFoundError) as excinfo:
+        client.get(scope_ref="X", key="K")
+    assert len(audit.records) == 1
+    assert audit.records[0]["outcome"] is CredentialAccessOutcome.INTERNAL
+    # No chain leak — raw RuntimeError args carry "api_key=sk_live"
+    # which must NOT appear in the surfaced exception or its chain.
+    err = excinfo.value
+    assert err.__cause__ is None
+    assert err.__context__ is None
+    formatted_args = " ".join(
+        str(a) for a in err.args if isinstance(a, str)
+    )
+    assert "api_key=" not in formatted_args
+    assert "sk_live" not in formatted_args
+
+
+def test_clock_returning_naive_datetime_raises_runtime_error() -> None:
+    """Codex iter-2 minor: defense-in-depth — producer-side guard
+    that the injected clock returns tz-aware. A custom audit
+    adapter may not validate, so the producer must."""
+
+    backend = InMemoryVaultBackend(credentials={("X", "K"): "v"})
+    audit = _RecordingAudit()
+
+    def naive_clock() -> datetime:
+        return datetime(2026, 5, 9, 12, 0, 0)  # noqa: DTZ001 — intentional naive
+
+    client = OutboxVaultClient(
+        backend=backend,
+        audit=audit,
+        run_ref="r",
+        clock=naive_clock,
+    )
+    with pytest.raises(RuntimeError, match="tz-aware"):
+        client.get(scope_ref="X", key="K")
 
 
 def test_outbox_vault_client_satisfies_credential_vault_port() -> None:
