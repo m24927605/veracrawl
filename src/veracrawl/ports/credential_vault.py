@@ -13,7 +13,8 @@ Two implementations land across Phase 2:
 
 * :class:`~veracrawl.adapters.credential_vault.env_var_vault.EnvVarVault`
   (this step, step 2.1): test / fixture impl that reads
-  ``VERACRAWL_CRED_<scope>_<key>`` from the process env.
+  ``VERACRAWL_CRED_<scope>__<key>`` (double-underscore separator)
+  from the process env.
 * ``OutboxVaultClient`` (step 2.4): production impl that talks to
   a real vault (HashiCorp Vault / AWS Secrets Manager /
   customer-supplied) and emits ``CredentialUseRecord`` audit rows.
@@ -48,15 +49,14 @@ from __future__ import annotations
 import re
 from typing import Final, Protocol, runtime_checkable
 
-# Codex iter-1 important: ``scope_ref`` is interpolated verbatim
-# into the redaction marker (``<credential:redacted:<scope>>``).
-# A future vault adapter that accidentally passed a raw token /
-# control-character payload as ``scope_ref`` would leak it
-# through the exact paths this wrapper is meant to make safe.
-# Constrain ``scope_ref`` to env-var-safe shape so secret-looking
-# strings cannot land here. The orchestrator translates
-# structured ``CredentialScope.id`` values to vault-safe scopes
-# at the wiring layer before calling the port.
+# ``scope_ref`` is interpolated verbatim into the redaction marker
+# (``<credential:redacted:<scope>>``). Constrain it to env-var-safe
+# shape so a caller / vault adapter that accidentally passes a raw
+# token or control-character payload as ``scope_ref`` cannot leak
+# it through the very ``__repr__`` / ``__str__`` / ``__format__``
+# paths the wrapper exists to make safe. The orchestrator translates
+# structured ``CredentialScope.id`` values to vault-safe scopes at
+# the wiring layer before calling the port.
 _SAFE_SCOPE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9_]+$")
 
 
@@ -100,11 +100,11 @@ class CredentialValue:
         if not value:
             raise ValueError("CredentialValue requires a non-empty value")
         if not value.strip():
-            # Codex iter-2 important: centralize the fail-closed
-            # whitespace rule on the wrapper itself so a future
-            # production vault adapter (step 2.4 ``OutboxVaultClient``
-            # and beyond) cannot return ``CredentialValue(value="   ")``
-            # and end up sending blank Authorization upstream.
+            # Centralize the fail-closed whitespace rule on the
+            # wrapper itself so a future production vault adapter
+            # (step 2.4 ``OutboxVaultClient`` and beyond) cannot
+            # return ``CredentialValue(value="   ")`` and end up
+            # sending blank Authorization upstream.
             raise ValueError(
                 "CredentialValue rejects whitespace-only values "
                 "(treated as missing / fail-closed for the cooperative crawler)"
@@ -112,16 +112,11 @@ class CredentialValue:
         if not scope_ref:
             raise ValueError("CredentialValue requires a non-empty scope_ref")
         if not _SAFE_SCOPE_RE.fullmatch(scope_ref):
-            # Codex iter-1 important: refuse to interpolate
-            # arbitrary ``scope_ref`` content into the redaction
-            # marker. A caller / vault adapter that passed a raw
-            # token here would leak it through ``__repr__`` /
-            # ``__str__`` / ``__format__``.
-            #
-            # Codex iter-3 important: don't echo the rejected
-            # value either — the caller may have handed us a
-            # secret-looking string and the ``ValueError`` itself
-            # would carry it into logs / test output / telemetry.
+            # Refuse to interpolate arbitrary ``scope_ref`` content
+            # into the redaction marker. The caller may have handed
+            # us a secret-looking string; do not echo it in the
+            # error either, since the exception text would itself
+            # leak through logs / pytest output / telemetry.
             raise ValueError(
                 f"CredentialValue scope_ref must match ``^[A-Z0-9_]+$`` "
                 f"(env-var-safe identifier); rejected value of length "
@@ -158,9 +153,9 @@ class CredentialValue:
         return self._redacted()
 
     def __format__(self, format_spec: str) -> str:
-        # Codex iter-2 minor: honor the format spec on the redacted
-        # marker (alignment, width, fill) so f-strings behave
-        # predictably without ever exposing the secret.
+        # Honor the format spec on the redacted marker (alignment,
+        # width, fill) so f-strings behave predictably without
+        # ever exposing the secret.
         return format(self._redacted(), format_spec)
 
     def __reduce__(self) -> tuple[type, tuple[str, ...]]:

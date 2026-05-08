@@ -7,9 +7,9 @@ alphanumeric + underscore); the vault rejects anything else so a
 caller cannot smuggle env-var-name injection or path-traversal-
 shaped strings into the lookup.
 
-The double-underscore separator (codex iter-3 important) keeps
-the mapping unambiguous when both scope and key contain
-underscores: ``(scope='A_B', key='C')`` → ``..._A_B__C``;
+The double-underscore separator keeps the mapping unambiguous
+when both scope and key contain underscores:
+``(scope='A_B', key='C')`` → ``..._A_B__C``;
 ``(scope='A', key='B_C')`` → ``..._A__B_C`` — different env vars,
 no aliasing.
 
@@ -20,7 +20,7 @@ gate at ``get`` time: under ``RuntimeMode.PRODUCTION``, every
 ``get`` raises :class:`ProductionRuntimeNotImplemented`. This
 ensures an unaudited credential path can never appear in
 production even if a wiring regression slipped past the
-adapter layer (codex iter-1 important — defense in depth).
+adapter layer (defense in depth).
 """
 
 from __future__ import annotations
@@ -41,7 +41,10 @@ from veracrawl.runtime_support.runtime_mode import (
 )
 
 _ENV_PREFIX: Final[str] = "VERACRAWL_CRED_"
-_ENV_SEP: Final[str] = "__"  # codex iter-3 important: disambiguate
+# Double underscore disambiguates ``(scope='A_B', key='C')`` from
+# ``(scope='A', key='B_C')`` — both would otherwise alias to
+# ``VERACRAWL_CRED_A_B_C`` and silently cross-pollute scope.
+_ENV_SEP: Final[str] = "__"
 _SAFE_IDENT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9_]+$")
 
 
@@ -49,9 +52,9 @@ def _validate_identifier(name: str, *, kind: str) -> None:
     if not name:
         raise ValueError(f"{kind} must be non-empty")
     if not _SAFE_IDENT_RE.fullmatch(name):
-        # Codex iter-3 minor: don't echo the rejected identifier
-        # — credential-adjacent boundary, and the caller may have
-        # handed us a secret-looking string. Report length only.
+        # Don't echo the rejected identifier — the caller may have
+        # handed us a secret-looking string and the exception text
+        # would carry it into logs / telemetry. Length only.
         raise ValueError(
             f"{kind} must match ``^[A-Z0-9_]+$`` (uppercase, digits, "
             f"underscore only — env-var-safe identifier); rejected value "
@@ -77,12 +80,10 @@ class EnvVarVault:
         self._environ: Mapping[str, str] = environ if environ is not None else os.environ
 
     def get(self, *, scope_ref: str, key: str) -> CredentialValue:
-        # Codex iter-1 important: defense-in-depth gate against
-        # an unaudited credential path appearing in PRODUCTION.
-        # The wiring layer in step 2.4 will swap in
-        # ``OutboxVaultClient`` for production, but we refuse
-        # here too so a wiring regression cannot silently route
-        # production through env vars.
+        # Defense-in-depth: the wiring layer (step 2.4) swaps in
+        # ``OutboxVaultClient`` for production, but refuse here
+        # too so a wiring regression cannot silently route
+        # production credentials through this fixture adapter.
         if current_mode() is RuntimeMode.PRODUCTION:
             raise ProductionRuntimeNotImplemented(
                 backend="env_var_vault",
