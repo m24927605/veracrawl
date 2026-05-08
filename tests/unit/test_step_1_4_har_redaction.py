@@ -93,6 +93,57 @@ def test_authorization_header_redacted() -> None:
     assert b"secret-token-123" not in redact_har_payload(payload)
 
 
+def test_cookie_array_values_redacted_unconditionally() -> None:
+    """HAR ``cookies`` arrays use cookie names like ``session`` /
+    ``sid`` / ``csrf`` / ``auth_token`` that don't match the
+    generic sensitive-key patterns. Cookies are credential-by-
+    construction; every value must be redacted."""
+
+    payload = _har(
+        [
+            _entry(
+                request_cookies=[
+                    {"name": "session", "value": "session-token-abc"},
+                    {"name": "sid", "value": "sid-token-xyz"},
+                    {"name": "auth_token", "value": "tok-123"},
+                    {"name": "theme", "value": "dark"},  # benign
+                    {"name": "csrf", "value": "csrf-abcdef"},
+                    {"name": "_ga", "value": "GA1.2.456.789"},  # tracking
+                ],
+                response_cookies=[
+                    {"name": "session", "value": "session-set"},
+                    {"name": "anything", "value": "any-value"},
+                ],
+            )
+        ]
+    )
+    out = json.loads(redact_har_payload(payload))
+    req_cookies = out["log"]["entries"][0]["request"]["cookies"]
+    res_cookies = out["log"]["entries"][0]["response"]["cookies"]
+    # Every cookie value redacted, regardless of name match.
+    for c in req_cookies:
+        assert c["value"] == REDACTED_VALUE
+    for c in res_cookies:
+        assert c["value"] == REDACTED_VALUE
+    redacted = redact_har_payload(payload)
+    assert b"session-token-abc" not in redacted
+    assert b"sid-token-xyz" not in redacted
+    assert b"tok-123" not in redacted
+    assert b"csrf-abcdef" not in redacted
+
+
+def test_cookie_array_preserves_name_for_replay_diagnostics() -> None:
+    """The cookie *name* is not a secret — preserving it lets replay
+    diagnostics see which cookies were involved without leaking the
+    value."""
+
+    payload = _har([_entry(request_cookies=[{"name": "session", "value": "s"}])])
+    out = json.loads(redact_har_payload(payload))
+    cookie = out["log"]["entries"][0]["request"]["cookies"][0]
+    assert cookie["name"] == "session"
+    assert cookie["value"] == REDACTED_VALUE
+
+
 def test_cookie_and_set_cookie_redacted() -> None:
     payload = _har(
         [
@@ -119,11 +170,17 @@ def test_cookie_and_set_cookie_redacted() -> None:
     res_headers = entry["response"]["headers"]
     assert next(h for h in req_headers if h["name"] == "Cookie")["value"] == REDACTED_VALUE
     assert next(h for h in res_headers if h["name"] == "Set-Cookie")["value"] == REDACTED_VALUE
-    # Cookie *arrays* — name "session" matches sensitive-key pattern via
-    # ``session_id``... actually "session" alone does not match the
-    # current pattern set, so the cookie array values remain unless the
-    # name is in our sensitive list. Verify behavior is consistent:
-    # the header carrier is redacted (which is what matters for HAR).
+    # Cookie *arrays* are now redacted unconditionally (every value)
+    # because cookie names like ``session`` / ``sid`` rarely match
+    # generic sensitive-key patterns but cookies are credential-by-
+    # construction. See ``test_cookie_array_values_redacted_unconditionally``.
+    req_cookies = entry["request"]["cookies"]
+    res_cookies = entry["response"]["cookies"]
+    for c in req_cookies + res_cookies:
+        assert c["value"] == REDACTED_VALUE
+    redacted = redact_har_payload(payload)
+    assert b'"value": "abc"' not in redacted
+    assert b'"value": "xyz"' not in redacted
 
 
 def test_x_api_key_and_x_auth_token_redacted() -> None:
@@ -319,3 +376,46 @@ def test_image_response_content_not_redacted() -> None:
     content = out["log"]["entries"][0]["response"]["content"]
     # Mime is image/* so the body redaction does not fire.
     assert content["text"] == "iVBORw0KGgo="
+
+
+def test_canary_scrubbed_from_image_content_text() -> None:
+    """Image / non-text MIME bodies bypass body over-redaction but
+    must still go through canary scrubbing — a caller-declared
+    canary token must never appear in the persisted HAR regardless
+    of MIME."""
+
+    payload = _har(
+        [
+            _entry(
+                content={
+                    "size": 100,
+                    "mimeType": "image/png",
+                    "text": "base64-prefix-CANARY_IN_IMG-suffix",
+                }
+            )
+        ]
+    )
+    redacted = redact_har_payload(payload, canary_tokens=["CANARY_IN_IMG"])
+    assert b"CANARY_IN_IMG" not in redacted
+    out = json.loads(redacted)
+    content = out["log"]["entries"][0]["response"]["content"]
+    assert REDACTED_CANARY in content["text"]
+
+
+def test_canary_scrubbed_from_application_octet_stream_body() -> None:
+    """``application/octet-stream`` is a binary type that bypasses
+    body redaction — but canary scrubbing must still apply."""
+
+    payload = _har(
+        [
+            _entry(
+                content={
+                    "size": 100,
+                    "mimeType": "application/octet-stream",
+                    "text": "binary-blob-with-CANARY_BLOB-inside",
+                }
+            )
+        ]
+    )
+    redacted = redact_har_payload(payload, canary_tokens=["CANARY_BLOB"])
+    assert b"CANARY_BLOB" not in redacted

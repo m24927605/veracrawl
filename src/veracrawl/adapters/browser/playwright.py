@@ -470,12 +470,18 @@ class PlaywrightBrowserObservationAdapter:
         """
         sync_playwright = self._playwright_factory()
         storage_state_path = self._storage_state_path(run_ref) if persist else None
+        # Reset per-session HAR ref so a session that fails to capture
+        # / persist HAR cannot leave a previous session's ``artifact_ref``
+        # visible. Replay / evidence consumers must never associate a
+        # stale ref with the current run.
+        self._last_har_artifact_ref = None
         # Phase 1 step 1.4: pre-pick a HAR file path under the configured
-        # capture directory. ``None`` disables HAR capture (the no-op
-        # store is the only configuration where this remains ``None``,
-        # so HAR is opt-in via ``har_capture_dir`` AND a real evidence
-        # store).
-        har_path = self._pick_har_path(run_ref) if persist else None
+        # capture directory. ``None`` disables HAR capture. HAR capture
+        # is decoupled from ``persist`` (storage_state persistence) —
+        # the two are unrelated concerns; a caller may want HAR
+        # evidence without cookie-state persistence (one-shot
+        # observe()) and vice-versa.
+        har_path = self._pick_har_path(run_ref)
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             # Outer try owns the browser; inner try owns the context.
@@ -579,9 +585,7 @@ class PlaywrightBrowserObservationAdapter:
                 )
                 return
             try:
-                redacted = redact_har_payload(
-                    raw, canary_tokens=self.har_canary_tokens
-                )
+                redacted = redact_har_payload(raw, canary_tokens=self.har_canary_tokens)
             except HarRedactionError:
                 # Malformed HAR — never persist. Log and drop.
                 _logger.exception(

@@ -279,6 +279,78 @@ def test_payload_size_reflects_persisted_bytes(
     assert len(store.get(artifact_ref=result.artifact_ref) or b"") == 12345
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="symlink semantics differ on Windows")
+def test_get_refuses_to_follow_symlink_at_artifact_path(tmp_path: Path) -> None:
+    """If the artifact file is replaced by a symlink pointing outside
+    the root, ``get`` must refuse rather than read sensitive bytes
+    via the link. lstat-based regular-file check rejects symlinks."""
+
+    store = LocalFsEvidenceArtifactStore(root=tmp_path / "evidence")
+    payload = b'{"log":{}}'
+    result = store.put(
+        run_ref="run:r",
+        attempt_ref="attempt:1",
+        kind=ArtifactKind.HAR,
+        payload=payload,
+        content_type="application/json",
+        redaction_applied=True,
+    )
+    # Verify normal read works first.
+    assert store.get(artifact_ref=result.artifact_ref) == payload
+    # Replace the file with a symlink to a sensitive sibling.
+    target_files = list((tmp_path / "evidence").rglob("har-*.har.json"))
+    assert len(target_files) == 1
+    artifact_file = target_files[0]
+    sensitive = tmp_path / "sensitive.txt"
+    sensitive.write_bytes(b"DO NOT LEAK ME")
+    artifact_file.unlink()
+    artifact_file.symlink_to(sensitive)
+    # ``get`` must refuse to follow the symlink.
+    assert store.get(artifact_ref=result.artifact_ref) is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlink semantics differ on Windows")
+def test_get_refuses_symlinked_directory_ancestor(tmp_path: Path) -> None:
+    """A compromised directory ancestor (the run-dir or attempt-dir
+    replaced by a symlink) must also cause ``get`` to refuse."""
+
+    store = LocalFsEvidenceArtifactStore(root=tmp_path / "evidence")
+    result = store.put(
+        run_ref="run:dir-symlink",
+        attempt_ref="attempt:1",
+        kind=ArtifactKind.HAR,
+        payload=b'{"log":{}}',
+        content_type="application/json",
+        redaction_applied=True,
+    )
+    # Find the run dir and replace it with a symlink to a sibling
+    # tree that contains a same-named file but with sensitive contents.
+    run_dirs = [p for p in (tmp_path / "evidence").iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    run_dir = run_dirs[0]
+    # Build a parallel tree with a same-named artifact carrying
+    # different bytes.
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    # Mirror the inner structure: <elsewhere>/<attempt>/<file>
+    attempt_dirs = list(run_dir.iterdir())
+    assert len(attempt_dirs) == 1
+    attempt_name = attempt_dirs[0].name
+    artifact_files = list(attempt_dirs[0].iterdir())
+    assert len(artifact_files) == 1
+    artifact_name = artifact_files[0].name
+    (elsewhere / attempt_name).mkdir()
+    (elsewhere / attempt_name / artifact_name).write_bytes(b"SENSITIVE")
+    # Swap run_dir to a symlink pointing at ``elsewhere``.
+    import shutil
+
+    shutil.rmtree(run_dir)
+    run_dir.symlink_to(elsewhere)
+    # ``get`` must refuse — any ancestor that is not a real directory
+    # makes the read unsafe.
+    assert store.get(artifact_ref=result.artifact_ref) is None
+
+
 def test_disk_full_raises_evidence_artifact_store_error(
     monkeypatch: pytest.MonkeyPatch,
     store: LocalFsEvidenceArtifactStore,

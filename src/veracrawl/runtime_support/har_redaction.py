@@ -102,6 +102,36 @@ def _redact_name_value_array(
     return out
 
 
+def _redact_cookie_array(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Walk a HAR ``cookies`` array and redact every cookie value.
+
+    HAR request/response ``cookies`` entries use the cookie's own
+    name as ``name`` (e.g. ``session``, ``sid``, ``csrf``,
+    ``auth_token``), not a header carrier name like ``Cookie`` /
+    ``Set-Cookie``. Those cookie names rarely match our generic
+    sensitive-key patterns, so a name-based check would let
+    session / auth cookies survive into persisted HARs.
+
+    Cookies are session-bearing by construction — every value is
+    a credential / state token. We unconditionally redact every
+    ``value`` in cookie arrays (the ``name`` itself is not a
+    secret; it's useful for replay diagnostics). This matches the
+    cooperative-crawler policy that no captured cookie value ever
+    reaches the evidence store in plaintext.
+    """
+
+    out: list[dict[str, Any]] = []
+    for entry in items:
+        if not isinstance(entry, dict):
+            out.append(entry)
+            continue
+        new_entry = dict(entry)
+        if "value" in new_entry:
+            new_entry["value"] = REDACTED_VALUE
+        out.append(new_entry)
+    return out
+
+
 def _redact_post_data(post_data: dict[str, Any], canaries: tuple[str, ...]) -> dict[str, Any]:
     """Redact ``request.postData``: params + text body."""
 
@@ -118,13 +148,25 @@ def _redact_post_data(post_data: dict[str, Any], canaries: tuple[str, ...]) -> d
     return out
 
 
-def _redact_content(content: dict[str, Any]) -> dict[str, Any]:
-    """Redact ``response.content.text`` based on mimeType."""
+def _redact_content(content: dict[str, Any], canaries: tuple[str, ...]) -> dict[str, Any]:
+    """Redact ``response.content.text`` based on mimeType.
+
+    Body MIMEs that may carry credentials / PII are unconditionally
+    replaced with ``<redacted-body>``. Image / binary bodies bypass
+    the over-redaction but **still go through canary scrubbing** —
+    a caller-declared canary token must never appear in the persisted
+    HAR regardless of MIME, otherwise the contract a test asserts
+    ("canary X is not in persisted bytes") would silently fail for
+    any non-text response.
+    """
 
     out = dict(content)
     text = out.get("text")
-    if isinstance(text, str) and _should_redact_body(out.get("mimeType")):
-        out["text"] = REDACTED_BODY
+    if isinstance(text, str):
+        if _should_redact_body(out.get("mimeType")):
+            out["text"] = REDACTED_BODY
+        elif canaries:
+            out["text"] = _scrub_canary(text, canaries)
     return out
 
 
@@ -143,7 +185,10 @@ def _redact_request(request: dict[str, Any], canaries: tuple[str, ...]) -> dict[
         out["headers"] = _redact_name_value_array(headers, canaries)
     cookies = out.get("cookies")
     if isinstance(cookies, list):
-        out["cookies"] = _redact_name_value_array(cookies, canaries)
+        # Cookies-by-name are credential-by-construction; redact every
+        # value unconditionally (cookie *names* are too varied to
+        # cover by sensitive-key patterns).
+        out["cookies"] = _redact_cookie_array(cookies)
     query = out.get("queryString")
     if isinstance(query, list):
         out["queryString"] = _redact_name_value_array(query, canaries)
@@ -160,12 +205,12 @@ def _redact_response(response: dict[str, Any], canaries: tuple[str, ...]) -> dic
         out["headers"] = _redact_name_value_array(headers, canaries)
     cookies = out.get("cookies")
     if isinstance(cookies, list):
-        out["cookies"] = _redact_name_value_array(cookies, canaries)
+        out["cookies"] = _redact_cookie_array(cookies)
     if isinstance(out.get("redirectURL"), str):
         out["redirectURL"] = _redact_url(out["redirectURL"], canaries)
     content = out.get("content")
     if isinstance(content, dict):
-        out["content"] = _redact_content(content)
+        out["content"] = _redact_content(content, canaries)
     return out
 
 

@@ -522,6 +522,82 @@ def test_redaction_required_kind_with_unredacted_payload_raises_at_put(
         )
 
 
+def test_last_har_artifact_ref_resets_when_subsequent_session_misses(
+    tmp_path: Path,
+) -> None:
+    """A second session that fails to capture HAR (e.g. browser crash
+    → no file) must not leave the previous session's
+    ``last_har_artifact_ref`` visible. Replay / evidence consumers
+    must never associate stale evidence with a new run."""
+
+    store = LocalFsEvidenceArtifactStore(root=tmp_path / "evidence")
+
+    @contextmanager
+    def factory_capturing_then_missing() -> Iterator[_FakePlaywright]:
+        # First session: HAR present. Second session: no HAR file.
+        if not factory_capturing_then_missing.first_done:  # type: ignore[attr-defined]
+            factory_capturing_then_missing.first_done = True  # type: ignore[attr-defined]
+            yield _FakePlaywright(har_payload=_make_har_payload())
+        else:
+            yield _FakePlaywright(har_payload=None)
+
+    factory_capturing_then_missing.first_done = False  # type: ignore[attr-defined]
+
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-4-reset",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        storage_state_dir=tmp_path,
+        har_capture_dir=tmp_path / "har",
+        evidence_artifact_store=store,
+        playwright_factory=lambda: factory_capturing_then_missing,
+    )
+    # First session — captures HAR.
+    with adapter.open_session(run_ref="run:first") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+    first_ref = adapter.last_har_artifact_ref
+    assert first_ref is not None
+    # Second session — no HAR. Must reset, not leave stale ref.
+    with adapter.open_session(run_ref="run:second") as session:
+        session.observe(
+            source_ref="source:fixture",
+            target_url="https://example.test/",
+            sandbox_policy=_sandbox(),
+        )
+    assert adapter.last_har_artifact_ref is None
+
+
+def test_har_capture_works_for_observe_one_shot_path(tmp_path: Path) -> None:
+    """``observe()`` is the legacy one-shot path that uses
+    ``persist=False``. HAR capture is a separate concern from
+    storage_state persistence — a one-shot caller with a real
+    evidence store + capture dir must still get HAR persisted."""
+
+    store = LocalFsEvidenceArtifactStore(root=tmp_path / "evidence")
+    adapter = PlaywrightBrowserObservationAdapter(
+        fixture_id="step-1-4-oneshot",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+        # No storage_state_dir → persist=False on observe()
+        har_capture_dir=tmp_path / "har",
+        evidence_artifact_store=store,
+        playwright_factory=_fake_factory(har_payload=_make_har_payload()),
+    )
+    adapter.observe(
+        run_ref="run:oneshot",
+        source_ref="source:fixture",
+        target_url="https://example.test/",
+        sandbox_policy=_sandbox(),
+    )
+    # HAR captured even on the legacy one-shot path.
+    assert adapter.last_har_artifact_ref is not None
+    assert adapter.last_har_artifact_ref.startswith("artifact:evidence:har:")
+
+
 def test_evidence_put_result_round_trip(tmp_path: Path) -> None:
     """Sanity check the persisted result shape — used by the playwright
     wiring to populate ``last_har_artifact_ref``."""

@@ -12,10 +12,13 @@ through a SHA-256 digest + safe-prefix scheme (the same idiom step
 hands us ``run_ref="../etc/passwd"``, the persisted file lands
 inside the configured root.
 
-Concurrency: each ``put`` writes to a sibling tempfile (``O_CREAT |
-O_EXCL | O_NOFOLLOW``) and ``os.replace``s into place. Two writers
-with the same digest will land identical bytes on the same path —
-``os.replace`` is atomic so the final file is never partial.
+Concurrency: each ``put`` stages bytes via :func:`tempfile.mkstemp`
+(``O_CREAT | O_EXCL | O_RDWR`` with mode ``0o600``) and ``os.replace``s
+the result into place. Two writers with the same digest land
+identical bytes on the same path — ``os.replace`` is atomic so the
+final file is never partial. The :func:`get` path uses ``lstat``-
+based containment checks to refuse symlinks anywhere on the route
+from root to artifact.
 
 Privacy: HAR / DOM payloads contain redacted credentials but may
 still carry PII (display names, addresses) from the underlying page.
@@ -195,8 +198,58 @@ class LocalFsEvidenceArtifactStore:
 
     def get(self, *, artifact_ref: str) -> bytes | None:
         path = self._path_for_ref(artifact_ref)
-        if path is None or not path.is_file():
+        if path is None:
             return None
+        # Symlink-safe read: refuse to follow any symlink at the
+        # target or any directory on the way down. A malicious or
+        # compromised local process could replace ``run_dir`` /
+        # ``attempt_dir`` / the artifact file itself with a symlink
+        # pointing outside the configured root, causing
+        # ``read_bytes()`` to read sensitive files. ``lstat`` does
+        # not follow links; ``S_ISREG`` on the lstat-returned mode
+        # rejects anything that is not a real regular file at that
+        # path.
+        import stat as _stat
+
+        try:
+            info = path.lstat()
+        except OSError:
+            return None
+        if not _stat.S_ISREG(info.st_mode):
+            _logger.warning(
+                "evidence_store_get_refused_non_regular_file",
+                artifact_ref=artifact_ref,
+                mode=oct(info.st_mode),
+            )
+            return None
+        # Containment check: resolve the path *without following
+        # symlinks*. ``Path.resolve(strict=True)`` would follow
+        # symlinks; instead, walk ``path.parents`` and verify each
+        # ancestor is also a regular directory under the root
+        # (lstat-based — same anti-symlink guard).
+        try:
+            root_real = self._root.resolve(strict=False)
+        except OSError:
+            return None
+        # ``Path.resolve()`` does follow symlinks but on a fixed
+        # ``self._root`` the resolution is one-time and trusted (we
+        # control how the root is configured). For the artifact path
+        # itself we walk parents and lstat-check each component.
+        for parent in path.parents:
+            if parent == root_real or parent == self._root:
+                break
+            try:
+                p_info = parent.lstat()
+            except OSError:
+                return None
+            if not _stat.S_ISDIR(p_info.st_mode):
+                _logger.warning(
+                    "evidence_store_get_refused_non_dir_ancestor",
+                    artifact_ref=artifact_ref,
+                    ancestor=str(parent),
+                    mode=oct(p_info.st_mode),
+                )
+                return None
         try:
             return path.read_bytes()
         except OSError:
