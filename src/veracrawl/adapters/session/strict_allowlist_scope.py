@@ -32,6 +32,7 @@ worker hang.
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from typing import Final
 from urllib.parse import urlsplit
@@ -64,6 +65,18 @@ _MAX_ROUTE_LENGTH: Final[int] = 4096
 # input. The credential gate prefers refusing in that case (treat
 # as ``ROUTE_NOT_ALLOWED``) over letting the worker hang.
 _MATCH_TIMEOUT_SECONDS: Final[float] = 0.05
+
+# Cumulative deadline across all patterns in one ``check()`` call.
+# A scope with many ``allowed_route_patterns`` could otherwise spend
+# N × ``_MATCH_TIMEOUT_SECONDS`` in the matcher per credentialed
+# request — a long-tail latency channel even with the per-match
+# timeout. 100 ms is the whole-check ceiling: at 50 ms per pattern
+# that is two patterns of worst-case work, which is enough for a
+# realistic scope to converge or refuse but small enough to bound
+# the worker's per-request commitment. Each per-match timeout is
+# computed as ``min(_MATCH_TIMEOUT_SECONDS, remaining_budget)`` so
+# the budget hardens individual matches as patterns accumulate.
+_TOTAL_BUDGET_SECONDS: Final[float] = 0.10
 
 
 def _safe_urlsplit(
@@ -315,16 +328,32 @@ class StrictAllowlistScope:
                 method=method,
                 reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
             )
+        # Cumulative deadline across the whole pattern loop. Even
+        # with a per-match timeout, a scope with many patterns
+        # could spend ``N * _MATCH_TIMEOUT_SECONDS`` on one
+        # credentialed request and become a long-tail latency
+        # channel. Cap aggregate work at ``_TOTAL_BUDGET_SECONDS``
+        # so the worker's per-request commitment is bounded.
+        deadline = time.monotonic() + _TOTAL_BUDGET_SECONDS
         for pattern in scope.allowed_route_patterns:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._raise(
+                    scope=scope,
+                    request_url=request_url,
+                    method=method,
+                    reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
+                )
             # ``regex.match`` anchors at position 0 (same semantics
             # as stdlib ``re.match``) and accepts a ``timeout=``
-            # kwarg that aborts the match if wall-clock spent inside
-            # the engine exceeds the budget — the bounded matcher
-            # codex iter 2-5 of step 2.2a flagged. Refuse the
-            # request on timeout (treat as ``ROUTE_NOT_ALLOWED``)
+            # kwarg that aborts the match when wall-clock spent
+            # inside the engine exceeds the budget — the bounded
+            # matcher codex iter 2-5 of step 2.2a flagged. Refuse
+            # the request on timeout (treat as ``ROUTE_NOT_ALLOWED``)
             # rather than let the worker hang on a hostile input.
+            per_match_timeout = min(_MATCH_TIMEOUT_SECONDS, remaining)
             try:
-                matched = regex.match(pattern, route, timeout=_MATCH_TIMEOUT_SECONDS)
+                matched = regex.match(pattern, route, timeout=per_match_timeout)
             except TimeoutError:
                 self._raise(
                     scope=scope,

@@ -877,7 +877,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2,<9" },
     { name = "redis", marker = "extra == 'queue-redis'", specifier = ">=5.0,<6" },
-    { name = "regex", specifier = ">=2024.5" },
+    { name = "regex", specifier = ">=2024.5,<2027" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5,<1" },
     { name = "structlog", specifier = ">=24,<26" },
 ]

@@ -19,7 +19,7 @@ dependencies = [
   # refuses nested-quantifier patterns, but contract-valid ambiguous
   # alternations (``(a|aa)+``) can still backtrack catastrophically
   # without a timeout.
-  "regex>=2024.5",
+  "regex>=2024.5,<2027",
 ]
 
 [project.optional-dependencies]

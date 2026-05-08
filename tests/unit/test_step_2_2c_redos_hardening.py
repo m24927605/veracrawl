@@ -128,6 +128,56 @@ def test_timeout_does_not_escape_as_raw_timeout_error() -> None:
         pytest.fail("raw TimeoutError escaped the policy boundary")
 
 
+def test_cumulative_budget_caps_total_matcher_work_per_request() -> None:
+    """Codex iter-1 important: even with a 50 ms per-match timeout,
+    a scope containing many patterns could spend
+    ``N * 50 ms`` per credentialed request — a long-tail latency
+    channel. The cumulative ``_TOTAL_BUDGET_SECONDS`` (100 ms)
+    caps aggregate matcher work; a scope with multiple
+    backtracking patterns must refuse under the whole-check
+    budget, not the sum of per-match budgets."""
+
+    backtracking_pattern = "^/(a|aa)+$"
+    adversarial_path = "/" + ("a" * 60) + "!"
+
+    # Five backtracking patterns + a final permissive matcher. With
+    # only the per-match timeout, this would take ~5 × 50ms = 250 ms
+    # before reaching the permissive pattern. The cumulative budget
+    # forces a refusal under ~100 ms regardless of how many
+    # patterns the scope carries.
+    scope = CredentialScope(
+        id="cred-scope-1",
+        credential_handle_ref="vault:test#1",
+        allowed_origins=["https://api.example.com"],
+        allowed_route_patterns=[
+            backtracking_pattern,
+            backtracking_pattern,
+            backtracking_pattern,
+            backtracking_pattern,
+            backtracking_pattern,
+            "/a",  # would otherwise match the adversarial path prefix
+        ],
+        allowed_methods=["GET"],
+    )
+
+    start = time.monotonic()
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            scope,
+            request_url=f"https://api.example.com{adversarial_path}",
+            method="GET",
+        )
+    elapsed = time.monotonic() - start
+
+    # Cumulative budget is 100 ms; the cap forces refusal under
+    # 250 ms (5 * 50ms per-match would otherwise consume).
+    assert elapsed < 0.25, (
+        f"matcher took {elapsed:.3f}s — expected <0.25s under the "
+        "cumulative whole-check budget"
+    )
+    assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
+
+
 def test_timeout_path_does_not_break_other_patterns_in_same_scope() -> None:
     """If a scope has multiple ``allowed_route_patterns``, a timeout
     on one MUST refuse the whole request rather than fall through

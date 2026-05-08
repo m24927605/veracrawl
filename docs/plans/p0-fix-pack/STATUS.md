@@ -19,6 +19,7 @@
 | 2.1 | CredentialVaultPort + EnvVarVault (test/fixture impl) + opaque CredentialValue (auto-redacted repr/str/format/dir) | DONE_WITH_RESERVATIONS | 5426095, fc0cd8b, 5d739e3, d30e781, 1ebb164, fb420f0 | 5 (rejected at iter-5; iter-5 important findings addressed in post-iter-5 commit fb420f0 but not re-reviewed) | 1 — see "v2 phase 2 step 2.1 reservations" below |
 | 2.2a | SessionScopePolicy port + StrictAllowlistScope core matcher (origin/route/method/expiry; defensive URL parse; userinfo refusal; path-canonicalization refusal; route length cap; invalid-scope invariant) | DONE_WITH_RESERVATIONS | a5ab243, 50dbef8, 0418866, db24b60, b86efff, 1cf4efe | 5 (rejected at iter-5; iter-5 important finding addressed in iter-5 commit 1cf4efe in-iteration) | 1 — see "v2 phase 2 step 2.2a reservations" below |
 | 2.2b | CredentialScopeReason structured enum (replaces free-form `reason: str` on `CredentialScopeViolation`) — Phase 0.4 reservation pull-forward | DONE | b4ec948, da74515, 793a15b, 976a824 | 4 (approved) | none |
+| 2.2c | Runtime ReDoS hardening via `regex` package per-match timeout (50 ms per pattern + 100 ms whole-check cumulative budget) — Phase 0.3 + step 2.2a runtime-ReDoS reservation pull-forward | IN_PROGRESS (codex review) | 27b1408, … | TBD | TBD |
 
 **Attempt id**: `0a4ea4442335e51ed8ba7fcd5b47e8a86d4a6eea:da7df723b19ab39d21915274fef71ecb:01KR0038H38F0MFMR0H7HGHEA4`
 
