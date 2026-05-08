@@ -238,13 +238,19 @@ def test_httpbin_real_conditional_cache_round_trip_with_304_short_circuit() -> N
         # test failure is easier to triage.
         cached = cache.get(run_ref="run:live:step-1-6a", url=url)
         assert cached is not None
-        assert cached.etag is not None and "test-step-1-6a" in cached.etag
+        # Codex iter-4 important: don't assert specific ETag content
+        # — httpbin's ETag endpoint may quote/transform the supplied
+        # tag in future versions. Asserting only "non-empty" + the
+        # 304 round-trip behavior keeps the test resilient.
+        assert cached.etag is not None and cached.etag.strip()
 
         adapter2 = StdlibHttpSourceAdapter(_make_request(url), config=config)
         adapter2.execute(_make_command(url))
         second_result = adapter2.last_result
         assert second_result is not None
-        # Same artifact_ref as the first fetch — replay traceability.
+        # Same artifact_ref as the first fetch — replay traceability
+        # (this is the load-bearing contract; ETag content shape is
+        # irrelevant as long as the round-trip works).
         assert second_result.artifact_refs == [first_artifact_ref]
         # Per-attempt evidence captures the wire 304.
         statuses = [ev.response_status for ev in second_result.attempt_evidences]
