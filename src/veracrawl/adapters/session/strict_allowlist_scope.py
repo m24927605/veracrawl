@@ -93,7 +93,16 @@ def _safe_urlsplit(
         # Malformed authority (e.g., ``host:bad`` port or
         # ``host:99999`` out-of-range).
         return None
-    has_userinfo = bool(parts.username) or bool(parts.password)
+    # Detect userinfo structurally from the authority delimiter
+    # rather than truthiness of ``parts.username`` / ``parts.password``.
+    # Empty userinfo shapes (``https://@host/...`` and
+    # ``https://:@host/...``) carry an ``@`` delimiter but parse to
+    # empty strings, so the truthiness check would miss them and let
+    # an attacker land at the credential gate with userinfo present
+    # in the wire URL. Rsplit so a literal ``@`` inside a path-only
+    # value (post ``//``) cannot false-positive.
+    netloc = parts.netloc
+    has_userinfo = "@" in netloc
     return parts.scheme, parts.hostname, port, parts.path, has_userinfo
 
 
@@ -142,13 +151,26 @@ def _normalize_allowed_origin(origin: str) -> str:
     """
 
     parsed = _safe_urlsplit(origin)
-    if parsed is None:
-        # Contract layer rejects this shape, so this branch is a
-        # belt-and-suspenders default. Return a sentinel that
-        # cannot match any normalized request origin.
-        return f"<invalid-allowed-origin:{len(origin)}>"
+    if (
+        parsed is None
+        or parsed[0] not in {"http", "https"}
+        or not parsed[1]
+    ):
+        # Contract layer rejects this shape; reaching here means a
+        # ``CredentialScope`` was constructed bypassing
+        # validation (e.g., a contract regression or an unsafe
+        # ``model_construct``). Fail loudly so the issue surfaces
+        # as an internal invariant violation rather than degrading
+        # silently into a confusing ``origin_not_allowed`` refusal.
+        raise RuntimeError(
+            "StrictAllowlistScope: scope.allowed_origins contains a value "
+            f"that is not a valid http(s) origin; len={len(origin)} "
+            "(contract layer should have rejected this — looks like a "
+            "validation bypass)"
+        )
     scheme, host, port, _path, _userinfo = parsed
-    host = (host or "").lower()
+    assert host is not None  # narrowed by the early-return above
+    host = host.lower()
     if port is not None and port == _DEFAULT_PORTS.get(scheme):
         port = None
     if port is None:

@@ -225,6 +225,11 @@ def test_refuses_unknown_method_with_method_not_allowed_reason() -> None:
         "https://user:pass@api.example.com/v1/items",
         "https://user@api.example.com/v1/items",
         "https://:pass@api.example.com/v1/items",
+        # Empty-userinfo shapes still carry an ``@`` authority delimiter
+        # and must be refused (truthiness on parts.username/password
+        # would have missed these — codex iter-4 important).
+        "https://@api.example.com/v1/items",
+        "https://:@api.example.com/v1/items",
     ],
 )
 def test_refuses_userinfo_in_request_url_as_origin_not_allowed(
@@ -297,6 +302,29 @@ def test_refuses_dotdot_path_traversal_attempt() -> None:
             method="GET",
         )
     assert excinfo.value.reason == "route_not_allowed"
+
+
+def test_invalid_allowed_origin_raises_internal_invariant() -> None:
+    """If a ``CredentialScope`` reaches the runtime with an
+    ``allowed_origin`` that doesn't parse as scheme://host[:port]
+    (e.g., a ``model_construct`` bypass of contract validation),
+    the matcher must surface an internal invariant violation —
+    NOT silently return ``origin_not_allowed``. Otherwise a
+    contract regression degrades into "credential refused" in
+    production with no signal to the operator."""
+
+    # Build a scope that bypasses validation by editing the
+    # underlying dict after construction. The Pydantic BaseModel
+    # accepts post-init mutation; the runtime must not trust the
+    # in-memory shape.
+    scope = _make_scope()
+    object.__setattr__(scope, "allowed_origins", ["not-a-url"])
+    with pytest.raises(RuntimeError, match="validation bypass"):
+        StrictAllowlistScope().check(
+            scope,
+            request_url="https://api.example.com/v1/items",
+            method="GET",
+        )
 
 
 def test_refuses_path_longer_than_runtime_cap_with_route_not_allowed() -> None:
