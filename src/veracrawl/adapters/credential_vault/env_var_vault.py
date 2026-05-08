@@ -1,10 +1,17 @@
 """``EnvVarVault`` — test / fixture impl of ``CredentialVaultPort``.
 
 Reads credentials from process environment variables of shape
-``VERACRAWL_CRED_<scope>_<key>``. Scope and key must be env-var-safe
-identifiers (uppercase alphanumeric + underscore); the vault
-rejects anything else so a caller cannot smuggle env-var-name
-injection or path-traversal-shaped strings into the lookup.
+``VERACRAWL_CRED_<scope>__<key>`` (double-underscore separator).
+Scope and key must be env-var-safe identifiers (uppercase
+alphanumeric + underscore); the vault rejects anything else so a
+caller cannot smuggle env-var-name injection or path-traversal-
+shaped strings into the lookup.
+
+The double-underscore separator (codex iter-3 important) keeps
+the mapping unambiguous when both scope and key contain
+underscores: ``(scope='A_B', key='C')`` → ``..._A_B__C``;
+``(scope='A', key='B_C')`` → ``..._A__B_C`` — different env vars,
+no aliasing.
 
 This impl is for **tests / fixtures only** — the production
 ``OutboxVaultClient`` (Phase 2 step 2.4) does the real audit-
@@ -34,6 +41,7 @@ from veracrawl.runtime_support.runtime_mode import (
 )
 
 _ENV_PREFIX: Final[str] = "VERACRAWL_CRED_"
+_ENV_SEP: Final[str] = "__"  # codex iter-3 important: disambiguate
 _SAFE_IDENT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9_]+$")
 
 
@@ -41,9 +49,13 @@ def _validate_identifier(name: str, *, kind: str) -> None:
     if not name:
         raise ValueError(f"{kind} must be non-empty")
     if not _SAFE_IDENT_RE.fullmatch(name):
+        # Codex iter-3 minor: don't echo the rejected identifier
+        # — credential-adjacent boundary, and the caller may have
+        # handed us a secret-looking string. Report length only.
         raise ValueError(
-            f"{kind} {name!r} must match ``^[A-Z0-9_]+$`` (uppercase, digits, "
-            "underscore only — env-var-safe identifier)"
+            f"{kind} must match ``^[A-Z0-9_]+$`` (uppercase, digits, "
+            f"underscore only — env-var-safe identifier); rejected value "
+            f"of length {len(name)} (redacted)"
         )
 
 
@@ -78,7 +90,7 @@ class EnvVarVault:
             )
         _validate_identifier(scope_ref, kind="scope_ref")
         _validate_identifier(key, kind="key")
-        env_name = f"{_ENV_PREFIX}{scope_ref}_{key}"
+        env_name = f"{_ENV_PREFIX}{scope_ref}{_ENV_SEP}{key}"
         raw = self._environ.get(env_name)
         if raw is None:
             raise CredentialNotFoundError(

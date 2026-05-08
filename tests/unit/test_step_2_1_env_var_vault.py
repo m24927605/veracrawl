@@ -1,7 +1,8 @@
 """Unit tests for ``EnvVarVault`` (Phase 2 step 2.1 test impl).
 
 design.md §4 Phase 2: ``EnvVarVault`` reads
-``VERACRAWL_CRED_<scope>_<key>`` from the process env. Tests
+``VERACRAWL_CRED_<scope>__<key>`` (double-underscore separator,
+codex iter-3) from the process env. Tests
 inject an ``environ`` dict so they don't pollute the real env.
 
 Behavioral expectations:
@@ -34,7 +35,7 @@ from veracrawl.runtime_support.runtime_mode import (
 
 
 def test_get_returns_credential_value_from_env_var() -> None:
-    vault = EnvVarVault(environ={"VERACRAWL_CRED_EBAY_API_KEY": "sk_live_abc123"})
+    vault = EnvVarVault(environ={"VERACRAWL_CRED_EBAY__API_KEY": "sk_live_abc123"})
     cred = vault.get(scope_ref="EBAY", key="API_KEY")
     assert isinstance(cred, CredentialValue)
     assert cred.reveal() == "sk_live_abc123"
@@ -52,10 +53,10 @@ def test_empty_value_treated_as_missing_fail_closed() -> None:
     misconfiguration; fail-closed rather than send empty
     Authorization upstream."""
 
-    vault = EnvVarVault(environ={"VERACRAWL_CRED_EBAY_API_KEY": ""})
+    vault = EnvVarVault(environ={"VERACRAWL_CRED_EBAY__API_KEY": ""})
     with pytest.raises(CredentialNotFoundError):
         vault.get(scope_ref="EBAY", key="API_KEY")
-    vault_ws = EnvVarVault(environ={"VERACRAWL_CRED_EBAY_API_KEY": "   \t"})
+    vault_ws = EnvVarVault(environ={"VERACRAWL_CRED_EBAY__API_KEY": "   \t"})
     with pytest.raises(CredentialNotFoundError):
         vault_ws.get(scope_ref="EBAY", key="API_KEY")
 
@@ -99,7 +100,7 @@ def test_returned_credential_redacts_in_repr_and_str() -> None:
     """End-to-end: the EnvVarVault returns a CredentialValue whose
     default string conversions hide the secret."""
 
-    vault = EnvVarVault(environ={"VERACRAWL_CRED_X_K": "secret-vault-token"})
+    vault = EnvVarVault(environ={"VERACRAWL_CRED_X__K": "secret-vault-token"})
     cred = vault.get(scope_ref="X", key="K")
     assert "secret-vault-token" not in repr(cred)
     assert "secret-vault-token" not in str(cred)
@@ -112,7 +113,7 @@ def test_env_var_naming_does_not_leak_into_credential_value() -> None:
     showing ``scope_ref=EBAY`` should not betray the env var
     convention to anyone who only sees the wrapper."""
 
-    vault = EnvVarVault(environ={"VERACRAWL_CRED_EBAY_API_KEY": "x"})
+    vault = EnvVarVault(environ={"VERACRAWL_CRED_EBAY__API_KEY": "x"})
     cred = vault.get(scope_ref="EBAY", key="API_KEY")
     assert cred.scope_ref == "EBAY"
     assert "VERACRAWL_CRED_" not in repr(cred)
@@ -123,7 +124,7 @@ def test_default_environ_uses_os_environ(monkeypatch: pytest.MonkeyPatch) -> Non
     """When no ``environ`` arg is passed, ``EnvVarVault`` falls back
     to ``os.environ``. Verify by patching the process env."""
 
-    monkeypatch.setenv("VERACRAWL_CRED_DEFAULT_TEST_KEY", "from-os-environ")
+    monkeypatch.setenv("VERACRAWL_CRED_DEFAULT_TEST__KEY", "from-os-environ")
     vault = EnvVarVault()
     cred = vault.get(scope_ref="DEFAULT_TEST", key="KEY")
     assert cred.reveal() == "from-os-environ"
@@ -137,7 +138,7 @@ def test_get_refuses_in_production_mode() -> None:
     before the env var lookup so a configured-but-test-only
     secret cannot leak under production wiring."""
 
-    vault = EnvVarVault(environ={"VERACRAWL_CRED_X_K": "should-never-load"})
+    vault = EnvVarVault(environ={"VERACRAWL_CRED_X__K": "should-never-load"})
     with with_runtime_mode(RuntimeMode.PRODUCTION):
         with pytest.raises(ProductionRuntimeNotImplemented) as excinfo:
             vault.get(scope_ref="X", key="K")
@@ -146,16 +147,46 @@ def test_get_refuses_in_production_mode() -> None:
 
 
 def test_unrelated_env_vars_are_not_leaked() -> None:
-    """Vault only returns the exact ``VERACRAWL_CRED_<scope>_<key>``
+    """Vault only returns the exact ``VERACRAWL_CRED_<scope>__<key>``
     match — a related env var doesn't accidentally match."""
 
     vault = EnvVarVault(
         environ={
-            "VERACRAWL_CRED_EBAY_API_KEY": "wanted",
-            "VERACRAWL_CRED_EBAY_OTHER": "not-wanted",
-            "VERACRAWL_CRED_OTHER_API_KEY": "not-wanted-2",
+            "VERACRAWL_CRED_EBAY__API_KEY": "wanted",
+            "VERACRAWL_CRED_EBAY__OTHER": "not-wanted",
+            "VERACRAWL_CRED_OTHER__API_KEY": "not-wanted-2",
             "PATH": "/usr/bin",
         }
     )
     cred = vault.get(scope_ref="EBAY", key="API_KEY")
     assert cred.reveal() == "wanted"
+
+
+def test_scope_key_underscore_ambiguity_disambiguated() -> None:
+    """Codex iter-3 important: with a single-underscore separator,
+    ``(scope='A_B', key='C')`` and ``(scope='A', key='B_C')`` both
+    aliased to the same env var. Double-underscore separator now
+    keeps them distinct — verify both round-trip independently."""
+
+    vault = EnvVarVault(
+        environ={
+            "VERACRAWL_CRED_A_B__C": "scope-A_B/key-C",
+            "VERACRAWL_CRED_A__B_C": "scope-A/key-B_C",
+        }
+    )
+    assert vault.get(scope_ref="A_B", key="C").reveal() == "scope-A_B/key-C"
+    assert vault.get(scope_ref="A", key="B_C").reveal() == "scope-A/key-B_C"
+
+
+def test_invalid_identifier_error_does_not_echo_raw_value() -> None:
+    """Codex iter-3 minor: error text is credential-adjacent and
+    must not echo the rejected identifier (caller may have handed
+    us a secret-looking string)."""
+
+    vault = EnvVarVault(environ={})
+    secret_looking = "sk_live_abc.123"  # has a dot → invalid
+    with pytest.raises(ValueError) as excinfo:
+        vault.get(scope_ref=secret_looking, key="API_KEY")
+    assert secret_looking not in str(excinfo.value)
+    assert "abc.123" not in str(excinfo.value)
+    assert "redacted" in str(excinfo.value)

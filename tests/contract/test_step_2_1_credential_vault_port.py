@@ -119,6 +119,21 @@ def test_credential_value_rejects_whitespace_only_value(blank_value: str) -> Non
         CredentialValue(value=blank_value, scope_ref="X")
 
 
+def test_credential_value_invalid_scope_ref_error_does_not_echo_raw() -> None:
+    """Codex iter-3 important: the ``ValueError`` raised when
+    ``scope_ref`` fails the env-var-safe regex must not echo the
+    rejected value — the caller might have handed us a raw token
+    or control-character payload, and the exception text would
+    otherwise leak it through logs / test output / telemetry."""
+
+    secret_looking = "sk_live_should_never_appear_in_logs"  # lowercase ⇒ rejected
+    with pytest.raises(ValueError) as excinfo:
+        CredentialValue(value="x", scope_ref=secret_looking)
+    assert secret_looking not in str(excinfo.value)
+    assert "should_never_appear" not in str(excinfo.value)
+    assert "redacted" in str(excinfo.value)
+
+
 def test_credential_value_format_honors_padding_spec_without_leaking() -> None:
     """Codex iter-2 minor: ``__format__`` should respect the format
     spec (alignment, width) so f-strings behave predictably while

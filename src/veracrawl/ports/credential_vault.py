@@ -117,9 +117,15 @@ class CredentialValue:
             # marker. A caller / vault adapter that passed a raw
             # token here would leak it through ``__repr__`` /
             # ``__str__`` / ``__format__``.
+            #
+            # Codex iter-3 important: don't echo the rejected
+            # value either — the caller may have handed us a
+            # secret-looking string and the ``ValueError`` itself
+            # would carry it into logs / test output / telemetry.
             raise ValueError(
                 f"CredentialValue scope_ref must match ``^[A-Z0-9_]+$`` "
-                f"(env-var-safe identifier); got {scope_ref!r}"
+                f"(env-var-safe identifier); rejected value of length "
+                f"{len(scope_ref)} (redacted)"
             )
         self._value = value
         self._scope_ref = scope_ref
