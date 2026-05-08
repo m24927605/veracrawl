@@ -95,10 +95,12 @@ class CachedConditional:
             raise ValueError(
                 "CachedConditional requires at least one non-empty etag / last_modified"
             )
-        if not self.body_artifact_ref:
-            raise ValueError("CachedConditional.body_artifact_ref must be non-empty")
-        if not self.content_type:
-            raise ValueError("CachedConditional.content_type must be non-empty")
+        if not self.body_artifact_ref or not self.body_artifact_ref.strip():
+            raise ValueError(
+                "CachedConditional.body_artifact_ref must be non-empty + non-whitespace"
+            )
+        if not self.content_type or not self.content_type.strip():
+            raise ValueError("CachedConditional.content_type must be non-empty + non-whitespace")
         if not (200 <= self.status_code < 300):
             raise ValueError(f"CachedConditional.status_code must be 2xx, got {self.status_code}")
 

@@ -600,6 +600,7 @@ class StdlibHttpSourceAdapter:
         self._attempt_evidences = []
         self._cached_artifact_ref_for_response = None
         self._suppress_jar_cookies_for_next_request = False
+        self._last_result = None
         # Snapshot the extra-headers config for this fetch so a
         # cross-origin strip on this fetch does not mutate the
         # adapter's persistent state across calls. Read from the
@@ -608,9 +609,21 @@ class StdlibHttpSourceAdapter:
         # dict mid-flight cannot affect us.
         self._current_extra_headers = dict(self._frozen_extra_headers)
         self._attempt_counter = 0
-        response = self._fetch_with_redirects(
-            self.request.url, policy_decision_refs=policy_decision_refs
-        )
+        try:
+            response = self._fetch_with_redirects(
+                self.request.url, policy_decision_refs=policy_decision_refs
+            )
+        except NetworkAdapterError:
+            # Codex iter-4/5 important: publish a partial
+            # ``NetworkClientResult`` so callers / replay can read
+            # the accumulated ``redirect_hops`` and
+            # ``attempt_evidences`` even on failure (redirect
+            # denial, retry exhaustion, robots block on the
+            # redirect target, etc.). The synthesized result has
+            # an empty body / a placeholder response shape — the
+            # raised error remains the primary signal.
+            self._last_result = self._build_partial_failure_result()
+            raise
         body = response.read()
         try:
             content_type_header = response.headers.get("content-type", "")
@@ -665,6 +678,45 @@ class StdlibHttpSourceAdapter:
             replay_event_refs=[f"event:{command.command_envelope_id}:network_response_recorded"],
             idempotency_key=f"{command.adapter_spec.id}:{self.request.id}",
             status=AdapterResultStatus.SUCCEEDED,
+        )
+
+    def _build_partial_failure_result(self) -> NetworkClientResult:
+        """Synthesize a ``NetworkClientResult`` for a failed fetch.
+
+        Codex iter-4/5 important: callers / replay must be able to
+        read the accumulated redirect hops + per-attempt evidence
+        even when the fetch raised. The response shape carries a
+        zero status + a placeholder artifact ref so the contract
+        validator passes; the raised exception remains the primary
+        failure signal.
+        """
+
+        # Always use ``502`` (Bad Gateway) for the partial-failure
+        # response. ``NetworkResponse`` requires raw artifact
+        # metadata for any 2xx-3xx response (we have neither when
+        # the fetch failed), so the placeholder must be 4xx-5xx.
+        # The actual last-seen wire status is preserved on the
+        # last ``NetworkAttemptEvidence``; the placeholder
+        # response status is just a contract-valid sentinel.
+        placeholder_response = NetworkResponse(
+            id=f"network-response:{self.request.id}:partial",
+            request_ref=self.request.id,
+            status_code=502,
+            final_url=self.request.url,
+            headers_ref=f"headers:{self.request.id}:response",
+            raw_artifact_ref=f"artifact:{self.request.id}:partial",
+            content_digest="",
+            content_type="application/octet-stream",
+            body_size_bytes=0,
+            redirect_hop_refs=[hop.id for hop in self._redirect_hops],
+            timing_ref=f"timing:{self.request.id}:partial",
+        )
+        return NetworkClientResult(
+            response=placeholder_response,
+            redirect_hops=list(self._redirect_hops),
+            body_text="",
+            artifact_refs=[],
+            attempt_evidences=list(self._attempt_evidences),
         )
 
     def _fetch_with_redirects(self, url: str, *, policy_decision_refs: list[str]) -> httpx.Response:

@@ -383,6 +383,48 @@ def test_cookie_header_in_extra_stripped_on_cross_origin_redirect() -> None:
     assert "cookie" not in captured[1]
 
 
+@pytest.mark.parametrize(
+    "header_name, header_value",
+    [
+        ("X-Api-Key", "ak_secret_xyz"),
+        ("X-Auth-Token", "tok_secret_xyz"),
+        ("X-Session-Token", "session_secret_xyz"),
+        ("X-CSRF-Token", "csrf_secret_xyz"),
+    ],
+)
+def test_credential_headers_stripped_on_cross_origin_redirect(
+    header_name: str, header_value: str
+) -> None:
+    """Iter-5 important: every credential-bearing header in the
+    contract sensitive set must be stripped on cross-origin
+    redirect (parametric coverage)."""
+
+    captured: list[dict[str, str]] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(dict(request.headers))
+        url = str(request.url)
+        if url == "https://a.test/p/1":
+            return httpx.Response(
+                301,
+                headers={"location": "https://b.test/q", "content-type": "text/plain"},
+            )
+        return httpx.Response(
+            200, content=b"<html>ok</html>", headers={"content-type": "text/html"}
+        )
+
+    StdlibHttpSourceAdapter(
+        _make_request("https://a.test/p/1"),
+        config=HttpClientConfig(extra_headers={header_name: header_value}),
+        transport=httpx.MockTransport(_handler),
+    ).execute(_make_command())
+    # Original origin sees the header.
+    assert captured[0].get(header_name.lower()) == header_value
+    # Cross-origin target must NOT see the header (case-insensitive).
+    cross_lowered = {k.lower(): v for k, v in captured[1].items()}
+    assert header_name.lower() not in cross_lowered
+
+
 def test_proxy_authorization_stripped_on_cross_origin_redirect() -> None:
     captured: list[dict[str, str]] = []
 

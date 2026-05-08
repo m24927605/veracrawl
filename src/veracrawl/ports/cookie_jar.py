@@ -52,9 +52,17 @@ from typing import Protocol, runtime_checkable
 class CookieRecord:
     """A stored cookie as observed by the jar.
 
+    Codex iter-5 important: ``value`` is credential material in
+    the project's threat model. The dataclass declares ``value``
+    with ``field(repr=False)`` so the default ``__repr__`` does
+    not stringify the raw cookie value into log lines / debug
+    output / accidental ``print`` calls. Tests / debug paths can
+    still read ``record.value`` directly when they explicitly
+    need it.
+
     Attributes:
         name: Cookie name.
-        value: Cookie value.
+        value: Cookie value (excluded from ``__repr__``).
         origin: Canonical origin (``scheme://host[:port]``) the
             cookie was set under.
         path: Path scope (default ``/``).
@@ -68,12 +76,16 @@ class CookieRecord:
     """
 
     name: str
-    value: str
-    origin: str
+    value: str = field(repr=False)
+    origin: str = ""
     path: str = "/"
     expires_epoch: float | None = None
     secure: bool = False
     http_only: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.origin:
+            raise ValueError("CookieRecord.origin must be non-empty")
 
 
 @dataclass

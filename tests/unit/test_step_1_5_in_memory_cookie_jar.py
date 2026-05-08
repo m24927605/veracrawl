@@ -161,6 +161,79 @@ def test_max_age_zero_clears_cookie_immediately() -> None:
     assert cookies == {}
 
 
+def test_expires_attribute_future_keeps_cookie() -> None:
+    """Codex iter-5 important: Expires attribute coverage."""
+
+    fake_time = [1_000_000.0]
+
+    def clock() -> float:
+        return fake_time[0]
+
+    jar = InMemoryCookieJar(clock_fn=clock)
+    # 2099 — far future relative to the fake clock at epoch 1M.
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=abc; Expires=Wed, 21 Oct 2099 07:28:00 GMT",
+    )
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/")
+    assert cookies == {"session": "abc"}
+
+
+def test_expires_attribute_past_clears_cookie() -> None:
+    fake_time = [4_000_000_000.0]  # ~2096
+
+    def clock() -> float:
+        return fake_time[0]
+
+    jar = InMemoryCookieJar(clock_fn=clock)
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=abc; Expires=Wed, 21 Oct 1990 07:28:00 GMT",
+    )
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/")
+    assert cookies == {}
+
+
+def test_expires_invalid_falls_back_to_session() -> None:
+    """Malformed Expires → cookie treated as session (no expiry)."""
+
+    jar = InMemoryCookieJar()
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=abc; Expires=NOT_A_DATE",
+    )
+    cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/")
+    assert cookies == {"session": "abc"}
+
+
+def test_max_age_zero_deletes_existing_cookie() -> None:
+    """Codex iter-5 important: an existing cookie should be removed
+    when a later Set-Cookie for the same (name, path) carries
+    Max-Age=0 (the spec deletion mechanism)."""
+
+    fake_time = [1_000_000.0]
+
+    def clock() -> float:
+        return fake_time[0]
+
+    jar = InMemoryCookieJar(clock_fn=clock)
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=v1; Path=/",
+    )
+    assert jar.cookies_for(run_ref="run:r", url="https://example.test/") == {"session": "v1"}
+    jar.accept_set_cookie(
+        run_ref="run:r",
+        url="https://example.test/",
+        set_cookie_value="session=v1; Path=/; Max-Age=0",
+    )
+    assert jar.cookies_for(run_ref="run:r", url="https://example.test/") == {}
+
+
 def test_max_age_positive_then_expires() -> None:
     fake_time = [1_000_000.0]
 
