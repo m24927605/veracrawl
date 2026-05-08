@@ -14,8 +14,11 @@ contract has deterministic control. Runs under
 and private-network denial.
 
 Gated by ``@pytest.mark.live``; default invocation excludes via
-``-m 'not live'``. Operators run with ``pytest -m live``. Two
-HTTP round trips bounded by ``HttpClientConfig.connect_timeout_s``
+``-m 'not live'``. Operators run with ``pytest -m live``. The
+file contains three tests; each performs one redirect + one final
+fetch (six wire round trips total), plus the robots fetch
+each ``StdlibHttpSourceAdapter`` issues per origin per session.
+Per-fetch latency is bounded by ``HttpClientConfig.connect_timeout_s``
 (10s default) + ``read_timeout_s`` (30s default).
 """
 
