@@ -35,11 +35,11 @@ What lives in step 2.2a vs later sub-steps:
   ``SessionScopePolicy`` that ship after step 2.2b must use the
   enum — free-form strings raise :class:`ValueError` at exception
   construction.
-* **2.2c**: layers a runtime ReDoS defense (per-match timeout /
-  ``re2`` engine / glob-only DSL) over the regex matcher so an
-  attacker-controlled URL cannot wedge the matcher even though
-  the AST guard already refuses pathological *patterns*
-  (Phase 0 step 0.3 reservation pull-forward).
+* **2.2c** (now landed): layers a runtime ReDoS defense over the
+  regex matcher — the third-party ``regex`` package's per-match
+  ``timeout=`` kwarg, combined with a cumulative whole-check
+  deadline, bounds worst-case work on attacker-controlled URLs.
+  Resolves Phase 0 step 0.3 + step 2.2a runtime-ReDoS reservations.
 """
 
 from __future__ import annotations
