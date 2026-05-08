@@ -31,6 +31,7 @@ from __future__ import annotations
 import time
 
 import pytest
+import regex
 
 from veracrawl.adapters.session.strict_allowlist_scope import StrictAllowlistScope
 from veracrawl.contracts.errors import (
@@ -161,85 +162,211 @@ def test_timeout_does_not_escape_as_raw_timeout_error() -> None:
         pytest.fail("raw TimeoutError escaped the policy boundary")
 
 
-def test_cumulative_budget_caps_total_matcher_work_per_request() -> None:
-    """Codex iter-1 important: even with a 50 ms per-match timeout,
-    a scope containing many patterns could spend
-    ``N * 50 ms`` per credentialed request — a long-tail latency
-    channel. The cumulative ``_TOTAL_BUDGET_SECONDS`` (100 ms)
-    caps aggregate matcher work; a scope with multiple
-    backtracking patterns must refuse under the whole-check
-    budget, not the sum of per-match budgets."""
+def test_cumulative_budget_refuses_after_deadline_via_monkeypatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex iter-3 important: deterministic verification that the
+    cumulative-deadline refusal fires. Patch ``regex.match`` to
+    sleep almost exactly the per-match budget on every call, then
+    advance through the pattern list — once the cumulative wall
+    clock crosses ``_TOTAL_BUDGET_SECONDS`` the matcher must
+    refuse rather than continue iterating, regardless of whether
+    a later pattern would have matched."""
 
-    backtracking_pattern = "^/(a|aa)+$"
-    adversarial_path = "/" + ("a" * 60) + "!"
+    from veracrawl.adapters.session import strict_allowlist_scope as sas
 
-    # Five backtracking patterns + a final permissive matcher. With
-    # only the per-match timeout, this would take ~5 × 50ms = 250 ms
-    # before reaching the permissive pattern. The cumulative budget
-    # forces a refusal under ~100 ms regardless of how many
-    # patterns the scope carries.
+    call_log: list[float] = []
+    fake_now = [0.0]
+
+    def fake_monotonic() -> float:
+        return fake_now[0]
+
+    def fake_match(*args: object, **kwargs: object) -> None:
+        # Simulate ~per_match_timeout of work by advancing the
+        # fake clock. ``timeout=`` kwarg is the budget the matcher
+        # passed in; consume it fully and return None (no match).
+        timeout = kwargs.get("timeout", sas._MATCH_TIMEOUT_SECONDS)
+        assert isinstance(timeout, float)
+        call_log.append(timeout)
+        fake_now[0] += timeout
+        return None
+
+    monkeypatch.setattr(sas, "regex", type("R", (), {"match": staticmethod(fake_match)}))
+    monkeypatch.setattr(sas.time, "monotonic", fake_monotonic)
+
     scope = CredentialScope(
         id="cred-scope-1",
         credential_handle_ref="vault:test#1",
         allowed_origins=["https://api.example.com"],
         allowed_route_patterns=[
-            backtracking_pattern,
-            backtracking_pattern,
-            backtracking_pattern,
-            backtracking_pattern,
-            backtracking_pattern,
-            "/a",  # would otherwise match the adversarial path prefix
+            "^/v1/items",
+            "^/v2/items",
+            "^/v3/items",
+            "^/v4/items",
+            "^/v5/items",  # would otherwise be the 5th attempt
         ],
         allowed_methods=["GET"],
     )
 
-    start = time.monotonic()
     with pytest.raises(CredentialScopeViolation) as excinfo:
         StrictAllowlistScope().check(
             scope,
-            request_url=f"https://api.example.com{adversarial_path}",
+            request_url="https://api.example.com/never-matches",
             method="GET",
         )
-    elapsed = time.monotonic() - start
-
-    # Cumulative budget is 100 ms; the cap forces refusal under
-    # 250 ms (5 * 50ms per-match would otherwise consume).
-    assert elapsed < 0.25, (
-        f"matcher took {elapsed:.3f}s — expected <0.25s under the "
-        "cumulative whole-check budget"
-    )
     assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
 
+    # Cumulative budget is 100 ms; per-match is 50 ms. After two
+    # full per-match consumptions (100 ms), the third iteration
+    # finds ``remaining <= 0`` and refuses without invoking
+    # ``regex.match`` again. Verify the call log and budget shrink.
+    assert len(call_log) == 2, (
+        f"expected matcher to bail after 2 full per-match consumptions; "
+        f"got {len(call_log)} calls: {call_log}"
+    )
+    # The two timeouts passed in are bounded by the per-match cap
+    # AND the remaining cumulative budget at the time of each call.
+    assert call_log[0] == pytest.approx(0.05, abs=1e-6)
+    assert call_log[1] == pytest.approx(0.05, abs=1e-6)
 
-def test_timeout_path_does_not_break_other_patterns_in_same_scope() -> None:
-    """If a scope has multiple ``allowed_route_patterns``, a timeout
-    on one MUST refuse the whole request rather than fall through
-    to the next pattern. Otherwise a hostile URL could ride a
-    permissive secondary pattern and bypass the protection.
 
-    Concretely: scope with ``[backtracking_pattern, "/v1/items"]``
-    and an adversarial input that times out on the first pattern —
-    the request must be refused, not allowed via the second."""
+def test_per_match_timeout_shrinks_with_remaining_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex iter-3 important: per-match timeouts must be the
+    minimum of the per-match cap and the remaining cumulative
+    budget. Patch ``regex.match`` to consume a partial budget
+    on each call, then assert the next call receives a smaller
+    timeout that reflects the remaining deadline."""
 
-    backtracking_pattern = "^/(a|aa)+$"
-    permissive_secondary = "/"  # would match anything, but contract
-    # layer rejects bare "/" as catch-all. Use a near-permissive
-    # pattern that the adversarial input also matches.
-    adversarial_path = "/" + ("a" * 60) + "!"
+    from veracrawl.adapters.session import strict_allowlist_scope as sas
+
+    timeouts_seen: list[float] = []
+    fake_now = [0.0]
+
+    def fake_monotonic() -> float:
+        return fake_now[0]
+
+    def fake_match(*args: object, **kwargs: object) -> None:
+        timeout = kwargs.get("timeout", sas._MATCH_TIMEOUT_SECONDS)
+        assert isinstance(timeout, float)
+        timeouts_seen.append(timeout)
+        # Consume 80% of the budget on each call so the next
+        # iteration sees a strictly smaller remaining budget.
+        fake_now[0] += timeout * 0.8
+        return None
+
+    monkeypatch.setattr(sas, "regex", type("R", (), {"match": staticmethod(fake_match)}))
+    monkeypatch.setattr(sas.time, "monotonic", fake_monotonic)
 
     scope = CredentialScope(
         id="cred-scope-1",
         credential_handle_ref="vault:test#1",
         allowed_origins=["https://api.example.com"],
-        allowed_route_patterns=[backtracking_pattern, "/a"],
+        allowed_route_patterns=[
+            "^/v1/items",
+            "^/v2/items",
+            "^/v3/items",
+            "^/v4/items",
+        ],
         allowed_methods=["GET"],
     )
-    del permissive_secondary  # documented intent only
+
+    with pytest.raises(CredentialScopeViolation):
+        StrictAllowlistScope().check(
+            scope,
+            request_url="https://api.example.com/no-match",
+            method="GET",
+        )
+
+    # Each timeout must not exceed the per-match cap, AND must
+    # decrease as the cumulative deadline approaches. Once the
+    # remaining budget drops below the per-match cap, the
+    # ``min(per_match, remaining)`` rule kicks in.
+    assert all(t <= 0.05 + 1e-9 for t in timeouts_seen), timeouts_seen
+    # First call sees full per-match budget (cumulative budget
+    # 100 ms is well above per-match 50 ms).
+    assert timeouts_seen[0] == pytest.approx(0.05, abs=1e-6)
+    # Eventually a call sees a budget strictly less than the
+    # per-match cap because the cumulative deadline kicked in.
+    assert any(t < 0.05 - 1e-6 for t in timeouts_seen[1:]), (
+        f"expected at least one shrunk timeout after the cumulative "
+        f"deadline kicked in; got {timeouts_seen}"
+    )
+
+
+def test_timeout_on_first_pattern_refuses_via_monkeypatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex iter-3 important: a timeout on one pattern must NOT
+    fall through to a permissive secondary pattern. Patch
+    ``regex.match`` to raise ``TimeoutError`` on the first call
+    and assert refusal — never give the request a chance to ride
+    a later pattern."""
+
+    from veracrawl.adapters.session import strict_allowlist_scope as sas
+
+    calls = [0]
+
+    def fake_match(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        calls[0] += 1
+        if calls[0] == 1:
+            raise TimeoutError("simulated timeout on first pattern")
+        # The next call would match — but the matcher must have
+        # refused before reaching here.
+        return object()  # truthy; would match if reached
+
+    monkeypatch.setattr(sas, "regex", type("R", (), {"match": staticmethod(fake_match)}))
+
+    scope = CredentialScope(
+        id="cred-scope-1",
+        credential_handle_ref="vault:test#1",
+        allowed_origins=["https://api.example.com"],
+        allowed_route_patterns=["^/never-times-out", "/a"],
+        allowed_methods=["GET"],
+    )
 
     with pytest.raises(CredentialScopeViolation) as excinfo:
         StrictAllowlistScope().check(
             scope,
-            request_url=f"https://api.example.com{adversarial_path}",
+            request_url="https://api.example.com/anything",
             method="GET",
         )
     assert excinfo.value.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
+    assert calls[0] == 1, (
+        f"matcher must refuse after first-pattern timeout; instead "
+        f"made {calls[0]} regex.match calls"
+    )
+
+
+def test_contract_validated_patterns_compile_under_regex() -> None:
+    """Codex iter-3 minor: the contract validator
+    (``_validate_route_pattern``) uses stdlib ``re.compile`` /
+    ``re._parser`` to check pattern syntax + structural shape; the
+    runtime executes via the third-party ``regex`` package. Verify
+    the boundary: every pattern shape the contract layer accepts
+    must also compile under ``regex`` so no contract-valid scope
+    fails at runtime with a compile error.
+
+    ``regex`` is documented as a strict superset of stdlib ``re``
+    syntax for the constructs the contract layer permits
+    (``^``-anchored, alternation, character classes, basic
+    quantifiers); the test locks that compatibility as a regression
+    boundary."""
+
+    contract_valid_patterns = [
+        "^/v1/items",
+        "/v1/items",
+        "^/v1/items$",
+        "/v1/(items|users)",
+        "/v1/items/[a-z]+",
+        "/v1/items/[0-9]{1,10}",
+        "/api/v1/.+",
+        "^/oauth/token$",
+    ]
+    for pattern in contract_valid_patterns:
+        compiled = regex.compile(pattern)
+        # Compilation succeeded; verify a basic match against a
+        # representative input doesn't error either.
+        compiled.match("/v1/items/123")
