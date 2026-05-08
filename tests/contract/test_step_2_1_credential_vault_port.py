@@ -108,6 +108,30 @@ def test_credential_value_rejects_empty_scope() -> None:
         CredentialValue(value="x", scope_ref="")
 
 
+@pytest.mark.parametrize(
+    "scope_ref",
+    [
+        "ebay",  # lowercase
+        "EBAY-PROD",  # dash
+        "EBAY.PROD",  # dot
+        "EBAY/../X",  # path-traversal shape
+        "EBAY PROD",  # space
+        "EBAY\nPROD",  # control char
+        "EBAY\x00PROD",  # NUL byte
+        "<script>",  # angle-bracket payload
+        "sk_live_actual_secret_token",  # secret-looking value (lowercase rejects)
+        "Bearer abc.def.ghi",  # JWT-looking value with dots
+    ],
+)
+def test_credential_value_rejects_unsafe_scope_ref_shape(scope_ref: str) -> None:
+    """Codex iter-1 important: ``scope_ref`` is interpolated into the
+    redaction marker. Refuse anything that could carry a token,
+    control char, or markup so the marker stays safe to log."""
+
+    with pytest.raises(ValueError, match="env-var-safe"):
+        CredentialValue(value="x", scope_ref=scope_ref)
+
+
 def test_credential_value_eq_uses_identity_default() -> None:
     """Two wrappers around the same secret are NOT equal (identity
     semantics). Prevents leaking via ``cred == known_value``

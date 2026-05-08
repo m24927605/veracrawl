@@ -8,12 +8,12 @@ injection or path-traversal-shaped strings into the lookup.
 
 This impl is for **tests / fixtures only** — the production
 ``OutboxVaultClient`` (Phase 2 step 2.4) does the real audit-
-logged retrieval. The wiring layer (``AuthorizedSessionAdapter``)
-gates against using ``EnvVarVault`` under
-``RuntimeMode.PRODUCTION``; the vault itself does not enforce
-the gate (a clean separation lets the env-var vault remain
-useful for e2e fixtures that legitimately want production-mode
-without a real secrets backend).
+logged retrieval. ``EnvVarVault`` enforces a production-mode
+gate at ``get`` time: under ``RuntimeMode.PRODUCTION``, every
+``get`` raises :class:`ProductionRuntimeNotImplemented`. This
+ensures an unaudited credential path can never appear in
+production even if a wiring regression slipped past the
+adapter layer (codex iter-1 important — defense in depth).
 """
 
 from __future__ import annotations
@@ -26,6 +26,11 @@ from typing import Final
 from veracrawl.ports.credential_vault import (
     CredentialNotFoundError,
     CredentialValue,
+)
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
 )
 
 _ENV_PREFIX: Final[str] = "VERACRAWL_CRED_"
@@ -60,6 +65,17 @@ class EnvVarVault:
         self._environ: Mapping[str, str] = environ if environ is not None else os.environ
 
     def get(self, *, scope_ref: str, key: str) -> CredentialValue:
+        # Codex iter-1 important: defense-in-depth gate against
+        # an unaudited credential path appearing in PRODUCTION.
+        # The wiring layer in step 2.4 will swap in
+        # ``OutboxVaultClient`` for production, but we refuse
+        # here too so a wiring regression cannot silently route
+        # production through env vars.
+        if current_mode() is RuntimeMode.PRODUCTION:
+            raise ProductionRuntimeNotImplemented(
+                backend="env_var_vault",
+                gate="credential_vault",
+            )
         _validate_identifier(scope_ref, kind="scope_ref")
         _validate_identifier(key, kind="key")
         env_name = f"{_ENV_PREFIX}{scope_ref}_{key}"

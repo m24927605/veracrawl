@@ -45,7 +45,19 @@ Failure semantics:
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+import re
+from typing import Final, Protocol, runtime_checkable
+
+# Codex iter-1 important: ``scope_ref`` is interpolated verbatim
+# into the redaction marker (``<credential:redacted:<scope>>``).
+# A future vault adapter that accidentally passed a raw token /
+# control-character payload as ``scope_ref`` would leak it
+# through the exact paths this wrapper is meant to make safe.
+# Constrain ``scope_ref`` to env-var-safe shape so secret-looking
+# strings cannot land here. The orchestrator translates
+# structured ``CredentialScope.id`` values to vault-safe scopes
+# at the wiring layer before calling the port.
+_SAFE_SCOPE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9_]+$")
 
 
 class CredentialNotFoundError(KeyError):
@@ -89,6 +101,16 @@ class CredentialValue:
             raise ValueError("CredentialValue requires a non-empty value")
         if not scope_ref:
             raise ValueError("CredentialValue requires a non-empty scope_ref")
+        if not _SAFE_SCOPE_RE.fullmatch(scope_ref):
+            # Codex iter-1 important: refuse to interpolate
+            # arbitrary ``scope_ref`` content into the redaction
+            # marker. A caller / vault adapter that passed a raw
+            # token here would leak it through ``__repr__`` /
+            # ``__str__`` / ``__format__``.
+            raise ValueError(
+                f"CredentialValue scope_ref must match ``^[A-Z0-9_]+$`` "
+                f"(env-var-safe identifier); got {scope_ref!r}"
+            )
         self._value = value
         self._scope_ref = scope_ref
 

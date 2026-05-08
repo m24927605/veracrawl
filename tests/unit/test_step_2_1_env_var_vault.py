@@ -26,6 +26,11 @@ from veracrawl.ports.credential_vault import (
     CredentialNotFoundError,
     CredentialValue,
 )
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    with_runtime_mode,
+)
 
 
 def test_get_returns_credential_value_from_env_var() -> None:
@@ -122,6 +127,22 @@ def test_default_environ_uses_os_environ(monkeypatch: pytest.MonkeyPatch) -> Non
     vault = EnvVarVault()
     cred = vault.get(scope_ref="DEFAULT_TEST", key="KEY")
     assert cred.reveal() == "from-os-environ"
+
+
+def test_get_refuses_in_production_mode() -> None:
+    """Codex iter-1 important: defense in depth — ``EnvVarVault``
+    is fixture-only and refuses to serve any credential under
+    ``RuntimeMode.PRODUCTION`` even if a wiring regression would
+    have routed production through it. The refusal happens
+    before the env var lookup so a configured-but-test-only
+    secret cannot leak under production wiring."""
+
+    vault = EnvVarVault(environ={"VERACRAWL_CRED_X_K": "should-never-load"})
+    with with_runtime_mode(RuntimeMode.PRODUCTION):
+        with pytest.raises(ProductionRuntimeNotImplemented) as excinfo:
+            vault.get(scope_ref="X", key="K")
+    assert excinfo.value.backend == "env_var_vault"
+    assert excinfo.value.gate == "credential_vault"
 
 
 def test_unrelated_env_vars_are_not_leaked() -> None:
