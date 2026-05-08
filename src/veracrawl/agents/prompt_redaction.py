@@ -31,7 +31,6 @@ the full registry.
 
 from __future__ import annotations
 
-import _string  # CPython-public field-name parser; same one ``string.Formatter`` uses internally
 import re
 import string
 from collections.abc import Mapping
@@ -51,6 +50,16 @@ _CREDENTIAL_MARKER_RE: Final[re.Pattern[str]] = re.compile(
     r"<credential:redacted:[A-Z0-9_]+>"
 )
 
+# ``template_ref`` is stored as a public attribute on
+# ``PromptCredentialLeakError`` and lands in log lines via
+# ``__dict__`` / ``vars()`` / ``logging.exception``. Constrain it
+# to a stable opaque-ID shape so a caller cannot smuggle a URL,
+# token, query string, or PII parameter through the exception
+# (codex iter-4 important).
+_TEMPLATE_REF_RE: Final[re.Pattern[str]] = re.compile(
+    r"^[a-z][a-zA-Z0-9_:.\-]*$"
+)
+
 # Hard cap on context-walk recursion depth. Practical contexts are
 # shallow (<= 3 nested levels); the cap bounds work on accidentally
 # cyclic / pathologically deep inputs.
@@ -63,19 +72,23 @@ def _context_contains_credential(
     seen: set[int] | None = None,
 ) -> bool:
     """Recursively walk ``value`` looking for a
-    :class:`CredentialValue` instance.
+    :class:`CredentialValue` instance — including inside custom
+    objects' ``__dict__`` and ``__slots__``.
 
-    Walks dict / list / tuple / set / frozenset containers. Custom
-    objects are NOT walked here — they get covered by the
-    credential-aware formatter at render time, which intercepts
-    every traversal step regardless of the parent type.
+    Walks the standard container types (dict / list / tuple / set
+    / frozenset) AND descends into custom-class instances by
+    inspecting their ``__dict__`` (regular attributes) and
+    ``__slots__`` (slot-only classes). This covers the
+    ``LeakyWrapper(cred)`` attack codex iter-4 flagged: a custom
+    class whose ``__format__`` reveals the secret would otherwise
+    bypass both the structural walk and the credential-aware
+    formatter, because ``vformat`` calls the wrapper's
+    ``__format__`` on the bare wrapper value rather than reaching
+    the credential through traversal.
 
-    Cycle detection via ``id``-based ``seen`` set so the walk
-    terminates on accidentally cyclic structures. Depth cap is a
-    belt-and-suspenders bound on accidentally deep inputs;
-    **fail-closed** at the cap (treat as credential-bearing) so
-    a credential nested past the cap cannot silently slip through
-    (codex iter-3 important).
+    Cycle detection via ``id``-based ``seen`` set; fail-closed
+    depth cap so a credential nested past depth 12 cannot silently
+    slip through (codex iter-3 important).
     """
 
     if depth >= _MAX_CONTEXT_DEPTH:
@@ -95,7 +108,77 @@ def _context_contains_credential(
     if isinstance(value, list | tuple | set | frozenset):
         seen.add(obj_id)
         return any(_context_contains_credential(v, depth + 1, seen) for v in value)
+    # Primitives can't host a credential — short-circuit before
+    # attempting attribute introspection (faster + avoids edge
+    # cases on int/float/bool/etc. which all have ``__dict__`` via
+    # their type but not as instance dicts).
+    if isinstance(value, str | bytes | bytearray | int | float | bool | complex) or value is None:
+        return False
+    seen.add(obj_id)
+    instance_dict = getattr(value, "__dict__", None)
+    if isinstance(instance_dict, dict) and any(
+        _context_contains_credential(v, depth + 1, seen) for v in instance_dict.values()
+    ):
+        return True
+    slot_names = getattr(value, "__slots__", ())
+    if isinstance(slot_names, str):
+        slot_names = (slot_names,)
+    for slot in slot_names:
+        try:
+            slot_value = getattr(value, slot)
+        except AttributeError:
+            continue
+        if _context_contains_credential(slot_value, depth + 1, seen):
+            return True
     return False
+
+
+def _split_field_name(
+    field_name: str,
+) -> tuple[str, list[tuple[bool, str | int]]]:
+    """Project-owned mirror of ``_string.formatter_field_name_split``.
+
+    Returns ``(first_key, [(is_attr, name_or_index), ...])``.
+    Avoids depending on the CPython-private ``_string`` module
+    (codex iter-4 minor).
+
+    Implements the documented format-field grammar:
+
+    * The first segment is the bare key (everything before the
+      first ``.`` or ``[``).
+    * Subsequent ``.name`` segments are attribute traversals.
+    * Subsequent ``[index]`` segments are item traversals; if the
+      index parses as an int it is returned as one (so dicts /
+      lists / tuples behave as Python's stdlib formatter does).
+    """
+
+    i = 0
+    while i < len(field_name) and field_name[i] not in ".[":
+        i += 1
+    first = field_name[:i]
+    rest: list[tuple[bool, str | int]] = []
+    while i < len(field_name):
+        char = field_name[i]
+        if char == ".":
+            i += 1
+            j = i
+            while j < len(field_name) and field_name[j] not in ".[":
+                j += 1
+            rest.append((True, field_name[i:j]))
+            i = j
+        elif char == "[":
+            j = field_name.index("]", i)
+            key = field_name[i + 1 : j]
+            idx_or_key: str | int
+            try:
+                idx_or_key = int(key)
+            except ValueError:
+                idx_or_key = key
+            rest.append((False, idx_or_key))
+            i = j + 1
+        else:  # pragma: no cover — defensive
+            i += 1
+    return first, rest
 
 
 class _CredentialAwareFormatter(string.Formatter):
@@ -136,13 +219,19 @@ class _CredentialAwareFormatter(string.Formatter):
         args: Any,
         kwargs: Any,
     ) -> tuple[Any, Any]:
-        first, rest = _string.formatter_field_name_split(field_name)
+        first, rest = _split_field_name(field_name)
         obj = self.get_value(first, args, kwargs)
         if isinstance(obj, CredentialValue):
             self.credential_reached = True
             return "", first
-        for is_attr, i in rest:
-            obj = getattr(obj, i) if is_attr else obj[i]
+        for is_attr, key in rest:
+            if is_attr:
+                # ``key`` is always ``str`` for ``.attr`` segments —
+                # the splitter only emits int for ``[idx]`` segments.
+                assert isinstance(key, str)
+                obj = getattr(obj, key)
+            else:
+                obj = obj[key]
             if isinstance(obj, CredentialValue):
                 self.credential_reached = True
                 return "", first
@@ -166,9 +255,20 @@ class PromptCredentialLeakError(VeraCrawlError, PolicyViolation):
     """
 
     def __init__(self, *, template_ref: str) -> None:
-        self.template_ref = template_ref
+        # Sanitize the template_ref before storing on the
+        # exception. The public attribute lands in log lines via
+        # ``__dict__`` / ``vars()`` / ``logging.exception``; an
+        # unvalidated caller could smuggle a URL query, token,
+        # or PII parameter through this field. Constrain to the
+        # documented opaque-ID shape; replace anything else with
+        # ``[REDACTED]`` (length-only) so the exception still
+        # carries a non-secret signal for triage.
+        if _TEMPLATE_REF_RE.fullmatch(template_ref):
+            self.template_ref = template_ref
+        else:
+            self.template_ref = f"[REDACTED:len={len(template_ref)}]"
         super().__init__(
-            f"prompt template {template_ref!r} resolved to output "
+            f"prompt template {self.template_ref!r} resolved to output "
             "containing a credential redaction marker — credentials "
             "must not flow into prompts. Use AuthorizedSessionAdapter "
             "(Phase 2 step 2.4) for credential-bearing requests instead."

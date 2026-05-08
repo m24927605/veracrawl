@@ -302,6 +302,81 @@ def test_render_refuses_credential_nested_in_tuple_context() -> None:
         ctx.render("static template", template_ref="prompt:nested-tuple")
 
 
+def test_render_refuses_custom_wrapper_format_that_reveals_secret() -> None:
+    """Codex iter-4 critical: a custom wrapper whose ``__format__``
+    or ``__str__`` calls ``cred.reveal()`` would otherwise leak
+    the raw secret directly into the rendered output. The
+    structural walk now descends into custom objects' ``__dict__``
+    and finds the credential before render runs, even though
+    ``vformat``'s top-level ``{wrapper}`` does not traverse to
+    the credential."""
+
+    class _LeakyWrapper:
+        def __init__(self, cred: CredentialValue) -> None:
+            self.cred = cred
+
+        def __format__(self, format_spec: str) -> str:
+            del format_spec
+            return self.cred.reveal()  # would leak the raw secret
+
+    cred = CredentialValue(value="sk-live-leaky-wrapper", scope_ref="X")
+    ctx = RedactedPromptContext(wrapper=_LeakyWrapper(cred))
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("token={wrapper}", template_ref="prompt:leaky-wrapper")
+
+
+def test_render_refuses_custom_wrapper_with_credential_in_slots() -> None:
+    """Slot-only classes have no ``__dict__``; the structural walk
+    must also iterate ``__slots__`` to catch a credential stored
+    there."""
+
+    class _SlotWrapper:
+        __slots__ = ("cred",)
+
+        def __init__(self, cred: CredentialValue) -> None:
+            self.cred = cred
+
+    cred = CredentialValue(value="x", scope_ref="X")
+    ctx = RedactedPromptContext(wrapper=_SlotWrapper(cred))
+    with pytest.raises(PromptCredentialLeakError):
+        ctx.render("static template", template_ref="prompt:slot-wrap")
+
+
+def test_template_ref_redacted_when_carrying_unsafe_shape() -> None:
+    """Codex iter-4 important: ``template_ref`` lands on the
+    exception's public attribute and ``__dict__``. A caller piping
+    a URL / token / query string through would leak via
+    ``logging.exception()``. Constrain to a stable opaque-ID
+    shape; anything else gets replaced with a length-only
+    ``[REDACTED]`` marker so the exception still carries a
+    triage signal without leaking the input."""
+
+    cred = CredentialValue(value="x", scope_ref="X")
+    ctx = RedactedPromptContext(t=cred)
+    leaky_ref = "https://api.example.com/?api_key=SECRET&session=abc"
+    with pytest.raises(PromptCredentialLeakError) as excinfo:
+        ctx.render("{t}", template_ref=leaky_ref)
+    err = excinfo.value
+    text = f"{err!r} {err} {err.__dict__}"
+    assert "SECRET" not in text
+    assert "session=abc" not in text
+    assert "api_key=" not in text
+    assert err.template_ref.startswith("[REDACTED:len=")
+
+
+def test_template_ref_preserved_when_safe_shape() -> None:
+    """A sanely-shaped opaque ID (lowercase identifier with
+    optional ``:`` / ``.`` / ``-`` separators) is preserved so
+    operators can map the refusal back to the offending
+    template."""
+
+    cred = CredentialValue(value="x", scope_ref="X")
+    ctx = RedactedPromptContext(t=cred)
+    with pytest.raises(PromptCredentialLeakError) as excinfo:
+        ctx.render("{t}", template_ref="prompt:planner.v3")
+    assert excinfo.value.template_ref == "prompt:planner.v3"
+
+
 def test_template_with_literal_marker_is_refused() -> None:
     """A template author who pre-bakes the marker into the
     template string is also refused — no path through the
