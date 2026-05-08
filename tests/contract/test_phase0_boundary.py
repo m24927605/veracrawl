@@ -49,6 +49,7 @@ from veracrawl.adapters.model_providers.openai_responses import (
 )
 from veracrawl.adapters.network.stdlib_http import NetworkAdapterError
 from veracrawl.contracts.errors import (
+    CredentialScopeReason,
     CredentialScopeViolation,
     FatalError,
     PolicyViolation,
@@ -199,7 +200,7 @@ def test_credential_scope_violation_classification() -> None:
         requested_origin="https://api.ebay.com",
         requested_route="/admin/users",
         requested_method="GET",
-        reason="route /admin/users not in allowed_route_patterns",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     assert isinstance(err, VeraCrawlError)
     assert isinstance(err, Exception)
@@ -216,18 +217,22 @@ def test_credential_scope_violation_carries_request_metadata() -> None:
         requested_origin="https://api.ebay.com",
         requested_route="/admin/users",
         requested_method="POST",
-        reason="route not allowed",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     assert err.scope_ref == "credential-scope:ebay"
     assert err.requested_origin == "https://api.ebay.com"
     assert err.requested_route == "/admin/users"
     assert err.requested_method == "POST"
-    assert err.reason == "route not allowed"
+    # ``reason`` is a structured enum (Phase 2 step 2.2b);
+    # ``StrEnum`` makes it ``==`` its string value.
+    assert err.reason is CredentialScopeReason.ROUTE_NOT_ALLOWED
+    assert err.reason == "route_not_allowed"
     msg = str(err)
     assert "POST" in msg
     assert "https://api.ebay.com" in msg
     assert "/admin/users" in msg
     assert "credential-scope:ebay" in msg
+    assert "route_not_allowed" in msg
 
 
 def test_credential_scope_violation_message_carries_no_secret() -> None:
@@ -240,7 +245,7 @@ def test_credential_scope_violation_message_carries_no_secret() -> None:
         requested_origin="https://api.ebay.com",
         requested_route="/admin",
         requested_method="GET",
-        reason="x",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     msg = str(err)
     # The historical sensitive-marker tripwire — none of these tokens
@@ -277,7 +282,7 @@ def test_credential_scope_violation_redacts_tainted_origin(tainted_origin: str) 
         requested_origin=tainted_origin,
         requested_route="/items",
         requested_method="GET",
-        reason="not in scope",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     leaks = (
         "api_key=",
@@ -317,7 +322,7 @@ def test_credential_scope_violation_redacts_tainted_route(tainted_route: str) ->
         requested_origin="https://api.ebay.com",
         requested_route=tainted_route,
         requested_method="GET",
-        reason="not in scope",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     msg = str(err)
     for leak in ("password=", "secret=", "api_key=", "token=", "hunter2", "sk-XXX", "eyJhbGc"):
@@ -336,28 +341,24 @@ def test_credential_scope_violation_redacts_tainted_route(tainted_route: str) ->
         "credential api_key=sk-XXX did not match",
     ],
 )
-def test_credential_scope_violation_redacts_tainted_reason(tainted_reason: str) -> None:
-    err = CredentialScopeViolation(
-        scope_ref="credential-scope:ebay",
-        requested_origin="https://api.ebay.com",
-        requested_route="/items",
-        requested_method="GET",
-        reason=tainted_reason,
-    )
-    leaks = ("Bearer ", "password=", "token=", "api_key=", "hunter2", "sk-XXX", "eyJhbGc")
-    msg = str(err)
-    for leak in leaks:
-        assert leak.lower() not in msg.lower(), (
-            f"CredentialScopeViolation leaked {leak!r} from tainted "
-            f"reason {tainted_reason!r}: msg={msg}"
-        )
-    # Public attribute is sanitized — raw reason is intentionally
-    # not preserved on the exception (codex iter-3 important: the
-    # audit pipeline reads structured data from CredentialUseRecord
-    # in the outbox, not from the raised exception).
-    for leak in leaks:
-        assert leak.lower() not in err.reason.lower(), (
-            f"CredentialScopeViolation public reason attr leaked {leak!r}: reason={err.reason!r}"
+def test_credential_scope_violation_rejects_free_form_reason(tainted_reason: str) -> None:
+    """Phase 2 step 2.2b: ``reason`` must be a
+    :class:`CredentialScopeReason` enum value (or its string form).
+    Free-form text is the leak vector codex iter-5 flagged on
+    Phase 0 step 0.4 — even after the marker tuple was expanded
+    to cover OAuth / session / CSRF / JWT / PII tokens, a producer
+    could still pipe arbitrary content with a token outside the
+    tuple. Structural enum rejection closes the path: the
+    constructor raises before the formatted exception even
+    materializes, so there is no marker-based redaction to
+    bypass."""
+    with pytest.raises(ValueError, match="CredentialScopeReason"):
+        CredentialScopeViolation(
+            scope_ref="credential-scope:ebay",
+            requested_origin="https://api.ebay.com",
+            requested_route="/items",
+            requested_method="GET",
+            reason=tainted_reason,
         )
 
 
@@ -384,7 +385,7 @@ def test_credential_scope_violation_redacts_tainted_scope_ref(tainted_scope: str
         requested_origin="https://api.ebay.com",
         requested_route="/items",
         requested_method="GET",
-        reason="not in scope",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     leaks = ("password=", "token=", "api_key=", "Bearer ", "raw_secret:", "eyJhbGc", "sk-XXX")
     msg = str(err)
@@ -430,7 +431,7 @@ def test_credential_scope_violation_strips_route_query_unconditionally(
         requested_origin="https://api.ebay.com",
         requested_route=tainted_route,
         requested_method="GET",
-        reason="x",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     msg = str(err)
     # Neither ``?`` nor ``#`` should appear in the formatted route
@@ -479,7 +480,7 @@ def test_credential_scope_violation_handles_malformed_origin(
         requested_origin=malformed_origin,
         requested_route="/items",
         requested_method="GET",
-        reason="malformed origin",
+        reason=CredentialScopeReason.ORIGIN_NOT_ALLOWED,
     )
     # Constructor produced a real exception. Public attribute is
     # sanitized; we don't assert the original input survives because
@@ -521,7 +522,7 @@ def test_credential_scope_violation_vars_and_dict_carry_no_secret() -> None:
         requested_origin="https://api.ebay.com/?api_key=sk-XXX",
         requested_route="/items?session=abc",
         requested_method="GET",
-        reason="header Authorization: Bearer eyJhbGc was rejected",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     leaks = (
         "raw_secret:",
@@ -679,7 +680,7 @@ def test_credential_scope_violation_full_redacts_malformed_origins_with_secrets(
         requested_origin=malformed_origin_with_secrets,
         requested_route="/items",
         requested_method="GET",
-        reason="malformed origin",
+        reason=CredentialScopeReason.ORIGIN_NOT_ALLOWED,
     )
     msg = str(err)
     for leak in ("hunter2", "session=", "abc123", "user:"):
@@ -738,7 +739,7 @@ def test_credential_scope_violation_is_caught_by_veracrawl_error() -> None:
         requested_origin="https://api.ebay.com",
         requested_route="/x",
         requested_method="GET",
-        reason="x",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     with pytest.raises(VeraCrawlError):
         raise err
@@ -750,7 +751,7 @@ def test_credential_scope_violation_is_caught_by_policy_violation() -> None:
         requested_origin="https://api.ebay.com",
         requested_route="/x",
         requested_method="GET",
-        reason="x",
+        reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
     )
     with pytest.raises(PolicyViolation):
         raise err
@@ -787,7 +788,7 @@ def test_classify_provider_error_routes_structured_output_violation() -> None:
     assert isinstance(err, PolicyViolation)
 
 
-# Codex iter-5 important: reason field PII / session token redaction
+# Phase 2 step 2.2b: free-form reason retired in favor of structured enum.
 
 
 @pytest.mark.parametrize(
@@ -803,56 +804,26 @@ def test_classify_provider_error_routes_structured_output_violation() -> None:
         "phpsessid=def-456 invalid",
     ],
 )
-def test_credential_scope_violation_redacts_pii_in_reason(tainted_reason: str) -> None:
-    """Codex iter-5 important: the ``reason`` field is free-form
-    text supplied by ``StrictAllowlistScope`` (or any caller that
-    raises this exception). The previous narrow marker list let
-    ``session=...`` / ``email=...`` / ``jwt=...`` slip through —
-    those are exactly the parameter names URL-redaction strips
-    elsewhere. The expanded marker tuple now catches them too,
-    and the test covers both ``str(err)`` and the public
-    attribute / ``__dict__`` views (the latter is the
-    logging-handler back-channel codex iter-3 already flagged for
-    other fields)."""
-    err = CredentialScopeViolation(
-        scope_ref="credential-scope:ebay",
-        requested_origin="https://api.ebay.com",
-        requested_route="/items",
-        requested_method="GET",
-        reason=tainted_reason,
-    )
-    leaks = (
-        "session=",
-        "sid=",
-        "email=",
-        "jwt=",
-        "code=",
-        "access_token=",
-        "csrf_token=",
-        "phpsessid=",
-        "abc123",
-        "def456",
-        "user@example",
-        "eyJhbGc",
-        "oauth-grant",
-        "ya29",
-    )
-    msg = str(err)
-    for leak in leaks:
-        assert leak.lower() not in msg.lower(), (
-            f"CredentialScopeViolation message leaked {leak!r} from "
-            f"tainted reason {tainted_reason!r}: msg={msg}"
+def test_credential_scope_violation_rejects_pii_bearing_free_form_reason(
+    tainted_reason: str,
+) -> None:
+    """Phase 2 step 2.2b retired the free-form ``reason`` field in
+    favor of :class:`CredentialScopeReason`. Phase 0 step 0.4
+    iter-5 expanded the redaction marker tuple to cover OAuth /
+    session / CSRF / JWT / PII parameter names — but a marker-tuple
+    approach can never be 100% leak-proof against arbitrary
+    free-form text. The structural fix is to refuse free-form
+    text at the constructor: the listed PII-bearing strings now
+    raise ``ValueError`` before any formatted message can leak.
+
+    Verify the rejection covers every shape the iter-5 marker tuple
+    would have caught — the contract is now stronger (refuse rather
+    than redact)."""
+    with pytest.raises(ValueError, match="CredentialScopeReason"):
+        CredentialScopeViolation(
+            scope_ref="credential-scope:ebay",
+            requested_origin="https://api.ebay.com",
+            requested_route="/items",
+            requested_method="GET",
+            reason=tainted_reason,
         )
-    # Public attribute and __dict__ view both clean.
-    for leak in leaks:
-        assert leak.lower() not in err.reason.lower(), (
-            f"CredentialScopeViolation public reason attr leaked {leak!r}: reason={err.reason!r}"
-        )
-    for value in vars(err).values():
-        if not isinstance(value, str):
-            continue
-        for leak in leaks:
-            assert leak.lower() not in value.lower(), (
-                f"CredentialScopeViolation vars(err) leaked {leak!r} from "
-                f"tainted reason {tainted_reason!r}: value={value!r}"
-            )

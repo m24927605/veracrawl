@@ -13,17 +13,14 @@ hold:
 4. ``scope.expires_at`` (if set) is strictly later than ``now``.
 
 Any violation raises :class:`CredentialScopeViolation` with a
-``reason`` of ``origin_not_allowed`` / ``route_not_allowed`` /
-``method_not_allowed`` / ``expired``. The exception sanitizes its
-public attributes at the boundary, so refusal logging / telemetry
-cannot leak credentials or PII even if a caller passes a
-credentialed URL.
+:class:`CredentialScopeReason` of ``ORIGIN_NOT_ALLOWED`` /
+``ROUTE_NOT_ALLOWED`` / ``METHOD_NOT_ALLOWED`` / ``EXPIRED``. The
+exception sanitizes its public attributes at the boundary, so
+refusal logging / telemetry cannot leak credentials or PII even if
+a caller passes a credentialed URL.
 
 What is **out of scope** for 2.2a:
 
-* The refusal ``reason`` is currently free-form text. Step 2.2b
-  will replace it with a structured enum so a future caller
-  cannot leak by piping raw user input into the field.
 * The matcher uses Python's ``re`` engine, which has no per-match
   timeout. The contract layer's nested-quantifier AST guard
   (``_validate_route_pattern``) refuses pathological *patterns*
@@ -40,7 +37,7 @@ from datetime import UTC, datetime
 from typing import Final
 from urllib.parse import urlsplit
 
-from veracrawl.contracts.errors import CredentialScopeViolation
+from veracrawl.contracts.errors import CredentialScopeReason, CredentialScopeViolation
 from veracrawl.contracts.security_privacy import CredentialScope
 
 _DEFAULT_PORTS: Final[dict[str, int]] = {"http": 80, "https": 443}
@@ -267,7 +264,7 @@ class StrictAllowlistScope:
                     scope=scope,
                     request_url=request_url,
                     method=method,
-                    reason="expired",
+                    reason=CredentialScopeReason.EXPIRED,
                 )
 
         normalized_method = method.upper()
@@ -276,7 +273,7 @@ class StrictAllowlistScope:
                 scope=scope,
                 request_url=request_url,
                 method=method,
-                reason="method_not_allowed",
+                reason=CredentialScopeReason.METHOD_NOT_ALLOWED,
             )
 
         request_origin = _normalize_origin(request_url)
@@ -286,7 +283,7 @@ class StrictAllowlistScope:
                 scope=scope,
                 request_url=request_url,
                 method=method,
-                reason="origin_not_allowed",
+                reason=CredentialScopeReason.ORIGIN_NOT_ALLOWED,
             )
 
         route = _route_of(request_url)
@@ -302,7 +299,7 @@ class StrictAllowlistScope:
                 scope=scope,
                 request_url=request_url,
                 method=method,
-                reason="route_not_allowed",
+                reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
             )
         if _route_too_long(route):
             # Bound the worst-case work the regex engine will do on
@@ -316,7 +313,7 @@ class StrictAllowlistScope:
                 scope=scope,
                 request_url=request_url,
                 method=method,
-                reason="route_not_allowed",
+                reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
             )
         for pattern in scope.allowed_route_patterns:
             # ``re.match`` anchors at position 0 — required because
@@ -332,7 +329,7 @@ class StrictAllowlistScope:
             scope=scope,
             request_url=request_url,
             method=method,
-            reason="route_not_allowed",
+            reason=CredentialScopeReason.ROUTE_NOT_ALLOWED,
         )
 
     @staticmethod
@@ -341,7 +338,7 @@ class StrictAllowlistScope:
         scope: CredentialScope,
         request_url: str,
         method: str,
-        reason: str,
+        reason: CredentialScopeReason,
     ) -> None:
         # The exception sanitizes ``scope_ref`` / ``requested_origin``
         # / ``requested_route`` / ``requested_method`` / ``reason``

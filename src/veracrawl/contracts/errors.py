@@ -30,6 +30,7 @@ base.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from urllib.parse import urlsplit, urlunsplit
 
 # Sensitive substrings that must never appear unredacted in an exception
@@ -235,6 +236,32 @@ class ImportBoundaryError(VeraCrawlError):
     """Raised when a core package imports forbidden dependencies."""
 
 
+class CredentialScopeReason(StrEnum):
+    """Structured refusal classes for ``CredentialScopeViolation``.
+
+    Phase 0 step 0.4 reservation pull-forward (Phase 2 step 2.2b):
+    the original ``reason: str`` field on ``CredentialScopeViolation``
+    was free-form text, redacted by a substring marker check before
+    landing in the formatted exception message. That defended
+    against the original credential-marker tuple, but a producer
+    could in principle pipe arbitrary content (caller-supplied URLs,
+    raw user input, a ``ValueError.args`` from elsewhere) into the
+    field with a token that fell outside the marker tuple. A
+    structured (enum-coded) shape closes the leak structurally:
+    callers can only express known refusal classes, so there is no
+    free-form text path to leak through.
+
+    Values mirror the four refusal classes ``StrictAllowlistScope``
+    (Phase 2 step 2.2a) emits at runtime; producers / adapters add
+    new classes here when a new refusal mode lands.
+    """
+
+    ORIGIN_NOT_ALLOWED = "origin_not_allowed"
+    ROUTE_NOT_ALLOWED = "route_not_allowed"
+    METHOD_NOT_ALLOWED = "method_not_allowed"
+    EXPIRED = "expired"
+
+
 class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
     """Raised when ``StrictAllowlistScope`` (Phase 2 step 2.2) refuses
     a credential-bearing request because its origin / route pattern /
@@ -279,6 +306,15 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
     in a controlled context. Losing fidelity on this exception's
     public attributes is therefore acceptable in exchange for
     closing the ``__dict__`` leak vector.
+
+    Structured ``reason`` (Phase 2 step 2.2b): the previous
+    free-form ``reason: str`` field was a residual leak path —
+    a producer could pipe arbitrary content with a token outside
+    the redaction marker tuple. ``reason`` now must be a
+    :class:`CredentialScopeReason` enum value (or a string that
+    matches one of the enum's values). Anything else raises
+    :class:`ValueError` at construction time, closing the leak
+    structurally rather than via marker checks.
     """
 
     def __init__(
@@ -288,7 +324,7 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
         requested_origin: str,
         requested_route: str,
         requested_method: str,
-        reason: str,
+        reason: CredentialScopeReason | str,
     ) -> None:
         # All public attributes carry sanitized values. Exceptions
         # are routinely logged via ``logging.exception()`` and similar
@@ -297,17 +333,33 @@ class CredentialScopeViolation(VeraCrawlError, PolicyViolation):
         # credentials / PII into log lines that the formatted-message
         # redaction never sees. The audit pipeline reads structured
         # data from ``CredentialUseRecord`` in the outbox, not from
-        # the raised exception, so losing fidelity here is fine
-        # (codex iter-3 important).
+        # the raised exception, so losing fidelity here is fine.
         self.scope_ref = _redact_field(scope_ref)
         self.requested_origin = _redact_url(requested_origin)
         self.requested_route = _redact_route(requested_route)
         self.requested_method = _redact_field(requested_method)
-        self.reason = _redact_field(reason)
+        # Coerce to the enum so a plain str like ``"expired"`` works
+        # for the (rare) caller that built the value programmatically,
+        # but anything outside the enum's value set raises before the
+        # exception even constructs — there is no free-form path.
+        if isinstance(reason, CredentialScopeReason):
+            self.reason: CredentialScopeReason = reason
+        else:
+            try:
+                self.reason = CredentialScopeReason(reason)
+            except ValueError as exc:
+                raise ValueError(
+                    "CredentialScopeViolation.reason must be a "
+                    "CredentialScopeReason enum value (or its string "
+                    "form); got an unknown value (length="
+                    f"{len(reason) if isinstance(reason, str) else 0}, "
+                    "redacted) — free-form reasons were retired in "
+                    "Phase 2 step 2.2b to close a residual leak path"
+                ) from exc
         super().__init__(
             f"credential scope refused {self.requested_method} "
             f"{self.requested_origin}{self.requested_route} "
-            f"(scope={self.scope_ref}): {self.reason}"
+            f"(scope={self.scope_ref}): {self.reason.value}"
         )
 
 
