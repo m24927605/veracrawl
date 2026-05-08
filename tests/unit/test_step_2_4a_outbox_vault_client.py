@@ -431,6 +431,114 @@ def test_clock_returning_naive_datetime_raises_runtime_error() -> None:
         client.get(scope_ref="X", key="K")
 
 
+def test_naive_clock_refuses_before_calling_backend() -> None:
+    """Codex iter-3 important: tz-naive clock must abort BEFORE
+    the backend is invoked — otherwise a credential may be fetched
+    but no audit row recorded (violates "no access without audit")."""
+
+    class _CountingBackend:
+        def __init__(self) -> None:
+            self.fetch_count = 0
+
+        def fetch(self, *, scope_ref: str, key: str) -> str | None:
+            del scope_ref, key
+            self.fetch_count += 1
+            return "should-not-reach"
+
+    backend = _CountingBackend()
+    audit = _RecordingAudit()
+
+    def naive_clock() -> datetime:
+        return datetime(2026, 5, 9, 12, 0, 0)  # noqa: DTZ001
+
+    client = OutboxVaultClient(
+        backend=backend,
+        audit=audit,
+        run_ref="r",
+        clock=naive_clock,
+    )
+    with pytest.raises(RuntimeError, match="tz-aware"):
+        client.get(scope_ref="X", key="K")
+    assert backend.fetch_count == 0
+    # No audit row either since we abort BEFORE the audit attempt.
+    assert audit.records == []
+
+
+def test_audit_writer_failure_after_fetch_refuses_credential_return() -> None:
+    """Codex iter-3 important: even if the audit writer fails AFTER
+    a successful backend fetch, the client refuses to return the
+    credential — "no access without audit". A fallback
+    ``credential_access_audit_failed`` structured-log event signals
+    the operator that audit dropped."""
+
+    class _FailingAudit:
+        """Always raises on record."""
+
+        def record(
+            self,
+            *,
+            scope_ref: str,
+            key: str,
+            outcome: CredentialAccessOutcome,
+            run_ref: Any,
+            timestamp: Any,
+        ) -> None:
+            del scope_ref, key, outcome, run_ref, timestamp
+            raise RuntimeError("simulated audit queue full")
+
+    backend = InMemoryVaultBackend(
+        credentials={("X", "K"): "secret-canary-DEADBEEF"}
+    )
+    audit = _FailingAudit()
+    client = OutboxVaultClient(
+        backend=backend,
+        audit=audit,
+        run_ref="r",
+        clock=lambda: _FROZEN_NOW,
+    )
+    with pytest.raises(CredentialNotFoundError) as excinfo:
+        client.get(scope_ref="X", key="K")
+    err = excinfo.value
+    # No chain leak; the secret must NEVER appear in the
+    # surfaced exception.
+    assert err.__cause__ is None
+    assert err.__context__ is None
+    text = " ".join(str(a) for a in err.args if isinstance(a, str))
+    assert "secret-canary-DEADBEEF" not in text
+
+
+def test_audit_writer_failure_on_invalid_identifier_propagates() -> None:
+    """If the audit writer fails on the INVALID_IDENTIFIER row,
+    the original ValueError is replaced by the audit-failure
+    refusal. Either way no credential is returned, so the
+    "no access without audit" contract holds."""
+
+    class _FailingAudit:
+        def record(
+            self,
+            *,
+            scope_ref: str,
+            key: str,
+            outcome: CredentialAccessOutcome,
+            run_ref: Any,
+            timestamp: Any,
+        ) -> None:
+            del scope_ref, key, outcome, run_ref, timestamp
+            raise RuntimeError("simulated audit queue full")
+
+    backend = InMemoryVaultBackend()
+    client = OutboxVaultClient(
+        backend=backend,
+        audit=_FailingAudit(),
+        run_ref="r",
+        clock=lambda: _FROZEN_NOW,
+    )
+    # Audit failure is what surfaces; the original identifier
+    # rejection is masked but the credential is still refused.
+    with pytest.raises(RuntimeError, match="simulated audit queue full"):
+        client.get(scope_ref="lowercase", key="K")
+
+
 def test_outbox_vault_client_satisfies_credential_vault_port() -> None:
     """OutboxVaultClient is the production CredentialVaultPort impl."""
 

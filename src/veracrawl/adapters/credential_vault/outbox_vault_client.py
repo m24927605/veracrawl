@@ -54,6 +54,7 @@ from veracrawl.ports.vault_backend import (
     VaultBackendErrorKind,
     VaultBackendPort,
 )
+from veracrawl.runtime_support.logging import get_logger
 
 _SAFE_IDENT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9_]+$")
 _REDACTED_IDENT: Final[str] = "[REDACTED]"
@@ -67,6 +68,8 @@ _BACKEND_KIND_TO_OUTCOME: Final[dict[VaultBackendErrorKind, CredentialAccessOutc
     VaultBackendErrorKind.AUTH_FAILED: CredentialAccessOutcome.AUTH_FAILED,
     VaultBackendErrorKind.INTERNAL: CredentialAccessOutcome.INTERNAL,
 }
+
+_logger = get_logger(__name__)
 
 
 def _is_valid_identifier(name: str) -> bool:
@@ -148,26 +151,46 @@ class OutboxVaultClient:
         scope_ref_for_audit: str,
         key_for_audit: str,
         outcome: CredentialAccessOutcome,
+        timestamp: datetime,
     ) -> None:
+        """Write one audit row. Codex iter-3 important: any failure
+        in the audit writer (network down, queue full, etc.) MUST
+        be detected by the caller — the caller refuses the
+        credential return when audit fails so the contract "no
+        access without audit" holds end-to-end. This method does
+        NOT swallow exceptions; it propagates them.
+        """
+
         self._audit.record(
             scope_ref=scope_ref_for_audit,
             key=key_for_audit,
             outcome=outcome,
             run_ref=self._run_ref,
-            timestamp=self._now(),
+            timestamp=timestamp,
         )
 
     def get(self, *, scope_ref: str, key: str) -> CredentialValue:
-        # Identifier shape validation. Audit the rejection with
-        # redacted placeholders BEFORE raising — operators want
-        # to count invalid-identifier attempts (security-relevant
-        # signal of a misconfiguration / abuse) without leaking
-        # the rejected value.
+        # Codex iter-3 important: validate the clock BEFORE any
+        # backend call. A tz-naive clock means we cannot write a
+        # replay-deterministic audit row, so refuse the access
+        # before fetching any credential. ``_now()`` raises
+        # RuntimeError on naive timestamps (defense in depth).
+        # We compute timestamps lazily for each audit row from the
+        # same clock; failing here means later audit rows would
+        # also fail, so abort up front.
+        pre_flight_ts = self._now()
+
+        # Identifier shape validation. Audit the rejection BEFORE
+        # raising the ValueError so operators can count
+        # invalid-identifier attempts. Redacted placeholders
+        # because the rejected values may carry secret-shaped
+        # strings.
         if not _is_valid_identifier(scope_ref) or not _is_valid_identifier(key):
             self._audit_record(
                 scope_ref_for_audit=_REDACTED_IDENT,
                 key_for_audit=_REDACTED_IDENT,
                 outcome=CredentialAccessOutcome.INVALID_IDENTIFIER,
+                timestamp=pre_flight_ts,
             )
             # Surface a typed shape error; identifier-shape failures
             # are caller-bug not vault-fail, so don't degrade to
@@ -179,9 +202,7 @@ class OutboxVaultClient:
             )
 
         # Audit IDs are stable hashes of the validated identifiers,
-        # never the raw caller-supplied strings — even shape-valid
-        # uppercase tokens may be secret-shaped (codex iter-2
-        # important).
+        # never the raw caller-supplied strings (codex iter-2 important).
         scope_audit = _hashed_ref(scope_ref)
         key_audit = _hashed_ref(key)
 
@@ -195,69 +216,90 @@ class OutboxVaultClient:
             raw = None
         except Exception:
             # Codex iter-2 important: any non-VaultBackendError
-            # (e.g., a misbehaving SDK that raises ``RuntimeError``
-            # / ``TimeoutError`` / etc. instead of the typed
-            # backend exception) must still produce one audit row
-            # and surface as the canonical CredentialNotFoundError.
-            # Catch + flag here; raise OUTSIDE the except block so
-            # ``__context__`` does not chain (defense in depth
-            # against logging handlers that walk the chain).
+            # SDK panic must still produce one audit row and surface
+            # as the canonical CredentialNotFoundError. Raise outside
+            # the except block so ``__context__`` does not chain.
             unexpected_exception_seen = True
             raw = None
+
+        # Compute the post-fetch outcome before any audit attempt
+        # so we know what to record + what to raise. The credential
+        # is then returned ONLY if the audit write succeeds —
+        # codex iter-3 important: "no access without audit" must
+        # hold even when the audit writer itself fails.
+        outcome: CredentialAccessOutcome
+        not_found_message: str | None
         if unexpected_exception_seen:
-            self._audit_record(
-                scope_ref_for_audit=scope_audit,
-                key_for_audit=key_audit,
-                outcome=CredentialAccessOutcome.INTERNAL,
-            )
-            raise CredentialNotFoundError(
+            outcome = CredentialAccessOutcome.INTERNAL
+            not_found_message = (
                 "vault backend raised an unexpected exception; "
                 "treated as missing (see audit log for INTERNAL outcome)"
-            ) from None
-        if backend_failure_kind is not None:
-            # Audit + raise OUTSIDE the except block so Python does
-            # not auto-populate ``__context__`` with the original
-            # VaultBackendError (Phase 2 step 2.2b lesson). The
-            # structured backend kind IS preserved on the audit row
-            # via the ``outcome`` field; the upstream-visible
-            # exception is the canonical CredentialNotFoundError so
-            # callers can dispatch uniformly.
-            self._audit_record(
-                scope_ref_for_audit=scope_audit,
-                key_for_audit=key_audit,
-                outcome=_BACKEND_KIND_TO_OUTCOME[backend_failure_kind],
             )
-            raise CredentialNotFoundError(
+        elif backend_failure_kind is not None:
+            outcome = _BACKEND_KIND_TO_OUTCOME[backend_failure_kind]
+            not_found_message = (
                 "vault backend operation failed; treated as missing "
                 "(scope_ref / key shapes redacted in this message; "
                 "see audit log for the structured outcome)"
-            ) from None
-
-        if raw is None:
-            self._audit_record(
-                scope_ref_for_audit=scope_audit,
-                key_for_audit=key_audit,
-                outcome=CredentialAccessOutcome.NOT_FOUND,
             )
-            raise CredentialNotFoundError(
+        elif raw is None:
+            outcome = CredentialAccessOutcome.NOT_FOUND
+            not_found_message = (
                 "credential not found in vault (scope_ref / key "
                 "redacted; see audit log)"
             )
-        if not raw.strip():
-            self._audit_record(
-                scope_ref_for_audit=scope_audit,
-                key_for_audit=key_audit,
-                outcome=CredentialAccessOutcome.BLANK_VALUE,
-            )
-            raise CredentialNotFoundError(
+        elif not raw.strip():
+            outcome = CredentialAccessOutcome.BLANK_VALUE
+            not_found_message = (
                 "vault returned a blank credential value; treated as "
                 "missing (fail-closed for cooperative crawler)"
             )
-        self._audit_record(
-            scope_ref_for_audit=scope_audit,
-            key_for_audit=key_audit,
-            outcome=CredentialAccessOutcome.SUCCESS,
-        )
+        else:
+            outcome = CredentialAccessOutcome.SUCCESS
+            not_found_message = None
+
+        # Codex iter-3 important: the post-fetch audit write may
+        # itself fail (audit adapter network down, queue full,
+        # disk full, etc.). If the write fails AND we have a
+        # successfully fetched credential, we cannot return it —
+        # that would violate "no access without audit". Refuse
+        # with CredentialNotFoundError + emit a fallback
+        # structured-log event so the operator sees the gap. The
+        # fallback log itself does NOT carry the credential.
+        post_fetch_ts = self._now()
+        audit_failed = False
+        try:
+            self._audit_record(
+                scope_ref_for_audit=scope_audit,
+                key_for_audit=key_audit,
+                outcome=outcome,
+                timestamp=post_fetch_ts,
+            )
+        except Exception:
+            audit_failed = True
+        if audit_failed:
+            # Raise OUTSIDE the except block so Python does not
+            # auto-populate ``__context__`` with the audit-writer's
+            # exception (which may carry adapter-specific details
+            # a logging handler that walks the chain would surface).
+            _logger.error(  # noqa: TRY400 — caller doesn't need our traceback
+                "credential_access_audit_failed",
+                scope_ref=scope_audit,
+                key=key_audit,
+                attempted_outcome=outcome.value,
+                run_ref=self._run_ref,
+                timestamp_iso=post_fetch_ts.isoformat(),
+            )
+            raise CredentialNotFoundError(
+                "credential access audit write failed; refusing "
+                "credential return (no access without audit). See "
+                "structured-log fallback event ``credential_access_audit_failed``."
+            ) from None
+
+        if not_found_message is not None:
+            raise CredentialNotFoundError(not_found_message)
+        # Mypy: ``not_found_message is None`` implies success branch ran.
+        assert raw is not None
         return CredentialValue(value=raw, scope_ref=scope_ref)
 
 
