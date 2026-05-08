@@ -125,6 +125,11 @@ def test_jar_init_validation() -> None:
 
 
 def test_secure_attribute_blocks_http() -> None:
+    """Codex iter-3: ``Secure`` cookie set over HTTPS must NOT ship on
+    a subsequent HTTP request to the same host (different origin
+    anyway in our exact-origin-scope, but verify the Secure
+    request-side check too)."""
+
     jar = InMemoryCookieJar()
     jar.accept_set_cookie(
         run_ref="run:r",
@@ -133,6 +138,11 @@ def test_secure_attribute_blocks_http() -> None:
     )
     https_cookies = jar.cookies_for(run_ref="run:r", url="https://example.test/")
     assert https_cookies == {"session": "abc"}
+    # Direct HTTP request — different origin (exact-origin scope),
+    # so jar returns nothing. Even if origins were merged, the
+    # Secure attribute on the request-side check would block.
+    http_cookies = jar.cookies_for(run_ref="run:r", url="http://example.test/")
+    assert http_cookies == {}
 
 
 def test_max_age_zero_clears_cookie_immediately() -> None:

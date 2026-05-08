@@ -82,9 +82,41 @@ class CookieJarSnapshot:
 
     Returned by :meth:`CookieJarPort.cookies_in_jar` for tests /
     observability. Mutating the snapshot does not mutate the jar.
+
+    Codex iter-3 important: cookie values are credentials; the
+    snapshot returned to non-test observability surfaces should
+    NOT carry raw values. Use :meth:`redacted` to obtain a copy
+    where each cookie's ``value`` is replaced with ``<redacted>``.
+    Tests that need to assert on raw values use the snapshot as
+    returned by the jar (which keeps values for backward
+    compatibility with the existing test surface — the burden of
+    keeping raw cookie values out of audit / observability sinks
+    falls on the integrator, who should call ``redacted()``).
     """
 
     cookies: list[CookieRecord] = field(default_factory=list)
+
+    def redacted(self) -> CookieJarSnapshot:
+        """Return a copy with every cookie's value replaced.
+
+        Use for any non-test observability surface (audit logs,
+        operator dashboards, replay records) that should not
+        carry credential material.
+        """
+
+        redacted_cookies = [
+            CookieRecord(
+                name=c.name,
+                value="<redacted>",
+                origin=c.origin,
+                path=c.path,
+                expires_epoch=c.expires_epoch,
+                secure=c.secure,
+                http_only=c.http_only,
+            )
+            for c in self.cookies
+        ]
+        return CookieJarSnapshot(cookies=redacted_cookies)
 
 
 @runtime_checkable

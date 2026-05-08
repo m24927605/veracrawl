@@ -44,6 +44,8 @@ def test_noop_put_is_no_op() -> None:
 
 
 def test_cached_conditional_is_immutable() -> None:
+    from dataclasses import FrozenInstanceError
+
     entry = CachedConditional(
         etag='"v1"',
         last_modified="Wed, 21 Oct 2026 07:28:00 GMT",
@@ -52,11 +54,69 @@ def test_cached_conditional_is_immutable() -> None:
         content_type="text/html",
         status_code=200,
     )
-    try:
+    import pytest as _pytest
+
+    with _pytest.raises(FrozenInstanceError):
         entry.etag = '"v2"'  # type: ignore[misc]
-    except (AttributeError, Exception):  # noqa: BLE001
-        return
-    raise AssertionError("CachedConditional must be immutable")
+
+
+def test_cached_conditional_validator_rejects_no_etag_no_last_modified() -> None:
+    """Iter-3 important: cache entry must carry at least one of the
+    conditional-fetch hints — otherwise it cannot drive any 304."""
+
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        CachedConditional(
+            etag=None,
+            last_modified=None,
+            body_bytes=b"x",
+            body_artifact_ref="artifact:t:1",
+            content_type="text/html",
+            status_code=200,
+        )
+
+
+def test_cached_conditional_validator_rejects_non_2xx_status() -> None:
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        CachedConditional(
+            etag='"v"',
+            last_modified=None,
+            body_bytes=b"x",
+            body_artifact_ref="artifact:t:1",
+            content_type="text/html",
+            status_code=500,
+        )
+
+
+def test_cached_conditional_validator_rejects_empty_body_artifact_ref() -> None:
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        CachedConditional(
+            etag='"v"',
+            last_modified=None,
+            body_bytes=b"x",
+            body_artifact_ref="",
+            content_type="text/html",
+            status_code=200,
+        )
+
+
+def test_cached_conditional_validator_rejects_empty_content_type() -> None:
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        CachedConditional(
+            etag='"v"',
+            last_modified=None,
+            body_bytes=b"x",
+            body_artifact_ref="artifact:t:1",
+            content_type="",
+            status_code=200,
+        )
 
 
 def test_cached_conditional_carries_all_fields() -> None:

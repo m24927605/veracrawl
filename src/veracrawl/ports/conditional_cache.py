@@ -24,6 +24,14 @@ the framework default :class:`NoopConditionalCache` is per-design
 empty (every ``get`` returns ``None``) so existing tests pass
 without configuration (Phase 1 boundary acceptance).
 
+URL key normalization (codex iter-3 minor): implementations should
+treat URLs that differ only in fragment or in scheme / host casing
+as the same key. Path + query / case-sensitive characters are
+preserved verbatim. The framework default no-op does no
+normalization (no entries persist anyway); the production
+:class:`InMemoryConditionalCache` lowercases scheme + netloc and
+drops the fragment.
+
 Thread safety: callers can issue concurrent ``get`` / ``put`` for
 distinct runs and URLs. Production impls use a lock; the no-op is
 trivially safe.
@@ -38,6 +46,14 @@ from typing import Protocol, runtime_checkable
 @dataclass(frozen=True)
 class CachedConditional:
     """Cached conditional-fetch state for one ``(run_ref, url)`` pair.
+
+    Invariants enforced by ``__post_init__`` (codex iter-3
+    important): a cached entry must carry at least one of
+    ``etag`` / ``last_modified`` (otherwise it cannot drive any
+    conditional fetch); ``body_artifact_ref`` must be a non-empty
+    string (replay traceability); ``content_type`` must be
+    non-empty; ``status_code`` must be a 2xx (we don't cache
+    redirects / errors).
 
     Attributes:
         etag: Server-supplied ``ETag`` value (opaque to us; stored
@@ -65,6 +81,16 @@ class CachedConditional:
     body_artifact_ref: str
     content_type: str
     status_code: int
+
+    def __post_init__(self) -> None:
+        if self.etag is None and self.last_modified is None:
+            raise ValueError("CachedConditional requires at least one of etag / last_modified")
+        if not self.body_artifact_ref:
+            raise ValueError("CachedConditional.body_artifact_ref must be non-empty")
+        if not self.content_type:
+            raise ValueError("CachedConditional.content_type must be non-empty")
+        if not (200 <= self.status_code < 300):
+            raise ValueError(f"CachedConditional.status_code must be 2xx, got {self.status_code}")
 
 
 @runtime_checkable

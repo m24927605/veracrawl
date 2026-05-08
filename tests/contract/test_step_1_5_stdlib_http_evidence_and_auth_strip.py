@@ -321,15 +321,21 @@ def test_304_short_circuit_reuses_cached_body_artifact_ref() -> None:
         )
 
     config = HttpClientConfig(conditional_cache=cache, run_ref="run:reuse")
-    StdlibHttpSourceAdapter(
+    adapter1 = StdlibHttpSourceAdapter(
         _make_request(),
         config=config,
         transport=httpx.MockTransport(_handler_serve),
-    ).execute(_make_command())
-    # Capture the first-fetch artifact_ref.
+    )
+    adapter1.execute(_make_command())
+    # Codex iter-3 important: capture the FIRST result's emitted
+    # artifact_ref, not just the cache value, so an implementation
+    # that caches a fabricated ref still fails this regression.
+    first_result = adapter1.last_result
+    assert first_result is not None
+    first_emitted_ref = first_result.artifact_refs[0]
     cached = cache.get(run_ref="run:reuse", url="https://a.test/p/1")
     assert cached is not None
-    cached_ref = cached.body_artifact_ref
+    assert cached.body_artifact_ref == first_emitted_ref
 
     def _handler_304(request: httpx.Request) -> httpx.Response:
         if request.headers.get("if-none-match") == '"v1"':
@@ -344,8 +350,95 @@ def test_304_short_circuit_reuses_cached_body_artifact_ref() -> None:
     adapter2.execute(_make_command())
     result = adapter2.last_result
     assert result is not None
-    # Reuses the cached body's artifact_ref.
-    assert result.artifact_refs == [cached_ref]
+    # 304 reuses the FIRST emitted ref end-to-end.
+    assert result.artifact_refs == [first_emitted_ref]
+    # Per-attempt evidence captures the wire 304 (codex iter-3 minor).
+    statuses = [ev.response_status for ev in result.attempt_evidences]
+    assert 304 in statuses
+
+
+def test_cookie_header_in_extra_stripped_on_cross_origin_redirect() -> None:
+    """Cross-origin strip covers ``Cookie`` (case-insensitive)."""
+
+    captured: list[dict[str, str]] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(dict(request.headers))
+        url = str(request.url)
+        if url == "https://a.test/p/1":
+            return httpx.Response(
+                301,
+                headers={"location": "https://b.test/q", "content-type": "text/plain"},
+            )
+        return httpx.Response(
+            200, content=b"<html>ok</html>", headers={"content-type": "text/html"}
+        )
+
+    StdlibHttpSourceAdapter(
+        _make_request("https://a.test/p/1"),
+        config=HttpClientConfig(extra_headers={"Cookie": "session=SECRET_COOKIE"}),
+        transport=httpx.MockTransport(_handler),
+    ).execute(_make_command())
+    assert captured[0].get("cookie") == "session=SECRET_COOKIE"
+    assert "cookie" not in captured[1]
+
+
+def test_proxy_authorization_stripped_on_cross_origin_redirect() -> None:
+    captured: list[dict[str, str]] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(dict(request.headers))
+        url = str(request.url)
+        if url == "https://a.test/p/1":
+            return httpx.Response(
+                301,
+                headers={"location": "https://b.test/q", "content-type": "text/plain"},
+            )
+        return httpx.Response(
+            200, content=b"<html>ok</html>", headers={"content-type": "text/html"}
+        )
+
+    StdlibHttpSourceAdapter(
+        _make_request("https://a.test/p/1"),
+        config=HttpClientConfig(
+            extra_headers={"Proxy-Authorization": "Basic PROXY_SECRET"},
+        ),
+        transport=httpx.MockTransport(_handler),
+    ).execute(_make_command())
+    assert captured[0].get("proxy-authorization") == "Basic PROXY_SECRET"
+    assert "proxy-authorization" not in captured[1]
+
+
+def test_set_cookie_response_header_redacted_in_attempt_evidence() -> None:
+    """Iter-3 important: a server's ``Set-Cookie`` must not appear
+    in ``response_headers_redacted`` in plaintext."""
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"<html>ok</html>",
+            headers={
+                "content-type": "text/html",
+                "set-cookie": "session=SECRET_RESPONSE_TOKEN; Path=/",
+            },
+        )
+
+    adapter = StdlibHttpSourceAdapter(
+        _make_request(),
+        config=HttpClientConfig(),
+        transport=httpx.MockTransport(_handler),
+    )
+    adapter.execute(_make_command())
+    result = adapter.last_result
+    assert result is not None
+    ev = result.attempt_evidences[0]
+    assert ev.response_headers_redacted is not None
+    set_cookie_value = ev.response_headers_redacted.get("set-cookie")
+    assert set_cookie_value == "[REDACTED]"
+    import json as _json
+
+    serialized = _json.dumps(ev.response_headers_redacted)
+    assert "SECRET_RESPONSE_TOKEN" not in serialized
 
 
 def test_conditional_fetch_uses_last_modified_when_no_etag() -> None:

@@ -45,16 +45,38 @@ def test_noop_cookies_in_jar_returns_empty_snapshot() -> None:
 
 
 def test_cookie_record_immutable() -> None:
+    from dataclasses import FrozenInstanceError
+
+    import pytest as _pytest
+
     cookie = CookieRecord(
         name="session",
         value="abc",
         origin="https://example.test",
     )
-    try:
+    with _pytest.raises(FrozenInstanceError):
         cookie.value = "xyz"  # type: ignore[misc]
-    except (AttributeError, Exception):  # noqa: BLE001
-        return
-    raise AssertionError("CookieRecord must be immutable")
+
+
+def test_cookie_jar_snapshot_redacted_strips_values() -> None:
+    """Iter-3 important: cookie values are credentials. The
+    ``redacted()`` helper returns a copy with every value replaced
+    so observability surfaces don't leak credential material."""
+
+    snapshot = CookieJarSnapshot(
+        cookies=[
+            CookieRecord(
+                name="session",
+                value="SECRET_VALUE",
+                origin="https://example.test",
+            ),
+        ]
+    )
+    redacted = snapshot.redacted()
+    assert redacted.cookies[0].name == "session"
+    assert redacted.cookies[0].value == "<redacted>"
+    # Original snapshot is unmutated.
+    assert snapshot.cookies[0].value == "SECRET_VALUE"
 
 
 def test_cookie_record_default_path_is_root() -> None:
