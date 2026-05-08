@@ -73,7 +73,7 @@ mechanics). Each is a single cohesive concern.
 | 3.3 | `source_coverage_gate` revert to evaluative | ~250 | Refactor: integrate with existing `SourceCoverageAdapterExecutionRecord` / `SourceCoverageAdapterReport`; add cross-record consistency assertions |
 | 3.4 | eBay OAuth token cache (`EbayTokenCachePort` + `FileBackedEbayTokenCache`) | ~250 | File-backed cache + cross-worktree lock, isolated from rest of Phase 3 |
 | **3.5a** | Amazon SP-API paginator (transport-only) | ~300 | Pure pagination over a pre-signed transport; injectable transport for tests |
-| **3.5b** | LWA + AWS SigV4 signing transport (`AmazonSpApiSignedTransport`) | ~250 | Real production credential / signing path — wraps an inner `httpx.BaseTransport` to add LWA token + SigV4 headers; talks to AWS STS for IAM role; **WIRED but not live-tested in Phase 3** — the live exercise is Phase 6 |
+| **3.5b** | LWA-only signing transport (`AmazonSpApiLwaTransport`) | ~250 | Real production credential / signing path — wraps an inner `httpx.BaseTransport` to add an `x-amz-access-token` header from a fresh LWA token; talks to `https://api.amazon.com/auth/o2/token` for `grant_type=refresh_token` exchange. **No AWS SigV4** — Amazon SP-API removed the SigV4 requirement effective 2023-10-02 (per `developer-docs.amazon.com/sp-api/.../sp-api-will-no-longer-require-aws-iam-or-aws-signature-version-4`); only the LWA bearer token is required. **Live-validation of full 3.5b stack deferred to Phase 6 step 6.4** because real LWA credentials require SP-API developer-account approval — not available in CI. |
 | 3.6 | eBay browse adapter + live test #5 | ~250 | eBay OAuth fetcher + browse adapter + `@pytest.mark.live` test |
 
 iter-3 codex finding: a single SP-API "list" call requires regional
@@ -87,14 +87,64 @@ splits into:
   (rebrandable as `CursorPaginatedAdapter` for a future eBay
   Inventory API or similar — no Amazon specifics).
 
-- **3.5b** ships the *signed transport* — a `BaseTransport` wrapper
-  that fetches LWA tokens from `https://api.amazon.com/auth/o2/token`,
-  fetches AWS STS credentials via `AssumeRole`, and signs each
-  outgoing request with SigV4. Production-only; tests for 3.5b are
-  fixture-mode against canned LWA / STS responses. **Live-validation
-  of full 3.5b stack is deferred to Phase 6 step 6.4** because real
-  STS / LWA credentials require a deployed AWS IAM role and SP-API
-  developer-account approval — not available in CI.
+- **3.5b** ships the *LWA-only signed transport* — a
+  `BaseTransport` wrapper that fetches LWA refresh tokens from
+  `https://api.amazon.com/auth/o2/token` (using
+  `grant_type=refresh_token` + a long-lived refresh token from the
+  vault) and adds the resulting access token as the
+  `x-amz-access-token` header on each outgoing request. Per
+  Amazon's 2023-10-02 SP-API changelog, AWS SigV4 / IAM are no
+  longer required — only LWA bearer tokens. Production-only; tests
+  for 3.5b are fixture-mode against canned LWA token responses.
+
+  Interface sketch:
+
+  ```python
+  # src/veracrawl/adapters/sources/amazon_sp_api_lwa_transport.py
+
+  @dataclass(frozen=True, slots=True)
+  class LwaCredentialBundle:
+      """LWA application credentials for SP-API refresh-token flow."""
+      lwa_client_id: str
+      lwa_client_secret: str  # stored as CredentialValue at construction
+      refresh_token: str       # stored as CredentialValue at construction
+
+  class AmazonSpApiLwaTransport(httpx.BaseTransport):
+      """Wraps an inner BaseTransport and adds the
+      ``x-amz-access-token`` header to outgoing requests, refreshing
+      the token when it expires (5-min skew).
+
+      The transport caches the access token in an injectable
+      `EbayTokenCachePort`-shaped store (`SpApiLwaTokenCachePort`,
+      defined here) so multiple worktree runs share a single token.
+      """
+
+      def __init__(
+          self,
+          *,
+          inner: httpx.BaseTransport,
+          credentials: LwaCredentialBundle,
+          token_cache: SpApiLwaTokenCachePort,
+          marketplace_endpoint: str,  # e.g., "https://sellingpartnerapi-na.amazon.com"
+          clock: Callable[[], datetime] = ...,
+      ) -> None: ...
+
+      def handle_request(self, request: httpx.Request) -> httpx.Response: ...
+  ```
+
+  Test coverage (`tests/unit/test_step_3_5b_lwa_transport.py`):
+
+  1. `test_first_call_fetches_token_from_lwa_endpoint`
+  2. `test_subsequent_calls_use_cached_token_until_expiry`
+  3. `test_token_refresh_on_expiry_with_5_minute_skew`
+  4. `test_4xx_token_endpoint_response_raises_provider_auth_failed`
+  5. `test_x_amz_access_token_header_present_on_signed_requests`
+  6. `test_marketplace_endpoint_required_at_construction`
+  7. `test_credentials_logged_only_via_credentialvalue_redaction`
+  8. `test_token_endpoint_url_hardcoded_to_amazon_lwa_endpoint`
+
+  Live validation deferred to Phase 6 step 6.4 (requires
+  SP-API developer-account approval).
 
 This split lets 3.5a ship cleanly with full unit-test coverage; 3.5b
 ships with full unit coverage but its end-to-end live correctness
@@ -304,7 +354,8 @@ class AdapterEscalationPort(Protocol):
         self,
         *,
         from_adapter_type: AdapterType,
-        # Exactly one of `failure` or `js_render_evidence_ref` is non-None.
+        # Exactly one of `failure` or `js_render_evidence_ref` is non-None
+        # (acceptance-tested invariant — see test 17 below).
         # `failure` for the failure-driven branches; `js_render_evidence_ref`
         # for the success-driven JS-render escalation (HTTP returned a
         # 200 with a skeleton + <script> bundle, evidence captured by
@@ -312,10 +363,22 @@ class AdapterEscalationPort(Protocol):
         # NetworkAttemptEvidence + a serialized js_render_decision payload).
         failure: NetworkAdapterError | AccessControlBlocked | None,
         js_render_evidence_ref: Ref | None,
+        # Caller-supplied evidence ref the decision will record as
+        # ``triggered_by_ref``. For ``failure`` of type
+        # ``AccessControlBlocked``, this is the AccessControlBlocked.id
+        # (it has an ``id`` field per Phase 0). For
+        # ``failure`` of type ``NetworkAdapterError`` (which has NO
+        # ``id`` field — it's a plain Exception subclass), the caller
+        # passes the ref of the preceding ``NetworkAttemptEvidence``
+        # captured by the transport. For the JS-render branch, this
+        # equals ``js_render_evidence_ref``. Required (non-None).
+        triggered_by_ref: Ref,
         policy: AdapterEscalationPolicy,
+        policy_ref: Ref,                 # for AdapterEscalationDecision.policy_ref
         run_ref: Ref,
         escalations_used: int,
         scope_covers_authorized_session: bool,
+        review_provider: OperatorReviewProviderPort | None = None,
     ) -> AdapterEscalationDecision | None: ...
 ```
 
@@ -328,7 +391,7 @@ hierarchy:
 
 | Failure class | Inherits | Maps to |
 |---|---|---|
-| `NetworkPolicyForbiddenError` (existing, Phase 0) | `NetworkAdapterError, FatalError` | terminal (401/403/404/410) |
+| Status-fatal failure (NEW for Phase 3 step 3.2 — `HttpStatusFatalError(NetworkAdapterError, FatalError)`) | `NetworkAdapterError, FatalError` | terminal (401/403/404/410). Phase 3 introduces this single new class because Phase 1's `stdlib_http` covers transport-level failures (timeout, retry-exhausted, redirect-denied) but does NOT classify status-as-fatal — status mapping is the orchestrator / classifier layer's responsibility. The transport returns the response as-is for 4xx; the orchestrator constructs `HttpStatusFatalError(status_code=401)` (or 403 / 404 / 410 — the four codes design.md explicitly calls out as terminal) before invoking the escalator. Tests pass an `HttpStatusFatalError` instance directly. |
 | `NetworkTimeoutError` (existing) | `NetworkAdapterError, RetryableError` | retry on same adapter |
 | `AccessControlBlocked` (existing, Phase 0 contract — passed to escalator as a typed value, not raised) | dataclass / not exception | escalate to AUTHORIZED_SESSION when scope covers |
 | `ApiSourceOutageError` (NEW, Phase 3 step 3.2) | `NetworkAdapterError, RetryableError` | escalate to HTTP — distinct from generic transport timeout |
@@ -365,7 +428,7 @@ decide(from, failure, policy, escalations_used, scope_covers_session, document_i
     if scope_covers_session and AUTHORIZED_SESSION in policy.allowed_transitions.get(from, ()):
       return decision(from, AUTHORIZED_SESSION,
                       signature=ACCESS_CONTROL_BLOCKED,
-                      triggered_by_ref=failure.id)
+                      triggered_by_ref=triggered_by_ref)
     return None
 
   # 4. ApiSourceOutageError — escalate API_SOURCE to HTTP.
@@ -375,7 +438,7 @@ decide(from, failure, policy, escalations_used, scope_covers_session, document_i
     if from == API_SOURCE and HTTP in policy.allowed_transitions.get(API_SOURCE, ()):
       return decision(API_SOURCE, HTTP,
                       signature=API_SOURCE_UNAVAILABLE,
-                      triggered_by_ref=failure.id)
+                      triggered_by_ref=triggered_by_ref)
     return None
 
   # 5. Generic RetryableError (transport timeout, etc.) — retry on same
@@ -497,7 +560,7 @@ free-form caller string lands on the exception or in audit logs.
 
 ### Acceptance tests (`tests/unit/test_step_3_2_policy_driven_escalator.py`)
 
-1. `test_http_403_does_not_escalate_to_browser` (regression for codex critical #4 / important #7) — failure of type `NetworkPolicyForbiddenError` (FatalError) with `from=HTTP` + browser allowed in policy → returns `None`
+1. `test_http_403_does_not_escalate_to_browser` (regression for codex critical #4 / important #7) — failure of type `HttpStatusFatalError(status_code=403)` with `from=HTTP` + browser allowed in policy → returns `None`
 2. `test_http_404_does_not_escalate_to_browser` → None
 3. `test_http_401_does_not_escalate_to_browser` → None
 4. `test_access_control_blocked_with_scope_escalates_to_authorized_session` → decision with `to=AUTHORIZED_SESSION`
@@ -547,31 +610,59 @@ which contradicted the Phase 0 contracts already in
 
 The Phase 3 evaluative gate therefore consumes these existing
 records and validates **cross-record consistency** without
-introducing new Phase 0 types:
+introducing new Phase 0 types.
 
-1. For each `SourceCoverageAdapterExecutionRecord` in the report's
-   `adapter_execution_refs`, follow `policy_decision_refs` and
-   load any `AdapterEscalationDecision` records (Phase 0).
-2. Build an in-memory chain by ordering execution records by
-   their `created_at` timestamp (already on `TimestampedModel`),
-   with ties broken by execution-record `id` lexicographic order
-   for replay determinism.
-3. For each escalation decision: assert the preceding execution
-   record's `adapter_type == decision.from_adapter_type`, AND
-   that the preceding record contains either (a) a fetch_attempt
-   ref pointing at a `NetworkAttemptEvidence` whose
-   `failure_type` matches the `decision.failure_signature`, OR
-   (b) a policy_decision_ref pointing at an `AccessControlBlocked`
-   for the access-control branch.
-4. Assert chain length (count of escalation decisions in
-   `report.policy_decision_refs`) ≤ the policy's
-   `max_escalations_per_run` (loaded from the policy registry via
-   the run's `runtime_spec`).
-5. Assert `verified_adapter_types` is a subset of the actual
-   adapters that succeeded (no fabricated success claims).
+### Gate input contract (no live ref resolution)
 
-The existing record fields carry enough information that no
-denormalized event-list schema is needed.
+The gate is pure logic. Callers (orchestrator / replay tooling)
+resolve all refs **before** invoking the gate; the gate itself
+does NOT load anything from a registry / repository. Input shape:
+
+```python
+@dataclass(frozen=True, slots=True)
+class SourceCoverageGateInput:
+    report: SourceCoverageAdapterReport
+    executions: tuple[SourceCoverageAdapterExecutionRecord, ...]  # all execution records
+    escalation_decisions: tuple[AdapterEscalationDecision, ...]   # all decisions for this run
+    access_control_blocks: tuple[AccessControlBlocked, ...]       # all classifier outputs for this run
+    network_attempt_evidences: tuple[NetworkAttemptEvidence, ...]  # all attempt evidences for this run
+    policy: AdapterEscalationPolicy   # the policy that governed this run
+```
+
+Caller is responsible for ensuring the input is internally
+consistent (records are all from the same run; no orphans). The
+gate validates the chain semantics, not the resolution.
+
+### Validation rules
+
+1. Order the executions by `created_at` (TimestampedModel field —
+   tz-aware), tie-break by execution `id` lexicographic.
+2. For each `AdapterEscalationDecision` in
+   `escalation_decisions` (also ordered by `created_at` then
+   `id`):
+   - Find the most recent execution at-or-before
+     `decision.created_at` whose `adapter_type ==
+     decision.from_adapter_type`. If none, **flag** as unjustified.
+   - For `failure_signature == ACCESS_CONTROL_BLOCKED`: assert
+     the preceding execution's `policy_decision_refs` contains a
+     ref equal to one of the input `access_control_blocks`'s
+     `id`s.
+   - For `failure_signature in (API_SOURCE_UNAVAILABLE,
+     JS_RENDERED_DOCUMENT)`: assert the preceding execution's
+     `fetch_attempt_refs` contains a ref equal to one of the
+     input `network_attempt_evidences`'s `id`s. For
+     `API_SOURCE_UNAVAILABLE`, additionally assert the matched
+     `NetworkAttemptEvidence.failure_class` (Phase 0 field —
+     verified at iter-4) equals `"ApiSourceOutageError"`.
+3. Assert `len(escalation_decisions) <=
+   policy.max_escalations_per_run`.
+4. Assert `report.verified_adapter_types` is a subset of
+   `{e.adapter_type for e in executions if e.result ==
+   CompletenessResult.PASS}`.
+
+The existing record fields (`fetch_attempt_refs`,
+`policy_decision_refs`, etc.) carry enough information that no
+schema enrichment is needed for these checks.
 
 ### Acceptance tests (`tests/unit/test_step_3_3_source_coverage_gate_evaluative.py`)
 
@@ -727,7 +818,9 @@ checks `sys.platform`:
 2. `test_get_returns_none_for_missing_scope`
 3. `test_get_returns_none_after_ttl_expires` (inject clock)
 4. `test_invalidate_removes_entry`
-5. `test_concurrent_put_serialized_via_flock` — spawn 2 processes (subprocess) each calling `put` against same cache_dir; lockfile is created once and stable; assert no torn write (file readable as JSON after both complete) AND both writes' values are present (last writer wins, but neither produces corruption)
+5. `test_concurrent_put_serialized_via_flock` — spawn 2 processes (subprocess) each calling `put` against same cache_dir, **with distinct scope_refs** (process A puts `EBAY_PROD_A`, process B puts `EBAY_PROD_B`). Assert: lockfile is created once and stable; resulting cache file is valid JSON; both scope_ref keys are present in the final cache (lockfile prevents one writer from clobbering the other's read-modify-write on a different key). For same-scope concurrent writes, last-writer-wins is the documented semantics — covered by a separate test below.
+
+5a. `test_concurrent_put_same_scope_last_writer_wins_no_corruption` — same setup but both processes target the same scope_ref. Assert: cache file is valid JSON; the final value for the scope is one of the two writers' values (not torn / not partial); no corruption.
 6. `test_cache_file_mode_is_0600` — after `put`, `os.stat(cache_file).st_mode & 0o777 == 0o600`
 7. `test_cache_dir_mode_is_0700_when_created`
 8. `test_lockfile_separate_from_cache_file` — `<cache>.lock` exists distinct from `<cache>.json`; lockfile is never replaced
@@ -787,9 +880,11 @@ class AmazonSpApiAdapter:
     def __init__(
         self,
         *,
-        http_transport: httpx.BaseTransport,
+        http_transport: httpx.BaseTransport,  # MockTransport in tests; AmazonSpApiLwaTransport in production
         vault: CredentialVaultPort,
         scope_policy: SessionScopePolicy,
+        token_cache: SpApiLwaTokenCachePort,  # for invalidate-on-401 (vault has no invalidate method)
+        marketplace_endpoint: str,  # e.g., "https://sellingpartnerapi-na.amazon.com"; validated at __init__: must be https://*.amazon.com or https://sandbox.* per SP-API regional endpoints list
         clock: Callable[[], datetime] = ...,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None: ...
@@ -804,6 +899,20 @@ class AmazonSpApiAdapter:
         budget: PaginationBudget,
     ) -> AmazonSpApiPaginatedResult: ...
 ```
+
+`marketplace_endpoint` is the regional SP-API base URL — see
+`developer-docs.amazon.com/sp-api/docs/marketplace-ids`. Production
+values: `https://sellingpartnerapi-na.amazon.com` (North America),
+`https://sellingpartnerapi-eu.amazon.com` (Europe),
+`https://sellingpartnerapi-fe.amazon.com` (Far East). Tests use
+`https://sandbox.sellingpartnerapi-na.amazon.com`.
+
+The full request URL the paginator constructs is
+`f"{marketplace_endpoint}{endpoint}?<params>"`; the validated
+`endpoint` regex is path-only (no scheme/host). Validation at
+construction time refuses non-HTTPS / non-Amazon hosts so a
+misconfigured caller cannot accidentally point at the wrong
+service.
 
 ### Transport contract
 
@@ -866,7 +975,7 @@ list(endpoint, params, scope_ref, run_ref, budget):
     if response.status_code == 401:
       if not refresh_used:
         refresh_used = True
-        vault.invalidate(scope_ref)
+        token_cache.invalidate(scope_ref)  # cache has invalidate; vault does not
         continue  # retry SAME page with fresh token
       return AmazonSpApiPaginatedResult(pages, AmazonSpApiPaginationFailure(
           kind=AUTH_REFRESH_EXHAUSTED, response_status=401))
@@ -975,11 +1084,15 @@ This step ships **two** files:
    - The test wires `FileBackedEbayTokenCache` (step 3.4) plus an
      `EbayOAuthTokenFetcher` (small helper internal to step 3.6:
      posts to `https://api.ebay.com/identity/v1/oauth2/token` with
-     `grant_type=client_credentials` + Basic-auth header built from
-     `client_id:client_secret`; returns access token + expires_in;
-     no scope_refs of its own — the cache's `scope_ref` is simply
-     `EBAY_PROD`). Token endpoint URL is hardcoded for the live test
-     because eBay's prod endpoint is the only relevant target.
+     URL-encoded body
+     `grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope`
+     (per `developer.ebay.com/api-docs/static/oauth-client-credentials-grant.html`
+     — the `scope` parameter is required, not optional) + Basic-auth
+     header built from `client_id:client_secret`; returns access
+     token + expires_in; the cache's `scope_ref` is the constant
+     `EBAY_PROD` for the Browse API). Token endpoint URL is
+     hardcoded for the live test because eBay's prod endpoint is
+     the only relevant target.
    - **No** `VERACRAWL_CRED_EBAY_PROD__OAUTH` — that was a misnomer in
      iter-1. The live test fetches the OAuth token itself; an env
      var carrying a pre-fetched access token would be redundant
@@ -1018,7 +1131,7 @@ which is gitignored.
 
 ### Codex recurring concerns coverage
 
-- (b) Production gate: live tests run under `RuntimeMode.PRODUCTION`. ✓
+- (b) Production gate: step 3.6 live test runs under `RuntimeMode.FIXTURE` (per Phase 1 step 1.6 precedent and step 3.6 runtime-mode resolution above). The Phase 0.4 production gates on `EnvVarVault` / production-only paths are not exercised; the test validates the eBay vendor / OAuth flow / cache hit behavior against a real endpoint without claiming production-runtime correctness. Production runtime is Phase 6 step 6.4.
 - Live test fragility (2026-05-08 reassessment lesson): assert minimal
   invariants (≥1 product, status 200) — never assert specific product
   counts or eBay-controlled field values that drift over time.
