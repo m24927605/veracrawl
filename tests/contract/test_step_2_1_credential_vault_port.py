@@ -108,6 +108,31 @@ def test_credential_value_rejects_empty_scope() -> None:
         CredentialValue(value="x", scope_ref="")
 
 
+@pytest.mark.parametrize("blank_value", ["   ", "\t", "\n", " \t\n "])
+def test_credential_value_rejects_whitespace_only_value(blank_value: str) -> None:
+    """Codex iter-2 important: centralize the fail-closed whitespace
+    rule on the wrapper. Future production vault adapters cannot
+    leak blank Authorization upstream by returning a whitespace
+    ``CredentialValue``."""
+
+    with pytest.raises(ValueError, match="whitespace"):
+        CredentialValue(value=blank_value, scope_ref="X")
+
+
+def test_credential_value_format_honors_padding_spec_without_leaking() -> None:
+    """Codex iter-2 minor: ``__format__`` should respect the format
+    spec (alignment, width) so f-strings behave predictably while
+    still emitting only the redacted marker."""
+
+    cred = CredentialValue(value="secret-padded", scope_ref="X")
+    formatted = f"{cred:>40}"
+    assert "secret-padded" not in formatted
+    assert "<credential:redacted:X>" in formatted
+    # Width 40 ⇒ left-padded marker (right-aligned in a 40-wide field).
+    assert len(formatted) == 40
+    assert formatted.endswith("<credential:redacted:X>")
+
+
 @pytest.mark.parametrize(
     "scope_ref",
     [

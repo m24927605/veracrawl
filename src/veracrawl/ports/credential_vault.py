@@ -99,6 +99,16 @@ class CredentialValue:
     def __init__(self, *, value: str, scope_ref: str) -> None:
         if not value:
             raise ValueError("CredentialValue requires a non-empty value")
+        if not value.strip():
+            # Codex iter-2 important: centralize the fail-closed
+            # whitespace rule on the wrapper itself so a future
+            # production vault adapter (step 2.4 ``OutboxVaultClient``
+            # and beyond) cannot return ``CredentialValue(value="   ")``
+            # and end up sending blank Authorization upstream.
+            raise ValueError(
+                "CredentialValue rejects whitespace-only values "
+                "(treated as missing / fail-closed for the cooperative crawler)"
+            )
         if not scope_ref:
             raise ValueError("CredentialValue requires a non-empty scope_ref")
         if not _SAFE_SCOPE_RE.fullmatch(scope_ref):
@@ -142,8 +152,10 @@ class CredentialValue:
         return self._redacted()
 
     def __format__(self, format_spec: str) -> str:
-        del format_spec
-        return self._redacted()
+        # Codex iter-2 minor: honor the format spec on the redacted
+        # marker (alignment, width, fill) so f-strings behave
+        # predictably without ever exposing the secret.
+        return format(self._redacted(), format_spec)
 
     def __reduce__(self) -> tuple[type, tuple[str, ...]]:
         # Picking a credential into a stable on-disk form is
