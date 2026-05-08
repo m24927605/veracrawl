@@ -144,9 +144,10 @@ def test_example_com_har_persisted_via_evidence_store(
             evidence_artifact_store=store,
             har_capture_dir=har_dir,
         )
-        # Must use ``open_session`` (not the legacy one-shot
-        # ``observe``) to engage the per-run lifecycle that
-        # finalizes HAR on context close.
+        # Use the explicit ``open_session`` path to exercise the
+        # per-run session lifecycle directly (one-shot ``observe``
+        # also runs HAR post-processing internally — both surfaces
+        # share the same lifecycle code).
         with adapter.open_session(run_ref="run:live:step-1-6c") as session:
             session.observe(
                 source_ref="source:live:step-1-6c:example",

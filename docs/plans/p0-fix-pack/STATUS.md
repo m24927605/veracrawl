@@ -15,6 +15,7 @@
 | 1.5 | Per-attempt NetworkAttemptEvidence + cross-redirect Authorization/Cookie strip + ETag/Last-Modified conditional fetch + per-run/per-origin cookie jar | DONE_WITH_RESERVATIONS | 635e419, 290b51c, 360e934, 8006864, 5c2e2e6, 1e8ba28 | 5 (rejected at iter-5; iter-5 important findings addressed in post-iter-5 commit 1e8ba28 but not re-reviewed) | 1 — see "v2 phase 1 step 1.5 reservations" below |
 | 1.6a | Live test #1: httpbin.org/headers (Chrome UA reaches origin + AIMD limiter engaged + conditional cache populates ETag) | DONE_WITH_RESERVATIONS | 4f44ffb, 1e70b4c, 401f149, 87f4dc2, 42209c1, b8fb9cc | 5 (rejected at iter-5; iter-5 important findings addressed in post-iter-5 commit b8fb9cc but not re-reviewed) | 1 — see "v2 phase 1 step 1.6a reservations" below |
 | 1.6b | Live test #2: httpbin.org/redirect-to (redirect-hop evidence + per-attempt evidence per hop + redirect_hop_refs on response) | DONE | 8954114, cd39ecc, 944d1d0 | 3 (approved) | none |
+| 1.6c | Live test #3: example.com DOM + screenshot + HAR persisted via evidence store | DONE | cc5f3ad, eeeb2f9 | 2 (approved) | none |
 
 **Attempt id**: `0a4ea4442335e51ed8ba7fcd5b47e8a86d4a6eea:da7df723b19ab39d21915274fef71ecb:01KR0038H38F0MFMR0H7HGHEA4`
 
@@ -125,6 +126,8 @@ Status = DONE_WITH_RESERVATIONS because iter 5 was the last formal review under 
 | 1.6b | 1 | ❌ rejected | important: stale `__init__.py` saying "1.6b: ... (later)"; STATUS.md missing 1.6b row; minor: iter-N review history in module docstring; inaccurate timeout comment |
 | 1.6b | 2 | ❌ rejected | important: STATUS.md committed `IN_PROGRESS (codex review) | TBD`; minor: docstring claimed "Two HTTP round trips" while file has 3 tests × 2 = 6 |
 | 1.6b | 3 | ✅ **approved** | no blocking findings; minor: 3 tests each perform the same live redirect (acceptable for gated live suite) |
+| 1.6c | 1 | ❌ rejected | important: codex hallucinated `pytest -m live -k phase1` selection (verified absent from design.md, dismissed); module-level `_chromium_available()` launched Chromium at collection time even on `-m 'not live'` runs |
+| 1.6c | 2 | ✅ **approved** | no blocking findings; minor: package doc still said 1.6c pending; comment about open_session-vs-observe inaccurate (both share lifecycle code) |
 
 ## V1 (Sept 2026) — preserved
 
