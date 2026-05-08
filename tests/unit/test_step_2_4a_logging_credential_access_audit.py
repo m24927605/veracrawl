@@ -16,7 +16,10 @@ from datetime import UTC, datetime
 import pytest
 import structlog
 
-from veracrawl.ports.credential_access_audit import CredentialAccessAuditPort
+from veracrawl.ports.credential_access_audit import (
+    CredentialAccessAuditPort,
+    CredentialAccessOutcome,
+)
 from veracrawl.runtime_support.credential_access_audit import (
     LoggingCredentialAccessAuditWriter,
 )
@@ -33,7 +36,7 @@ def test_record_writes_structured_event() -> None:
         writer.record(
             scope_ref="EBAY_PROD",
             key="API_KEY",
-            success=True,
+            outcome=CredentialAccessOutcome.SUCCESS,
             run_ref="run:test:1",
             timestamp=timestamp,
         )
@@ -42,9 +45,31 @@ def test_record_writes_structured_event() -> None:
     entry = matched[0]
     assert entry["scope_ref"] == "EBAY_PROD"
     assert entry["key"] == "API_KEY"
-    assert entry["success"] is True
+    assert entry["outcome"] == "success"
     assert entry["run_ref"] == "run:test:1"
     assert entry["timestamp_iso"] == "2026-05-09T12:00:00+00:00"
+
+
+def test_record_serializes_outcome_as_stable_string() -> None:
+    """Each CredentialAccessOutcome value should land as its
+    stable string form for log aggregation."""
+
+    writer = LoggingCredentialAccessAuditWriter()
+    timestamp = datetime(2026, 5, 9, 12, 0, 0, tzinfo=UTC)
+    for outcome in CredentialAccessOutcome:
+        with structlog.testing.capture_logs() as captured:
+            writer.record(
+                scope_ref="X",
+                key="K",
+                outcome=outcome,
+                run_ref="r",
+                timestamp=timestamp,
+            )
+        assert any(
+            entry.get("event") == "credential_access"
+            and entry.get("outcome") == outcome.value
+            for entry in captured
+        ), f"missing log event for outcome {outcome}"
 
 
 def test_record_rejects_naive_timestamp() -> None:
@@ -53,7 +78,7 @@ def test_record_rejects_naive_timestamp() -> None:
         writer.record(
             scope_ref="X",
             key="K",
-            success=True,
+            outcome=CredentialAccessOutcome.SUCCESS,
             run_ref="r",
             timestamp=datetime(2026, 5, 9, 12, 0, 0),  # noqa: DTZ001 — intentional naive
         )

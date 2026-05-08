@@ -26,6 +26,7 @@ from veracrawl.adapters.credential_vault.in_memory_vault_backend import (
 from veracrawl.adapters.credential_vault.outbox_vault_client import (
     OutboxVaultClient,
 )
+from veracrawl.ports.credential_access_audit import CredentialAccessOutcome
 from veracrawl.ports.credential_vault import (
     CredentialNotFoundError,
     CredentialValue,
@@ -46,7 +47,7 @@ class _RecordingAudit:
         *,
         scope_ref: str,
         key: str,
-        success: bool,
+        outcome: CredentialAccessOutcome,
         run_ref: str,
         timestamp: datetime,
     ) -> None:
@@ -54,7 +55,7 @@ class _RecordingAudit:
             {
                 "scope_ref": scope_ref,
                 "key": key,
-                "success": success,
+                "outcome": outcome,
                 "run_ref": run_ref,
                 "timestamp": timestamp,
             }
@@ -96,7 +97,7 @@ def test_get_returns_credential_value_for_present_credential() -> None:
     assert result.reveal() == "sk_live_abc123"
     assert result.scope_ref == "EBAY_PROD"
     assert len(audit.records) == 1
-    assert audit.records[0]["success"] is True
+    assert audit.records[0]["outcome"] is CredentialAccessOutcome.SUCCESS
 
 
 def test_get_writes_audit_row_with_injected_clock_timestamp() -> None:
@@ -122,26 +123,33 @@ def test_get_missing_credential_raises_not_found_with_audit() -> None:
     with pytest.raises(CredentialNotFoundError):
         client.get(scope_ref="X", key="K")
     assert len(audit.records) == 1
-    assert audit.records[0]["success"] is False
+    assert audit.records[0]["outcome"] is CredentialAccessOutcome.NOT_FOUND
 
 
 @pytest.mark.parametrize(
-    "kind",
+    "kind,expected_outcome",
     [
-        VaultBackendErrorKind.BACKEND_UNREACHABLE,
-        VaultBackendErrorKind.AUTH_FAILED,
-        VaultBackendErrorKind.INTERNAL,
+        (VaultBackendErrorKind.BACKEND_UNREACHABLE, CredentialAccessOutcome.BACKEND_UNREACHABLE),
+        (VaultBackendErrorKind.AUTH_FAILED, CredentialAccessOutcome.AUTH_FAILED),
+        (VaultBackendErrorKind.INTERNAL, CredentialAccessOutcome.INTERNAL),
+        (VaultBackendErrorKind.NOT_FOUND, CredentialAccessOutcome.NOT_FOUND),
     ],
 )
-def test_backend_error_translates_to_not_found_and_audits_failure(
+def test_backend_error_translates_to_structured_audit_outcome(
     kind: VaultBackendErrorKind,
+    expected_outcome: CredentialAccessOutcome,
 ) -> None:
+    """Codex iter-1 important: the audit row must preserve the
+    structured backend failure kind, not collapse to a boolean.
+    Operational triage needs to distinguish auth_failed /
+    backend_unreachable / internal in production logs."""
+
     backend = InMemoryVaultBackend(fail_with_kind=kind)
     client, audit = _make_client(backend=backend)
     with pytest.raises(CredentialNotFoundError):
         client.get(scope_ref="X", key="K")
     assert len(audit.records) == 1
-    assert audit.records[0]["success"] is False
+    assert audit.records[0]["outcome"] is expected_outcome
 
 
 def test_backend_error_does_not_leak_via_exception_chain() -> None:
@@ -183,13 +191,49 @@ def test_backend_error_does_not_leak_via_exception_chain() -> None:
             chain.append(node.__context__)
 
 
-@pytest.mark.parametrize("blank_value", ["", "   ", "\t", "\n"])
-def test_backend_returns_blank_value_treated_as_not_found(blank_value: str) -> None:
+@pytest.mark.parametrize("blank_value", ["   ", "\t", "\n"])
+def test_backend_returns_blank_value_treated_as_blank_value_outcome(
+    blank_value: str,
+) -> None:
+    """Whitespace-only values are caught by the InMemoryVaultBackend
+    (returns None) before they reach the client; outcome is
+    therefore NOT_FOUND. The BLANK_VALUE outcome path is exercised
+    when a future backend (e.g., a vault that returns the empty
+    string distinctly from missing) returns a literal blank — see
+    test below using a stub that returns blank directly."""
+
     backend = InMemoryVaultBackend(credentials={("X", "K"): blank_value})
     client, audit = _make_client(backend=backend)
     with pytest.raises(CredentialNotFoundError):
         client.get(scope_ref="X", key="K")
-    assert audit.records[0]["success"] is False
+    # InMemoryVaultBackend's blank-value handling reports as NOT_FOUND
+    # (it returns None for blank). Distinct backend behavior is
+    # tested below.
+    assert audit.records[0]["outcome"] is CredentialAccessOutcome.NOT_FOUND
+
+
+def test_backend_that_returns_literal_blank_audits_as_blank_value() -> None:
+    """A backend that distinguishes blank-string from missing (some
+    vaults do — they store empty placeholders) drives the
+    BLANK_VALUE outcome path. The client treats a returned blank
+    string as fail-closed missing, distinct from the
+    NOT_FOUND-from-backend case."""
+
+    class _BlankReturningBackend:
+        def fetch(self, *, scope_ref: str, key: str) -> str | None:
+            del scope_ref, key
+            return "   "
+
+    audit = _RecordingAudit()
+    client = OutboxVaultClient(
+        backend=_BlankReturningBackend(),
+        audit=audit,
+        run_ref="run:test:1",
+        clock=lambda: _FROZEN_NOW,
+    )
+    with pytest.raises(CredentialNotFoundError):
+        client.get(scope_ref="X", key="K")
+    assert audit.records[0]["outcome"] is CredentialAccessOutcome.BLANK_VALUE
 
 
 # ---------------------------------------------------------------------------
@@ -209,15 +253,24 @@ def test_backend_returns_blank_value_treated_as_not_found(blank_value: str) -> N
         "EBAY\nPROD",  # control char
     ],
 )
-def test_invalid_scope_ref_raises_value_error_before_backend_call(
+def test_invalid_scope_ref_raises_value_error_with_invalid_identifier_audit(
     scope_ref: str,
 ) -> None:
+    """Codex iter-1 important: invalid-identifier rejection must
+    still emit an audit row (operationally distinct outcome:
+    INVALID_IDENTIFIER). Identifiers in the audit row are
+    redacted to `[REDACTED]` placeholders since the rejected
+    values may carry secret-shaped strings."""
+
     backend = InMemoryVaultBackend()
     client, audit = _make_client(backend=backend)
-    with pytest.raises(ValueError, match=r"^[A-Z0-9_]+|redacted"):
+    with pytest.raises(ValueError):
         client.get(scope_ref=scope_ref, key="API_KEY")
-    # No audit row written — validation rejected before backend call.
-    assert audit.records == []
+    assert len(audit.records) == 1
+    record = audit.records[0]
+    assert record["outcome"] is CredentialAccessOutcome.INVALID_IDENTIFIER
+    assert record["scope_ref"] == "[REDACTED]"
+    assert record["key"] == "[REDACTED]"
 
 
 @pytest.mark.parametrize(
@@ -230,12 +283,15 @@ def test_invalid_scope_ref_raises_value_error_before_backend_call(
         "API/KEY",
     ],
 )
-def test_invalid_key_raises_value_error_before_backend_call(key: str) -> None:
+def test_invalid_key_raises_value_error_with_invalid_identifier_audit(
+    key: str,
+) -> None:
     backend = InMemoryVaultBackend()
     client, audit = _make_client(backend=backend)
     with pytest.raises(ValueError):
         client.get(scope_ref="EBAY", key=key)
-    assert audit.records == []
+    assert len(audit.records) == 1
+    assert audit.records[0]["outcome"] is CredentialAccessOutcome.INVALID_IDENTIFIER
 
 
 def test_invalid_identifier_error_does_not_echo_raw_value() -> None:

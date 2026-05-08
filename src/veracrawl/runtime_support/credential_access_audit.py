@@ -2,20 +2,23 @@
 
 The default :class:`~veracrawl.ports.credential_access_audit.CredentialAccessAuditPort`
 implementation. Writes one structured-log event per credential
-fetch via :func:`veracrawl.runtime_support.logging.get_logger` so
-existing log aggregation pipelines (Datadog / Splunk / OTLP) can
-correlate vault accesses with run identifiers without a separate
-persistence layer. Phase 6 ships an outbox-backed alternate that
-satisfies the same port; production deployments swap via wiring.
+fetch attempt via :func:`veracrawl.runtime_support.logging.get_logger`
+so existing log aggregation pipelines (Datadog / Splunk / OTLP) can
+correlate vault accesses with run identifiers + structured outcomes
+without a separate persistence layer. Phase 6 ships an outbox-
+backed alternate that satisfies the same port; production
+deployments swap via wiring.
 
 The structured fields emitted:
 
 * ``event``: ``"credential_access"`` (stable string for log
   aggregation grep).
-* ``scope_ref``: caller-supplied (already env-var-safe per Phase 2
-  step 2.1 regex; never a credential string).
-* ``key``: caller-supplied (env-var-safe).
-* ``success``: ``True`` / ``False``.
+* ``scope_ref``: caller-supplied (env-var-safe shape, OR the
+  literal ``"[REDACTED]"`` placeholder when the original failed
+  identifier-shape validation).
+* ``key``: caller-supplied (env-var-safe shape, OR
+  ``"[REDACTED]"``).
+* ``outcome``: structured ``CredentialAccessOutcome`` value.
 * ``run_ref``: caller-supplied opaque identifier.
 * ``timestamp_iso``: ISO-8601 tz-aware string (deterministic
   serialization for replay).
@@ -32,6 +35,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from veracrawl.contracts.common import Ref
+from veracrawl.ports.credential_access_audit import CredentialAccessOutcome
 from veracrawl.runtime_support.logging import get_logger
 
 _logger = get_logger(__name__)
@@ -49,7 +53,7 @@ class LoggingCredentialAccessAuditWriter:
         *,
         scope_ref: str,
         key: str,
-        success: bool,
+        outcome: CredentialAccessOutcome,
         run_ref: Ref,
         timestamp: datetime,
     ) -> None:
@@ -62,7 +66,7 @@ class LoggingCredentialAccessAuditWriter:
             "credential_access",
             scope_ref=scope_ref,
             key=key,
-            success=success,
+            outcome=outcome.value,
             run_ref=run_ref,
             timestamp_iso=timestamp.isoformat(),
         )

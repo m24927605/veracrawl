@@ -40,30 +40,39 @@ from datetime import UTC, datetime
 from typing import Final
 
 from veracrawl.contracts.common import Ref
-from veracrawl.ports.credential_access_audit import CredentialAccessAuditPort
+from veracrawl.ports.credential_access_audit import (
+    CredentialAccessAuditPort,
+    CredentialAccessOutcome,
+)
 from veracrawl.ports.credential_vault import (
     CredentialNotFoundError,
     CredentialValue,
 )
 from veracrawl.ports.vault_backend import (
     VaultBackendError,
+    VaultBackendErrorKind,
     VaultBackendPort,
 )
 
 _SAFE_IDENT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9_]+$")
+_REDACTED_IDENT: Final[str] = "[REDACTED]"
+
+# Maps the structured backend-failure kind onto the corresponding
+# audit outcome. Kept as a closed dict so a new VaultBackendErrorKind
+# value forces a deliberate decision at the next test run.
+_BACKEND_KIND_TO_OUTCOME: Final[dict[VaultBackendErrorKind, CredentialAccessOutcome]] = {
+    VaultBackendErrorKind.NOT_FOUND: CredentialAccessOutcome.NOT_FOUND,
+    VaultBackendErrorKind.BACKEND_UNREACHABLE: CredentialAccessOutcome.BACKEND_UNREACHABLE,
+    VaultBackendErrorKind.AUTH_FAILED: CredentialAccessOutcome.AUTH_FAILED,
+    VaultBackendErrorKind.INTERNAL: CredentialAccessOutcome.INTERNAL,
+}
 
 
-def _validate_identifier(name: str, *, kind: str) -> None:
+def _is_valid_identifier(name: str) -> bool:
     """Symmetric with EnvVarVault: scope_ref and key must be
-    env-var-safe. Don't echo the rejected value in the error
-    (could carry a secret-shaped string)."""
+    env-var-safe."""
 
-    if not name or not _SAFE_IDENT_RE.fullmatch(name):
-        raise ValueError(
-            f"{kind} must match ``^[A-Z0-9_]+$`` (uppercase, digits, "
-            f"underscore only); rejected value of length "
-            f"{len(name) if isinstance(name, str) else 0} (redacted)"
-        )
+    return bool(name) and _SAFE_IDENT_RE.fullmatch(name) is not None
 
 
 def _utc_now() -> datetime:
@@ -100,54 +109,87 @@ class OutboxVaultClient:
         self._clock = clock
 
     def get(self, *, scope_ref: str, key: str) -> CredentialValue:
-        _validate_identifier(scope_ref, kind="scope_ref")
-        _validate_identifier(key, kind="key")
+        # Identifier shape validation. Audit the rejection with
+        # redacted placeholders BEFORE raising — operators want
+        # to count invalid-identifier attempts (security-relevant
+        # signal of a misconfiguration / abuse) without leaking
+        # the rejected value.
+        if not _is_valid_identifier(scope_ref) or not _is_valid_identifier(key):
+            self._audit.record(
+                scope_ref=_REDACTED_IDENT,
+                key=_REDACTED_IDENT,
+                outcome=CredentialAccessOutcome.INVALID_IDENTIFIER,
+                run_ref=self._run_ref,
+                timestamp=self._clock(),
+            )
+            # Surface a typed shape error; identifier-shape failures
+            # are caller-bug not vault-fail, so don't degrade to
+            # CredentialNotFoundError.
+            raise ValueError(
+                "scope_ref / key must match ``^[A-Z0-9_]+$`` (uppercase, "
+                "digits, underscore only); rejected values redacted "
+                "(see audit log for the recorded INVALID_IDENTIFIER event)"
+            )
 
         raw: str | None
-        backend_failed = False
+        backend_failure_kind: VaultBackendErrorKind | None = None
         try:
             raw = self._backend.fetch(scope_ref=scope_ref, key=key)
-        except VaultBackendError:
-            backend_failed = True
+        except VaultBackendError as exc:
+            backend_failure_kind = exc.kind
             raw = None
-        if backend_failed:
-            # Audit the failed access. Then raise OUTSIDE the
-            # except block so Python does not auto-populate
-            # ``__context__`` with the original VaultBackendError —
-            # that would leak the structured kind via a logging
-            # handler that walks the exception chain
-            # (Phase 2 step 2.2b lesson). The original kind is
-            # captured in the audit row via ``success=False``; the
-            # upstream-visible exception is the canonical
-            # ``CredentialNotFoundError`` so callers can dispatch
-            # uniformly.
+        if backend_failure_kind is not None:
+            # Audit + raise OUTSIDE the except block so Python does
+            # not auto-populate ``__context__`` with the original
+            # VaultBackendError (Phase 2 step 2.2b lesson). The
+            # structured backend kind IS preserved on the audit row
+            # via the ``outcome`` field; the upstream-visible
+            # exception is the canonical CredentialNotFoundError so
+            # callers can dispatch uniformly.
             self._audit.record(
                 scope_ref=scope_ref,
                 key=key,
-                success=False,
+                outcome=_BACKEND_KIND_TO_OUTCOME[backend_failure_kind],
                 run_ref=self._run_ref,
                 timestamp=self._clock(),
             )
             raise CredentialNotFoundError(
                 "vault backend operation failed; treated as missing "
-                "(scope_ref / key shapes redacted in this message)"
+                "(scope_ref / key shapes redacted in this message; "
+                "see audit log for the structured outcome)"
             ) from None
 
-        success = raw is not None and bool(raw.strip())
+        if raw is None:
+            self._audit.record(
+                scope_ref=scope_ref,
+                key=key,
+                outcome=CredentialAccessOutcome.NOT_FOUND,
+                run_ref=self._run_ref,
+                timestamp=self._clock(),
+            )
+            raise CredentialNotFoundError(
+                "credential not found in vault (scope_ref / key "
+                "redacted; see audit log)"
+            )
+        if not raw.strip():
+            self._audit.record(
+                scope_ref=scope_ref,
+                key=key,
+                outcome=CredentialAccessOutcome.BLANK_VALUE,
+                run_ref=self._run_ref,
+                timestamp=self._clock(),
+            )
+            raise CredentialNotFoundError(
+                "vault returned a blank credential value; treated as "
+                "missing (fail-closed for cooperative crawler)"
+            )
         self._audit.record(
             scope_ref=scope_ref,
             key=key,
-            success=success,
+            outcome=CredentialAccessOutcome.SUCCESS,
             run_ref=self._run_ref,
             timestamp=self._clock(),
         )
-        if not success:
-            raise CredentialNotFoundError(
-                "credential not found in vault (scope_ref / key redacted; "
-                "see audit log for the recorded access event)"
-            )
-        # Mypy: ``success`` implies ``raw`` is non-None and non-blank.
-        assert raw is not None
         return CredentialValue(value=raw, scope_ref=scope_ref)
 
 
