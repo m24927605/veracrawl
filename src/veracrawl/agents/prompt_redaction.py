@@ -102,9 +102,16 @@ def _context_contains_credential(
         return False
     if isinstance(value, dict):
         seen.add(obj_id)
-        return any(
-            _context_contains_credential(v, depth + 1, seen) for v in value.values()
-        )
+        # Walk both keys AND values — a ``CredentialValue`` used
+        # as a mapping key would violate the contract just as
+        # surely as one used as a value, even though templates
+        # rarely format keys directly.
+        for key, sub_value in value.items():
+            if _context_contains_credential(key, depth + 1, seen):
+                return True
+            if _context_contains_credential(sub_value, depth + 1, seen):
+                return True
+        return False
     if isinstance(value, list | tuple | set | frozenset):
         seen.add(obj_id)
         return any(_context_contains_credential(v, depth + 1, seen) for v in value)
@@ -115,127 +122,68 @@ def _context_contains_credential(
     if isinstance(value, str | bytes | bytearray | int | float | bool | complex) or value is None:
         return False
     seen.add(obj_id)
-    instance_dict = getattr(value, "__dict__", None)
+    # ``vars(value)`` reads ``__dict__`` directly without invoking
+    # ``__getattribute__``, so a context object with a custom
+    # attribute hook does not get its hook fired during the walk
+    # (codex iter-5 important — minimize side effects). Falls back
+    # to ``None`` for slot-only types.
+    try:
+        instance_dict = vars(value)
+    except TypeError:
+        instance_dict = None
     if isinstance(instance_dict, dict) and any(
         _context_contains_credential(v, depth + 1, seen) for v in instance_dict.values()
     ):
         return True
-    slot_names = getattr(value, "__slots__", ())
+    # Slot walking still uses ``getattr`` (the slot descriptor's
+    # ``__get__``); wrap in try/except so any descriptor that
+    # raises is treated as "no credential here" rather than
+    # crashing the walk. This is the unavoidable side-effect path
+    # for slot-only classes; documented limitation.
+    slot_names = getattr(type(value), "__slots__", ())
     if isinstance(slot_names, str):
         slot_names = (slot_names,)
     for slot in slot_names:
         try:
             slot_value = getattr(value, slot)
-        except AttributeError:
+        except (AttributeError, Exception):  # noqa: BLE001 — defensive
             continue
         if _context_contains_credential(slot_value, depth + 1, seen):
             return True
     return False
 
 
-def _split_field_name(
-    field_name: str,
-) -> tuple[str, list[tuple[bool, str | int]]]:
-    """Project-owned mirror of ``_string.formatter_field_name_split``.
-
-    Returns ``(first_key, [(is_attr, name_or_index), ...])``.
-    Avoids depending on the CPython-private ``_string`` module
-    (codex iter-4 minor).
-
-    Implements the documented format-field grammar:
-
-    * The first segment is the bare key (everything before the
-      first ``.`` or ``[``).
-    * Subsequent ``.name`` segments are attribute traversals.
-    * Subsequent ``[index]`` segments are item traversals; if the
-      index parses as an int it is returned as one (so dicts /
-      lists / tuples behave as Python's stdlib formatter does).
-    """
-
-    i = 0
-    while i < len(field_name) and field_name[i] not in ".[":
-        i += 1
-    first = field_name[:i]
-    rest: list[tuple[bool, str | int]] = []
-    while i < len(field_name):
-        char = field_name[i]
-        if char == ".":
-            i += 1
-            j = i
-            while j < len(field_name) and field_name[j] not in ".[":
-                j += 1
-            rest.append((True, field_name[i:j]))
-            i = j
-        elif char == "[":
-            j = field_name.index("]", i)
-            key = field_name[i + 1 : j]
-            idx_or_key: str | int
-            try:
-                idx_or_key = int(key)
-            except ValueError:
-                idx_or_key = key
-            rest.append((False, idx_or_key))
-            i = j + 1
-        else:  # pragma: no cover — defensive
-            i += 1
-    return first, rest
-
-
 class _CredentialAwareFormatter(string.Formatter):
     """``string.Formatter`` subclass that trips a flag whenever a
-    field resolution path passes through a :class:`CredentialValue`.
+    field's final resolved value is a :class:`CredentialValue`.
 
-    Overrides :meth:`get_field` to walk attribute / item traversal
-    manually (the same logic the stdlib uses, via
-    ``_string.formatter_field_name_split``); after every step,
-    checks whether the current value is a ``CredentialValue``. If
-    so, the formatter records the breach via ``credential_reached``
-    and returns a benign sentinel so render does not error
-    mid-format — :meth:`RedactedPromptContext.render` checks the
-    flag after ``vformat`` and raises :class:`PromptCredentialLeakError`.
+    Belt-and-suspenders for the structural context walk: by the
+    time ``render`` calls into ``vformat``, the structural walk
+    has already refused contexts containing a credential anywhere
+    reachable through dict / list / tuple / set / frozenset
+    containers AND through custom objects' ``__dict__`` /
+    ``__slots__``. This subclass catches the residual case where
+    a credential somehow slipped past the walk and is being
+    formatted directly.
 
-    Why intercept at traversal: ``str.format_map`` (stdlib) goes
-    through C code that bypasses Python-level overrides. Using
-    ``string.Formatter().vformat`` instead routes through this
-    subclass so traversal is observable. Catches:
-
-    * ``{cred._value}`` (top-level credential, attribute traversal)
-    * ``{wrapper.cred}`` (custom object holding a credential)
-    * ``{wrapper.cred._value}`` (deeper traversal into a credential's
-      private slot — even though ``_value`` is a string, the
-      intermediate ``wrapper.cred`` is the credential and trips the
-      flag)
-    * ``{name:{wrapper.cred}}`` (nested replacement field in a
-      format spec — handled by the same ``vformat`` machinery)
+    Implementation strategy: override :meth:`format_field` (which
+    receives the *final* resolved value before it is formatted via
+    ``__format__``). No traversal is done by this subclass —
+    delegating field-name parsing entirely to the stdlib
+    formatter avoids the partial-reimplementation drift codex
+    iter-5 flagged on the iter-4 ``_split_field_name`` helper.
     """
 
     def __init__(self) -> None:
         super().__init__()
         self.credential_reached = False
 
-    def get_field(
-        self,
-        field_name: str,
-        args: Any,
-        kwargs: Any,
-    ) -> tuple[Any, Any]:
-        first, rest = _split_field_name(field_name)
-        obj = self.get_value(first, args, kwargs)
-        if isinstance(obj, CredentialValue):
+    def format_field(self, value: Any, format_spec: str) -> str:
+        if isinstance(value, CredentialValue):
             self.credential_reached = True
-            return "", first
-        for is_attr, key in rest:
-            if is_attr:
-                # ``key`` is always ``str`` for ``.attr`` segments —
-                # the splitter only emits int for ``[idx]`` segments.
-                assert isinstance(key, str)
-                obj = getattr(obj, key)
-            else:
-                obj = obj[key]
-            if isinstance(obj, CredentialValue):
-                self.credential_reached = True
-                return "", first
-        return obj, first
+            return ""
+        result: str = super().format_field(value, format_spec)
+        return result
 
 
 class PromptCredentialLeakError(VeraCrawlError, PolicyViolation):
