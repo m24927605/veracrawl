@@ -2,8 +2,10 @@
 
 Every test in this package is gated by ``@pytest.mark.live``. The
 default pytest invocation excludes them via the project's
-``addopts = "-q"`` plus ``-m 'not live'`` (operators run live
-tests explicitly with ``pytest -m live``).
+``addopts = "-q -m 'not live'"`` (see ``pyproject.toml``).
+Operators run live tests explicitly with ``pytest -m live``;
+pytest's CLI ``-m`` replaces the addopts ``-m`` so the override
+selects only live tests.
 
 Live tests:
 - Hit real network targets (httpbin.org, example.com, eBay official

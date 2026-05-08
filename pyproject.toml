@@ -110,10 +110,7 @@ packages = ["src/veracrawl"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 # Default invocation excludes live tests so dev / CI never accidentally
-# hits external services. Pytest CLI ``-m`` REPLACES (not ANDs with)
-# the addopts ``-m`` expression, so ``pytest -m live`` selects the live
-# suite cleanly. Verified: ``uv run pytest -m live tests/integration/live/``
-# collects 3 tests (default invocation deselects them).
+# hits external services. ``pytest -m live`` overrides this selection.
 addopts = "-q -m 'not live'"
 markers = [
   "live: tests that hit real external services (HTTP, LLM APIs, etc.); skipped by default; run with `pytest -m live`",

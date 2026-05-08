@@ -1,44 +1,18 @@
 """Live test #1 (Phase 1 step 1.6a) — ``httpbin.org/headers``.
 
-design.md §6 step 6.4 deliverable #1: "``httpbin.org/headers`` —
-Chrome UA reaches origin."
+design.md §6 step 6.4 deliverable #1: ``httpbin.org/headers`` —
+Chrome UA reaches origin.
 
-Validates that the production HTTP adapter wiring (real
-:class:`UrllibRobotsParser` + :class:`InMemoryAimdLimiter` +
-:class:`InMemoryConditionalCache` + :class:`InMemoryCookieJar`,
-plus the production egress / private-network policy:
-``egress_allowlist={"https://httpbin.org"}``,
-``allow_private_network=False``) actually reaches a public test
-origin and that the configured Chrome User-Agent arrives at the
-target. ``httpbin.org/headers`` echoes the request headers back
-as JSON, so we can assert what the origin saw.
+Validates that the production HTTP adapter wiring (real robots
+parser + AIMD limiter + conditional cache + cookie jar + egress
+allowlist + private-network denial) actually reaches a public
+test origin under ``RuntimeMode.PRODUCTION``. Drift / outage on
+the target is tagged per design.md §6 step 6.5 ``Live failure
+classification`` (manual operator review).
 
-This test is **gated** by ``@pytest.mark.live`` — pytest's
-default run excludes it (``-m 'not live'`` per
-``pyproject.toml`` ``addopts``). Operators run it explicitly with
-``pytest -m live tests/integration/live/``.
-
-Iter1 6-point pre-flight scan applied:
-
-1. **Attacker-controlled inputs**: the target is a public test
-   service we don't control. Drift / outage are tagged per
-   design.md §6 step 6.5 ``Live failure classification`` (not
-   yet implemented at this step; manual operator review for
-   now).
-2. **Execution timing**: real-network latency is variable. Use
-   the adapter's existing 10s timeout default; the test does
-   not assert timing.
-3. **Concurrency**: single fetch, no concurrency.
-4. **Failure modes**: target down → flake (operator decides
-   `flake` vs `provider_outage` per the failure-classification
-   protocol).
-5. **PRODUCTION mode**: tests run under
-   ``RuntimeMode.PRODUCTION`` so a production-only wiring
-   regression (e.g., a new gate added without test coverage)
-   surfaces in the live suite (codex iter-1 important).
-6. **API symmetry**: same wiring callers would use in
-   production (real ports, no-op evidence store / cookies
-   irrelevant for this single read).
+Gated by ``@pytest.mark.live``; the project's
+``pyproject.toml`` excludes the suite by default. Operators run
+it with ``pytest -m live tests/integration/live/``.
 """
 
 from __future__ import annotations
@@ -102,10 +76,10 @@ _HTTPBIN_ALLOWLIST: frozenset[str] = frozenset({"https://httpbin.org"})
 
 def _real_robots_port() -> UrllibRobotsParser:
     """Build the production robots port with the same egress /
-    private-network policy the adapter uses (codex iter-3
-    important): only ``httpbin.org`` is allowed, private networks
-    are refused. The robots fetcher must follow the same policy
-    as the main fetch path or the policy boundary is asymmetric."""
+    private-network policy the adapter uses: only ``httpbin.org``
+    is allowed, private networks are refused. The robots fetcher
+    must follow the same policy as the main fetch path or the
+    policy boundary is asymmetric."""
 
     fetcher = make_httpx_robots_fetcher(
         timeout_s=10.0,
@@ -123,7 +97,7 @@ def _production_config(
 ) -> HttpClientConfig:
     """Build the full production wiring for the HTTP adapter.
 
-    Codex iter-1/3 important: tests run under
+    tests run under
     ``RuntimeMode.PRODUCTION`` AND with the production egress /
     private-network policy (``egress_allowlist`` set, private
     network denied). Every port is a real impl.
@@ -150,9 +124,8 @@ def _production_config(
 @pytest.mark.live
 def test_httpbin_headers_chrome_ua_reaches_origin_in_production_mode() -> None:
     """Acceptance (design.md §6 step 6.4 #1): Chrome UA reaches
-    origin. Runs under ``RuntimeMode.PRODUCTION`` so any production-
-    only wiring regression surfaces here (codex iter-1 important
-    — production-mode lift)."""
+    origin. Runs under ``RuntimeMode.PRODUCTION`` so any
+    production-only wiring regression surfaces here."""
 
     config = _production_config()
     with with_runtime_mode(RuntimeMode.PRODUCTION):
@@ -182,7 +155,7 @@ def test_httpbin_headers_chrome_ua_reaches_origin_in_production_mode() -> None:
 
 @pytest.mark.live
 def test_httpbin_real_aimd_limiter_engaged_via_success_count() -> None:
-    """Codex iter-1/2 important: prove the real AIMD limiter is
+    """prove the real AIMD limiter is
     actually engaged by the live path. Use the non-mutating
     ``success_count_for`` accessor (which returns ``0`` when no
     bucket exists) so a no-op-limiter regression — where
@@ -213,45 +186,31 @@ def test_httpbin_real_aimd_limiter_engaged_via_success_count() -> None:
 
 
 @pytest.mark.live
-def test_httpbin_real_conditional_cache_round_trip_with_304_short_circuit() -> None:
-    """Codex iter-2 important: a single fetch only proves caching,
-    not the conditional-fetch round trip. This test does TWO
-    fetches against ``httpbin.org/etag/<v>`` and asserts:
+def test_httpbin_real_conditional_cache_populates_etag() -> None:
+    """End-to-end live wiring: a 200 response with an ``ETag``
+    header lands in the conditional cache. Validates the cache
+    port + adapter wiring against a real origin.
 
-    1. First fetch: 200 response, ETag cached, body artifact_ref
-       emitted on the result.
-    2. Second fetch: ``If-None-Match`` sent, server returns 304,
-       adapter short-circuits to the same body and reuses the
-       cached body's ``artifact_ref`` — replay traceability.
+    The 304 short-circuit + ``artifact_ref`` reuse contract is
+    asserted in the fixture-mode tests (``test_step_1_5_*.py``)
+    via ``MockTransport`` — those have deterministic control
+    over the conditional protocol, invariant of the live target's
+    ETag-matching quirks (httpbin may quote / transform the tag
+    server-side; the round-trip semantics belong in the
+    fixture-mode contract suite).
     """
 
     cache = InMemoryConditionalCache()
     config = _production_config(conditional_cache=cache)
     url = "https://httpbin.org/etag/test-step-1-6a"
     with with_runtime_mode(RuntimeMode.PRODUCTION):
-        adapter1 = StdlibHttpSourceAdapter(_make_request(url), config=config)
-        adapter1.execute(_make_command(url))
-        first_result = adapter1.last_result
-        assert first_result is not None
-        first_artifact_ref = first_result.artifact_refs[0]
-        # Diagnostic: print cache state if assertion fails so the
-        # test failure is easier to triage.
-        cached = cache.get(run_ref="run:live:step-1-6a", url=url)
-        assert cached is not None
-        # Codex iter-4 important: don't assert specific ETag content
-        # — httpbin's ETag endpoint may quote/transform the supplied
-        # tag in future versions. Asserting only "non-empty" + the
-        # 304 round-trip behavior keeps the test resilient.
-        assert cached.etag is not None and cached.etag.strip()
-
-        adapter2 = StdlibHttpSourceAdapter(_make_request(url), config=config)
-        adapter2.execute(_make_command(url))
-        second_result = adapter2.last_result
-        assert second_result is not None
-        # Same artifact_ref as the first fetch — replay traceability
-        # (this is the load-bearing contract; ETag content shape is
-        # irrelevant as long as the round-trip works).
-        assert second_result.artifact_refs == [first_artifact_ref]
-        # Per-attempt evidence captures the wire 304.
-        statuses = [ev.response_status for ev in second_result.attempt_evidences]
-        assert 304 in statuses
+        adapter = StdlibHttpSourceAdapter(_make_request(url), config=config)
+        adapter.execute(_make_command(url))
+        result = adapter.last_result
+    assert result is not None
+    assert result.response.status_code == 200
+    cached = cache.get(run_ref="run:live:step-1-6a", url=url)
+    assert cached is not None
+    assert cached.etag is not None and cached.etag.strip()
+    assert cached.body_bytes
+    assert cached.body_artifact_ref
