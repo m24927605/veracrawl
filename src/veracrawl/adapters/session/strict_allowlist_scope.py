@@ -50,10 +50,20 @@ _DEFAULT_PORTS: Final[dict[str, int]] = {"http": 80, "https": 443}
 # (``_validate_route_pattern``), this bounds the maximum work a
 # single ``re.match`` call can do — even a degenerate pattern that
 # slipped past the AST guard cannot wedge the matcher on an
-# attacker-controlled URL because the input is short. Step 2.2c will
-# layer a stronger defense (per-match timeout / ``re2`` / glob-only
-# DSL); this cap is the floor that ships in 2.2a so the credential
-# gate is not relying solely on contract-time validation.
+# attacker-controlled URL because the input is short.
+#
+# This is intentionally not a *complete* ReDoS defense: contract-valid
+# patterns with ambiguous alternations can still backtrack on much
+# shorter inputs. A per-match timeout (re2 engine, regex-module
+# ``timeout=`` kwarg, or signal.alarm in a worker) is required to
+# fully close that gap and lives in **step 2.2c** of the second-
+# reassessment plan split. Pulling it forward into 2.2a was
+# considered and rejected because it adds a third-party dependency
+# (``re2``/``regex``) or a worker-pool integration that is a meaningful
+# scope expansion for an atomic step. The 4 KiB cap + AST guard is
+# the floor that ships in 2.2a so the credential gate has *some*
+# runtime defense, with step 2.2c upgrading that floor to a hard
+# bound. See STATUS.md "v2 phase 2 step 2.2a reservations".
 _MAX_ROUTE_LENGTH: Final[int] = 4096
 
 
@@ -167,6 +177,36 @@ def _route_too_long(route: str) -> bool:
     return len(route) > _MAX_ROUTE_LENGTH
 
 
+# Tokens that make a path ambiguous between what the matcher sees
+# and what a downstream client / proxy / server normalizes the path
+# to. ``/v1/items/../admin`` would match a regex anchored at
+# ``/v1/items`` but reach ``/admin`` after upstream normalization;
+# the credential-bearing gate must refuse rather than approve under
+# that ambiguity.
+_AMBIGUOUS_PATH_TOKENS: Final[tuple[str, ...]] = (
+    "%2f",  # encoded slash
+    "%2F",
+    "%5c",  # encoded backslash
+    "%5C",
+    "%2e",  # encoded dot — combines with another dot or with `/` to bypass dot-segment refusal
+    "%2E",
+    "%00",  # NUL — short-circuits some C clients
+    "\\",  # raw backslash
+)
+_DOT_SEGMENTS: Final[frozenset[str]] = frozenset({".", ".."})
+
+
+def _route_is_ambiguous(route: str) -> bool:
+    """Return ``True`` for paths that should be refused before regex
+    match because downstream normalization could move them outside
+    the matched scope.
+    """
+
+    if any(token in route for token in _AMBIGUOUS_PATH_TOKENS):
+        return True
+    return any(segment in _DOT_SEGMENTS for segment in route.split("/"))
+
+
 class StrictAllowlistScope:
     """Default ``SessionScopePolicy``: literal allowlist enforcement.
 
@@ -222,6 +262,20 @@ class StrictAllowlistScope:
             )
 
         route = _route_of(request_url)
+        if _route_is_ambiguous(route):
+            # Refuse paths whose runtime form differs from what the
+            # regex matches: ``/v1/items/../admin`` would match a
+            # ``^/v1/items`` regex literally but reach ``/admin``
+            # after the upstream normalizes dot-segments. Same risk
+            # for percent-encoded slashes / backslashes / NUL —
+            # downstream normalization can move the request outside
+            # the matched scope.
+            self._raise(
+                scope=scope,
+                request_url=request_url,
+                method=method,
+                reason="route_not_allowed",
+            )
         if _route_too_long(route):
             # Bound the worst-case work the regex engine will do on
             # an attacker-controlled URL. The contract-layer AST

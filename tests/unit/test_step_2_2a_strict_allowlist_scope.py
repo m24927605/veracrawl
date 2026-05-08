@@ -250,6 +250,55 @@ def test_refuses_userinfo_in_request_url_as_origin_not_allowed(
     assert excinfo.value.reason == "origin_not_allowed"
 
 
+@pytest.mark.parametrize(
+    "ambiguous_path",
+    [
+        "/v1/items/../admin",  # dot-dot escape
+        "/v1/items/./private",  # dot segment
+        "/v1/items/%2e%2e/admin",  # URL-encoded but our split sees raw -> still has ".."? No: it's %2e%2e literally
+        "/v1/items/sub%2fpath",  # encoded slash
+        "/v1/items/sub%2Fpath",  # encoded slash uppercase
+        "/v1/items%5cadmin",  # encoded backslash
+        "/v1/items\\admin",  # raw backslash
+        "/v1/items%00.json",  # NUL truncation
+    ],
+)
+def test_refuses_ambiguous_path_with_route_not_allowed(ambiguous_path: str) -> None:
+    """A credential-bearing gate must refuse paths whose runtime
+    form differs from the literal regex match. ``/v1/items/../admin``
+    matches an ``^/v1/items`` regex literally but reaches ``/admin``
+    after upstream dot-segment normalization. Same class of risk
+    for encoded slashes / backslashes / NUL truncation, all of
+    which different normalizers handle differently."""
+
+    # Some of the parametrize cases (raw \ / %00) actually come
+    # through urlsplit's path component as expected; some don't.
+    # The test only cares that the policy refuses the URL —
+    # whether the refusal happens because the URL parses oddly
+    # or because the canonicalization check fires is fine.
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _make_scope(allowed_route_patterns=["/v1/items"]),
+            request_url=f"https://api.example.com{ambiguous_path}",
+            method="GET",
+        )
+    assert excinfo.value.reason in {"route_not_allowed", "origin_not_allowed"}
+
+
+def test_refuses_dotdot_path_traversal_attempt() -> None:
+    """Concrete dot-dot regression: a request scoped to ``/v1/items``
+    must not allow ``/v1/items/../admin`` even though the literal
+    regex would match the prefix."""
+
+    with pytest.raises(CredentialScopeViolation) as excinfo:
+        StrictAllowlistScope().check(
+            _make_scope(allowed_route_patterns=["/v1/items"]),
+            request_url="https://api.example.com/v1/items/../admin",
+            method="GET",
+        )
+    assert excinfo.value.reason == "route_not_allowed"
+
+
 def test_refuses_path_longer_than_runtime_cap_with_route_not_allowed() -> None:
     """Bound the worst-case work the regex engine does on an
     attacker-controlled URL — even a well-formed pattern combined
