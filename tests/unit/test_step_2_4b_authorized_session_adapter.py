@@ -150,6 +150,30 @@ def _ok_transport() -> httpx.MockTransport:
 # ---------------------------------------------------------------------------
 
 
+def test_request_emits_audit_correlation_event_linking_access_and_use() -> None:
+    """Codex iter-4 important: design.md acceptance "each
+    CredentialUseRecord has the vault audit cookie present".
+    Phase 0 schema has no formal cookie field; correlation lives
+    in a structured-log ``credential_audit_correlation`` event
+    that links the vault-side access audit row to the use record."""
+
+    import structlog
+
+    transport = _ok_transport()
+    adapter, _, _ = _make_adapter(transport=transport)
+    with structlog.testing.capture_logs() as captured:
+        adapter.request(method="GET", url="https://api.example.com/v1/items")
+    correlations = [
+        e for e in captured if e.get("event") == "credential_audit_correlation"
+    ]
+    assert len(correlations) == 1
+    entry = correlations[0]
+    assert entry["correlation_id"].startswith("audit-corr:")
+    assert entry["run_ref"] == "run:test:1"
+    assert entry["credential_scope_ref"] == "cred-scope:ebay-prod"
+    assert entry["vault_scope_ref"] == "EBAY_PROD"
+
+
 def test_request_returns_response_for_in_scope_request() -> None:
     transport = _ok_transport()
     adapter, use_audit, access_audit = _make_adapter(transport=transport)
@@ -285,7 +309,11 @@ def test_route_not_allowed_refuses_before_vault_or_transport() -> None:
 
 
 def test_expired_scope_refuses_before_vault_or_transport() -> None:
-    expired = datetime.now(UTC) - timedelta(seconds=1)
+    """Codex iter-4 minor: pin expires_at relative to ``_FROZEN_NOW``
+    (the adapter's injected clock) — using ``datetime.now(UTC)``
+    couples the test to wall-clock and breaks replay determinism."""
+
+    expired = _FROZEN_NOW - timedelta(seconds=1)
     scope = _make_scope(expires_at=expired)
     transport = _ok_transport()
     adapter, use_audit, access_audit = _make_adapter(transport=transport, scope=scope)
@@ -367,12 +395,9 @@ def test_out_of_scope_emits_credential_scope_denied_log_event() -> None:
 
 def test_production_mode_refuses_raw_transport_construction() -> None:
     """Codex iter-3 critical: under PRODUCTION, the adapter refuses
-    to construct with a raw httpx.BaseTransport (which bypasses
-    Phase 1 robots / AIMD / redirect SSRF / evidence). Production
-    composition is Phase 6 step 6.1's job. Tests that legitimately
-    need to exercise the raw-transport path in PRODUCTION (e.g.,
-    the orchestrator that wires Phase 1 itself) opt in via
-    ``production_allow_raw_transport=True``."""
+    a raw httpx.BaseTransport (which bypasses Phase 1's policy
+    stack). Iter-4 important: the gate is now type-driven — only
+    Phase1ComposedTransport is accepted under PRODUCTION."""
 
     from veracrawl.runtime_support.runtime_mode import (
         ProductionRuntimeNotImplemented,
@@ -386,35 +411,34 @@ def test_production_mode_refuses_raw_transport_construction() -> None:
             _make_adapter(transport=transport)
 
 
-def test_production_mode_with_explicit_opt_in_constructs() -> None:
-    """The opt-in flag is the orchestrator's escape hatch when it
-    has already wrapped the transport in Phase 1's policy stack."""
+def test_production_mode_accepts_phase1_composed_transport() -> None:
+    """Codex iter-4 important: the typed marker
+    Phase1ComposedTransport is the production-allowed wrapping
+    path. Mechanical type enforcement instead of a boolean opt-in."""
 
+    from veracrawl.adapters.session.authorized_session_adapter import (
+        Phase1ComposedTransport,
+    )
     from veracrawl.runtime_support.runtime_mode import (
         RuntimeMode,
         with_runtime_mode,
     )
 
-    transport = _ok_transport()
+    inner = _ok_transport()
+    composed = Phase1ComposedTransport(inner)
     creds = {("EBAY_PROD", "API_KEY"): "sk-live"}
     backend = InMemoryVaultBackend(credentials=creds)
-
-    # Vault layer's audit too uses fixture; under PRODUCTION the
-    # InMemoryVaultBackend would also gate. So the construction
-    # check itself is what we're testing — fixture mode for the
-    # vault, PRODUCTION for the adapter check.
-    with with_runtime_mode(RuntimeMode.FIXTURE):
-        access_audit = _RecordingAccessAudit()
-        vault = OutboxVaultClient(
-            backend=backend,
-            audit=access_audit,
-            run_ref="run:test:1",
-            clock=lambda: _FROZEN_NOW,
-        )
+    access_audit = _RecordingAccessAudit()
+    vault = OutboxVaultClient(
+        backend=backend,
+        audit=access_audit,
+        run_ref="run:test:1",
+        clock=lambda: _FROZEN_NOW,
+    )
     use_audit = _RecordingUseAudit()
     with with_runtime_mode(RuntimeMode.PRODUCTION):
         adapter = AuthorizedSessionAdapter(
-            transport=transport,
+            transport=composed,
             vault=vault,
             scope_policy=StrictAllowlistScope(),
             credential_scope=_make_scope(),
@@ -423,7 +447,6 @@ def test_production_mode_with_explicit_opt_in_constructs() -> None:
             use_audit=use_audit,
             run_ref="run:test:1",
             clock=lambda: _FROZEN_NOW,
-            production_allow_raw_transport=True,
         )
     assert adapter is not None
 

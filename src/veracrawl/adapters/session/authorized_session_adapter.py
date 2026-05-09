@@ -98,6 +98,38 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class Phase1ComposedTransport:
+    """Typed marker wrapping an :class:`httpx.BaseTransport` that
+    has been composed through Phase 1's policy stack.
+
+    The orchestrator wraps :class:`httpx.MockTransport` /
+    :class:`httpx.HTTPTransport` with Phase 1's
+    :class:`StdlibHttpSourceAdapter` (robots checks, AIMD limiter,
+    redirect SSRF re-check, NetworkAttemptEvidence capture, cross-
+    origin Authorization stripping) and hands the resulting
+    transport to this marker class. The marker's existence is the
+    production contract: an :class:`AuthorizedSessionAdapter`
+    constructed with a :class:`Phase1ComposedTransport` is
+    production-ready; one with a raw :class:`httpx.BaseTransport`
+    is fixture-only.
+
+    The class deliberately does not validate the wrapping at
+    construction (we cannot mechanically detect "this transport
+    has Phase 1 policies"). Instead it documents the contract
+    via type: production wiring code paths only ever touch
+    :class:`Phase1ComposedTransport`; the wrapping responsibility
+    is held by the orchestrator wiring (Phase 6 step 6.1).
+    """
+
+    __slots__ = ("_inner",)
+
+    def __init__(self, inner: httpx.BaseTransport) -> None:
+        self._inner = inner
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        return self._inner.handle_request(request)
+
+
 class AuthorizedSessionAdapter:
     """Production credential-injection HTTP adapter.
 
@@ -131,7 +163,7 @@ class AuthorizedSessionAdapter:
     def __init__(
         self,
         *,
-        transport: httpx.BaseTransport,
+        transport: httpx.BaseTransport | Phase1ComposedTransport,
         vault: CredentialVaultPort,
         scope_policy: SessionScopePolicy,
         credential_scope: CredentialScope,
@@ -140,22 +172,17 @@ class AuthorizedSessionAdapter:
         use_audit: CredentialUseAuditPort,
         run_ref: Ref,
         clock: Callable[[], datetime] = _utc_now,
-        production_allow_raw_transport: bool = False,
     ) -> None:
-        # Codex iter-3 critical: a raw ``httpx.BaseTransport`` bypasses
-        # the Phase 1 HTTP policy stack (robots / AIMD / retry /
-        # redirect SSRF / NetworkAttemptEvidence / cross-origin
-        # Authorization strip). Production composition is Phase 6
-        # step 6.1's job (route credentialed requests through
-        # ``StdlibHttpSourceAdapter`` with ``HttpClientConfig.extra_headers``).
-        # Until then, refuse to construct the adapter under PRODUCTION
-        # unless the caller explicitly opts in via
-        # ``production_allow_raw_transport=True`` — that flag is the
-        # "I know what I'm doing" escape hatch for the orchestrator
-        # that wires the Phase 1 stack itself.
+        # Codex iter-3 critical + iter-4 important: typed enforcement
+        # of "production transport is composed through Phase 1's
+        # policy stack". The boolean ``production_allow_raw_transport``
+        # was a weak guarantee; iter-4 replaces it with the
+        # ``Phase1ComposedTransport`` typed marker class. Under
+        # PRODUCTION, only ``Phase1ComposedTransport`` is accepted;
+        # raw ``httpx.BaseTransport`` is fixture-only.
         if (
             current_mode() is RuntimeMode.PRODUCTION
-            and not production_allow_raw_transport
+            and not isinstance(transport, Phase1ComposedTransport)
         ):
             raise ProductionRuntimeNotImplemented(
                 backend="raw_httpx_transport",
@@ -219,6 +246,24 @@ class AuthorizedSessionAdapter:
 
         # 3. Vault fetch (vault layer's own audit fires inside).
         cred = self._vault.get(scope_ref=self._vault_scope_ref, key=self._vault_key)
+
+        # Codex iter-4 important: design.md acceptance "each
+        # CredentialUseRecord outbox event has the vault audit
+        # cookie present". Phase 0 contract has no formal
+        # ``audit_cookie`` field; the correlation lives in a
+        # structured-log event that links the access audit row
+        # (vault-side) to the use record (this side). The
+        # correlation_id is a fresh UUID per fetch so multiple
+        # fetches in one session each have a distinct correlation.
+        correlation_id = f"audit-corr:{uuid.uuid4().hex}"
+        _logger.info(
+            "credential_audit_correlation",
+            correlation_id=correlation_id,
+            run_ref=self._run_ref,
+            credential_scope_ref=self._credential_scope.id,
+            vault_scope_ref=self._vault_scope_ref,
+            timestamp_iso=timestamp.isoformat(),
+        )
 
         # 4 + 5. Reveal + send. Reveal at the single call site
         #    (design.md §3.3) and immediately hand to the transport.
