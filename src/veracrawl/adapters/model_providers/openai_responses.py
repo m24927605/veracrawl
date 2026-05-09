@@ -128,6 +128,22 @@ class OpenAIResponsesModelProviderRuntimeAdapter:
         sleep_fn: Callable[[float], None] = time.sleep,
         jitter_fn: Callable[[], float] | None = None,
     ) -> None:
+        # Phase 4 step 4.2 introduced the v2 adapter
+        # ``OpenAIResponsesAdapterV2`` (provider-blind, consumes
+        # ``ProviderRequest`` / produces ``ProviderResponse``).
+        # The v1 surface stays operational during the
+        # deprecation window; new callers should construct the
+        # v2 adapter instead.
+        import warnings
+
+        warnings.warn(
+            "OpenAIResponsesModelProviderRuntimeAdapter (v1) is deprecated; "
+            "use veracrawl.adapters.model_providers.openai_responses_v2."
+            "OpenAIResponsesAdapterV2 for the provider-blind ModelProviderPortV2 "
+            "surface. The v1 adapter remains operational during the migration window.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.model_id = model_id
         self.model_version = model_id
         self._api_key = api_key
