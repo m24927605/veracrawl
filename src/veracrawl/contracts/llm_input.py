@@ -31,6 +31,7 @@ to the call site):
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from pydantic import Field, model_validator
@@ -119,6 +120,8 @@ class ProviderRequest(VeraModel):
         _ensure_non_blank_identifier("provider request model_name", self.model_name)
         if self.max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be positive")
+        if not math.isfinite(self.temperature):
+            raise ValueError("temperature must be a finite number")
         if not 0.0 <= self.temperature <= 2.0:
             raise ValueError("temperature must be in [0.0, 2.0]")
         if not self.messages:
@@ -215,6 +218,12 @@ class TokenUsageEstimate(VeraModel):
         ):
             if value < 0:
                 raise ValueError(f"{name} must be non-negative")
+        # ``cost_usd_estimate`` is the budget-enforcement field —
+        # NaN passes ``< 0`` (NaN comparisons are always False) and
+        # would let a cost cap silently never trip. Reject all
+        # non-finite values (codex iter-3 important).
+        if not math.isfinite(self.cost_usd_estimate):
+            raise ValueError("cost_usd_estimate must be a finite number")
         if self.cost_usd_estimate < 0:
             raise ValueError("cost_usd_estimate must be non-negative")
         return self

@@ -19,17 +19,25 @@ The boundary invariants enforced here (per
 
 * identifier-shape validation (codex recurring concern #6) for
   ``id`` / ``run_ref`` / ``model_name`` / ``request_ref``;
-* ``temperature`` ∈ [0.0, 2.0];
+* ``temperature`` finite and in [0.0, 2.0];
 * ``max_output_tokens`` strictly positive;
 * ``messages`` non-empty;
 * anchor IDs unique within a request (no silent shadowing at
   citation time);
 * ``ProviderResponse.usage`` required (no ``None`` token counts);
-* ``ProviderResponse.text`` non-empty unless
-  ``finish_reason == TOOL_CALL``.
+* ``ProviderResponse.text`` non-empty (and not whitespace-only)
+  when ``finish_reason == STOP``; empty text is permitted for
+  ``TOOL_CALL`` / ``CONTENT_FILTER`` / ``LENGTH`` / ``ERROR``
+  per real-provider behavior;
+* ``TokenUsageEstimate.cost_usd_estimate`` rejects non-finite
+  values (NaN slips past naive ``< 0`` because NaN comparisons
+  are always False) — the budget-enforcement field must always
+  trip on overflow.
 """
 
 from __future__ import annotations
+
+import math
 
 import pytest
 
@@ -338,6 +346,35 @@ def test_token_usage_estimate_rejects_negative_cost() -> None:
             completion_tokens_estimate=50,
             cost_usd_estimate=-0.01,
         )
+
+
+@pytest.mark.parametrize("bad_cost", [float("nan"), float("inf"), float("-inf")])
+def test_token_usage_estimate_rejects_non_finite_cost(bad_cost: float) -> None:
+    """Codex iter-3 important: NaN slips past ``< 0`` because
+    NaN comparisons are always False. The cost cap is the
+    budget-enforcement field — non-finite values must be
+    rejected so the cap can never silently fail to trip."""
+
+    with pytest.raises(ValueError, match="cost_usd_estimate must be a finite number"):
+        TokenUsageEstimate(
+            request_ref="provider-request:phase-4-1:1",
+            model_name="gpt-4o-mini",
+            prompt_tokens_estimate=100,
+            completion_tokens_estimate=50,
+            cost_usd_estimate=bad_cost,
+        )
+
+
+@pytest.mark.parametrize("bad_temp", [float("nan"), float("inf"), float("-inf")])
+def test_provider_request_rejects_non_finite_temperature(bad_temp: float) -> None:
+    """Companion to the NaN check on cost_usd_estimate: any
+    non-finite temperature is also a wiring bug (real APIs
+    reject it; replay determinism breaks)."""
+
+    with pytest.raises(ValueError, match="temperature must be a finite number"):
+        _make_request(temperature=bad_temp)
+    # Sanity: ensures the parametrize value is actually non-finite.
+    assert not math.isfinite(bad_temp)
 
 
 # --- Port -------------------------------------------------------------------
