@@ -438,14 +438,41 @@ class AuthorizedSessionAdapter:
                 "``credential_use_audit_failed`` (phase=completion)."
             ) from None
 
-        # Codex iter-3 important: ``on_credential_use`` failures
-        # are accounting bugs (orchestrator wiring problem), not
-        # operational events. Propagate so the run halts rather
-        # than continuing with diverged audit counts. The caller
-        # (orchestrator) is responsible for ensuring the
-        # callable stays valid for the adapter's lifetime.
+        # Codex iter-5 important resolution: durable audit is the
+        # source of truth, the in-memory accounting callback is
+        # advisory. Letting a callback exception escape after the
+        # durable use record committed creates retry ambiguity:
+        # the caller sees a wiring-bug exception, but the durable
+        # store says the credential was used. Mirror the
+        # transport-failure-branch policy and surface callback
+        # failures through a critical operator-alert event
+        # without halting the request — the response is the
+        # actionable result, the diverged counter is recoverable
+        # post-mortem from the durable record. Phase 5 step 5.1
+        # (agent runtime wiring) is scoped to derive the
+        # lifecycle counter directly from the durable audit
+        # store, removing this divergence by construction.
         if self._on_credential_use is not None:
-            self._on_credential_use()
+            try:
+                self._on_credential_use()
+            except Exception as callback_exc:
+                _logger.critical(  # noqa: TRY400
+                    "credential_use_callback_failed_after_audit",
+                    use_record_id=completion_record.id,
+                    run_ref=self._run_ref,
+                    credential_scope_ref=self._credential_scope.id,
+                    request_method=method,
+                    request_url=sanitized_url,
+                    response_status=response.status_code,
+                    timestamp_iso=completion_record.timestamp_used.isoformat(),
+                    callback_exception_type=type(callback_exc).__name__,
+                    note=(
+                        "durable audit is the source of truth; "
+                        "in-memory accounting counter is advisory "
+                        "and may be stale by 1 — operator must "
+                        "reconcile against the durable use record"
+                    ),
+                )
 
         return response
 

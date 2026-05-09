@@ -390,12 +390,20 @@ def test_transport_failure_increments_lifecycle_counter() -> None:
         lifecycle.__exit__(None, None, None)
 
 
-def test_stale_on_credential_use_callable_raises_strictly() -> None:
-    """Codex iter-3 important: ``on_credential_use`` failure is an
-    accounting bug (orchestrator wiring problem), not an
-    operational event. Propagate so the run halts rather than
-    continuing with diverged audit counts. Caller is responsible
-    for ensuring the callable stays valid for adapter lifetime.
+def test_stale_callback_failure_does_not_propagate_durable_audit_authoritative() -> (
+    None
+):
+    """Codex iter-5 important: durable audit is the source of
+    truth; the in-memory accounting callback is advisory.
+    Letting a callback exception escape after the durable use
+    record committed creates retry ambiguity (caller sees a
+    wiring-bug exception, durable store says the credential
+    was used). Policy: callback failure → critical operator-
+    alert log + continue with the response. The diverged
+    counter (durable=1, in-memory=0) is recoverable post-
+    mortem from the durable store. Phase 5 step 5.1 wires the
+    counter to derive from the durable audit store, removing
+    the divergence by construction.
     """
 
     persisted: list[CredentialUseRecord] = []
@@ -444,11 +452,25 @@ def test_stale_on_credential_use_callable_raises_strictly() -> None:
         clock=lambda: _FROZEN_NOW,
         on_credential_use=stale_lifecycle.record_use,
     )
-    with pytest.raises(RuntimeError, match="state 'constructed'"):
-        adapter.request(method="GET", url="https://api.example.com/v1/items")
-    # The use record was already persisted before the accounting
-    # callback failed (durable audit happens before the callable).
+    with structlog.testing.capture_logs() as captured_logs:
+        # Caller sees the actionable response, not the wiring bug.
+        response = adapter.request(
+            method="GET", url="https://api.example.com/v1/items"
+        )
+    assert response.status_code == 200
+    # Durable record committed — this is the source of truth.
     assert len(persisted) == 1
+    # In-memory advisory counter NOT incremented (callback failed
+    # before reaching the increment branch inside record_use).
+    assert stale_lifecycle.credential_use_count == 0
+    # Critical operator-alert event captured for reconciliation.
+    alert_events = [
+        e
+        for e in captured_logs
+        if e.get("event") == "credential_use_callback_failed_after_audit"
+    ]
+    assert len(alert_events) == 1
+    assert alert_events[0]["callback_exception_type"] == "RuntimeError"
 
 
 def test_transport_failure_preserves_typed_exception_when_callback_raises() -> (
