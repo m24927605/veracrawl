@@ -1,0 +1,9 @@
+{
+  "fixture_class": "escalate_to_llm",
+  "expected_verdict": "escalate_to_llm",
+  "samples": [
+    {"failure_class": "_FakeStatusFailure", "status_code": 403, "scenario": "permission error not Cloudflare-shaped"},
+    {"failure_class": "RuntimeError", "scenario": "unknown exception class"},
+    {"failure_class": "_FakeStatusFailure", "status_code": 418, "scenario": "I'm a teapot — should escalate"}
+  ]
+}

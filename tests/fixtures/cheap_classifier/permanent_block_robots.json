@@ -1,0 +1,9 @@
+{
+  "fixture_class": "permanent_block",
+  "expected_verdict": "permanent_block",
+  "samples": [
+    {"failure_class": "RobotsBlockedError", "scenario": "robots.txt disallows /search path"},
+    {"failure_class": "AccessControlBlocked", "classifier_provider": "cloudflare", "scenario": "Cloudflare 403 + cf-ray header"},
+    {"failure_class": "AccessControlBlocked", "classifier_provider": "datadome", "scenario": "DataDome challenge page"}
+  ]
+}

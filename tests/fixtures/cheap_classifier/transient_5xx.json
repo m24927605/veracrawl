@@ -1,0 +1,10 @@
+{
+  "fixture_class": "transient_unclear",
+  "expected_verdict": "transient_unclear",
+  "samples": [
+    {"failure_class": "_FakeStatusFailure", "status_code": 500, "scenario": "upstream Internal Server Error"},
+    {"failure_class": "_FakeStatusFailure", "status_code": 502, "scenario": "Bad Gateway during deploy"},
+    {"failure_class": "_FakeStatusFailure", "status_code": 503, "scenario": "Service Unavailable + Retry-After"},
+    {"failure_class": "_FakeStatusFailure", "status_code": 504, "scenario": "Gateway Timeout under load"}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "fixture_class": "dead_host",
+  "expected_verdict": "dead_host",
+  "samples": [
+    {"failure_class": "_FakeStatusFailure", "status_code": 404, "scenario": "discontinued product page"},
+    {"failure_class": "_FakeStatusFailure", "status_code": 410, "scenario": "permanently removed listing"},
+    {"failure_class": "_FakeStatusFailure", "status_code": 404, "scenario": "typo'd URL slug"}
+  ]
+}
