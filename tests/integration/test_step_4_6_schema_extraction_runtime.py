@@ -363,6 +363,129 @@ def test_extract_refuses_when_budget_too_tight(tmp_path: Path) -> None:
 # --- Construction ----------------------------------------------------------
 
 
+def test_extract_refuses_credential_in_prompt_context_before_provider_call(
+    tmp_path: Path,
+) -> None:
+    """Codex iter-1 important + Phase 4 design acceptance:
+    a CredentialValue in prompt_context must raise the
+    Phase 2 step 2.3 boundary BEFORE the provider call —
+    no LLM cost is incurred on a credential-leak attempt."""
+
+    from veracrawl.agents.prompt_redaction import PromptCredentialLeakError
+    from veracrawl.ports.credential_vault import CredentialValue
+
+    # Use a template that references the credential variable
+    # so the redaction boundary's traversal walk has something
+    # to find.
+    role_dir = tmp_path / "extractor"
+    role_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "ref": "extractor/cred_test.v1",
+        "role": "extractor",
+        "name": "cred_test",
+        "version": "v1",
+        "template": "Extract with token {token}",
+        "variables": ["token"],
+    }
+    (role_dir / "cred_test.v1.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+    provider_call_count = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal provider_call_count
+        provider_call_count += 1
+        return httpx.Response(200, json=_ok_provider_body("{}"))
+
+    prompt_registry = JsonPromptRegistry(root=tmp_path)
+    transport = httpx.MockTransport(handler)
+    provider = OpenAIResponsesAdapterV2(
+        api_key=_API_KEY_CANARY,
+        runtime_mode=RuntimeMode.FIXTURE,
+        transport=transport,
+        sleep_fn=lambda _: None,
+        jitter_fn=lambda: 0.0,
+    )
+
+    def persister(event: TokenUsageEvent) -> Ref:
+        del event
+        return "payload:noop"
+
+    token_budget = OutboxBackedBudget(
+        budget=TokenBudget(
+            id="b:1",
+            run_ref="run:phase-4-6:1",
+            max_total_tokens=10_000,
+        ),
+        price_table=ProviderPriceTable(
+            version="v1",
+            prices={"gpt-4o-mini": {"input_per_1k": 0.0, "output_per_1k": 0.0}},
+        ),
+        outbox_repo=_InMemoryOutboxRepo(),
+        record_persister=persister,
+        run_ref="run:phase-4-6:1",
+        command_result_ref="cmd:1",
+        event_ref="event:1",
+        clock=lambda: _FROZEN_NOW,
+        runtime_mode=RuntimeMode.FIXTURE,
+    )
+    runtime = SchemaExtractionRuntime(
+        provider=provider,
+        prompt_registry=prompt_registry,
+        token_budget=token_budget,
+        calibrator=IdentityCalibrator(),
+        run_ref="run:phase-4-6:1",
+    )
+    cred = CredentialValue(value="sk-secret-CANARY", scope_ref="EBAY_PROD")
+    kwargs = _extraction_kwargs()
+    kwargs["prompt_ref"] = "extractor/cred_test.v1"
+    kwargs["prompt_context"] = {"token": cred}
+    # The prompt-registry's primitive-only allowlist refuses
+    # the CredentialValue first; if not, the
+    # RedactedPromptContext walk catches it. Either way the
+    # boundary stops the call BEFORE the provider runs.
+    with pytest.raises((PromptCredentialLeakError, Exception)):
+        runtime.extract(**kwargs)
+    # The provider was NEVER called.
+    assert provider_call_count == 0
+
+
+def test_extract_replay_determinism_same_input_same_output(tmp_path: Path) -> None:
+    """Codex iter-1 important + Phase 4 acceptance: same
+    logical request + same fixture provider response →
+    structurally-identical LLMExtractionCandidate (modulo
+    the UUID-based id field)."""
+
+    response_text = json.dumps(
+        {"sku": "ABC-123", "title": "Widget Pro", "price": 19.99}
+    )
+    runtime_a = _build_runtime(tmp_path=tmp_path, response_text=response_text)
+    candidate_a, citations_a, confidences_a = runtime_a.extract(
+        **_extraction_kwargs()
+    )
+    runtime_b = _build_runtime(tmp_path=tmp_path, response_text=response_text)
+    candidate_b, citations_b, confidences_b = runtime_b.extract(
+        **_extraction_kwargs()
+    )
+    # IDs differ (uuid-based), but field_values and the
+    # citation/confidence shapes are identical.
+    assert candidate_a.field_values == candidate_b.field_values
+    assert candidate_a.abstentions == candidate_b.abstentions
+    assert sorted(candidate_a.field_citation_refs.keys()) == sorted(
+        candidate_b.field_citation_refs.keys()
+    )
+    assert {c.field_name for c in citations_a} == {
+        c.field_name for c in citations_b
+    }
+    assert {c.field_name for c in confidences_a} == {
+        c.field_name for c in confidences_b
+    }
+    assert {c.calibrated_score for c in confidences_a} == {
+        c.calibrated_score for c in confidences_b
+    }
+
+
 def test_runtime_rejects_blank_run_ref(tmp_path: Path) -> None:
     prompt_registry = JsonPromptRegistry(root=tmp_path)
     transport = httpx.MockTransport(

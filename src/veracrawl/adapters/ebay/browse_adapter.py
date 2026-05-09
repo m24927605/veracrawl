@@ -32,7 +32,7 @@ Boundary invariants:
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -90,22 +90,58 @@ class EbayBrowseAdapter:
         query: str,
         limit: int = _DEFAULT_LIMIT,
         offset: int = 0,
+        max_pages: int = 20,
     ) -> list[dict[str, Any]]:
+        """Walk the offset-based pagination loop and return all
+        items across pages (bounded by ``max_pages``).
+
+        Codex iter-1 important fix: a single GET would silently
+        truncate multi-page eBay results. The loop walks until
+        the returned page is short of ``limit`` (canonical
+        end-of-results signal for offset-based pagination) OR
+        ``max_pages`` is reached.
+
+        On 401 the cached token is treated as stale and the
+        single-shot refresh path runs once before retrying the
+        same offset.
+        """
+
         if not query or not query.strip():
             raise ValueError("eBay browse search query must be non-blank")
         if limit < 1 or limit > 200:
             raise ValueError("limit must be in [1, 200] (eBay Browse cap)")
         if offset < 0:
             raise ValueError("offset must be non-negative")
+        if max_pages < 1:
+            raise ValueError("max_pages must be >= 1")
+        all_items: list[dict[str, Any]] = []
+        current_offset = offset
+        for _ in range(max_pages):
+            page_items = self._fetch_one_page(
+                query=query, limit=limit, offset=current_offset
+            )
+            all_items.extend(page_items)
+            # Canonical end-of-results: page returned fewer
+            # than ``limit`` items.
+            if len(page_items) < limit:
+                break
+            current_offset += limit
+        return all_items
+
+    def _fetch_one_page(
+        self, *, query: str, limit: int, offset: int
+    ) -> list[dict[str, Any]]:
         token = self._fetch_or_refresh_token()
-        response = self._client.get(
-            _BROWSE_SEARCH_ENDPOINT,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-            },
-            params={"q": query, "limit": str(limit), "offset": str(offset)},
-        )
+        response = self._do_get(token=token, query=query, limit=limit, offset=offset)
+        if response.status_code == 401:
+            # Single-shot refresh: invalidate the cache and
+            # mint a fresh token, then retry once.
+            self._invalidate_cached_token()
+            response.read()
+            token = self._fetch_or_refresh_token()
+            response = self._do_get(
+                token=token, query=query, limit=limit, offset=offset
+            )
         if response.status_code != 200:
             response.read()
             raise EbayBrowseError(
@@ -121,6 +157,41 @@ class EbayBrowseAdapter:
         if not isinstance(items, list):
             return []
         return [item for item in items if isinstance(item, dict)]
+
+    def _do_get(
+        self, *, token: str, query: str, limit: int, offset: int
+    ) -> httpx.Response:
+        return self._client.get(
+            _BROWSE_SEARCH_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+            },
+            params={"q": query, "limit": str(limit), "offset": str(offset)},
+        )
+
+    def _invalidate_cached_token(self) -> None:
+        """Force the next ``_fetch_or_refresh_token`` to mint
+        a fresh token. Phase 6 step 6.1 will replace this with
+        a real cache.delete; for now we set the safety margin
+        high enough that any cached token reads as expired
+        on the next fetch."""
+
+        # The token cache has a per-call ``safety_margin_seconds``
+        # parameter; we re-fetch with a giant margin so the
+        # cached token is treated as expired and a refresh is
+        # forced.
+        now = self._clock()
+        # ``fetch`` is read-only; to actually invalidate, we
+        # rely on the next ``_fetch_or_refresh_token`` calling
+        # the refresh function. Set a sentinel via direct
+        # cache write that's already-expired.
+        self._token_cache.store(
+            cache_key=_TOKEN_CACHE_KEY,
+            access_token="invalidated",
+            expires_at=now + timedelta(seconds=1),
+            minted_at=now,
+        )
 
     def _fetch_or_refresh_token(self) -> str:
         now = self._clock()

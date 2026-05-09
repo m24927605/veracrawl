@@ -285,6 +285,162 @@ def test_run_url_propagates_cost_gate_exceeded_from_check(
 # --- Repeated-failure-signature hard stop ----------------------------------
 
 
+def test_run_url_different_url_recovery_recurses_with_alternative_url(
+    tmp_path: Path,
+) -> None:
+    """Codex iter-1 important: the DIFFERENT_URL recovery
+    path is the controller's main feature. A recovery stub
+    that returns DIFFERENT_URL with an alternative_url must
+    cause run_url to retry with the new URL bounded by
+    max_recovery_iterations."""
+
+    # Make the first call fail (invalid output), the second
+    # call succeed. Track which URLs the schema runtime saw.
+    seen_urls: list[str] = []
+
+    class _RecordingSchemaRuntime:
+        def __init__(self, real_runtime: Any) -> None:
+            self._real = real_runtime
+
+        def extract(self, **kwargs: Any) -> Any:
+            seen_urls.append(kwargs["source_url"])
+            return self._real.extract(**kwargs)
+
+    # First-page handler returns invalid output, second-page
+    # returns valid output.
+    call_count = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # Missing required ``title`` — fails Pydantic validation
+            return httpx.Response(
+                200,
+                json={
+                    "id": "resp:bad",
+                    "status": "completed",
+                    "output": [{"content": [{"type": "output_text", "text": '{"sku": "ABC"}'}]}],
+                    "usage": {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+                },
+            )
+        good_text = '{"sku": "ABC", "title": "Widget Pro"}'
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp:good",
+                "status": "completed",
+                "output": [
+                    {"content": [{"type": "output_text", "text": good_text}]}
+                ],
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "total_tokens": 150,
+                },
+            },
+        )
+
+    _write_template(tmp_path)
+    prompt_registry = JsonPromptRegistry(root=tmp_path)
+    transport = httpx.MockTransport(handler)
+    provider = OpenAIResponsesAdapterV2(
+        api_key=_API_KEY_CANARY,
+        runtime_mode=RuntimeMode.FIXTURE,
+        transport=transport,
+        sleep_fn=lambda _: None,
+        jitter_fn=lambda: 0.0,
+    )
+    persisted: list[TokenUsageEvent] = []
+
+    def persister(event: TokenUsageEvent) -> Ref:
+        persisted.append(event)
+        return f"payload:{event.id}"
+
+    token_budget = OutboxBackedBudget(
+        budget=TokenBudget(
+            id="b:1",
+            run_ref="run:phase-5-3:1",
+            max_total_tokens=10_000,
+        ),
+        price_table=ProviderPriceTable(
+            version="v1",
+            prices={"gpt-4o-mini": {"input_per_1k": 0.0, "output_per_1k": 0.0}},
+        ),
+        outbox_repo=_InMemoryOutboxRepo(),
+        record_persister=persister,
+        run_ref="run:phase-5-3:1",
+        command_result_ref="cmd:1",
+        event_ref="event:1",
+        runtime_mode=RuntimeMode.FIXTURE,
+    )
+    real_runtime = SchemaExtractionRuntime(
+        provider=provider,
+        prompt_registry=prompt_registry,
+        token_budget=token_budget,
+        calibrator=IdentityCalibrator(),
+        run_ref="run:phase-5-3:1",
+    )
+    recording = _RecordingSchemaRuntime(real_runtime)
+
+    # Recovery stub returns DIFFERENT_URL with alternative_url
+    # so the controller actually recurses.
+    from veracrawl.contracts.agent import RecoveryDecision
+    from veracrawl.contracts.enums import RecoveryDecisionSource
+
+    class _DifferentUrlRecoveryStub:
+        def __init__(self) -> None:
+            self.decisions: list[RecoveryDecision] = []
+
+        def decide(
+            self,
+            *,
+            failure: BaseException,
+            attempt_evidence_ref: Ref,
+            run_ref: Ref,
+            recovery_iteration: int,
+        ) -> RecoveryDecision:
+            del failure, attempt_evidence_ref, recovery_iteration
+            decision = RecoveryDecision(
+                id=f"recovery:{len(self.decisions)}",
+                kind=RecoveryDecisionKind.DIFFERENT_URL,
+                reason="llm_recovery:try alternate canonical URL",
+                failure_signature=f"sig-{len(self.decisions)}",
+                source=RecoveryDecisionSource.LLM_RECOVERY,
+                alternative_url="https://example.com/widget-canonical",
+                cost_usd=0.0,
+            )
+            self.decisions.append(decision)
+            return decision
+
+    recovery_stub = _DifferentUrlRecoveryStub()
+    cost_gate = InMemoryCostGate(per_run_cost_cap=10.0)
+    controller = AgentRunController(
+        schema_runtime=recording,
+        recovery=recovery_stub,
+        cost_gate=cost_gate,
+        run_ref="run:phase-5-3:1",
+        objective_ref="objective:1",
+        max_recovery_iterations=3,
+    )
+
+    outcome = controller.run_url(extraction_request=_extraction_request())
+
+    # Controller recursed once on DIFFERENT_URL; second URL succeeded.
+    assert outcome.candidate is not None
+    assert outcome.candidate.field_values == {"sku": "ABC", "title": "Widget Pro"}
+    assert outcome.iterations == 1
+    assert len(outcome.recovery_trace) == 1
+    assert outcome.recovery_trace[0].kind is RecoveryDecisionKind.DIFFERENT_URL
+    # Schema runtime saw both the original AND the alternative URL.
+    assert seen_urls == [
+        "https://example.com/widget",
+        "https://example.com/widget-canonical",
+    ]
+    # final_url reflects the URL that succeeded.
+    assert outcome.final_url == "https://example.com/widget-canonical"
+
+
 def test_run_url_repeated_failure_signature_hard_stops_via_cost_gate(
     tmp_path: Path,
 ) -> None:

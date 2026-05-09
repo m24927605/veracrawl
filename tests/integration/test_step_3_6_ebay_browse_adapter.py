@@ -222,6 +222,123 @@ def test_search_returns_empty_list_when_no_item_summaries(tmp_path: Path) -> Non
     assert items == []
 
 
+def test_search_walks_pagination_loop_until_short_page(tmp_path: Path) -> None:
+    """Codex iter-1 important: the adapter must walk
+    multi-page results, not silently truncate at one page.
+    The loop terminates when a page returns fewer than
+    ``limit`` items (canonical end-of-results signal)."""
+
+    call_count = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # Full page (limit=2 → 2 items)
+            return httpx.Response(
+                200,
+                json={
+                    "itemSummaries": [{"itemId": "1"}, {"itemId": "2"}],
+                },
+            )
+        if call_count == 2:
+            return httpx.Response(
+                200,
+                json={
+                    "itemSummaries": [{"itemId": "3"}, {"itemId": "4"}],
+                },
+            )
+        # Short page → end of results.
+        return httpx.Response(
+            200,
+            json={"itemSummaries": [{"itemId": "5"}]},
+        )
+
+    adapter = _build_adapter(tmp_path, handler=handler)
+    items = adapter.search(query="widget", limit=2)
+    assert [i["itemId"] for i in items] == ["1", "2", "3", "4", "5"]
+    assert call_count == 3
+
+
+def test_search_pagination_respects_max_pages(tmp_path: Path) -> None:
+    """If every page returns a full ``limit`` items (infinite
+    cursor), the loop halts at ``max_pages``."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"itemSummaries": [{"itemId": "X"}, {"itemId": "Y"}]},
+        )
+
+    adapter = _build_adapter(tmp_path, handler=handler)
+    items = adapter.search(query="widget", limit=2, max_pages=3)
+    assert len(items) == 6  # 3 pages × 2 items
+
+
+def test_search_pagination_passes_correct_offsets(tmp_path: Path) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        # Return short page on third call to halt loop.
+        if len(captured) >= 3:
+            return httpx.Response(200, json={"itemSummaries": [{"itemId": "Z"}]})
+        return httpx.Response(
+            200,
+            json={"itemSummaries": [{"itemId": "X"}, {"itemId": "Y"}]},
+        )
+
+    adapter = _build_adapter(tmp_path, handler=handler)
+    adapter.search(query="widget", limit=2, offset=10)
+    # Three calls at offsets 10, 12, 14.
+    assert "offset=10" in str(captured[0].url)
+    assert "offset=12" in str(captured[1].url)
+    assert "offset=14" in str(captured[2].url)
+
+
+def test_search_401_refreshes_token_and_retries_once(tmp_path: Path) -> None:
+    """Codex iter-1 important: 401 must invalidate the
+    cached token, refresh once, and retry — NOT crash."""
+
+    call_count = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(401, json={"errors": [{"message": "stale"}]})
+        return httpx.Response(
+            200,
+            json={"itemSummaries": [{"itemId": "RECOVERED"}]},
+        )
+
+    refresh_count = 0
+
+    def refresh() -> tuple[str, datetime]:
+        nonlocal refresh_count
+        refresh_count += 1
+        return (f"token-fresh-{refresh_count}", _NOW + timedelta(hours=2))
+
+    adapter = _build_adapter(
+        tmp_path,
+        handler=handler,
+        token_refresh_fn=refresh,
+    )
+    items = adapter.search(query="widget", limit=2)
+    assert [i["itemId"] for i in items] == ["RECOVERED"]
+    # Two refreshes: initial cache miss + after 401 invalidation.
+    assert refresh_count == 2
+    assert call_count == 2
+
+
+def test_search_rejects_zero_max_pages(tmp_path: Path) -> None:
+    adapter = _build_adapter(
+        tmp_path, handler=lambda _: httpx.Response(200, json={})
+    )
+    with pytest.raises(ValueError, match="max_pages"):
+        adapter.search(query="widget", max_pages=0)
+
+
 def test_search_skips_non_dict_items(tmp_path: Path) -> None:
     adapter = _build_adapter(
         tmp_path,
