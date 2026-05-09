@@ -301,6 +301,26 @@ class AuthorizedSessionAdapter:
                 self._use_audit.record(transport_failure_record)
             except Exception:
                 transport_failure_audit_failed = True
+            # Increment the lifecycle counter on the transport-
+            # failure path too — a persisted CredentialUseRecord
+            # IS a credential use in the adapter's audit model
+            # (the credential was revealed + sent; the response
+            # never materialized). Wrap to avoid raising after
+            # the original transport exception is already
+            # propagating.
+            if not transport_failure_audit_failed and self._lifecycle is not None:
+                try:
+                    self._lifecycle.record_use()
+                except Exception:
+                    _logger.error(  # noqa: TRY400
+                        "credential_use_lifecycle_record_failed",
+                        use_record_id=transport_failure_record.id,
+                        run_ref=self._run_ref,
+                        request_method=method,
+                        request_url=sanitized_url,
+                        timestamp_iso=timestamp.isoformat(),
+                        phase="transport_failure",
+                    )
             if transport_failure_audit_failed:
                 # Codex iter-3 important: transport failure + audit
                 # failure is the worst case — the credential was sent
@@ -393,8 +413,26 @@ class AuthorizedSessionAdapter:
         # the adapter owning the accounting so the lifecycle's
         # credential_use_count agrees with the count of
         # CredentialUseRecord rows by construction.
+        # Wrap in try/except: a stale lifecycle (constructed but
+        # not entered, or already exited) raises RuntimeError on
+        # record_use. Don't propagate — the credential was
+        # already used + audited; emit a structured-log
+        # operational event so the orchestrator can detect the
+        # accounting gap.
         if self._lifecycle is not None:
-            self._lifecycle.record_use()
+            try:
+                self._lifecycle.record_use()
+            except Exception:
+                _logger.error(  # noqa: TRY400
+                    "credential_use_lifecycle_record_failed",
+                    use_record_id=completion_record.id,
+                    run_ref=self._run_ref,
+                    request_method=method,
+                    request_url=sanitized_url,
+                    response_status=response.status_code,
+                    timestamp_iso=timestamp.isoformat(),
+                    phase="completion",
+                )
 
         return response
 

@@ -321,6 +321,143 @@ def test_lifecycle_counter_matches_use_record_count_via_auto_wiring() -> None:
     assert len(outbox_repo.appended) == 5
 
 
+def test_transport_failure_increments_lifecycle_counter() -> None:
+    """Codex iter-2 important: a persisted CredentialUseRecord on
+    the transport-failure path IS a credential use; lifecycle
+    counter must reflect it so durable count and lifecycle count
+    agree by construction."""
+
+    persisted: list[CredentialUseRecord] = []
+    scope = _make_credential_scope()
+    backend = InMemoryVaultBackend(
+        credentials={("EBAY_PROD", "API_KEY"): _CANARY_SECRET}
+    )
+    access_audit = _RecordingAccessAudit()
+    vault = OutboxVaultClient(
+        backend=backend,
+        audit=access_audit,
+        run_ref="run:int-2-5b:tx-fail",
+        clock=lambda: _FROZEN_NOW,
+    )
+
+    class _RaisingTransport(httpx.BaseTransport):
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            del request
+            raise RuntimeError("simulated transport failure")
+
+    outbox_repo = _InMemoryOutboxRepo()
+
+    def persister(record: CredentialUseRecord) -> Ref:
+        persisted.append(record)
+        return f"payload:{record.id}"
+
+    use_audit = OutboxCredentialUseAuditWriter(
+        record_persister=persister,
+        outbox_repo=outbox_repo,
+        command_result_ref="cmd-result:tx-fail",
+        event_ref="event:tx-fail",
+    )
+    registry = _StubScopeRegistry({"cred-scope:ebay-prod": scope})
+    request = _make_run_request("cred-scope:ebay-prod")
+    lifecycle = AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:int-2-5b:tx-fail",
+        clock=lambda: _FROZEN_NOW,
+    )
+    lifecycle.__enter__()
+    adapter = AuthorizedSessionAdapter(
+        transport=_RaisingTransport(),
+        vault=vault,
+        scope_policy=StrictAllowlistScope(),
+        credential_scope=lifecycle.scope_for("cred-scope:ebay-prod"),
+        vault_scope_ref="EBAY_PROD",
+        vault_key="API_KEY",
+        use_audit=use_audit,
+        run_ref="run:int-2-5b:tx-fail",
+        clock=lambda: _FROZEN_NOW,
+        lifecycle=lifecycle,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="simulated transport failure"):
+            adapter.request(method="GET", url="https://api.example.com/v1/items")
+        # Persisted use record + matching lifecycle counter.
+        assert len(persisted) == 1
+        assert persisted[0].response_status is None
+        assert lifecycle.credential_use_count == 1
+    finally:
+        lifecycle.__exit__(None, None, None)
+
+
+def test_stale_lifecycle_record_use_logs_audit_gap_not_raises() -> None:
+    """Codex iter-2 important: a stale lifecycle (never entered)
+    would cause record_use to raise. Adapter must wrap and log
+    the accounting gap rather than propagate after the credential
+    was already used + durably audited."""
+
+    persisted: list[CredentialUseRecord] = []
+    scope = _make_credential_scope()
+    backend = InMemoryVaultBackend(
+        credentials={("EBAY_PROD", "API_KEY"): _CANARY_SECRET}
+    )
+    access_audit = _RecordingAccessAudit()
+    vault = OutboxVaultClient(
+        backend=backend,
+        audit=access_audit,
+        run_ref="run:int-2-5b:stale",
+        clock=lambda: _FROZEN_NOW,
+    )
+    transport, _ = _echo_authorization_transport()
+    outbox_repo = _InMemoryOutboxRepo()
+
+    def persister(record: CredentialUseRecord) -> Ref:
+        persisted.append(record)
+        return f"payload:{record.id}"
+
+    use_audit = OutboxCredentialUseAuditWriter(
+        record_persister=persister,
+        outbox_repo=outbox_repo,
+        command_result_ref="cmd-result:stale",
+        event_ref="event:stale",
+    )
+    registry = _StubScopeRegistry({"cred-scope:ebay-prod": scope})
+    request = _make_run_request("cred-scope:ebay-prod")
+    # Lifecycle constructed but NOT entered — record_use will raise.
+    stale_lifecycle = AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:int-2-5b:stale",
+        clock=lambda: _FROZEN_NOW,
+    )
+    adapter = AuthorizedSessionAdapter(
+        transport=transport,
+        vault=vault,
+        scope_policy=StrictAllowlistScope(),
+        credential_scope=scope,
+        vault_scope_ref="EBAY_PROD",
+        vault_key="API_KEY",
+        use_audit=use_audit,
+        run_ref="run:int-2-5b:stale",
+        clock=lambda: _FROZEN_NOW,
+        lifecycle=stale_lifecycle,
+    )
+    with structlog.testing.capture_logs() as captured_logs:
+        # Adapter must NOT raise even though stale_lifecycle.record_use
+        # would. The credential is already audited; gap is logged.
+        response = adapter.request(
+            method="GET", url="https://api.example.com/v1/items"
+        )
+    assert response.status_code == 200
+    assert len(persisted) == 1
+    failures = [
+        e
+        for e in captured_logs
+        if e.get("event") == "credential_use_lifecycle_record_failed"
+    ]
+    assert len(failures) == 1
+    assert failures[0]["phase"] == "completion"
+
+
 def test_lifecycle_not_incremented_when_request_is_refused() -> None:
     """Out-of-scope refusal must NOT increment the lifecycle
     counter (no successful credential use)."""
