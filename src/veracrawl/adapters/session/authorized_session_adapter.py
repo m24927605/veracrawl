@@ -72,7 +72,6 @@ from datetime import UTC, datetime
 
 import httpx
 
-from veracrawl.agents.credential_lifecycle import AgentCredentialLifecycle
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.errors import CredentialScopeViolation, _redact_url
 from veracrawl.contracts.security_privacy import (
@@ -173,7 +172,7 @@ class AuthorizedSessionAdapter:
         use_audit: CredentialUseAuditPort,
         run_ref: Ref,
         clock: Callable[[], datetime] = _utc_now,
-        lifecycle: AgentCredentialLifecycle | None = None,
+        on_credential_use: Callable[[], None] | None = None,
     ) -> None:
         # Codex iter-3 critical + iter-4 important: typed enforcement
         # of "production transport is composed through Phase 1's
@@ -199,7 +198,15 @@ class AuthorizedSessionAdapter:
         self._use_audit = use_audit
         self._run_ref = run_ref
         self._clock = clock
-        self._lifecycle = lifecycle
+        # Codex iter-3 important: take a callable (port-shaped)
+        # rather than the concrete AgentCredentialLifecycle so the
+        # adapter doesn't depend on agent-orchestration internals.
+        # The orchestrator wires in ``lifecycle.record_use`` as the
+        # callable. The orchestrator is also responsible for
+        # ensuring the callable stays valid for the adapter's
+        # lifetime (i.e., the lifecycle is entered when the
+        # adapter dispatches requests).
+        self._on_credential_use = on_credential_use
 
     def _now(self) -> datetime:
         ts = self._clock()
@@ -308,19 +315,17 @@ class AuthorizedSessionAdapter:
             # never materialized). Wrap to avoid raising after
             # the original transport exception is already
             # propagating.
-            if not transport_failure_audit_failed and self._lifecycle is not None:
-                try:
-                    self._lifecycle.record_use()
-                except Exception:
-                    _logger.error(  # noqa: TRY400
-                        "credential_use_lifecycle_record_failed",
-                        use_record_id=transport_failure_record.id,
-                        run_ref=self._run_ref,
-                        request_method=method,
-                        request_url=sanitized_url,
-                        timestamp_iso=timestamp.isoformat(),
-                        phase="transport_failure",
-                    )
+            if not transport_failure_audit_failed and self._on_credential_use is not None:
+                # Same strict accounting policy as the success
+                # path: failure here is a wiring bug. We're
+                # already in the transport-failure branch and
+                # about to re-raise the original transport
+                # exception; let the on_credential_use exception
+                # propagate too — Python will chain it. The
+                # caller sees the transport exception with the
+                # accounting failure as cause; both are
+                # diagnostic.
+                self._on_credential_use()
             if transport_failure_audit_failed:
                 # Codex iter-3 important: transport failure + audit
                 # failure is the worst case — the credential was sent
@@ -408,31 +413,14 @@ class AuthorizedSessionAdapter:
                 "``credential_use_audit_failed`` (phase=completion)."
             ) from None
 
-        # Wire lifecycle counter automatically. The integration test
-        # (Phase 2 step 2.5b) and Phase 5 orchestrator wiring rely on
-        # the adapter owning the accounting so the lifecycle's
-        # credential_use_count agrees with the count of
-        # CredentialUseRecord rows by construction.
-        # Wrap in try/except: a stale lifecycle (constructed but
-        # not entered, or already exited) raises RuntimeError on
-        # record_use. Don't propagate — the credential was
-        # already used + audited; emit a structured-log
-        # operational event so the orchestrator can detect the
-        # accounting gap.
-        if self._lifecycle is not None:
-            try:
-                self._lifecycle.record_use()
-            except Exception:
-                _logger.error(  # noqa: TRY400
-                    "credential_use_lifecycle_record_failed",
-                    use_record_id=completion_record.id,
-                    run_ref=self._run_ref,
-                    request_method=method,
-                    request_url=sanitized_url,
-                    response_status=response.status_code,
-                    timestamp_iso=timestamp.isoformat(),
-                    phase="completion",
-                )
+        # Codex iter-3 important: ``on_credential_use`` failures
+        # are accounting bugs (orchestrator wiring problem), not
+        # operational events. Propagate so the run halts rather
+        # than continuing with diverged audit counts. The caller
+        # (orchestrator) is responsible for ensuring the
+        # callable stays valid for the adapter's lifetime.
+        if self._on_credential_use is not None:
+            self._on_credential_use()
 
         return response
 

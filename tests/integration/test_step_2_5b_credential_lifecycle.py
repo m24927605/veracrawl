@@ -50,7 +50,8 @@ from veracrawl.adapters.session.authorized_session_adapter import (
 )
 from veracrawl.adapters.session.strict_allowlist_scope import StrictAllowlistScope
 from veracrawl.agents.credential_lifecycle import AgentCredentialLifecycle
-from veracrawl.contracts.agent import AgentRole, AgentRunRequest
+from veracrawl.contracts.agent import AgentRunRequest
+from veracrawl.contracts.enums import AgentRole
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.durable import OutboxRecord
 from veracrawl.contracts.security_privacy import (
@@ -213,7 +214,7 @@ def _build_stack(
         use_audit=use_audit,
         run_ref="run:int-2-5b:1",
         clock=lambda: _FROZEN_NOW,
-        lifecycle=lifecycle,
+        on_credential_use=lifecycle.record_use,
     )
     return adapter, lifecycle, access_audit, captured_auth, outbox_repo
 
@@ -270,10 +271,10 @@ def test_credential_redaction_holds_through_durable_audit_chain() -> None:
         finally:
             lifecycle.__exit__(None, None, None)
 
-    for record in access_audit.records:
-        assert _CANARY_SECRET not in str(record)
-    for record in persisted:
-        assert _CANARY_SECRET not in str(record.__dict__)
+    for access_record in access_audit.records:
+        assert _CANARY_SECRET not in str(access_record)
+    for use_record in persisted:
+        assert _CANARY_SECRET not in str(use_record.__dict__)
     for outbox_row in outbox_repo.appended:
         assert _CANARY_SECRET not in str(outbox_row.__dict__)
     for event in captured_logs:
@@ -376,7 +377,7 @@ def test_transport_failure_increments_lifecycle_counter() -> None:
         use_audit=use_audit,
         run_ref="run:int-2-5b:tx-fail",
         clock=lambda: _FROZEN_NOW,
-        lifecycle=lifecycle,
+        on_credential_use=lifecycle.record_use,
     )
     try:
         with pytest.raises(RuntimeError, match="simulated transport failure"):
@@ -389,11 +390,13 @@ def test_transport_failure_increments_lifecycle_counter() -> None:
         lifecycle.__exit__(None, None, None)
 
 
-def test_stale_lifecycle_record_use_logs_audit_gap_not_raises() -> None:
-    """Codex iter-2 important: a stale lifecycle (never entered)
-    would cause record_use to raise. Adapter must wrap and log
-    the accounting gap rather than propagate after the credential
-    was already used + durably audited."""
+def test_stale_on_credential_use_callable_raises_strictly() -> None:
+    """Codex iter-3 important: ``on_credential_use`` failure is an
+    accounting bug (orchestrator wiring problem), not an
+    operational event. Propagate so the run halts rather than
+    continuing with diverged audit counts. Caller is responsible
+    for ensuring the callable stays valid for adapter lifetime.
+    """
 
     persisted: list[CredentialUseRecord] = []
     scope = _make_credential_scope()
@@ -439,23 +442,13 @@ def test_stale_lifecycle_record_use_logs_audit_gap_not_raises() -> None:
         use_audit=use_audit,
         run_ref="run:int-2-5b:stale",
         clock=lambda: _FROZEN_NOW,
-        lifecycle=stale_lifecycle,
+        on_credential_use=stale_lifecycle.record_use,
     )
-    with structlog.testing.capture_logs() as captured_logs:
-        # Adapter must NOT raise even though stale_lifecycle.record_use
-        # would. The credential is already audited; gap is logged.
-        response = adapter.request(
-            method="GET", url="https://api.example.com/v1/items"
-        )
-    assert response.status_code == 200
+    with pytest.raises(RuntimeError, match="state 'constructed'"):
+        adapter.request(method="GET", url="https://api.example.com/v1/items")
+    # The use record was already persisted before the accounting
+    # callback failed (durable audit happens before the callable).
     assert len(persisted) == 1
-    failures = [
-        e
-        for e in captured_logs
-        if e.get("event") == "credential_use_lifecycle_record_failed"
-    ]
-    assert len(failures) == 1
-    assert failures[0]["phase"] == "completion"
 
 
 def test_lifecycle_not_incremented_when_request_is_refused() -> None:
