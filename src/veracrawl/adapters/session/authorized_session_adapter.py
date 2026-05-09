@@ -1,6 +1,6 @@
 """``AuthorizedSessionAdapter`` — Phase 2 step 2.4b.
 
-Per request, two-phase audit:
+Per request:
 
 1. Pre-flight clock validation (tz-aware required).
 2. Apply :class:`~veracrawl.ports.session_scope_policy.SessionScopePolicy`
@@ -13,26 +13,37 @@ Per request, two-phase audit:
    Failures propagate as :class:`CredentialNotFoundError`. The
    vault layer's own :class:`CredentialAccessAuditPort` has
    already recorded the access attempt.
-4. **Pre-send audit** (codex iter-1 critical): write a PENDING
-   :class:`CredentialUseRecord` (``response_status=None``,
-   ``attempt_evidence_ref="attempt:pending:<uuid>"``) to the
-   :class:`CredentialUseAuditPort` BEFORE the transport sees the
-   request. On audit-write failure, refuse the request before
-   transmission (true "no use without audit" — the credential
-   never goes over the wire).
-5. Reveal credential and inject ``Authorization: Bearer <reveal>``
+4. Reveal credential and inject ``Authorization: Bearer <reveal>``
    header on the request (design.md §3.3 narrowest possible
    reveal scope).
-6. Send via the injected :class:`httpx.BaseTransport`. On
-   transport exception (no response materializes), emit a
-   ``credential_use_transport_failed`` structured-log event and
-   re-raise the original transport exception. The pending record
-   stays in the audit log for correlation.
-7. **Post-receive audit** (codex iter-1 critical): on a
-   successful HTTP completion (response received, any status),
-   write a SECOND :class:`CredentialUseRecord` with the actual
-   ``response_status``. On audit-write failure, refuse to return
-   the response (close + raise).
+5. Send via the injected :class:`httpx.BaseTransport`. On
+   transport exception (no response materializes), write a single
+   :class:`CredentialUseRecord` with ``response_status=None`` +
+   ``attempt_evidence_ref="attempt:pending:<uuid>"`` (placeholder
+   for Phase 6 step 6.1's real
+   :class:`NetworkAttemptEvidence`), emit a
+   ``credential_use_transport_failed`` structured-log event, and
+   re-raise the original transport exception.
+6. **Single post-receive audit** (design.md acceptance:
+   "N credential uses produce exactly N CredentialUseRecord
+   outbox events"): on a successful HTTP completion, write one
+   :class:`CredentialUseRecord` with the actual
+   ``response_status``. On audit-write failure, close + refuse
+   to return the response (best-effort — the credential was
+   already sent, but the caller cannot act on the unrecorded
+   response).
+
+URL sanitization (codex iter-2 critical): the ``request_url``
+field on every :class:`CredentialUseRecord` (and every fallback
+structured-log event) is the result of
+:func:`contracts.errors._redact_url` (drops query / fragment /
+userinfo). This applies at the *record* layer, not just at the
+logging writer, so any future
+:class:`CredentialUseAuditPort` implementation (outbox-backed
+Phase 6 alternate, etc.) cannot persist an unsanitized URL. The
+contract validator accepts the sanitized form because
+:func:`_redact_url` returns a scheme + host + path URL that still
+passes ``_is_http_url``.
 
 What this adapter does NOT do (reservation — Phase 6 step 6.1):
 
@@ -145,13 +156,15 @@ class AuthorizedSessionAdapter:
         return ts
 
     def request(self, *, method: str, url: str) -> httpx.Response:
-        """Send an authorized HTTP request with two-phase audit.
+        """Send an authorized HTTP request and audit the use.
 
-        See module docstring for the full ordering. URL field on
-        any structured-log event is redacted via
+        See module docstring for the full ordering. The URL stored
+        on the :class:`CredentialUseRecord` and on every
+        structured-log event is sanitized via
         ``contracts.errors._redact_url`` (drops query / fragment /
-        userinfo) so OAuth / session-id query parameters cannot
-        leak via the audit fallback path.
+        userinfo) at the record layer so any
+        :class:`CredentialUseAuditPort` implementation receives a
+        non-secret URL.
         """
 
         timestamp = self._now()
@@ -182,49 +195,8 @@ class AuthorizedSessionAdapter:
         # 3. Vault fetch (vault layer's own audit fires inside).
         cred = self._vault.get(scope_ref=self._vault_scope_ref, key=self._vault_key)
 
-        # 4. Pre-send audit (codex iter-1 critical): write a
-        #    PENDING CredentialUseRecord BEFORE transport. If the
-        #    audit write fails, the credential never goes over the
-        #    wire — true "no use without audit".
-        use_record_id = f"credential-use:{uuid.uuid4().hex}"
-        pending_evidence_ref = f"attempt:pending:{uuid.uuid4().hex}"
-        pending_record = CredentialUseRecord(
-            id=use_record_id,
-            run_ref=self._run_ref,
-            credential_scope_ref=self._credential_scope.id,
-            request_url=url,
-            request_method=method,
-            response_status=None,
-            timestamp_used=timestamp,
-            attempt_evidence_ref=pending_evidence_ref,
-        )
-        pending_audit_failed = False
-        try:
-            self._use_audit.record(pending_record)
-        except Exception:
-            pending_audit_failed = True
-        if pending_audit_failed:
-            _logger.error(  # noqa: TRY400
-                "credential_use_audit_failed",
-                phase="pending",
-                use_record_id=use_record_id,
-                run_ref=self._run_ref,
-                credential_scope_ref=self._credential_scope.id,
-                request_method=method,
-                request_url=sanitized_url,
-                timestamp_iso=timestamp.isoformat(),
-            )
-            raise CredentialNotFoundError(
-                "credential use pre-send audit write failed; refusing "
-                "to send the credential-bearing request (no use "
-                "without audit). See structured-log fallback event "
-                "``credential_use_audit_failed`` (phase=pending)."
-            ) from None
-
-        # 5 + 6. Reveal + send. Reveal at the single call site
+        # 4 + 5. Reveal + send. Reveal at the single call site
         #    (design.md §3.3) and immediately hand to the transport.
-        #    Transport exception still has the pending record in
-        #    the audit log for correlation.
         request = httpx.Request(
             method=method,
             url=url,
@@ -233,10 +205,37 @@ class AuthorizedSessionAdapter:
         try:
             response = self._transport.handle_request(request)
         except Exception:
+            # Transport exception → write the single use record
+            # with response_status=None + a pending-attempt
+            # placeholder ref, emit the fallback log, then re-raise
+            # the original transport exception (don't wrap — the
+            # caller wants the typed transport exception).
+            transport_failure_record = CredentialUseRecord(
+                id=f"credential-use:{uuid.uuid4().hex}",
+                run_ref=self._run_ref,
+                credential_scope_ref=self._credential_scope.id,
+                request_url=sanitized_url,
+                request_method=method,
+                response_status=None,
+                timestamp_used=timestamp,
+                attempt_evidence_ref=f"attempt:pending:{uuid.uuid4().hex}",
+            )
+            try:
+                self._use_audit.record(transport_failure_record)
+            except Exception:
+                _logger.error(  # noqa: TRY400
+                    "credential_use_audit_failed",
+                    phase="transport_failure",
+                    use_record_id=transport_failure_record.id,
+                    run_ref=self._run_ref,
+                    credential_scope_ref=self._credential_scope.id,
+                    request_method=method,
+                    request_url=sanitized_url,
+                    timestamp_iso=timestamp.isoformat(),
+                )
             _logger.error(  # noqa: TRY400
                 "credential_use_transport_failed",
-                use_record_id=use_record_id,
-                pending_attempt_ref=pending_evidence_ref,
+                use_record_id=transport_failure_record.id,
                 run_ref=self._run_ref,
                 credential_scope_ref=self._credential_scope.id,
                 request_method=method,
@@ -245,19 +244,22 @@ class AuthorizedSessionAdapter:
             )
             raise
 
-        # 7. Post-receive audit (codex iter-1 critical): write a
-        #    SECOND record with the actual response_status. This is
-        #    the audit-of-record; the pending record + this record
-        #    correlate by run_ref + credential_scope_ref + adjacent
-        #    timestamps in the audit pipeline.
+        # 6. Post-receive audit. Single record with the actual
+        #    response_status (design.md acceptance: 1:1 use→record).
+        #    URL stored as the sanitized form so any audit
+        #    implementation gets a non-secret value (codex iter-2
+        #    critical).
         completion_record = CredentialUseRecord(
             id=f"credential-use:{uuid.uuid4().hex}",
             run_ref=self._run_ref,
             credential_scope_ref=self._credential_scope.id,
-            request_url=url,
+            request_url=sanitized_url,
             request_method=method,
             response_status=response.status_code,
-            timestamp_used=self._now(),
+            # Reuse the pre-flight timestamp so the scope-policy
+            # check ``now`` and the use record's timestamp_used
+            # always agree — replay-deterministic.
+            timestamp_used=timestamp,
             attempt_evidence_ref=None,
         )
         completion_audit_failed = False
@@ -270,7 +272,6 @@ class AuthorizedSessionAdapter:
                 "credential_use_audit_failed",
                 phase="completion",
                 use_record_id=completion_record.id,
-                pending_record_id=use_record_id,
                 run_ref=self._run_ref,
                 credential_scope_ref=self._credential_scope.id,
                 request_method=method,
@@ -280,11 +281,10 @@ class AuthorizedSessionAdapter:
             )
             response.close()
             raise CredentialNotFoundError(
-                "credential use completion audit write failed; "
-                "refusing to return the credential-bearing response "
-                "(no use without audit). The pending record is still "
-                "in the audit log; the missing completion event is "
-                "in the structured-log fallback "
+                "credential use audit write failed; refusing to "
+                "return the credential-bearing response. The "
+                "credential was already sent over the wire but the "
+                "use was not recorded; see structured-log fallback "
                 "``credential_use_audit_failed`` (phase=completion)."
             ) from None
 

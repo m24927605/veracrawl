@@ -155,14 +155,11 @@ def test_request_returns_response_for_in_scope_request() -> None:
     adapter, use_audit, access_audit = _make_adapter(transport=transport)
     response = adapter.request(method="GET", url="https://api.example.com/v1/items/123")
     assert response.status_code == 200
-    # Two-phase audit: pending + completion records.
-    assert len(use_audit.records) == 2
-    pending, completion = use_audit.records
-    assert pending.response_status is None
-    assert pending.attempt_evidence_ref is not None
-    assert pending.attempt_evidence_ref.startswith("attempt:pending:")
-    assert completion.response_status == 200
-    assert completion.attempt_evidence_ref is None
+    # design.md acceptance: 1:1 credential-use → CredentialUseRecord.
+    assert len(use_audit.records) == 1
+    record = use_audit.records[0]
+    assert record.response_status == 200
+    assert record.attempt_evidence_ref is None
     assert len(access_audit.records) == 1
     assert access_audit.records[0]["outcome"] is CredentialAccessOutcome.SUCCESS
 
@@ -184,48 +181,28 @@ def test_request_injects_authorization_bearer_header() -> None:
     assert captured_headers.get("authorization") == "Bearer sk-live-canary-DEADBEEF"
 
 
-def test_completion_record_carries_response_status() -> None:
+def test_use_record_carries_run_ref_scope_url_method_status_timestamp() -> None:
     transport = _ok_transport()
     adapter, use_audit, _ = _make_adapter(transport=transport)
     adapter.request(method="GET", url="https://api.example.com/v1/items")
-    completion = use_audit.records[1]  # 2nd record = completion
-    assert completion.run_ref == "run:test:1"
-    assert completion.credential_scope_ref == "cred-scope:ebay-prod"
-    assert completion.request_url == "https://api.example.com/v1/items"
-    assert completion.request_method == "GET"
-    assert completion.response_status == 200
-    assert completion.timestamp_used == _FROZEN_NOW
+    record = use_audit.records[0]
+    assert record.run_ref == "run:test:1"
+    assert record.credential_scope_ref == "cred-scope:ebay-prod"
+    # URL stored as sanitized form (codex iter-2 critical).
+    # Benign URL passes through unchanged through _redact_url.
+    assert record.request_url == "https://api.example.com/v1/items"
+    assert record.request_method == "GET"
+    assert record.response_status == 200
+    assert record.timestamp_used == _FROZEN_NOW
 
 
-def test_pending_record_precedes_transport_call() -> None:
-    """Codex iter-1 critical: the pending record must be written
-    BEFORE the transport sees the request. Use a counter to verify
-    the order: audit.record fires, THEN transport handler fires."""
-
-    call_order: list[str] = []
-
-    class _OrderingAudit:
-        def record(self, use_record: CredentialUseRecord) -> None:
-            del use_record
-            call_order.append("audit")
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        call_order.append("transport")
-        return httpx.Response(200)
-
-    transport = httpx.MockTransport(handler)
-    adapter, _, _ = _make_adapter(transport=transport, use_audit=_OrderingAudit())  # type: ignore[arg-type]
-    adapter.request(method="GET", url="https://api.example.com/v1/items")
-    # Order: pending audit, transport, completion audit.
-    assert call_order == ["audit", "transport", "audit"]
-
-
-def test_use_record_ids_are_unique_per_request() -> None:
+def test_use_record_id_is_unique_per_request() -> None:
     transport = _ok_transport()
     adapter, use_audit, _ = _make_adapter(transport=transport)
     adapter.request(method="GET", url="https://api.example.com/v1/items/1")
     adapter.request(method="GET", url="https://api.example.com/v1/items/2")
-    assert len({r.id for r in use_audit.records}) == 4  # 2 requests × 2 records
+    # 1:1 use→record per design.md acceptance.
+    assert len({r.id for r in use_audit.records}) == 2
 
 
 def test_4xx_response_is_still_audited_with_status() -> None:
@@ -233,14 +210,36 @@ def test_4xx_response_is_still_audited_with_status() -> None:
     adapter, use_audit, _ = _make_adapter(transport=transport)
     response = adapter.request(method="GET", url="https://api.example.com/v1/items")
     assert response.status_code == 404
-    assert use_audit.records[1].response_status == 404
+    assert use_audit.records[0].response_status == 404
 
 
 def test_5xx_response_is_still_audited_with_status() -> None:
     transport = httpx.MockTransport(lambda req: httpx.Response(503))
     adapter, use_audit, _ = _make_adapter(transport=transport)
     adapter.request(method="GET", url="https://api.example.com/v1/items")
-    assert use_audit.records[1].response_status == 503
+    assert use_audit.records[0].response_status == 503
+
+
+def test_url_with_query_or_userinfo_is_sanitized_before_landing_in_record() -> None:
+    """Codex iter-2 critical: URLs with query strings (api_key,
+    session, code, etc.) or userinfo (user:pass@host) must be
+    sanitized at the record layer. Logging-side redaction is not
+    enough — Phase 6 outbox-backed audit writers would receive
+    raw URLs otherwise."""
+
+    transport = _ok_transport()
+    # Modify the scope so a query-bearing URL is in scope.
+    scope = _make_scope()
+    adapter, use_audit, _ = _make_adapter(transport=transport, scope=scope)
+    leaky_url = "https://api.example.com/v1/items?api_key=SECRET&session=DEADBEEF"
+    adapter.request(method="GET", url=leaky_url)
+    record = use_audit.records[0]
+    # URL on record is sanitized — no query string, no userinfo.
+    assert "api_key" not in record.request_url
+    assert "SECRET" not in record.request_url
+    assert "DEADBEEF" not in record.request_url
+    assert "session" not in record.request_url
+    assert record.request_url == "https://api.example.com/v1/items"
 
 
 # ---------------------------------------------------------------------------
@@ -318,50 +317,13 @@ def test_vault_missing_credential_refuses_before_transport() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_pending_audit_failure_refuses_before_transport() -> None:
-    """Codex iter-1 critical: if the pending audit write fails,
-    the credential must NOT go over the wire. True "no use without
-    audit" — pre-send refusal."""
-
-    transport_called = False
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        nonlocal transport_called
-        transport_called = True
-        return httpx.Response(200)
-
-    transport = httpx.MockTransport(handler)
-
-    class _PendingFailingAudit:
-        """Fails on the FIRST record call (the pending row)."""
-
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def record(self, use_record: CredentialUseRecord) -> None:
-            del use_record
-            self.calls += 1
-            if self.calls == 1:
-                raise RuntimeError("simulated pending audit failure")
-
-    adapter, _, _ = _make_adapter(
-        transport=transport,
-        use_audit=_PendingFailingAudit(),  # type: ignore[arg-type]
-    )
-    with pytest.raises(CredentialNotFoundError) as excinfo:
-        adapter.request(method="GET", url="https://api.example.com/v1/items")
-    assert transport_called is False
-    err = excinfo.value
-    # No chain leak.
-    assert err.__cause__ is None
-    assert err.__context__ is None
-
-
-def test_transport_exception_emits_fallback_log_and_re_raises() -> None:
-    """Codex iter-1 critical: on transport exception, the pending
-    record is already in the audit log; the adapter emits a
-    ``credential_use_transport_failed`` structured-log event and
-    re-raises the original transport exception."""
+def test_transport_exception_writes_single_record_with_pending_evidence_ref() -> None:
+    """Codex iter-1 critical + iter-2 important: on transport
+    exception, the adapter writes a SINGLE CredentialUseRecord
+    with response_status=None + a pending-attempt placeholder ref
+    (Phase 6 step 6.1 will replace with real
+    NetworkAttemptEvidence). Emit a structured-log fallback event
+    and re-raise the original transport exception."""
 
     import structlog
 
@@ -374,10 +336,12 @@ def test_transport_exception_emits_fallback_log_and_re_raises() -> None:
     with structlog.testing.capture_logs() as captured:
         with pytest.raises(RuntimeError, match="simulated transport failure"):
             adapter.request(method="GET", url="https://api.example.com/v1/items")
-    # Pending record was written; no completion record.
+    # 1:1 use→record: one record per credential use.
     assert len(use_audit.records) == 1
-    assert use_audit.records[0].response_status is None
-    # Fallback log event present.
+    record = use_audit.records[0]
+    assert record.response_status is None
+    assert record.attempt_evidence_ref is not None
+    assert record.attempt_evidence_ref.startswith("attempt:pending:")
     matched = [
         e for e in captured if e.get("event") == "credential_use_transport_failed"
     ]
@@ -401,31 +365,24 @@ def test_out_of_scope_emits_credential_scope_denied_log_event() -> None:
     assert matched[0]["reason"] == CredentialScopeReason.ORIGIN_NOT_ALLOWED.value
 
 
-def test_completion_audit_failure_after_response_refuses_response() -> None:
-    """Codex iter-1 critical: if the completion audit write fails
-    AFTER the request was sent + response received, the adapter
-    must refuse to return the response. Pending audit succeeds
-    (so the access is in the audit log); completion fails (so the
-    response is refused). Same fail-closed semantics as step 2.4a."""
+def test_audit_failure_after_response_refuses_response() -> None:
+    """If the post-receive audit write fails AFTER the request was
+    sent + response received, the adapter refuses to return the
+    response (best-effort — the credential was already sent, but
+    the caller cannot act on the unrecorded response). Sanitized
+    refusal — no chain leak."""
 
-    class _CompletionFailingUseAudit:
-        """Pending succeeds; completion fails."""
-
-        def __init__(self) -> None:
-            self.calls = 0
-
+    class _FailingUseAudit:
         def record(self, use_record: CredentialUseRecord) -> None:
             del use_record
-            self.calls += 1
-            if self.calls == 2:
-                raise RuntimeError("simulated completion audit failure with sensitive details")
+            raise RuntimeError("simulated audit failure with sensitive details")
 
     transport = httpx.MockTransport(
         lambda req: httpx.Response(200, content=b'{"item":"data"}')
     )
     adapter, _, _ = _make_adapter(
         transport=transport,
-        use_audit=_CompletionFailingUseAudit(),  # type: ignore[arg-type]
+        use_audit=_FailingUseAudit(),  # type: ignore[arg-type]
     )
     with pytest.raises(CredentialNotFoundError) as excinfo:
         adapter.request(method="GET", url="https://api.example.com/v1/items")
@@ -433,7 +390,7 @@ def test_completion_audit_failure_after_response_refuses_response() -> None:
     assert err.__cause__ is None
     assert err.__context__ is None
     text = " ".join(str(a) for a in err.args if isinstance(a, str))
-    assert "simulated completion audit failure" not in text
+    assert "simulated audit failure" not in text
     assert "sensitive details" not in text
 
 
