@@ -413,6 +413,27 @@ class OpenAIResponsesAdapterV2:
                 "OpenAIResponsesAdapterV2 does not yet support tool-result "
                 "messages (MessageRole.TOOL); see ``complete`` docstring."
             )
+        # Step 4.3 codex iter-4 critical: the port docstring
+        # requires adapters to validate ``JSON_SCHEMA``
+        # responses against ``request.response_format.json_schema``
+        # and raise ``StructuredOutputViolation`` on mismatches.
+        # Full JSON Schema validation is Phase 4 step 4.6
+        # ``schema_runtime`` (Pydantic-class round-trip); this
+        # adapter does not implement it. Refuse at the boundary
+        # so callers cannot route ``JSON_SCHEMA`` work here and
+        # later assume the response was schema-validated. The
+        # documented migration path: route ``JSON_SCHEMA`` calls
+        # through ``schema_runtime``, which uses this adapter
+        # internally with ``JSON_OBJECT`` then validates with
+        # the caller's Pydantic class.
+        if request.response_format.kind is ResponseFormatKind.JSON_SCHEMA:
+            raise NotImplementedError(
+                "OpenAIResponsesAdapterV2 does not perform JSON Schema "
+                "validation; ResponseFormatKind.JSON_SCHEMA must route "
+                "through Phase 4 step 4.6 schema_runtime (Pydantic-class "
+                "validator). Use ResponseFormatKind.TEXT or JSON_OBJECT "
+                "directly with this adapter."
+            )
         body = self._build_request_body(request)
         headers = {
             "Authorization": f"Bearer {self._api_key}",

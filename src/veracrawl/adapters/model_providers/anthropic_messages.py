@@ -389,6 +389,21 @@ class AnthropicMessagesAdapter:
                 "AnthropicMessagesAdapter does not yet support tool-result "
                 "messages (MessageRole.TOOL)."
             )
+        # Step 4.3 codex iter-4 critical: ``JSON_SCHEMA`` requests
+        # require client-side schema validation (Anthropic does
+        # not enforce per-call JSON Schema). The v2 adapter does
+        # not perform full JSON Schema validation; route through
+        # Phase 4 step 4.6 ``schema_runtime`` instead. Refuse at
+        # the boundary so callers cannot assume the response was
+        # schema-validated.
+        if request.response_format.kind is ResponseFormatKind.JSON_SCHEMA:
+            raise NotImplementedError(
+                "AnthropicMessagesAdapter does not perform JSON Schema "
+                "validation; ResponseFormatKind.JSON_SCHEMA must route "
+                "through Phase 4 step 4.6 schema_runtime (Pydantic-class "
+                "validator). Use ResponseFormatKind.TEXT or JSON_OBJECT "
+                "directly with this adapter."
+            )
         body = self._build_request_body(request)
         headers = {
             "x-api-key": self._api_key,

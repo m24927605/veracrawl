@@ -284,13 +284,12 @@ def test_malformed_response_does_not_leak_via_pydantic_validator() -> None:
     assert body_canary not in repr(exc_info.value)
 
 
-def test_json_schema_request_does_not_populate_parsed_output() -> None:
-    """Codex iter-2 important: ``JSON_SCHEMA`` callers must
-    go through Phase 4 step 4.6 ``schema_runtime`` for full
-    validation; the v2 adapter does not perform full JSON
-    Schema validation, so populating ``parsed_output`` would
-    let invalid extractions flow downstream as successful
-    structured data."""
+def test_json_schema_request_refused_at_adapter_boundary() -> None:
+    """Codex iter-4 critical: refuse ``JSON_SCHEMA`` at the
+    adapter boundary because Anthropic does not enforce
+    per-call JSON Schema and the v2 adapter does not perform
+    client-side validation. Phase 4 step 4.6 ``schema_runtime``
+    owns the validator; route through it."""
 
     schema = {
         "type": "object",
@@ -306,23 +305,11 @@ def test_json_schema_request_does_not_populate_parsed_output() -> None:
         )
     )
 
-    captured: list[httpx.Request] = []
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        captured.append(req)
-        return httpx.Response(200, json=_ok_response_body(text='{"sku": "ABC-123"}'))
-
-    adapter = _build_adapter(handler)
-    response = adapter.complete(request)
-
-    assert response.parsed_output is None
-    assert response.text == '{"sku": "ABC-123"}'
-    # Anthropic does not support per-call JSON-schema
-    # enforcement, so the wire body must NOT include any
-    # response_format / text.format equivalent.
-    body = json.loads(captured[0].content)
-    assert "response_format" not in body
-    assert "text" not in body or "format" not in body.get("text", {})
+    adapter = _build_adapter(
+        lambda _: httpx.Response(200, json=_ok_response_body())
+    )
+    with pytest.raises(NotImplementedError, match="schema_runtime"):
+        adapter.complete(request)
 
 
 def test_json_object_request_populates_parsed_output() -> None:

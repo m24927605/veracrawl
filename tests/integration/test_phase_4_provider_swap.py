@@ -209,17 +209,15 @@ def test_provider_swap_handles_provider_specific_finish_reason_mapping() -> None
     assert anthropic_response.finish_reason is ProviderFinishReason.STOP
 
 
-def test_provider_swap_json_schema_does_not_populate_parsed_output_either_side() -> (
-    None
-):
-    """Codex iter-2 + iter-3 settled policy: ``JSON_SCHEMA``
-    requests do NOT populate ``parsed_output`` in EITHER
-    adapter — full JSON Schema validation is the Phase 4
-    step 4.6 ``schema_runtime`` Pydantic-class round-trip's
-    job, not the adapter's. Lock in the symmetric behavior
-    so a future refactor that re-introduces minimal
-    validation in one adapter (without doing so in the
-    other) breaks this test."""
+def test_provider_swap_json_schema_refused_at_adapter_boundary_both_sides() -> None:
+    """Codex iter-4 critical: refuse ``JSON_SCHEMA`` at the
+    adapter boundary symmetrically across both providers.
+    Full JSON Schema validation is Phase 4 step 4.6
+    ``schema_runtime`` (Pydantic-class round-trip); routing
+    ``JSON_SCHEMA`` to either v2 adapter directly bypasses
+    the validator and lets unvalidated extractions claim
+    contract conformance. Refusal at the adapter is the
+    documented migration boundary."""
 
     schema_request_openai = ProviderRequest(
         id="provider-swap:json_schema:openai",
@@ -258,16 +256,10 @@ def test_provider_swap_json_schema_does_not_populate_parsed_output_either_side()
 
     openai_adapter = _build_openai_adapter()
     anthropic_adapter = _build_anthropic_adapter()
-    openai_response = openai_adapter.complete(schema_request_openai)
-    anthropic_response = anthropic_adapter.complete(schema_request_anthropic)
-
-    assert openai_response.parsed_output is None
-    assert anthropic_response.parsed_output is None
-    # The text payload is still surfaced symmetrically — callers
-    # that opt into ``schema_runtime`` use the text + their
-    # Pydantic class for full validation.
-    assert openai_response.text == _EXTRACTION_TEXT
-    assert anthropic_response.text == _EXTRACTION_TEXT
+    with pytest.raises(NotImplementedError, match="schema_runtime"):
+        openai_adapter.complete(schema_request_openai)
+    with pytest.raises(NotImplementedError, match="schema_runtime"):
+        anthropic_adapter.complete(schema_request_anthropic)
 
 
 @pytest.mark.parametrize(
