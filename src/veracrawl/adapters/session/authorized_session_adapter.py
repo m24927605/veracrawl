@@ -247,14 +247,17 @@ class AuthorizedSessionAdapter:
         # 3. Vault fetch (vault layer's own audit fires inside).
         cred = self._vault.get(scope_ref=self._vault_scope_ref, key=self._vault_key)
 
-        # Codex iter-4 important: design.md acceptance "each
+        # Codex iter-4 + iter-5: design.md acceptance "each
         # CredentialUseRecord outbox event has the vault audit
-        # cookie present". Phase 0 contract has no formal
-        # ``audit_cookie`` field; the correlation lives in a
-        # structured-log event that links the access audit row
-        # (vault-side) to the use record (this side). The
-        # correlation_id is a fresh UUID per fetch so multiple
-        # fetches in one session each have a distinct correlation.
+        # cookie present". Phase 0 ``CredentialUseRecord`` has
+        # no formal ``audit_cookie`` field, but its
+        # ``attempt_evidence_ref`` is freely settable when
+        # ``response_status is not None`` (the validator only
+        # requires it on transport failures). Repurpose that
+        # field to carry the correlation cookie so the cookie
+        # lives in the durable record itself, not just the
+        # structured-log event. The structured-log event still
+        # fires for log-aggregation cross-checks.
         correlation_id = f"audit-corr:{uuid.uuid4().hex}"
         _logger.info(
             "credential_audit_correlation",
@@ -352,7 +355,9 @@ class AuthorizedSessionAdapter:
             # check ``now`` and the use record's timestamp_used
             # always agree — replay-deterministic.
             timestamp_used=timestamp,
-            attempt_evidence_ref=None,
+            # Repurposed: vault audit correlation cookie. See
+            # ``credential_audit_correlation`` event above.
+            attempt_evidence_ref=correlation_id,
         )
         completion_audit_failed = False
         try:

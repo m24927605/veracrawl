@@ -183,7 +183,11 @@ def test_request_returns_response_for_in_scope_request() -> None:
     assert len(use_audit.records) == 1
     record = use_audit.records[0]
     assert record.response_status == 200
-    assert record.attempt_evidence_ref is None
+    # Codex iter-5 critical: attempt_evidence_ref repurposed to
+    # carry the audit correlation cookie so the durable record
+    # itself links to the vault access audit row.
+    assert record.attempt_evidence_ref is not None
+    assert record.attempt_evidence_ref.startswith("audit-corr:")
     assert len(access_audit.records) == 1
     assert access_audit.records[0]["outcome"] is CredentialAccessOutcome.SUCCESS
 
