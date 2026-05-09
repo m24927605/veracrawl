@@ -24,6 +24,7 @@ processor.
 
 from __future__ import annotations
 
+from veracrawl.contracts.errors import _redact_url
 from veracrawl.contracts.security_privacy import CredentialUseRecord
 from veracrawl.runtime_support.logging import get_logger
 
@@ -35,6 +36,15 @@ class LoggingCredentialUseAuditWriter:
 
     Stateless — safe to share across runs / threads. The
     underlying structlog logger is itself thread-safe.
+
+    URL sanitization (codex iter-1 important): the
+    :class:`CredentialUseRecord` contract only requires absolute
+    http(s) URLs — query strings (``?access_token=...``,
+    ``?session=...``, ``?email=...``) and userinfo
+    (``user:pass@host``) commonly carry credentials / PII. The
+    writer applies :func:`_redact_url` (the same helper Phase 0
+    step 0.4 uses for typed exception messages) to drop query /
+    fragment / userinfo before the URL lands in any log line.
     """
 
     def record(self, use_record: CredentialUseRecord) -> None:
@@ -43,7 +53,7 @@ class LoggingCredentialUseAuditWriter:
             id=use_record.id,
             run_ref=use_record.run_ref,
             credential_scope_ref=use_record.credential_scope_ref,
-            request_url=use_record.request_url,
+            request_url=_redact_url(use_record.request_url),
             request_method=use_record.request_method,
             response_status=use_record.response_status,
             timestamp_iso=use_record.timestamp_used.isoformat(),

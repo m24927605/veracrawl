@@ -1,43 +1,56 @@
 """``AuthorizedSessionAdapter`` — Phase 2 step 2.4b.
 
-Per request:
+Per request, two-phase audit:
 
-1. Apply :class:`~veracrawl.ports.session_scope_policy.SessionScopePolicy`
-   against the credential's scope. Out-of-scope refusal raises
-   :class:`CredentialScopeViolation` (Phase 0.4 + Phase 2 step 2.2b
-   structured ``CredentialScopeReason``).
-2. Fetch a :class:`CredentialValue` from the
-   :class:`~veracrawl.ports.credential_vault.CredentialVaultPort`
-   (e.g., :class:`OutboxVaultClient` Phase 2 step 2.4a). Failures
-   propagate as :class:`CredentialNotFoundError`.
-3. Inject ``Authorization: Bearer <reveal()>`` header on the
-   request. The credential value is revealed at this single
-   call site — design.md §3.3 narrowest possible reveal scope —
-   then immediately handed to the transport which sends bytes.
-4. Send via the injected :class:`httpx.BaseTransport`.
-5. On a successful HTTP completion (response received, any
-   status), write a :class:`CredentialUseRecord` to the
-   :class:`CredentialUseAuditPort`.
-6. On audit-write failure: refuse to return the response (no use
-   without audit) and emit a fallback structured-log event.
+1. Pre-flight clock validation (tz-aware required).
+2. Apply :class:`~veracrawl.ports.session_scope_policy.SessionScopePolicy`
+   against the credential's scope. **Out-of-scope refusal**:
+   emit a ``credential_scope_denied`` structured-log event AND
+   raise :class:`CredentialScopeViolation` (Phase 0.4 +
+   Phase 2 step 2.2b structured ``CredentialScopeReason``).
+3. Fetch a :class:`CredentialValue` from the
+   :class:`~veracrawl.ports.credential_vault.CredentialVaultPort`.
+   Failures propagate as :class:`CredentialNotFoundError`. The
+   vault layer's own :class:`CredentialAccessAuditPort` has
+   already recorded the access attempt.
+4. **Pre-send audit** (codex iter-1 critical): write a PENDING
+   :class:`CredentialUseRecord` (``response_status=None``,
+   ``attempt_evidence_ref="attempt:pending:<uuid>"``) to the
+   :class:`CredentialUseAuditPort` BEFORE the transport sees the
+   request. On audit-write failure, refuse the request before
+   transmission (true "no use without audit" — the credential
+   never goes over the wire).
+5. Reveal credential and inject ``Authorization: Bearer <reveal>``
+   header on the request (design.md §3.3 narrowest possible
+   reveal scope).
+6. Send via the injected :class:`httpx.BaseTransport`. On
+   transport exception (no response materializes), emit a
+   ``credential_use_transport_failed`` structured-log event and
+   re-raise the original transport exception. The pending record
+   stays in the audit log for correlation.
+7. **Post-receive audit** (codex iter-1 critical): on a
+   successful HTTP completion (response received, any status),
+   write a SECOND :class:`CredentialUseRecord` with the actual
+   ``response_status``. On audit-write failure, refuse to return
+   the response (close + raise).
 
-What this adapter does NOT do:
+What this adapter does NOT do (reservation — Phase 6 step 6.1):
 
-* Transport-level retries — the injected transport is the
-  post-retry transport (Phase 1 step 1.5 wraps).
-* Network attempt evidence (`NetworkAttemptEvidence`) capture —
-  Phase 1 step 1.5 owns that. This adapter only wires the
-  credential plumbing on top.
-* Response-body capture / HAR — Phase 1 step 1.4 owns that.
-
-Reservation (carried forward to Phase 6 step 6.1): on transport-
-level failure (exception before a response materializes), the
-adapter currently propagates without writing a use record because
-:class:`CredentialUseRecord` requires ``attempt_evidence_ref`` for
-``response_status=None`` rows, and this adapter does not produce
-attempt evidence. Phase 6 wires the
-:class:`NetworkAttemptEvidence` correlation so the use record
-can fire on transport failure too.
+* Phase 1 transport composition (robots check, AIMD limiter,
+  retry, redirect SSRF re-check, NetworkAttemptEvidence capture,
+  cross-origin Authorization strip on redirect). The injected
+  ``transport`` is a raw :class:`httpx.BaseTransport`; production
+  wiring composes the adapter through Phase 1's
+  :class:`StdlibHttpSourceAdapter` by routing the authorized
+  request through the Phase 1 stack with the Authorization
+  header configured in ``HttpClientConfig.extra_headers``.
+  This Phase 2 step 2.4b adapter is the credential-plumbing
+  layer; Phase 6 step 6.1 wires the production composition
+  through the cooperative HTTP transport.
+* Real :class:`NetworkAttemptEvidence` correlation. The pending
+  record's ``attempt_evidence_ref="attempt:pending:..."`` is a
+  placeholder; Phase 6 step 6.1 replaces it with the real
+  evidence ref produced by the wrapped Phase 1 transport.
 """
 
 from __future__ import annotations
@@ -49,6 +62,7 @@ from datetime import UTC, datetime
 import httpx
 
 from veracrawl.contracts.common import Ref
+from veracrawl.contracts.errors import CredentialScopeViolation, _redact_url
 from veracrawl.contracts.security_privacy import (
     CredentialScope,
     CredentialUseRecord,
@@ -131,86 +145,147 @@ class AuthorizedSessionAdapter:
         return ts
 
     def request(self, *, method: str, url: str) -> httpx.Response:
-        """Send an authorized HTTP request and audit the use.
+        """Send an authorized HTTP request with two-phase audit.
 
-        Order:
-
-        1. Pre-flight clock validation (consistent with step 2.4a
-           ``OutboxVaultClient`` — fail before any side-effect).
-        2. Scope-policy check. Out of scope → raise
-           :class:`CredentialScopeViolation` with no vault call,
-           no transport call.
-        3. Vault fetch. Failure → raise
-           :class:`CredentialNotFoundError`. The vault layer's own
-           audit has already recorded the failed access.
-        4. Send request with ``Authorization: Bearer <reveal>``.
-        5. On successful HTTP completion: write
-           :class:`CredentialUseRecord` to the use audit. If the
-           audit write fails, refuse to return the response (no
-           use without audit) and emit a fallback structured-log
-           event.
+        See module docstring for the full ordering. URL field on
+        any structured-log event is redacted via
+        ``contracts.errors._redact_url`` (drops query / fragment /
+        userinfo) so OAuth / session-id query parameters cannot
+        leak via the audit fallback path.
         """
 
         timestamp = self._now()
+        sanitized_url = _redact_url(url)
 
-        # 2. Scope policy check — refuses with CredentialScopeViolation
-        #    (typed PolicyViolation). Side-effect-free.
-        self._scope_policy.check(
-            self._credential_scope,
-            request_url=url,
-            method=method,
-            now=timestamp,
-        )
+        # 2. Scope policy check — out-of-scope refusal emits a
+        #    structured-log audit event so denied attempts are
+        #    visible (codex iter-1 important).
+        try:
+            self._scope_policy.check(
+                self._credential_scope,
+                request_url=url,
+                method=method,
+                now=timestamp,
+            )
+        except CredentialScopeViolation as exc:
+            _logger.info(
+                "credential_scope_denied",
+                run_ref=self._run_ref,
+                credential_scope_ref=self._credential_scope.id,
+                request_url=sanitized_url,
+                request_method=method,
+                reason=exc.reason.value,
+                timestamp_iso=timestamp.isoformat(),
+            )
+            raise
 
-        # 3. Vault fetch.
+        # 3. Vault fetch (vault layer's own audit fires inside).
         cred = self._vault.get(scope_ref=self._vault_scope_ref, key=self._vault_key)
 
-        # 4. Build + send request. Reveal credential ONLY at this
-        #    single call site (design.md §3.3 narrowest scope) and
-        #    immediately hand to the transport.
+        # 4. Pre-send audit (codex iter-1 critical): write a
+        #    PENDING CredentialUseRecord BEFORE transport. If the
+        #    audit write fails, the credential never goes over the
+        #    wire — true "no use without audit".
+        use_record_id = f"credential-use:{uuid.uuid4().hex}"
+        pending_evidence_ref = f"attempt:pending:{uuid.uuid4().hex}"
+        pending_record = CredentialUseRecord(
+            id=use_record_id,
+            run_ref=self._run_ref,
+            credential_scope_ref=self._credential_scope.id,
+            request_url=url,
+            request_method=method,
+            response_status=None,
+            timestamp_used=timestamp,
+            attempt_evidence_ref=pending_evidence_ref,
+        )
+        pending_audit_failed = False
+        try:
+            self._use_audit.record(pending_record)
+        except Exception:
+            pending_audit_failed = True
+        if pending_audit_failed:
+            _logger.error(  # noqa: TRY400
+                "credential_use_audit_failed",
+                phase="pending",
+                use_record_id=use_record_id,
+                run_ref=self._run_ref,
+                credential_scope_ref=self._credential_scope.id,
+                request_method=method,
+                request_url=sanitized_url,
+                timestamp_iso=timestamp.isoformat(),
+            )
+            raise CredentialNotFoundError(
+                "credential use pre-send audit write failed; refusing "
+                "to send the credential-bearing request (no use "
+                "without audit). See structured-log fallback event "
+                "``credential_use_audit_failed`` (phase=pending)."
+            ) from None
+
+        # 5 + 6. Reveal + send. Reveal at the single call site
+        #    (design.md §3.3) and immediately hand to the transport.
+        #    Transport exception still has the pending record in
+        #    the audit log for correlation.
         request = httpx.Request(
             method=method,
             url=url,
             headers={"Authorization": f"Bearer {cred.reveal()}"},
         )
-        response = self._transport.handle_request(request)
+        try:
+            response = self._transport.handle_request(request)
+        except Exception:
+            _logger.error(  # noqa: TRY400
+                "credential_use_transport_failed",
+                use_record_id=use_record_id,
+                pending_attempt_ref=pending_evidence_ref,
+                run_ref=self._run_ref,
+                credential_scope_ref=self._credential_scope.id,
+                request_method=method,
+                request_url=sanitized_url,
+                timestamp_iso=timestamp.isoformat(),
+            )
+            raise
 
-        # 5. Build + write the CredentialUseRecord. Wrap in
-        #    flag + raise-outside-except to keep `__context__` clean.
-        use_record = CredentialUseRecord(
+        # 7. Post-receive audit (codex iter-1 critical): write a
+        #    SECOND record with the actual response_status. This is
+        #    the audit-of-record; the pending record + this record
+        #    correlate by run_ref + credential_scope_ref + adjacent
+        #    timestamps in the audit pipeline.
+        completion_record = CredentialUseRecord(
             id=f"credential-use:{uuid.uuid4().hex}",
             run_ref=self._run_ref,
             credential_scope_ref=self._credential_scope.id,
             request_url=url,
             request_method=method,
             response_status=response.status_code,
-            timestamp_used=timestamp,
+            timestamp_used=self._now(),
             attempt_evidence_ref=None,
         )
-        audit_failed = False
+        completion_audit_failed = False
         try:
-            self._use_audit.record(use_record)
+            self._use_audit.record(completion_record)
         except Exception:
-            audit_failed = True
-        if audit_failed:
-            _logger.error(  # noqa: TRY400 — caller doesn't need our traceback
+            completion_audit_failed = True
+        if completion_audit_failed:
+            _logger.error(  # noqa: TRY400
                 "credential_use_audit_failed",
-                use_record_id=use_record.id,
+                phase="completion",
+                use_record_id=completion_record.id,
+                pending_record_id=use_record_id,
                 run_ref=self._run_ref,
                 credential_scope_ref=self._credential_scope.id,
                 request_method=method,
-                request_url=url,
+                request_url=sanitized_url,
                 response_status=response.status_code,
-                timestamp_iso=timestamp.isoformat(),
+                timestamp_iso=completion_record.timestamp_used.isoformat(),
             )
-            # Close the response so the connection / file handle
-            # is not leaked. Then refuse the response to the caller.
             response.close()
             raise CredentialNotFoundError(
-                "credential use audit write failed; refusing to return "
-                "the credential-bearing response (no use without audit). "
-                "See structured-log fallback event "
-                "``credential_use_audit_failed``."
+                "credential use completion audit write failed; "
+                "refusing to return the credential-bearing response "
+                "(no use without audit). The pending record is still "
+                "in the audit log; the missing completion event is "
+                "in the structured-log fallback "
+                "``credential_use_audit_failed`` (phase=completion)."
             ) from None
 
         return response

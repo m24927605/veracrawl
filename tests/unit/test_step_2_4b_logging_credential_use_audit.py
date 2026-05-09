@@ -45,3 +45,32 @@ def test_record_writes_structured_event() -> None:
 def test_writer_satisfies_protocol() -> None:
     writer: CredentialUseAuditPort = LoggingCredentialUseAuditWriter()
     assert isinstance(writer, CredentialUseAuditPort)
+
+
+def test_record_sanitizes_url_query_and_userinfo() -> None:
+    """Codex iter-1 important: URLs commonly carry credentials in
+    query strings or userinfo. The writer must drop both before
+    logging. Same redaction helper Phase 0 step 0.4 uses for typed
+    exception messages."""
+
+    leaky = CredentialUseRecord(
+        id="credential-use:abc",
+        run_ref="run:test:1",
+        credential_scope_ref="cred-scope:ebay",
+        request_url="https://user:pass@api.example.com/v1/items?api_key=SECRET&session=DEADBEEF",
+        request_method="GET",
+        response_status=200,
+        timestamp_used=datetime(2026, 5, 9, 12, 0, 0, tzinfo=UTC),
+        attempt_evidence_ref=None,
+    )
+    writer = LoggingCredentialUseAuditWriter()
+    with structlog.testing.capture_logs() as captured:
+        writer.record(leaky)
+    matched = [e for e in captured if e.get("event") == "credential_use"]
+    assert len(matched) == 1
+    logged_url = matched[0]["request_url"]
+    assert "user:pass@" not in logged_url
+    assert "SECRET" not in logged_url
+    assert "DEADBEEF" not in logged_url
+    assert "api_key" not in logged_url
+    assert "session" not in logged_url
