@@ -430,6 +430,35 @@ def test_record_use_increments_count_on_end_event() -> None:
     assert ends[0]["credential_use_count"] == 3
 
 
+def test_naive_clock_failure_rolls_back_lifecycle_state() -> None:
+    """Codex iter-4 important: if start-event timestamp/logging
+    fails, the lifecycle must roll back cleanly — entered state
+    must NOT commit. Verify scopes is empty, scope_for fails,
+    and record_use is not accepted."""
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+
+    def naive_clock() -> datetime:
+        return datetime(2026, 5, 9, 12, 0, 0)  # noqa: DTZ001
+
+    lifecycle = AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:test:1",
+        clock=naive_clock,
+    )
+    with pytest.raises(RuntimeError, match="tz-aware"):
+        lifecycle.__enter__()
+    # Rollback regression: state must NOT have committed entered.
+    assert lifecycle.scopes == ()
+    with pytest.raises(KeyError):
+        lifecycle.scope_for("cred-scope:ebay-prod")
+    with pytest.raises(RuntimeError, match="state 'constructed'"):
+        lifecycle.record_use()
+
+
 def test_naive_clock_raises_runtime_error() -> None:
     """Codex iter-1 minor: tz-aware guard symmetric with step
     2.4a / 2.4b."""

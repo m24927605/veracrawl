@@ -161,6 +161,14 @@ class AgentCredentialLifecycle:
         Only valid while the lifecycle is entered; pre-enter or
         post-exit calls raise :class:`RuntimeError` so an adapter
         holding a stale reference cannot corrupt the audit count.
+
+        Thread-safety: the counter is a plain ``int`` increment.
+        The lifecycle is **single-threaded by contract** — a
+        single agent run drives the credential-bearing requests
+        sequentially through one ``AuthorizedSessionAdapter`` per
+        scope. Callers that need to drive multiple scopes
+        concurrently should construct one
+        :class:`AgentCredentialLifecycle` per worker.
         """
 
         if self._state != "entered":
@@ -208,22 +216,33 @@ class AgentCredentialLifecycle:
             scope = self._registry.resolve(scope_ref)
             resolved.append(scope)
             scope_by_ref[scope_ref] = scope
-        self._scopes = tuple(resolved)
-        self._scope_by_ref = scope_by_ref
-        self._state = "entered"
+        # Compute timestamp + log payload BEFORE committing
+        # entered state, so a failure in clock validation or log
+        # emission rolls back cleanly: the lifecycle stays in
+        # ``constructed`` and Python won't call ``__exit__`` (the
+        # ``with`` form correctly treats it as "never entered").
         timestamp = self._now()
+        scope_id_hashes = tuple(
+            _hashed_scope_id(scope.id) for scope in resolved
+        )
         _logger.info(
             "agent_credential_session_started",
             session_id=self._session_id,
             run_ref=self._run_ref,
             agent_run_request_id=self._request.id,
-            scope_count=len(self._scopes),
-            # Codex iter-3 important: ``scope.id`` is free-form
-            # caller-supplied content; emit hashes (defense in
-            # depth symmetric with step 2.4a's hashed audit refs).
-            scope_id_hashes=tuple(_hashed_scope_id(scope.id) for scope in self._scopes),
+            scope_count=len(resolved),
+            # ``scope.id`` is free-form caller-supplied content;
+            # emit hashes (defense in depth symmetric with step
+            # 2.4a's hashed audit refs).
+            scope_id_hashes=scope_id_hashes,
             timestamp_iso=timestamp.isoformat(),
         )
+        # Commit entered state only after the start event has
+        # successfully landed. Anything later than this point that
+        # raises will trigger __exit__ and the matching end event.
+        self._scopes = tuple(resolved)
+        self._scope_by_ref = scope_by_ref
+        self._state = "entered"
         return self
 
     def __exit__(
