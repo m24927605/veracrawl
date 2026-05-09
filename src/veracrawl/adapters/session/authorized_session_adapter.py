@@ -309,23 +309,48 @@ class AuthorizedSessionAdapter:
             except Exception:
                 transport_failure_audit_failed = True
             # Increment the lifecycle counter on the transport-
-            # failure path too — a persisted CredentialUseRecord
-            # IS a credential use in the adapter's audit model
-            # (the credential was revealed + sent; the response
-            # never materialized). Wrap to avoid raising after
-            # the original transport exception is already
-            # propagating.
+            # failure path — a persisted CredentialUseRecord IS a
+            # credential use in the adapter's audit model (the
+            # credential was revealed + sent; the response never
+            # materialized). Codex iter-4 important: the original
+            # transport exception is the typed, actionable error
+            # the caller drives recovery off (HTTP timeout vs
+            # connection-refused vs TLS error → distinct retry /
+            # escalate policies). If we let an accounting-callback
+            # exception propagate from this except block, Python
+            # would replace the caller-visible error with the
+            # callback exception (the transport exc would survive
+            # only as ``__context__``), masking the actionable
+            # signal. So on the transport-failure path the
+            # accounting failure is reported through a critical
+            # log + structured event for operator alerting, and
+            # the transport exception is preserved as-is. (The
+            # success path keeps the strict-propagate policy:
+            # there is no other typed error competing for the
+            # caller's attention.)
             if not transport_failure_audit_failed and self._on_credential_use is not None:
-                # Same strict accounting policy as the success
-                # path: failure here is a wiring bug. We're
-                # already in the transport-failure branch and
-                # about to re-raise the original transport
-                # exception; let the on_credential_use exception
-                # propagate too — Python will chain it. The
-                # caller sees the transport exception with the
-                # accounting failure as cause; both are
-                # diagnostic.
-                self._on_credential_use()
+                try:
+                    self._on_credential_use()
+                except Exception as callback_exc:
+                    _logger.critical(  # noqa: TRY400
+                        "credential_use_callback_failed_during_transport_failure",
+                        use_record_id=transport_failure_record.id,
+                        run_ref=self._run_ref,
+                        credential_scope_ref=self._credential_scope.id,
+                        request_method=method,
+                        request_url=sanitized_url,
+                        timestamp_iso=timestamp.isoformat(),
+                        callback_exception_type=type(callback_exc).__name__,
+                        note=(
+                            "accounting callback raised while a "
+                            "transport exception was being handled; "
+                            "callback exception suppressed so the "
+                            "typed transport error reaches the "
+                            "caller — operator must reconcile the "
+                            "lifecycle counter against the durable "
+                            "use record"
+                        ),
+                    )
             if transport_failure_audit_failed:
                 # Codex iter-3 important: transport failure + audit
                 # failure is the worst case — the credential was sent

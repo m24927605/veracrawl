@@ -51,9 +51,9 @@ from veracrawl.adapters.session.authorized_session_adapter import (
 from veracrawl.adapters.session.strict_allowlist_scope import StrictAllowlistScope
 from veracrawl.agents.credential_lifecycle import AgentCredentialLifecycle
 from veracrawl.contracts.agent import AgentRunRequest
-from veracrawl.contracts.enums import AgentRole
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.durable import OutboxRecord
+from veracrawl.contracts.enums import AgentRole
 from veracrawl.contracts.security_privacy import (
     CredentialScope,
     CredentialUseRecord,
@@ -449,6 +449,83 @@ def test_stale_on_credential_use_callable_raises_strictly() -> None:
     # The use record was already persisted before the accounting
     # callback failed (durable audit happens before the callable).
     assert len(persisted) == 1
+
+
+def test_transport_failure_preserves_typed_exception_when_callback_raises() -> (
+    None
+):
+    """Codex iter-4 important: on the transport-failure branch, a
+    raising accounting callback must NOT mask the original
+    typed transport exception. The transport error is the
+    actionable signal the caller drives retry / escalate logic
+    off; the callback exception is suppressed in favor of a
+    structured operator-alert log event.
+    """
+
+    persisted: list[CredentialUseRecord] = []
+    scope = _make_credential_scope()
+    backend = InMemoryVaultBackend(
+        credentials={("EBAY_PROD", "API_KEY"): _CANARY_SECRET}
+    )
+    access_audit = _RecordingAccessAudit()
+    vault = OutboxVaultClient(
+        backend=backend,
+        audit=access_audit,
+        run_ref="run:int-2-5b:tx-fail-and-cb-fail",
+        clock=lambda: _FROZEN_NOW,
+    )
+
+    class _SpecificTransportError(RuntimeError):
+        """Distinguishable from the callback's RuntimeError."""
+
+    class _RaisingTransport(httpx.BaseTransport):
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            del request
+            raise _SpecificTransportError("simulated wire error")
+
+    outbox_repo = _InMemoryOutboxRepo()
+
+    def persister(record: CredentialUseRecord) -> Ref:
+        persisted.append(record)
+        return f"payload:{record.id}"
+
+    use_audit = OutboxCredentialUseAuditWriter(
+        record_persister=persister,
+        outbox_repo=outbox_repo,
+        command_result_ref="cmd-result:tx-fail-cb-fail",
+        event_ref="event:tx-fail-cb-fail",
+    )
+
+    def raising_callback() -> None:
+        raise RuntimeError("simulated accounting wiring bug")
+
+    adapter = AuthorizedSessionAdapter(
+        transport=_RaisingTransport(),
+        vault=vault,
+        scope_policy=StrictAllowlistScope(),
+        credential_scope=scope,
+        vault_scope_ref="EBAY_PROD",
+        vault_key="API_KEY",
+        use_audit=use_audit,
+        run_ref="run:int-2-5b:tx-fail-and-cb-fail",
+        clock=lambda: _FROZEN_NOW,
+        on_credential_use=raising_callback,
+    )
+
+    with structlog.testing.capture_logs() as captured_logs:
+        with pytest.raises(_SpecificTransportError, match="simulated wire error"):
+            adapter.request(method="GET", url="https://api.example.com/v1/items")
+    # Durable use record persisted.
+    assert len(persisted) == 1
+    # Critical operator-alert event emitted for the callback failure.
+    alert_events = [
+        e
+        for e in captured_logs
+        if e.get("event")
+        == "credential_use_callback_failed_during_transport_failure"
+    ]
+    assert len(alert_events) == 1
+    assert alert_events[0]["callback_exception_type"] == "RuntimeError"
 
 
 def test_lifecycle_not_incremented_when_request_is_refused() -> None:
