@@ -520,17 +520,33 @@ class AnthropicMessagesAdapter:
         text: str,
         finish_reason: ProviderFinishReason,
     ) -> dict[str, Any] | None:
-        """Best-effort JSON parse for ``JSON_SCHEMA`` /
-        ``JSON_OBJECT`` requests. Anthropic does not enforce
-        the schema upstream, so the adapter's role is to
-        catch obvious shape failures (non-JSON, non-object
-        root, missing required fields). Full validation is
-        Phase 4 step 4.6 ``schema_runtime``."""
+        """Parse JSON for ``JSON_OBJECT`` requests only.
 
-        if request.response_format.kind not in (
-            ResponseFormatKind.JSON_SCHEMA,
-            ResponseFormatKind.JSON_OBJECT,
-        ):
+        Codex iter-2 important: ``JSON_SCHEMA`` requests do
+        NOT populate ``parsed_output`` — the
+        ``ModelProviderPortV2``/``ProviderResponse`` contract
+        defines ``parsed_output`` as "validated against
+        ``request.response_format.json_schema``", and neither
+        Phase 4 v2 adapter performs full JSON Schema
+        validation (``anyOf`` / ``allOf`` / ``pattern`` /
+        nested type / ``enum`` / bounds /
+        ``additionalProperties``). Phase 4 step 4.6
+        ``schema_runtime`` owns full validation via the
+        Pydantic-class round-trip; until then,
+        ``JSON_SCHEMA`` callers MUST go through that wrapper.
+
+        ``JSON_OBJECT`` (provider-side: just ask for *a* JSON
+        object, no schema) is parsed and returned because the
+        contract for that kind is "any JSON object" — JSON
+        decodability + dict root is the full contract.
+
+        Decode failures use ``raise … from None`` so
+        ``json.JSONDecodeError.doc`` (which retains the raw
+        response text) does not surface via ``__cause__``
+        (RAW_RESPONSE_LEAK boundary).
+        """
+
+        if request.response_format.kind is not ResponseFormatKind.JSON_OBJECT:
             return None
         if finish_reason in {
             ProviderFinishReason.CONTENT_FILTER,
@@ -554,34 +570,7 @@ class AnthropicMessagesAdapter:
                 error_code="STRUCTURED_OUTPUT_VIOLATION",
                 request_id=None,
             )
-        if request.response_format.kind is ResponseFormatKind.JSON_SCHEMA:
-            self._validate_minimal_schema(
-                parsed=parsed,
-                schema=request.response_format.json_schema or {},
-            )
         return parsed
-
-    def _validate_minimal_schema(
-        self, *, parsed: dict[str, Any], schema: dict[str, Any]
-    ) -> None:
-        declared_type = schema.get("type")
-        if declared_type is not None and declared_type != "object":
-            raise StructuredOutputViolation(
-                status_code=200,
-                error_code="STRUCTURED_OUTPUT_VIOLATION",
-                request_id=None,
-            )
-        required = schema.get("required")
-        if isinstance(required, list):
-            for field in required:
-                if not isinstance(field, str):
-                    continue
-                if field not in parsed:
-                    raise StructuredOutputViolation(
-                        status_code=200,
-                        error_code="STRUCTURED_OUTPUT_VIOLATION",
-                        request_id=None,
-                    )
 
 
 __all__ = ["AnthropicMessagesAdapter"]

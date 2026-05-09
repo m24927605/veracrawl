@@ -264,7 +264,14 @@ def test_malformed_response_does_not_leak_via_pydantic_validator() -> None:
     assert body_canary not in repr(exc_info.value)
 
 
-def test_complete_structured_output_populates_parsed_output() -> None:
+def test_json_schema_request_does_not_populate_parsed_output() -> None:
+    """Codex iter-2 important: ``JSON_SCHEMA`` callers must
+    go through Phase 4 step 4.6 ``schema_runtime`` for full
+    validation; the v2 adapter does not perform full JSON
+    Schema validation, so populating ``parsed_output`` would
+    let invalid extractions flow downstream as successful
+    structured data."""
+
     schema = {
         "type": "object",
         "properties": {"sku": {"type": "string"}},
@@ -288,7 +295,8 @@ def test_complete_structured_output_populates_parsed_output() -> None:
     adapter = _build_adapter(handler)
     response = adapter.complete(request)
 
-    assert response.parsed_output == {"sku": "ABC-123"}
+    assert response.parsed_output is None
+    assert response.text == '{"sku": "ABC-123"}'
     # Anthropic does not support per-call JSON-schema
     # enforcement, so the wire body must NOT include any
     # response_format / text.format equivalent.
@@ -297,30 +305,23 @@ def test_complete_structured_output_populates_parsed_output() -> None:
     assert "text" not in body or "format" not in body.get("text", {})
 
 
-def test_complete_structured_output_rejects_missing_required_field() -> None:
-    schema = {
-        "type": "object",
-        "properties": {"sku": {"type": "string"}, "price": {"type": "number"}},
-        "required": ["sku", "price"],
-    }
+def test_json_object_request_populates_parsed_output() -> None:
     request = _build_request(
-        response_format=ResponseFormat(
-            kind=ResponseFormatKind.JSON_SCHEMA,
-            schema_name="product",
-            json_schema=schema,
-            strict=False,
-        )
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
     )
 
     def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=_ok_response_body(text='{"sku": "ABC-123"}'))
+        return httpx.Response(
+            200, json=_ok_response_body(text='{"sku": "ABC-123"}')
+        )
 
     adapter = _build_adapter(handler)
-    with pytest.raises(StructuredOutputViolation):
-        adapter.complete(request)
+    response = adapter.complete(request)
+
+    assert response.parsed_output == {"sku": "ABC-123"}
 
 
-def test_complete_structured_output_decode_failure_does_not_leak_via_cause() -> None:
+def test_json_object_decode_failure_does_not_leak_via_cause() -> None:
     leak_canary = "PROBE-LEAK-VIA-JSON-DOC-CANARY"
 
     def handler(_: httpx.Request) -> httpx.Response:
@@ -329,12 +330,7 @@ def test_complete_structured_output_decode_failure_does_not_leak_via_cause() -> 
         )
 
     request = _build_request(
-        response_format=ResponseFormat(
-            kind=ResponseFormatKind.JSON_SCHEMA,
-            schema_name="product",
-            json_schema={"type": "object"},
-            strict=True,
-        )
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
     )
     adapter = _build_adapter(handler)
     with pytest.raises(StructuredOutputViolation) as exc_info:

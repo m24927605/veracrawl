@@ -45,7 +45,13 @@ _EXTRACTION_TEXT = '{"sku": "ABC-123", "title": "Widget Pro"}'
 def _logical_request(model_name: str) -> ProviderRequest:
     """Build the same logical request adapted to each provider's
     model name. Everything else (messages, response_format,
-    max_output_tokens, temperature) is identical."""
+    max_output_tokens, temperature) is identical.
+
+    Uses ``JSON_OBJECT`` (not ``JSON_SCHEMA``) so both adapters
+    populate ``parsed_output`` symmetrically — step 4.3 codex
+    iter-2 settled the policy that ``JSON_SCHEMA`` requests
+    must route through step 4.6 ``schema_runtime``, not the
+    adapter directly."""
 
     return ProviderRequest(
         id=f"provider-swap:{model_name}:1",
@@ -55,19 +61,7 @@ def _logical_request(model_name: str) -> ProviderRequest:
             Message(role=MessageRole.SYSTEM, content="You are a careful extractor."),
             Message(role=MessageRole.USER, content="Extract product details."),
         ],
-        response_format=ResponseFormat(
-            kind=ResponseFormatKind.JSON_SCHEMA,
-            schema_name="product",
-            json_schema={
-                "type": "object",
-                "properties": {
-                    "sku": {"type": "string"},
-                    "title": {"type": "string"},
-                },
-                "required": ["sku", "title"],
-            },
-            strict=True,
-        ),
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT),
         max_output_tokens=256,
     )
 

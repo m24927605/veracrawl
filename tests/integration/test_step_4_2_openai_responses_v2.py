@@ -233,7 +233,16 @@ def test_complete_text_response_returns_provider_response() -> None:
     assert body["input"][0]["role"] == "user"
 
 
-def test_complete_structured_output_populates_parsed_output() -> None:
+def test_json_schema_request_does_not_populate_parsed_output() -> None:
+    """Step 4.3 codex iter-2 important: ``JSON_SCHEMA``
+    callers MUST go through Phase 4 step 4.6 ``schema_runtime``
+    (Pydantic-class validator) for full validation. The v2
+    adapter does not perform full JSON Schema validation, so
+    populating ``parsed_output`` here would let invalid
+    extractions flow downstream as successful structured
+    data. The wire shape is still emitted correctly so the
+    Responses API can run its own strict validation."""
+
     schema = {
         "type": "object",
         "properties": {"sku": {"type": "string"}},
@@ -257,10 +266,11 @@ def test_complete_structured_output_populates_parsed_output() -> None:
     adapter = _build_adapter(handler)
     response = adapter.complete(request)
 
-    assert response.parsed_output == {"sku": "ABC-123"}
-    # Codex iter-4 critical: Responses API JSON_SCHEMA wire shape
-    # is nested under ``text.format``, not top-level
-    # ``response_format``.
+    assert response.parsed_output is None
+    assert response.text == '{"sku": "ABC-123"}'
+    # Wire shape still emitted correctly (Responses API
+    # ``text.format`` envelope, not Chat-Completions
+    # ``response_format``).
     body = json.loads(captured[0].content)
     assert "response_format" not in body
     assert body["text"]["format"]["type"] == "json_schema"
@@ -268,42 +278,43 @@ def test_complete_structured_output_populates_parsed_output() -> None:
     assert body["text"]["format"]["strict"] is True
 
 
-def test_complete_structured_output_rejects_missing_required_field() -> None:
-    """Codex iter-4 important: the adapter must validate
-    ``parsed_output`` against the declared ``json_schema``
-    required fields. Provider-side strict mode is not enough —
-    non-strict requests + fixture-mode replay still need the
-    local validator to surface drift."""
+def test_json_object_request_populates_parsed_output() -> None:
+    """``JSON_OBJECT`` (no schema) is parsed and returned —
+    its contract is "any JSON object", which JSON-decode +
+    dict root fully satisfies."""
 
-    schema = {
-        "type": "object",
-        "properties": {"sku": {"type": "string"}, "price": {"type": "number"}},
-        "required": ["sku", "price"],
-    }
     request = _build_request(
-        response_format=ResponseFormat(
-            kind=ResponseFormatKind.JSON_SCHEMA,
-            schema_name="product",
-            json_schema=schema,
-            strict=False,
-        )
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
     )
 
     def handler(_: httpx.Request) -> httpx.Response:
-        # Missing required ``price`` field.
-        return httpx.Response(200, json=_ok_response_body(text='{"sku": "ABC-123"}'))
+        return httpx.Response(
+            200, json=_ok_response_body(text='{"sku": "ABC-123", "tags": ["a"]}')
+        )
+
+    adapter = _build_adapter(handler)
+    response = adapter.complete(request)
+
+    assert response.parsed_output == {"sku": "ABC-123", "tags": ["a"]}
+
+
+def test_json_object_request_rejects_non_object_root() -> None:
+    request = _build_request(
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
+    )
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_ok_response_body(text='["not", "an", "object"]'))
 
     adapter = _build_adapter(handler)
     with pytest.raises(StructuredOutputViolation):
         adapter.complete(request)
 
 
-def test_complete_structured_output_decode_failure_does_not_leak_via_cause() -> None:
-    """Codex iter-4 important: ``json.JSONDecodeError.doc``
-    retains the raw response text. Using
-    ``raise StructuredOutputViolation(...) from exc`` would
-    surface the body via ``__cause__``. ``from None`` clears
-    the chain."""
+def test_json_object_decode_failure_does_not_leak_via_cause() -> None:
+    """``json.JSONDecodeError.doc`` retains the raw response
+    text. ``raise … from None`` clears the cause chain so the
+    body never surfaces."""
 
     leak_canary = "PROBE-LEAK-VIA-JSON-DOC-CANARY"
 
@@ -313,12 +324,7 @@ def test_complete_structured_output_decode_failure_does_not_leak_via_cause() -> 
         )
 
     request = _build_request(
-        response_format=ResponseFormat(
-            kind=ResponseFormatKind.JSON_SCHEMA,
-            schema_name="product",
-            json_schema={"type": "object"},
-            strict=True,
-        )
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
     )
     adapter = _build_adapter(handler)
     with pytest.raises(StructuredOutputViolation) as exc_info:
@@ -347,14 +353,9 @@ def test_response_id_must_be_string_not_arbitrary_object() -> None:
     assert "wrong" not in response.id
 
 
-def test_complete_structured_output_decode_failure_raises_violation() -> None:
+def test_json_object_decode_failure_raises_violation() -> None:
     request = _build_request(
-        response_format=ResponseFormat(
-            kind=ResponseFormatKind.JSON_SCHEMA,
-            schema_name="product",
-            json_schema={"type": "object"},
-            strict=True,
-        )
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
     )
 
     def handler(_: httpx.Request) -> httpx.Response:
@@ -367,14 +368,9 @@ def test_complete_structured_output_decode_failure_raises_violation() -> None:
         adapter.complete(request)
 
 
-def test_complete_structured_output_non_object_root_raises_violation() -> None:
+def test_json_object_non_object_root_raises_violation() -> None:
     request = _build_request(
-        response_format=ResponseFormat(
-            kind=ResponseFormatKind.JSON_SCHEMA,
-            schema_name="product",
-            json_schema={"type": "object"},
-            strict=True,
-        )
+        response_format=ResponseFormat(kind=ResponseFormatKind.JSON_OBJECT)
     )
 
     def handler(_: httpx.Request) -> httpx.Response:

@@ -578,36 +578,32 @@ class OpenAIResponsesAdapterV2:
         text: str,
         finish_reason: ProviderFinishReason,
     ) -> dict[str, Any] | None:
-        """Parse JSON + minimal schema validation when the request
-        asked for ``JSON_SCHEMA`` / ``JSON_OBJECT``.
+        """Parse JSON for ``JSON_OBJECT`` requests only.
 
-        Scope (codex iter-4 important): the adapter validates a
-        deliberate subset of the Phase 0
-        ``ResponseFormat.json_schema`` — required-property
-        presence + top-level type. Full JSON-Schema validation
-        (anyOf / allOf / pattern / format / etc.) is scoped to
-        Phase 4 step 4.6 ``schema_runtime``, which validates
-        with the caller-supplied Pydantic class. The minimal
-        shape check here is enough to catch obvious provider
-        drift (a model returning narrative prose, an array
-        instead of an object, or an object with a missing
-        required field) without pulling in a JSON-Schema dep.
+        Step 4.3 codex iter-2 important: ``JSON_SCHEMA``
+        requests do NOT populate ``parsed_output`` — the
+        ``ModelProviderPortV2``/``ProviderResponse`` contract
+        defines ``parsed_output`` as "validated against
+        ``response_format.json_schema``", and the v2 adapter
+        does not perform full JSON Schema validation
+        (``anyOf`` / ``allOf`` / ``pattern`` / nested type /
+        ``enum`` / bounds / ``additionalProperties``).
+        Phase 4 step 4.6 ``schema_runtime`` owns full
+        validation via Pydantic-class round-trip; until then,
+        ``JSON_SCHEMA`` callers MUST go through that wrapper.
 
-        ``ProviderResponse.parsed_output`` is rejected for
-        ``CONTENT_FILTER`` / ``ERROR`` / ``LENGTH`` at the
-        contract layer; we don't try to parse for those cases.
+        ``JSON_OBJECT`` (the kind that asks for *a* JSON
+        object, no schema) is parsed and returned because its
+        contract is "any JSON object" — JSON decodability +
+        dict root is the full contract.
 
-        Decode failures use ``raise ... from None`` so the
-        underlying ``json.JSONDecodeError.doc`` (which retains
-        the raw response text) does not surface via the
-        exception ``__cause__`` graph (codex iter-4 important —
-        RAW_RESPONSE_LEAK boundary).
+        Decode failures use ``raise … from None`` so
+        ``json.JSONDecodeError.doc`` (which retains the raw
+        response text) does not surface via ``__cause__``
+        (RAW_RESPONSE_LEAK boundary).
         """
 
-        if request.response_format.kind not in (
-            ResponseFormatKind.JSON_SCHEMA,
-            ResponseFormatKind.JSON_OBJECT,
-        ):
+        if request.response_format.kind is not ResponseFormatKind.JSON_OBJECT:
             return None
         if finish_reason in {
             ProviderFinishReason.CONTENT_FILTER,
@@ -631,47 +627,7 @@ class OpenAIResponsesAdapterV2:
                 error_code="STRUCTURED_OUTPUT_VIOLATION",
                 request_id=None,
             )
-        if request.response_format.kind is ResponseFormatKind.JSON_SCHEMA:
-            self._validate_minimal_schema(
-                parsed=parsed,
-                schema=request.response_format.json_schema or {},
-            )
         return parsed
-
-    def _validate_minimal_schema(
-        self, *, parsed: dict[str, Any], schema: dict[str, Any]
-    ) -> None:
-        """Minimal JSON Schema check: top-level type + required.
-
-        Sanitized exceptions only — never echo ``parsed`` content
-        or schema content into the raised error (RAW_RESPONSE_LEAK
-        boundary). Codex iter-4 important rejected the prior
-        "OpenAI strict mode is enough" stance because non-strict
-        requests, fixture-mode replay, and provider drift all need
-        local validation.
-        """
-
-        declared_type = schema.get("type")
-        # JSON Schema may declare the root as "object" — that's
-        # the only shape the adapter can produce a dict for, so
-        # any other declared type is a violation.
-        if declared_type is not None and declared_type != "object":
-            raise StructuredOutputViolation(
-                status_code=200,
-                error_code="STRUCTURED_OUTPUT_VIOLATION",
-                request_id=None,
-            )
-        required = schema.get("required")
-        if isinstance(required, list):
-            for field in required:
-                if not isinstance(field, str):
-                    continue
-                if field not in parsed:
-                    raise StructuredOutputViolation(
-                        status_code=200,
-                        error_code="STRUCTURED_OUTPUT_VIOLATION",
-                        request_id=None,
-                    )
 
 
 __all__ = ["OpenAIResponsesAdapterV2"]
