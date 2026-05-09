@@ -211,13 +211,103 @@ def test_complete_structured_output_populates_parsed_output() -> None:
         )
     )
 
-    def handler(_: httpx.Request) -> httpx.Response:
+    captured: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured.append(req)
         return httpx.Response(200, json=_ok_response_body(text='{"sku": "ABC-123"}'))
 
     adapter = _build_adapter(handler)
     response = adapter.complete(request)
 
     assert response.parsed_output == {"sku": "ABC-123"}
+    # Codex iter-4 critical: Responses API JSON_SCHEMA wire shape
+    # is nested under ``text.format``, not top-level
+    # ``response_format``.
+    body = json.loads(captured[0].content)
+    assert "response_format" not in body
+    assert body["text"]["format"]["type"] == "json_schema"
+    assert body["text"]["format"]["name"] == "product"
+    assert body["text"]["format"]["strict"] is True
+
+
+def test_complete_structured_output_rejects_missing_required_field() -> None:
+    """Codex iter-4 important: the adapter must validate
+    ``parsed_output`` against the declared ``json_schema``
+    required fields. Provider-side strict mode is not enough —
+    non-strict requests + fixture-mode replay still need the
+    local validator to surface drift."""
+
+    schema = {
+        "type": "object",
+        "properties": {"sku": {"type": "string"}, "price": {"type": "number"}},
+        "required": ["sku", "price"],
+    }
+    request = _build_request(
+        response_format=ResponseFormat(
+            kind=ResponseFormatKind.JSON_SCHEMA,
+            schema_name="product",
+            json_schema=schema,
+            strict=False,
+        )
+    )
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        # Missing required ``price`` field.
+        return httpx.Response(200, json=_ok_response_body(text='{"sku": "ABC-123"}'))
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(StructuredOutputViolation):
+        adapter.complete(request)
+
+
+def test_complete_structured_output_decode_failure_does_not_leak_via_cause() -> None:
+    """Codex iter-4 important: ``json.JSONDecodeError.doc``
+    retains the raw response text. Using
+    ``raise StructuredOutputViolation(...) from exc`` would
+    surface the body via ``__cause__``. ``from None`` clears
+    the chain."""
+
+    leak_canary = "PROBE-LEAK-VIA-JSON-DOC-CANARY"
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json=_ok_response_body(text=f"narrative reply: {leak_canary}")
+        )
+
+    request = _build_request(
+        response_format=ResponseFormat(
+            kind=ResponseFormatKind.JSON_SCHEMA,
+            schema_name="product",
+            json_schema={"type": "object"},
+            strict=True,
+        )
+    )
+    adapter = _build_adapter(handler)
+    with pytest.raises(StructuredOutputViolation) as exc_info:
+        adapter.complete(request)
+    assert exc_info.value.__cause__ is None
+    assert leak_canary not in str(exc_info.value)
+    assert leak_canary not in repr(exc_info.value)
+
+
+def test_response_id_must_be_string_not_arbitrary_object() -> None:
+    """Codex iter-4 minor: the upstream ``id`` field must be
+    sanitized to a plain non-blank string before becoming
+    ``ProviderResponse.id`` (which Phase 6 indexes). Hostile
+    / malformed upstream payloads must fall back to the
+    synthetic id, not coerce-via-str() arbitrary objects."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        body = _ok_response_body()
+        body["id"] = {"shape": "wrong"}  # not a string
+        return httpx.Response(200, json=body)
+
+    adapter = _build_adapter(handler)
+    response = adapter.complete(_build_request())
+    assert response.id.startswith("openai-response:")
+    assert "shape" not in response.id
+    assert "wrong" not in response.id
 
 
 def test_complete_structured_output_decode_failure_raises_violation() -> None:
