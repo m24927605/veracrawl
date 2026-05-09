@@ -41,18 +41,33 @@ Design boundaries (per Phase 4 design supplement step 4.2):
   will not detect schema violations beyond JSON-decodability.
 * **Capability table**: ``supports`` returns ``True`` only for
   capabilities the adapter has implemented and validated.
-  Phase 4 step 4.2 ships ``STRUCTURED_OUTPUT_JSON_SCHEMA``;
-  tool-call support is **deferred** because the Phase 4 step
-  4.1 ``ProviderResponse`` does not yet carry a tool-call
-  field (multi-turn tool loops need a provider-blind
-  ``ToolCall`` representation). Until that contract surface
-  lands (deferred Phase 4 follow-up — sequence TBD), the
-  adapter:
-  - returns ``False`` from ``supports(TOOL_CALLS)``;
-  - refuses ``ProviderRequest`` instances carrying
-    ``tools`` or ``MessageRole.TOOL`` messages by raising
-    ``NotImplementedError`` at ``complete()``.
-  Vision and extended thinking are similarly deferred.
+  Phase 4 step 4.2 ships **no** capability flags as ``True`` —
+  every advertised capability is deferred:
+
+  - ``STRUCTURED_OUTPUT_JSON_SCHEMA``: the wire shape under
+    ``text.format`` is in place and the adapter performs
+    minimal JSON-decode + top-level type + required-field
+    checks, but full JSON Schema validation
+    (``anyOf`` / ``allOf`` / ``pattern`` / nested type checks
+    / ``enum`` / bounds / ``additionalProperties``) is the
+    ``schema_runtime`` step 4.6 responsibility (Pydantic-
+    class validator). Returning ``False`` here keeps callers
+    that require full structured-output validation routing to
+    a future adapter (or to step 4.6's wrapper) until that
+    work lands.
+  - ``TOOL_CALLS``: deferred because the Phase 4 step 4.1
+    ``ProviderResponse`` does not yet carry a tool-call
+    field. ``complete()`` refuses ``ProviderRequest``
+    instances carrying ``tools`` or ``MessageRole.TOOL``
+    messages with ``NotImplementedError`` so a caller cannot
+    silently lose a model-selected tool call.
+  - ``VISION`` / ``EXTENDED_THINKING``: similarly deferred.
+
+  Phase 4 step 4.2 therefore lands as a *building block*: the
+  call surface, retry/backoff, sanitized error path, and
+  fixture-mode test harness are all in place; capability flags
+  flip to ``True`` only as their backing implementations land
+  in subsequent sub-steps.
 """
 
 from __future__ import annotations
@@ -84,6 +99,7 @@ from veracrawl.contracts.llm_input import ProviderRequest, ProviderResponse
 from veracrawl.runtime_support.runtime_mode import (
     ProductionRuntimeNotImplemented,
     RuntimeMode,
+    current_mode,
 )
 
 _RESPONSES_ENDPOINT: Final[str] = "https://api.openai.com/v1/responses"
@@ -108,11 +124,13 @@ _FINISH_REASON_MAP: Final[dict[str, ProviderFinishReason]] = {
     "failed": ProviderFinishReason.ERROR,
 }
 
-_SUPPORTED_CAPABILITIES: Final[frozenset[ModelCapability]] = frozenset(
-    {
-        ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA,
-    }
-)
+_SUPPORTED_CAPABILITIES: Final[frozenset[ModelCapability]] = frozenset()
+"""Phase 4 step 4.2 lands as a building block — every
+capability is deferred (full JSON-Schema validation to step
+4.6 ``schema_runtime``; tool-call / vision / extended-
+thinking until the ``ProviderResponse`` contract grows the
+required fields). See module docstring for the full deferral
+rationale."""
 
 
 def _request_id_from(headers: Any) -> str | None:
@@ -315,12 +333,21 @@ class OpenAIResponsesAdapterV2:
         api_key: str,
         endpoint: str = _RESPONSES_ENDPOINT,
         max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
-        runtime_mode: RuntimeMode = RuntimeMode.FIXTURE,
+        runtime_mode: RuntimeMode | None = None,
         transport: httpx.BaseTransport | None = None,
         sleep_fn: Callable[[float], None] = time.sleep,
         jitter_fn: Callable[[], float] | None = None,
     ) -> None:
-        if runtime_mode is RuntimeMode.PRODUCTION:
+        # Codex iter-5 important: when no ``runtime_mode`` is
+        # passed explicitly, consult the project-wide
+        # ``current_mode()`` (env var ``VERACRAWL_RUNTIME_MODE``
+        # or contextvar set by ``with_runtime_mode``). Without
+        # this, ``VERACRAWL_RUNTIME_MODE=production`` would be
+        # silently ignored — defeating the runtime-mode
+        # boundary the rest of the project relies on for
+        # production-gate enforcement.
+        effective_mode = runtime_mode if runtime_mode is not None else current_mode()
+        if effective_mode is RuntimeMode.PRODUCTION:
             raise ProductionRuntimeNotImplemented(
                 backend="openai_responses_v2",
                 gate="phase_4_step_4_2_production_call",
@@ -329,17 +356,26 @@ class OpenAIResponsesAdapterV2:
             raise ValueError("OpenAIResponsesAdapterV2 requires a non-blank api_key")
         if max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
-        # Codex iter-3 important: FIXTURE mode without an
-        # explicit transport defaults to a real httpx.Client,
-        # which can reach api.openai.com from tests or local
-        # runs. Refuse construction so a wiring bug surfaces
-        # immediately instead of as an accidental live call
-        # (which would also burn API credits).
+        # Codex iter-3 + iter-5 important: FIXTURE mode must
+        # NEVER reach a real network. iter-3 added the explicit-
+        # transport requirement; iter-5 noted that ``BaseTransport``
+        # also covers ``httpx.HTTPTransport`` (real egress).
+        # Restrict fixture mode to ``httpx.MockTransport``
+        # specifically — production egress is gated by the
+        # PRODUCTION mode check above (which is currently
+        # always-raise per Phase 4 step 4.2 scope).
         if transport is None:
             raise ValueError(
                 "OpenAIResponsesAdapterV2 in FIXTURE mode requires an explicit "
-                "httpx.BaseTransport (e.g. httpx.MockTransport). The PRODUCTION "
-                "wiring (real network egress) is gated until Phase 6 step 6.1."
+                "httpx.MockTransport. The PRODUCTION wiring (real network "
+                "egress) is gated until Phase 6 step 6.1."
+            )
+        if not isinstance(transport, httpx.MockTransport):
+            raise ValueError(
+                "OpenAIResponsesAdapterV2 in FIXTURE mode only accepts "
+                "httpx.MockTransport (real network transports such as "
+                "httpx.HTTPTransport are refused — they would bypass the "
+                "production-egress gate)."
             )
         self._api_key = api_key
         self._endpoint = endpoint

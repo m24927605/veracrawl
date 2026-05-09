@@ -146,23 +146,60 @@ def test_fixture_mode_requires_explicit_transport() -> None:
     which can call api.openai.com from tests or local runs.
     Refuse construction so a wiring bug surfaces immediately."""
 
-    with pytest.raises(ValueError, match="explicit httpx.BaseTransport"):
+    with pytest.raises(ValueError, match="explicit httpx.MockTransport"):
         OpenAIResponsesAdapterV2(api_key=_API_KEY_CANARY)
+
+
+def test_fixture_mode_refuses_real_network_transport() -> None:
+    """Codex iter-5 important: ``BaseTransport`` also covers
+    ``httpx.HTTPTransport`` (real egress). Fixture mode must
+    accept only ``httpx.MockTransport`` so production-egress
+    gating is mechanically enforced — not just contractually
+    promised."""
+
+    with pytest.raises(ValueError, match="only accepts httpx.MockTransport"):
+        OpenAIResponsesAdapterV2(
+            api_key=_API_KEY_CANARY,
+            transport=httpx.HTTPTransport(),
+            runtime_mode=RuntimeMode.FIXTURE,
+        )
+
+
+def test_constructor_consults_current_mode_when_runtime_mode_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex iter-5 important: omitting ``runtime_mode`` must
+    fall through to ``current_mode()`` so
+    ``VERACRAWL_RUNTIME_MODE=production`` (env var) is honored.
+    Without this, every caller would have to remember to pass
+    ``runtime_mode`` for the production-gate to work."""
+
+    monkeypatch.setenv("VERACRAWL_RUNTIME_MODE", "production")
+    with pytest.raises(ProductionRuntimeNotImplemented):
+        OpenAIResponsesAdapterV2(
+            api_key=_API_KEY_CANARY,
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, json=_ok_response_body())
+            ),
+        )
 
 
 # --- Capability table -------------------------------------------------------
 
 
 def test_supports_returns_documented_capabilities() -> None:
-    """Phase 4 step 4.2 ships ``STRUCTURED_OUTPUT_JSON_SCHEMA``;
-    tool-call support is deferred (codex iter-2 important: the
-    Phase 4 step 4.1 ``ProviderResponse`` contract has no
-    tool-call field and the Responses API tool-result wire
-    shape differs from chat-completions). Vision and extended
-    thinking are also deferred."""
+    """Phase 4 step 4.2 lands as a building block — every
+    capability returns ``False``. Codex iter-5 important:
+    advertising ``STRUCTURED_OUTPUT_JSON_SCHEMA`` would route
+    structured-output work here even though full JSON-Schema
+    validation (anyOf / allOf / pattern / nested types / enum
+    bounds / additionalProperties) is the Phase 4 step 4.6
+    ``schema_runtime`` Pydantic-class validator's
+    responsibility. Better to flip the flag to ``True`` only
+    when the backing implementation lands."""
 
     adapter = _build_adapter(lambda _: httpx.Response(200, json=_ok_response_body()))
-    assert adapter.supports(ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA) is True
+    assert adapter.supports(ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA) is False
     assert adapter.supports(ModelCapability.TOOL_CALLS) is False
     assert adapter.supports(ModelCapability.VISION) is False
     assert adapter.supports(ModelCapability.EXTENDED_THINKING) is False
