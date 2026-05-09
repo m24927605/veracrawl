@@ -126,10 +126,14 @@ def _assert_provider_response_shape(response: ProviderResponse) -> None:
     assert response.request_ref and response.request_ref.strip()
     assert response.text == _EXTRACTION_TEXT
     assert response.finish_reason is ProviderFinishReason.STOP
-    # parsed_output is populated for both because both adapters
-    # parse JSON_SCHEMA responses (minimal validation in v2;
-    # Anthropic does prompt-side; both end up with the same
-    # parsed dict).
+    # ``parsed_output`` is populated for both because the
+    # logical request uses ``JSON_OBJECT`` (any-JSON-object
+    # contract — JSON-decode + dict root fully satisfies).
+    # ``JSON_SCHEMA`` requests would route through Phase 4
+    # step 4.6 ``schema_runtime`` for full Pydantic-class
+    # validation; the v2 adapters do not populate
+    # ``parsed_output`` on ``JSON_SCHEMA`` (codex iter-2
+    # settled policy).
     assert response.parsed_output == {"sku": "ABC-123", "title": "Widget Pro"}
     # Token usage shape is identical (the values come from the
     # different mocked bodies, but the contract is the same).
@@ -203,6 +207,67 @@ def test_provider_swap_handles_provider_specific_finish_reason_mapping() -> None
 
     assert openai_response.finish_reason is ProviderFinishReason.STOP
     assert anthropic_response.finish_reason is ProviderFinishReason.STOP
+
+
+def test_provider_swap_json_schema_does_not_populate_parsed_output_either_side() -> (
+    None
+):
+    """Codex iter-2 + iter-3 settled policy: ``JSON_SCHEMA``
+    requests do NOT populate ``parsed_output`` in EITHER
+    adapter — full JSON Schema validation is the Phase 4
+    step 4.6 ``schema_runtime`` Pydantic-class round-trip's
+    job, not the adapter's. Lock in the symmetric behavior
+    so a future refactor that re-introduces minimal
+    validation in one adapter (without doing so in the
+    other) breaks this test."""
+
+    schema_request_openai = ProviderRequest(
+        id="provider-swap:json_schema:openai",
+        run_ref="run:provider-swap:json_schema",
+        model_name="gpt-4o-mini",
+        messages=[Message(role=MessageRole.USER, content="extract")],
+        response_format=ResponseFormat(
+            kind=ResponseFormatKind.JSON_SCHEMA,
+            schema_name="product",
+            json_schema={
+                "type": "object",
+                "properties": {"sku": {"type": "string"}},
+                "required": ["sku"],
+            },
+            strict=True,
+        ),
+        max_output_tokens=128,
+    )
+    schema_request_anthropic = ProviderRequest(
+        id="provider-swap:json_schema:anthropic",
+        run_ref="run:provider-swap:json_schema",
+        model_name="claude-sonnet-4-6",
+        messages=[Message(role=MessageRole.USER, content="extract")],
+        response_format=ResponseFormat(
+            kind=ResponseFormatKind.JSON_SCHEMA,
+            schema_name="product",
+            json_schema={
+                "type": "object",
+                "properties": {"sku": {"type": "string"}},
+                "required": ["sku"],
+            },
+            strict=True,
+        ),
+        max_output_tokens=128,
+    )
+
+    openai_adapter = _build_openai_adapter()
+    anthropic_adapter = _build_anthropic_adapter()
+    openai_response = openai_adapter.complete(schema_request_openai)
+    anthropic_response = anthropic_adapter.complete(schema_request_anthropic)
+
+    assert openai_response.parsed_output is None
+    assert anthropic_response.parsed_output is None
+    # The text payload is still surfaced symmetrically — callers
+    # that opt into ``schema_runtime`` use the text + their
+    # Pydantic class for full validation.
+    assert openai_response.text == _EXTRACTION_TEXT
+    assert anthropic_response.text == _EXTRACTION_TEXT
 
 
 @pytest.mark.parametrize(

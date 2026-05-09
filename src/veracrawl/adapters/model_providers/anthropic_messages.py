@@ -254,6 +254,15 @@ def _message_to_anthropic(message: Message) -> dict[str, Any]:
 
 
 def _extract_output_text(response: dict[str, Any]) -> str:
+    """Concatenate Anthropic text blocks with newline separators.
+
+    Codex iter-3 critical: joining with an empty separator
+    can corrupt content — ``"hello"`` + ``"world"`` would
+    become ``"helloworld"``, and JSON-shaped responses can
+    silently lose structural separators. Block boundaries
+    matter, so preserve them with ``"\\n"``.
+    """
+
     chunks: list[str] = []
     content = response.get("content")
     if not isinstance(content, list):
@@ -265,7 +274,7 @@ def _extract_output_text(response: dict[str, Any]) -> str:
             text = block.get("text")
             if isinstance(text, str):
                 chunks.append(text)
-    return "".join(chunks)
+    return "\n".join(chunks)
 
 
 def _extract_usage(response: dict[str, Any]) -> TokenUsage:

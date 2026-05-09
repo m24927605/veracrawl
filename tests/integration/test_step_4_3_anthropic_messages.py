@@ -190,6 +190,26 @@ def test_complete_text_response_returns_provider_response() -> None:
     assert captured[0].headers["anthropic-version"] == "2023-06-01"
 
 
+def test_multi_block_text_response_joins_with_newline_separator() -> None:
+    """Codex iter-3 critical: joining Anthropic text blocks
+    with an empty separator can corrupt content. Block
+    boundaries are preserved with ``"\\n"`` so adjacent
+    chunks (``"hello"`` + ``"world"``) don't collapse to
+    ``"helloworld"``."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        body = _ok_response_body()
+        body["content"] = [
+            {"type": "text", "text": "First paragraph."},
+            {"type": "text", "text": "Second paragraph."},
+        ]
+        return httpx.Response(200, json=body)
+
+    adapter = _build_adapter(handler)
+    response = adapter.complete(_build_request())
+    assert response.text == "First paragraph.\nSecond paragraph."
+
+
 def test_system_message_hoisted_to_top_level_system_field() -> None:
     """Anthropic dedicates a ``system`` body field; the
     ``messages`` array carries USER/ASSISTANT only."""
