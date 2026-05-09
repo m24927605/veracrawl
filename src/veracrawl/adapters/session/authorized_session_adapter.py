@@ -72,6 +72,7 @@ from datetime import UTC, datetime
 
 import httpx
 
+from veracrawl.agents.credential_lifecycle import AgentCredentialLifecycle
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.errors import CredentialScopeViolation, _redact_url
 from veracrawl.contracts.security_privacy import (
@@ -172,6 +173,7 @@ class AuthorizedSessionAdapter:
         use_audit: CredentialUseAuditPort,
         run_ref: Ref,
         clock: Callable[[], datetime] = _utc_now,
+        lifecycle: AgentCredentialLifecycle | None = None,
     ) -> None:
         # Codex iter-3 critical + iter-4 important: typed enforcement
         # of "production transport is composed through Phase 1's
@@ -197,6 +199,7 @@ class AuthorizedSessionAdapter:
         self._use_audit = use_audit
         self._run_ref = run_ref
         self._clock = clock
+        self._lifecycle = lifecycle
 
     def _now(self) -> datetime:
         ts = self._clock()
@@ -384,6 +387,14 @@ class AuthorizedSessionAdapter:
                 "use was not recorded; see structured-log fallback "
                 "``credential_use_audit_failed`` (phase=completion)."
             ) from None
+
+        # Wire lifecycle counter automatically. The integration test
+        # (Phase 2 step 2.5b) and Phase 5 orchestrator wiring rely on
+        # the adapter owning the accounting so the lifecycle's
+        # credential_use_count agrees with the count of
+        # CredentialUseRecord rows by construction.
+        if self._lifecycle is not None:
+            self._lifecycle.record_use()
 
         return response
 
