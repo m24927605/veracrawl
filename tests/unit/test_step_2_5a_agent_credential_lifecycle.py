@@ -125,6 +125,76 @@ def test_lifecycle_invokes_on_session_end_callback() -> None:
     assert invocations[0] == (scope,)
 
 
+def test_partial_resolution_failure_leaves_lifecycle_unmodified() -> None:
+    """Codex iter-2 important: if resolving one of N scope_refs
+    fails midway, the lifecycle's resolved-state fields must NOT
+    be partially populated. Atomic assignment after all refs
+    resolve cleanly."""
+
+    scope_a = _make_scope(id="cred-scope:a")
+    registry = _StubRegistry(
+        scopes={
+            "cred-scope:a": scope_a,
+            # cred-scope:b deliberately missing
+        }
+    )
+    request = _make_request(scope_refs=["cred-scope:a", "cred-scope:b"])
+    lifecycle = AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:test:1",
+        clock=lambda: _FROZEN_NOW,
+    )
+    with pytest.raises(CredentialScopeRegistryError):
+        lifecycle.__enter__()
+    # Lifecycle remains unmodified — no partial scopes.
+    assert lifecycle.scopes == ()
+    with pytest.raises(KeyError):
+        lifecycle.scope_for("cred-scope:a")
+
+
+def test_end_event_carries_cleanup_succeeded_field() -> None:
+    """Codex iter-2 important: end event must reflect cleanup
+    outcome. Successful cleanup → cleanup_succeeded=True; failed
+    callback → cleanup_succeeded=False."""
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+
+    # Successful cleanup.
+    with structlog.testing.capture_logs() as captured:
+        with AgentCredentialLifecycle(
+            request=request,
+            registry=registry,
+            run_ref="run:test:1",
+            clock=lambda: _FROZEN_NOW,
+        ):
+            pass
+    ends = [e for e in captured if e.get("event") == "agent_credential_session_ended"]
+    assert ends[0]["cleanup_succeeded"] is True
+
+    # Failed cleanup.
+    def failing_callback(scopes: Iterable[CredentialScope]) -> None:
+        del scopes
+        raise RuntimeError("simulated cache invalidation failure")
+
+    from veracrawl.agents.credential_lifecycle import LifecycleEndCallbackError
+
+    with structlog.testing.capture_logs() as captured:
+        with pytest.raises(LifecycleEndCallbackError):
+            with AgentCredentialLifecycle(
+                request=request,
+                registry=registry,
+                run_ref="run:test:1",
+                on_session_end=failing_callback,
+                clock=lambda: _FROZEN_NOW,
+            ):
+                pass
+    ends = [e for e in captured if e.get("event") == "agent_credential_session_ended"]
+    assert ends[0]["cleanup_succeeded"] is False
+
+
 def test_unknown_scope_ref_raises_at_enter() -> None:
     registry = _StubRegistry()
     request = _make_request(scope_refs=["cred-scope:unknown"])

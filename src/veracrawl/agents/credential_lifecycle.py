@@ -58,7 +58,6 @@ from veracrawl.contracts.agent import AgentRunRequest
 from veracrawl.contracts.common import Ref
 from veracrawl.contracts.security_privacy import CredentialScope
 from veracrawl.ports.credential_scope_registry import (
-    CredentialScopeRegistryError,
     CredentialScopeRegistryPort,
 )
 from veracrawl.runtime_support.logging import get_logger
@@ -157,9 +156,10 @@ class AgentCredentialLifecycle:
         return self._scope_by_ref[scope_ref]
 
     def _now(self) -> datetime:
-        """Codex iter-1 minor: defense-in-depth tz-aware guard
-        symmetric with OutboxVaultClient (step 2.4a) and
-        AuthorizedSessionAdapter (step 2.4b)."""
+        """Defense-in-depth tz-aware guard symmetric with
+        ``OutboxVaultClient`` and ``AuthorizedSessionAdapter`` —
+        replay determinism requires every audit timestamp to be
+        tz-aware."""
 
         ts = self._clock()
         if ts.tzinfo is None or ts.utcoffset() is None:
@@ -170,17 +170,20 @@ class AgentCredentialLifecycle:
         return ts
 
     def __enter__(self) -> AgentCredentialLifecycle:
+        # Resolve into locals first; assign onto the lifecycle
+        # only after every ref has resolved. A partial-failure
+        # scenario therefore leaves the lifecycle in its initial
+        # state (no resolved scopes, no end event), which the
+        # ``with`` form correctly treats as "session never
+        # entered" — no __exit__ runs, no stale audit row.
         resolved: list[CredentialScope] = []
+        scope_by_ref: dict[Ref, CredentialScope] = {}
         for scope_ref in self._request.credential_scope_refs:
-            try:
-                scope = self._registry.resolve(scope_ref)
-            except CredentialScopeRegistryError:
-                # Re-raise as-is — the error already redacts the
-                # scope_ref content (only length is reported).
-                raise
+            scope = self._registry.resolve(scope_ref)
             resolved.append(scope)
-            self._scope_by_ref[scope_ref] = scope
+            scope_by_ref[scope_ref] = scope
         self._scopes = tuple(resolved)
+        self._scope_by_ref = scope_by_ref
         timestamp = self._now()
         _logger.info(
             "agent_credential_session_started",
@@ -201,6 +204,20 @@ class AgentCredentialLifecycle:
     ) -> None:
         del exc_val, exc_tb
         timestamp = self._now()
+        # Run cleanup BEFORE emitting the end event so the audit
+        # row's ``cleanup_succeeded`` field reflects the cleanup
+        # outcome (rather than always claiming success and forcing
+        # the operator to check a separate fallback log to detect
+        # cleanup failure). When an original exception is in
+        # flight, log + swallow the callback failure so the
+        # original error reaches the caller; otherwise raise
+        # ``LifecycleEndCallbackError`` after the end event.
+        callback_failed = False
+        try:
+            self._on_session_end(self._scopes)
+        except Exception:
+            callback_failed = True
+        cleanup_succeeded = not callback_failed
         _logger.info(
             "agent_credential_session_ended",
             session_id=self._session_id,
@@ -209,22 +226,9 @@ class AgentCredentialLifecycle:
             scope_count=len(self._scopes),
             credential_use_count=self._credential_use_count,
             ended_with_exception=exc_type is not None,
+            cleanup_succeeded=cleanup_succeeded,
             timestamp_iso=timestamp.isoformat(),
         )
-        # Invoke the cache-invalidation callback (Phase 6 wires
-        # this to vault token cache drops). Codex iter-1 important:
-        # if the callback raises and no original exception is in
-        # flight, surface a typed ``LifecycleEndCallbackError`` so
-        # the orchestrator sees the failure (otherwise upstream
-        # would think the run completed cleanly while credentials
-        # remained cached). When an original exception IS in flight,
-        # log + swallow the callback failure so we don't mask the
-        # original error.
-        callback_failed = False
-        try:
-            self._on_session_end(self._scopes)
-        except Exception:
-            callback_failed = True
         if callback_failed:
             _logger.error(  # noqa: TRY400
                 "agent_credential_session_end_callback_failed",
