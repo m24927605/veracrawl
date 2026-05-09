@@ -159,11 +159,42 @@ def test_lifecycle_marks_exit_with_exception_when_body_raises() -> None:
     assert ends[0]["ended_with_exception"] is True
 
 
-def test_lifecycle_callback_failure_does_not_mask_exit() -> None:
-    """If the on_session_end callback raises, lifecycle still exits
-    cleanly (logs the failure). Don't mask the original __exit__
-    semantics — agent runtime should not break because a vault
-    cache-invalidation hook misbehaved."""
+def test_lifecycle_callback_failure_raises_typed_error_when_no_original_exc() -> None:
+    """Codex iter-1 important: if on_session_end fails and no
+    original exception is in flight, surface a typed
+    LifecycleEndCallbackError so the orchestrator sees the
+    failure. Don't silently swallow."""
+
+    from veracrawl.agents.credential_lifecycle import LifecycleEndCallbackError
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+
+    def failing_callback(scopes: Iterable[CredentialScope]) -> None:
+        del scopes
+        raise RuntimeError("simulated cache invalidation failure with sensitive details")
+
+    with pytest.raises(LifecycleEndCallbackError) as excinfo:
+        with AgentCredentialLifecycle(
+            request=request,
+            registry=registry,
+            run_ref="run:test:1",
+            on_session_end=failing_callback,
+            clock=lambda: _FROZEN_NOW,
+        ):
+            pass
+    err = excinfo.value
+    assert err.__cause__ is None
+    assert err.__context__ is None
+    text = " ".join(str(a) for a in err.args if isinstance(a, str))
+    assert "sensitive details" not in text
+
+
+def test_lifecycle_callback_failure_swallowed_when_original_exc_in_flight() -> None:
+    """Codex iter-1 important: when an original exception IS in
+    flight, swallow callback failure so we don't mask the original
+    error. Log it for visibility."""
 
     scope = _make_scope()
     registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
@@ -174,20 +205,22 @@ def test_lifecycle_callback_failure_does_not_mask_exit() -> None:
         raise RuntimeError("simulated cache invalidation failure")
 
     with structlog.testing.capture_logs() as captured:
-        with AgentCredentialLifecycle(
-            request=request,
-            registry=registry,
-            run_ref="run:test:1",
-            on_session_end=failing_callback,
-            clock=lambda: _FROZEN_NOW,
-        ):
-            pass
+        with pytest.raises(RuntimeError, match="original agent failure"):
+            with AgentCredentialLifecycle(
+                request=request,
+                registry=registry,
+                run_ref="run:test:1",
+                on_session_end=failing_callback,
+                clock=lambda: _FROZEN_NOW,
+            ):
+                raise RuntimeError("original agent failure")
     failures = [
         e
         for e in captured
         if e.get("event") == "agent_credential_session_end_callback_failed"
     ]
     assert len(failures) == 1
+    assert failures[0]["masked_by_original_exception"] is True
 
 
 def test_scope_for_unknown_ref_raises_keyerror() -> None:
@@ -225,6 +258,50 @@ def test_registry_satisfies_protocol() -> None:
 
     registry: CredentialScopeRegistryPort = _StubRegistry()
     assert isinstance(registry, CredentialScopeRegistryPort)
+
+
+def test_record_use_increments_count_on_end_event() -> None:
+    """Codex iter-1 important: the end event must include the
+    per-run credential-use count so the audit pipeline can
+    reconcile against the count of CredentialUseRecord rows."""
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+    with structlog.testing.capture_logs() as captured:
+        with AgentCredentialLifecycle(
+            request=request,
+            registry=registry,
+            run_ref="run:test:1",
+            clock=lambda: _FROZEN_NOW,
+        ) as session:
+            session.record_use()
+            session.record_use()
+            session.record_use()
+            assert session.credential_use_count == 3
+    ends = [e for e in captured if e.get("event") == "agent_credential_session_ended"]
+    assert ends[0]["credential_use_count"] == 3
+
+
+def test_naive_clock_raises_runtime_error() -> None:
+    """Codex iter-1 minor: tz-aware guard symmetric with step
+    2.4a / 2.4b."""
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+
+    def naive_clock() -> datetime:
+        return datetime(2026, 5, 9, 12, 0, 0)  # noqa: DTZ001 — intentional naive
+
+    lifecycle = AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:test:1",
+        clock=naive_clock,
+    )
+    with pytest.raises(RuntimeError, match="tz-aware"):
+        lifecycle.__enter__()
 
 
 def test_credential_scope_refs_default_empty_on_request() -> None:
