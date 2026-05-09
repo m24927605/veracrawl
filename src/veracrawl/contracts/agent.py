@@ -129,6 +129,14 @@ class AgentRunRequest(TimestampedModel):
     required_output_schema_ref: Ref
     loop_budget_ref: Ref
     policy_decision_refs: list[Ref] = Field(default_factory=list)
+    # Phase 2 step 2.5a: credential scope refs the agent runtime
+    # is authorized to use for this run. The runtime resolves
+    # these at start (via ``CredentialScopeRegistryPort``), holds
+    # the refs (NOT values) for the run, and invalidates on
+    # completion. Default empty list keeps existing call sites
+    # backward-compatible — only credentialed agent runs populate
+    # this field.
+    credential_scope_refs: list[Ref] = Field(default_factory=list)
 
 
 class AgentRunResult(TimestampedModel):
