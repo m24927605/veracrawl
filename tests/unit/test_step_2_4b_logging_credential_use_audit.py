@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 import structlog
 
 from veracrawl.contracts.security_privacy import CredentialUseRecord
@@ -45,6 +46,26 @@ def test_record_writes_structured_event() -> None:
 def test_writer_satisfies_protocol() -> None:
     writer: CredentialUseAuditPort = LoggingCredentialUseAuditWriter()
     assert isinstance(writer, CredentialUseAuditPort)
+
+
+def test_writer_refuses_under_production_mode() -> None:
+    """Codex iter-3 important: structured logging is not durable
+    enough for production credential-use audit. Under PRODUCTION,
+    the writer raises ProductionRuntimeNotImplemented; Phase 6
+    step 6.1 ships an outbox-backed alternate."""
+
+    from veracrawl.runtime_support.runtime_mode import (
+        ProductionRuntimeNotImplemented,
+        RuntimeMode,
+        with_runtime_mode,
+    )
+
+    writer = LoggingCredentialUseAuditWriter()
+    with with_runtime_mode(RuntimeMode.PRODUCTION):
+        with pytest.raises(ProductionRuntimeNotImplemented) as excinfo:
+            writer.record(_make_record())
+    assert excinfo.value.backend == "logging_credential_use_audit"
+    assert excinfo.value.gate == "credential_use_audit"
 
 
 def test_record_sanitizes_url_query_and_userinfo() -> None:

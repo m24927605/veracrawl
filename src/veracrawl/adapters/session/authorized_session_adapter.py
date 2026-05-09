@@ -85,6 +85,11 @@ from veracrawl.ports.credential_vault import (
 )
 from veracrawl.ports.session_scope_policy import SessionScopePolicy
 from veracrawl.runtime_support.logging import get_logger
+from veracrawl.runtime_support.runtime_mode import (
+    ProductionRuntimeNotImplemented,
+    RuntimeMode,
+    current_mode,
+)
 
 _logger = get_logger(__name__)
 
@@ -135,7 +140,27 @@ class AuthorizedSessionAdapter:
         use_audit: CredentialUseAuditPort,
         run_ref: Ref,
         clock: Callable[[], datetime] = _utc_now,
+        production_allow_raw_transport: bool = False,
     ) -> None:
+        # Codex iter-3 critical: a raw ``httpx.BaseTransport`` bypasses
+        # the Phase 1 HTTP policy stack (robots / AIMD / retry /
+        # redirect SSRF / NetworkAttemptEvidence / cross-origin
+        # Authorization strip). Production composition is Phase 6
+        # step 6.1's job (route credentialed requests through
+        # ``StdlibHttpSourceAdapter`` with ``HttpClientConfig.extra_headers``).
+        # Until then, refuse to construct the adapter under PRODUCTION
+        # unless the caller explicitly opts in via
+        # ``production_allow_raw_transport=True`` — that flag is the
+        # "I know what I'm doing" escape hatch for the orchestrator
+        # that wires the Phase 1 stack itself.
+        if (
+            current_mode() is RuntimeMode.PRODUCTION
+            and not production_allow_raw_transport
+        ):
+            raise ProductionRuntimeNotImplemented(
+                backend="raw_httpx_transport",
+                gate="authorized_session_adapter",
+            )
         self._transport = transport
         self._vault = vault
         self._scope_policy = scope_policy
@@ -220,9 +245,31 @@ class AuthorizedSessionAdapter:
                 timestamp_used=timestamp,
                 attempt_evidence_ref=f"attempt:pending:{uuid.uuid4().hex}",
             )
+            transport_failure_audit_failed = False
             try:
                 self._use_audit.record(transport_failure_record)
             except Exception:
+                transport_failure_audit_failed = True
+            if transport_failure_audit_failed:
+                # Codex iter-3 important: transport failure + audit
+                # failure is the worst case — the credential was sent
+                # AND the use was not recorded. Emit a critical-
+                # severity event the operator alerting can pin a page
+                # on, distinct from the routine ``audit_failed`` event.
+                _logger.critical(  # noqa: TRY400
+                    "credential_use_audit_gap_critical",
+                    use_record_id=transport_failure_record.id,
+                    run_ref=self._run_ref,
+                    credential_scope_ref=self._credential_scope.id,
+                    request_method=method,
+                    request_url=sanitized_url,
+                    timestamp_iso=timestamp.isoformat(),
+                    note=(
+                        "credential was sent over the wire AND audit "
+                        "write failed; durable audit gap — operator "
+                        "must reconcile via vault access logs"
+                    ),
+                )
                 _logger.error(  # noqa: TRY400
                     "credential_use_audit_failed",
                     phase="transport_failure",

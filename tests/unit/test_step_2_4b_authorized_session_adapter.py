@@ -365,6 +365,103 @@ def test_out_of_scope_emits_credential_scope_denied_log_event() -> None:
     assert matched[0]["reason"] == CredentialScopeReason.ORIGIN_NOT_ALLOWED.value
 
 
+def test_production_mode_refuses_raw_transport_construction() -> None:
+    """Codex iter-3 critical: under PRODUCTION, the adapter refuses
+    to construct with a raw httpx.BaseTransport (which bypasses
+    Phase 1 robots / AIMD / redirect SSRF / evidence). Production
+    composition is Phase 6 step 6.1's job. Tests that legitimately
+    need to exercise the raw-transport path in PRODUCTION (e.g.,
+    the orchestrator that wires Phase 1 itself) opt in via
+    ``production_allow_raw_transport=True``."""
+
+    from veracrawl.runtime_support.runtime_mode import (
+        ProductionRuntimeNotImplemented,
+        RuntimeMode,
+        with_runtime_mode,
+    )
+
+    transport = _ok_transport()
+    with with_runtime_mode(RuntimeMode.PRODUCTION):
+        with pytest.raises(ProductionRuntimeNotImplemented):
+            _make_adapter(transport=transport)
+
+
+def test_production_mode_with_explicit_opt_in_constructs() -> None:
+    """The opt-in flag is the orchestrator's escape hatch when it
+    has already wrapped the transport in Phase 1's policy stack."""
+
+    from veracrawl.runtime_support.runtime_mode import (
+        RuntimeMode,
+        with_runtime_mode,
+    )
+
+    transport = _ok_transport()
+    creds = {("EBAY_PROD", "API_KEY"): "sk-live"}
+    backend = InMemoryVaultBackend(credentials=creds)
+
+    # Vault layer's audit too uses fixture; under PRODUCTION the
+    # InMemoryVaultBackend would also gate. So the construction
+    # check itself is what we're testing — fixture mode for the
+    # vault, PRODUCTION for the adapter check.
+    with with_runtime_mode(RuntimeMode.FIXTURE):
+        access_audit = _RecordingAccessAudit()
+        vault = OutboxVaultClient(
+            backend=backend,
+            audit=access_audit,
+            run_ref="run:test:1",
+            clock=lambda: _FROZEN_NOW,
+        )
+    use_audit = _RecordingUseAudit()
+    with with_runtime_mode(RuntimeMode.PRODUCTION):
+        adapter = AuthorizedSessionAdapter(
+            transport=transport,
+            vault=vault,
+            scope_policy=StrictAllowlistScope(),
+            credential_scope=_make_scope(),
+            vault_scope_ref="EBAY_PROD",
+            vault_key="API_KEY",
+            use_audit=use_audit,
+            run_ref="run:test:1",
+            clock=lambda: _FROZEN_NOW,
+            production_allow_raw_transport=True,
+        )
+    assert adapter is not None
+
+
+def test_transport_failure_with_audit_failure_emits_audit_gap_critical() -> None:
+    """Codex iter-3 important: if both transport and audit fail,
+    emit a critical-severity ``credential_use_audit_gap_critical``
+    event so operator alerting can pin a page on it. Distinct
+    from the routine ``credential_use_audit_failed``."""
+
+    import structlog
+
+    class _RaisingTransport(httpx.BaseTransport):
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            del request
+            raise RuntimeError("simulated transport failure")
+
+    class _FailingAudit:
+        def record(self, use_record: CredentialUseRecord) -> None:
+            del use_record
+            raise RuntimeError("simulated audit failure")
+
+    adapter, _, _ = _make_adapter(
+        transport=_RaisingTransport(),
+        use_audit=_FailingAudit(),  # type: ignore[arg-type]
+    )
+    with structlog.testing.capture_logs() as captured:
+        with pytest.raises(RuntimeError, match="simulated transport failure"):
+            adapter.request(method="GET", url="https://api.example.com/v1/items")
+    critical_events = [
+        e
+        for e in captured
+        if e.get("event") == "credential_use_audit_gap_critical"
+    ]
+    assert len(critical_events) == 1
+    assert critical_events[0].get("log_level") == "critical"
+
+
 def test_audit_failure_after_response_refuses_response() -> None:
     """If the post-receive audit write fails AFTER the request was
     sent + response received, the adapter refuses to return the
