@@ -1882,6 +1882,27 @@ class ProviderFinishReason(StrEnum):
     ERROR = "error"
 
 
+class ModelCapability(StrEnum):
+    """Opt-in feature flags for ``ModelProviderPortV2.supports``.
+
+    Per ``design.md`` §6 risk-mitigation: the v2 contract is the
+    lowest-common-denominator across providers; capability flags
+    let the agent runtime select a provider that supports the
+    feature instead of hard-failing on a provider that lacks it.
+
+    Adapters return ``True`` only for capabilities they actually
+    implement and have validated. Returning ``True`` for a
+    capability that the adapter does not exercise correctly is a
+    contract violation (the orchestrator will route work that
+    requires the capability to that adapter).
+    """
+
+    STRUCTURED_OUTPUT_JSON_SCHEMA = "structured_output_json_schema"
+    TOOL_CALLS = "tool_calls"
+    VISION = "vision"
+    EXTENDED_THINKING = "extended_thinking"
+
+
 class RecoveryDecisionKind(StrEnum):
     """Outcome the recovery layer asks the orchestrator to take."""
 

@@ -54,6 +54,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from veracrawl.contracts.enums import ModelCapability
 from veracrawl.contracts.llm_input import ProviderRequest, ProviderResponse
 
 
@@ -78,6 +79,28 @@ class ModelProviderPortV2(Protocol):
         * Surface HTTP failures via the typed retryable / fatal
           hierarchy (do not return error responses; raise instead).
         """
+
+        ...
+
+    def supports(self, capability: ModelCapability) -> bool:
+        """Capability negotiation hook (``design.md`` §6).
+
+        The agent runtime calls ``supports`` before routing work
+        that requires a particular capability (structured output,
+        tool calls, vision, extended thinking). Adapters that
+        lack the capability return ``False`` and the runtime
+        selects a different provider rather than hard-failing
+        the call.
+
+        Implementations must return ``True`` only for
+        capabilities they actually implement and have validated.
+        Returning ``True`` for a feature the adapter does not
+        exercise correctly is a contract violation — the
+        orchestrator will route work to the adapter on the
+        strength of that flag.
+        """
+
+        ...
 
 
 __all__ = ["ModelProviderPortV2"]

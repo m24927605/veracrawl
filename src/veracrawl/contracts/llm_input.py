@@ -198,9 +198,18 @@ class ProviderResponse(VeraModel):
         # claiming a successful structured extraction on a
         # blocked / errored response.
         if self.parsed_output is not None:
+            # ``LENGTH`` (truncated generation) is also refused
+            # for ``parsed_output`` (codex iter-5 important):
+            # partial JSON can validate against schemas with
+            # optional fields and silently look like a complete
+            # extraction. Forcing the partial-output case to
+            # surface as ``parsed_output=None`` makes the
+            # downstream extraction pipeline retry / abstain
+            # instead of accepting a truncated value.
             if self.finish_reason in {
                 ProviderFinishReason.CONTENT_FILTER,
                 ProviderFinishReason.ERROR,
+                ProviderFinishReason.LENGTH,
             }:
                 raise ValueError(
                     f"parsed_output is not meaningful when finish_reason "

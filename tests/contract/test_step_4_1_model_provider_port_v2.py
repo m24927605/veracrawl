@@ -44,6 +44,7 @@ import pytest
 from veracrawl.contracts.agent import Message, ResponseFormat, TokenUsage
 from veracrawl.contracts.enums import (
     MessageRole,
+    ModelCapability,
     ProviderFinishReason,
     ResponseFormatKind,
 )
@@ -326,17 +327,23 @@ def test_provider_response_rejects_parsed_output_with_blank_raw_ref() -> None:
 
 @pytest.mark.parametrize(
     "blocked_reason",
-    [ProviderFinishReason.CONTENT_FILTER, ProviderFinishReason.ERROR],
+    [
+        ProviderFinishReason.CONTENT_FILTER,
+        ProviderFinishReason.ERROR,
+        ProviderFinishReason.LENGTH,
+    ],
 )
 def test_provider_response_rejects_parsed_output_for_blocked_finish_reasons(
     blocked_reason: ProviderFinishReason,
 ) -> None:
-    """Codex iter-4 important: ``CONTENT_FILTER`` (provider
-    blocked generation) and ``ERROR`` (pre-generation failure)
-    are not states where structured output is meaningful;
-    refuse parsed_output structurally so an adapter cannot
-    falsely claim a successful structured extraction on a
-    blocked or errored response."""
+    """Codex iter-4 + iter-5 important: ``CONTENT_FILTER``
+    (provider blocked generation), ``ERROR`` (pre-generation
+    failure), and ``LENGTH`` (truncated generation — partial
+    JSON can validate against schemas with optional fields and
+    silently look like a complete extraction) are all states
+    where structured output is not meaningful. Refuse
+    ``parsed_output`` structurally so an adapter cannot claim
+    a successful extraction in any of these cases."""
 
     with pytest.raises(
         ValueError, match="parsed_output is not meaningful when finish_reason"
@@ -484,14 +491,45 @@ def test_model_provider_port_v2_is_runtime_checkable() -> None:
                 finish_reason=ProviderFinishReason.STOP,
             )
 
-    assert isinstance(_StubAdapter(), ModelProviderPortV2)
+        def supports(self, capability: ModelCapability) -> bool:
+            return capability is ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA
+
+    adapter = _StubAdapter()
+    assert isinstance(adapter, ModelProviderPortV2)
+    assert adapter.supports(ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA) is True
+    assert adapter.supports(ModelCapability.VISION) is False
 
 
 def test_model_provider_port_v2_rejects_missing_complete() -> None:
     class _MissingComplete:
-        pass
+        def supports(self, capability: ModelCapability) -> bool:
+            del capability
+            return False
 
     assert not isinstance(_MissingComplete(), ModelProviderPortV2)
+
+
+def test_model_provider_port_v2_rejects_missing_supports() -> None:
+    """Codex iter-5 important: ``supports`` is part of the
+    Phase 4 v2 contract (design.md §6 risk-mitigation —
+    capability negotiation lets the runtime route around
+    adapters that lack a feature instead of hard-failing).
+    A class implementing only ``complete`` is not the v2
+    contract."""
+
+    class _MissingSupports:
+        def complete(self, request: ProviderRequest) -> ProviderResponse:
+            del request
+            raise NotImplementedError
+
+    assert not isinstance(_MissingSupports(), ModelProviderPortV2)
+
+
+def test_model_capability_enum_exposed_at_package_root() -> None:
+    import veracrawl.contracts as contracts_pkg
+
+    assert hasattr(contracts_pkg, "ModelCapability")
+    assert "ModelCapability" in contracts_pkg.__all__
 
 
 # --- Foundation registry ----------------------------------------------------
