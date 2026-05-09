@@ -39,11 +39,20 @@ Design boundaries (per Phase 4 design supplement step 4.2):
   Callers that opt out of provider-side strict mode
   (``response_format.strict=False``) accept that the adapter
   will not detect schema violations beyond JSON-decodability.
-* **Capability table**: ``supports`` returns ``True`` for
-  capabilities the adapter has implemented and validated:
-  ``STRUCTURED_OUTPUT_JSON_SCHEMA``, ``TOOL_CALLS``. Vision
-  and extended thinking deferred to Phase 4 step 4.2 follow-up
-  (the wire shape exists, but coverage tests do not yet).
+* **Capability table**: ``supports`` returns ``True`` only for
+  capabilities the adapter has implemented and validated.
+  Phase 4 step 4.2 ships ``STRUCTURED_OUTPUT_JSON_SCHEMA``;
+  tool-call support is **deferred** because the Phase 4 step
+  4.1 ``ProviderResponse`` does not yet carry a tool-call
+  field (multi-turn tool loops need a provider-blind
+  ``ToolCall`` representation). Until that contract surface
+  lands (deferred Phase 4 follow-up — sequence TBD), the
+  adapter:
+  - returns ``False`` from ``supports(TOOL_CALLS)``;
+  - refuses ``ProviderRequest`` instances carrying
+    ``tools`` or ``MessageRole.TOOL`` messages by raising
+    ``NotImplementedError`` at ``complete()``.
+  Vision and extended thinking are similarly deferred.
 """
 
 from __future__ import annotations
@@ -102,7 +111,6 @@ _FINISH_REASON_MAP: Final[dict[str, ProviderFinishReason]] = {
 _SUPPORTED_CAPABILITIES: Final[frozenset[ModelCapability]] = frozenset(
     {
         ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA,
-        ModelCapability.TOOL_CALLS,
     }
 )
 
@@ -283,6 +291,25 @@ class OpenAIResponsesAdapterV2:
         return capability in _SUPPORTED_CAPABILITIES
 
     def complete(self, request: ProviderRequest) -> ProviderResponse:
+        # Codex iter-2 important: tool-call support is not yet
+        # implemented in v2 (the ``ProviderResponse`` contract does
+        # not yet carry a tool-call field, and the Responses API
+        # tool-result wire shape differs from the chat-completions
+        # ``role:"tool"`` envelope). Refuse at the boundary so a
+        # caller cannot silently lose a model-selected tool call
+        # OR send invalid wire data on multi-turn tool loops.
+        if request.tools:
+            raise NotImplementedError(
+                "OpenAIResponsesAdapterV2 does not yet support tool calls; "
+                "the ProviderResponse contract surface for tool calls is a "
+                "deferred Phase 4 follow-up. Build a ProviderRequest with "
+                "no tools, or wait for tool-call support to land."
+            )
+        if any(message.role is MessageRole.TOOL for message in request.messages):
+            raise NotImplementedError(
+                "OpenAIResponsesAdapterV2 does not yet support tool-result "
+                "messages (MessageRole.TOOL); see ``complete`` docstring."
+            )
         body = self._build_request_body(request)
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -306,28 +333,17 @@ class OpenAIResponsesAdapterV2:
         )
 
     def _build_request_body(self, request: ProviderRequest) -> dict[str, Any]:
+        # Tool-call paths are refused at ``complete()`` (codex
+        # iter-2 important — tool-call support deferred until
+        # the ``ProviderResponse`` contract carries a tool-call
+        # field). This function therefore never sees
+        # ``request.tools`` populated.
         body: dict[str, Any] = {
             "model": request.model_name,
             "input": [_message_to_input(m) for m in request.messages],
             "max_output_tokens": request.max_output_tokens,
             "temperature": request.temperature,
         }
-        if request.tools:
-            # OpenAI Responses API flat tool shape (NOT the Chat
-            # Completions ``{"type":"function","function":{...}}``
-            # nested envelope). Per the Responses API:
-            # ``{"type":"function","name":...,"description":...,
-            #   "parameters":...,"strict":...}``.
-            body["tools"] = [
-                {
-                    "type": "function",
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters_schema,
-                    "strict": tool.strict,
-                }
-                for tool in request.tools
-            ]
         if request.response_format.kind is ResponseFormatKind.JSON_SCHEMA:
             body["response_format"] = {
                 "type": "json_schema",

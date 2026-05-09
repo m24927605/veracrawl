@@ -140,9 +140,16 @@ def test_zero_max_attempts_rejected() -> None:
 
 
 def test_supports_returns_documented_capabilities() -> None:
+    """Phase 4 step 4.2 ships ``STRUCTURED_OUTPUT_JSON_SCHEMA``;
+    tool-call support is deferred (codex iter-2 important: the
+    Phase 4 step 4.1 ``ProviderResponse`` contract has no
+    tool-call field and the Responses API tool-result wire
+    shape differs from chat-completions). Vision and extended
+    thinking are also deferred."""
+
     adapter = _build_adapter(lambda _: httpx.Response(200, json=_ok_response_body()))
     assert adapter.supports(ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA) is True
-    assert adapter.supports(ModelCapability.TOOL_CALLS) is True
+    assert adapter.supports(ModelCapability.TOOL_CALLS) is False
     assert adapter.supports(ModelCapability.VISION) is False
     assert adapter.supports(ModelCapability.EXTENDED_THINKING) is False
 
@@ -331,21 +338,16 @@ def test_api_key_never_leaks_into_exception_messages() -> None:
 # --- Tool wire shape (codex iter-1 important) ------------------------------
 
 
-def test_tools_use_responses_api_flat_shape_not_chat_completions_nested() -> None:
-    """OpenAI Responses API tools are flat:
-    ``{"type": "function", "name": ..., "description": ...,
-       "parameters": ..., "strict": ...}`` — NOT the Chat
-    Completions nested ``{"type": "function", "function": {...}}``
-    envelope. ``supports(TOOL_CALLS) == True`` would be a lie if
-    the wire shape is wrong."""
+def test_complete_refuses_request_with_tools() -> None:
+    """Codex iter-2 important: tool-call support is not yet
+    implemented (the Phase 4 step 4.1 ``ProviderResponse``
+    contract has no tool-call field; multi-turn tool loops
+    would silently lose model-selected calls). Refuse at the
+    boundary so a caller cannot send invalid wire data."""
 
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return httpx.Response(200, json=_ok_response_body())
-
-    adapter = _build_adapter(handler)
+    adapter = _build_adapter(
+        lambda _: httpx.Response(200, json=_ok_response_body())
+    )
     tool = ToolSpec(
         name="lookup_product",
         description="Lookup a product by SKU",
@@ -356,30 +358,47 @@ def test_tools_use_responses_api_flat_shape_not_chat_completions_nested() -> Non
         },
         strict=True,
     )
-    request = _build_request()
+    base = _build_request()
     request_with_tool = ProviderRequest(
-        id=request.id,
-        run_ref=request.run_ref,
-        model_name=request.model_name,
-        messages=request.messages,
+        id=base.id,
+        run_ref=base.run_ref,
+        model_name=base.model_name,
+        messages=base.messages,
         tools=[tool],
-        response_format=request.response_format,
-        max_output_tokens=request.max_output_tokens,
+        response_format=base.response_format,
+        max_output_tokens=base.max_output_tokens,
     )
-    adapter.complete(request_with_tool)
+    with pytest.raises(NotImplementedError, match="does not yet support tool calls"):
+        adapter.complete(request_with_tool)
 
-    body = json.loads(captured[0].content)
-    assert "tools" in body
-    assert len(body["tools"]) == 1
-    wire_tool = body["tools"][0]
-    # Flat shape required.
-    assert wire_tool["type"] == "function"
-    assert wire_tool["name"] == "lookup_product"
-    assert wire_tool["description"] == "Lookup a product by SKU"
-    assert wire_tool["parameters"]["type"] == "object"
-    assert wire_tool["strict"] is True
-    # Nested-style fields must NOT be present.
-    assert "function" not in wire_tool
+
+def test_complete_refuses_request_with_tool_role_message() -> None:
+    """Tool-result messages (``MessageRole.TOOL``) are part of
+    the multi-turn tool loop; same deferral as the tool spec
+    case (codex iter-2 important)."""
+
+    adapter = _build_adapter(
+        lambda _: httpx.Response(200, json=_ok_response_body())
+    )
+    tool_msg = Message(
+        role=MessageRole.TOOL,
+        content='{"result": "ok"}',
+        name="lookup_product",
+        tool_call_id="call:1",
+    )
+    base = _build_request()
+    request_with_tool_msg = ProviderRequest(
+        id=base.id,
+        run_ref=base.run_ref,
+        model_name=base.model_name,
+        messages=[*base.messages, tool_msg],
+        response_format=base.response_format,
+        max_output_tokens=base.max_output_tokens,
+    )
+    with pytest.raises(
+        NotImplementedError, match="does not yet support tool-result messages"
+    ):
+        adapter.complete(request_with_tool_msg)
 
 
 # --- Token usage strictness (codex iter-1 minor) ---------------------------
