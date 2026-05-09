@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import string
 import threading
 from collections.abc import Mapping
@@ -52,26 +53,78 @@ from veracrawl.ports.prompt_registry import (
     PromptTemplateVariableError,
 )
 
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+_PRIMITIVE_CONTEXT_TYPES: tuple[type, ...] = (str, int, float, bool, type(None))
+
+
+def _is_primitive_context_value(value: Any) -> bool:
+    """Recursive primitive-allowlist check for prompt context
+    values. Only ``str`` / ``int`` / ``float`` / ``bool`` /
+    ``None`` and homogeneous containers of those are accepted.
+
+    Custom objects (with ``__format__`` / ``__str__`` /
+    ``__getattribute__`` overrides) are refused so a
+    non-credential-holding class cannot smuggle a credential
+    through its formatting protocol.
+    """
+
+    if isinstance(value, _PRIMITIVE_CONTEXT_TYPES):
+        return True
+    if isinstance(value, dict):
+        return all(
+            isinstance(k, str) and _is_primitive_context_value(v)
+            for k, v in value.items()
+        )
+    if isinstance(value, list | tuple):
+        return all(_is_primitive_context_value(item) for item in value)
+    return False
+
 
 def _extract_template_variables(template: str) -> set[str]:
     """Return the set of variable names referenced by a
-    ``str.format_map``-style template body. Only the top-level
-    field names are counted; ``{name.attr}`` is reported as
-    ``name``, ``{items[0]}`` as ``items``.
+    ``str.format_map``-style template body.
+
+    Codex iter-1 important (Phase 2 step 2.3 deferred attack
+    surface): the prompt registry's strict-allowlist defence
+    refuses any field that is not a top-level identifier. That
+    blocks ``{obj.cred._value}`` traversal, ``{obj[token]}``
+    subscripts, ``{0}`` positional fields, and ``{}`` empty
+    fields — all of which would let a custom object's
+    ``__getattribute__`` / ``__getitem__`` / ``__format__``
+    run during render and reach a credential value.
+
+    Returns the set of declared top-level identifiers. Raises
+    ``PromptTemplateLoadError`` (via the caller) for any
+    unsupported field shape so the malformed template fails
+    closed at resolve time, never at render time.
     """
 
     formatter = string.Formatter()
     names: set[str] = set()
     for _literal, field_name, _format_spec, _conversion in formatter.parse(template):
-        if not field_name:
+        if field_name is None:
             continue
-        # Top-level identifier before the first ``.`` or ``[``.
-        head = field_name
-        for delim in (".", "["):
-            head = head.split(delim, 1)[0]
-        if head.isidentifier():
-            names.add(head)
+        # ``{}``, ``{0}``, ``{1}``, ``{0.attr}``, ``{name.attr}``,
+        # ``{name[idx]}`` — every shape that is not a bare
+        # identifier is refused.
+        if not field_name:
+            raise _MalformedTemplateField("empty replacement field {} not allowed")
+        if not _IDENTIFIER_RE.fullmatch(field_name):
+            raise _MalformedTemplateField(
+                "template fields must be plain identifiers "
+                "(no dots, no subscripts, no positional indexes)"
+            )
+        names.add(field_name)
     return names
+
+
+class _MalformedTemplateField(Exception):
+    """Internal signal that a template body contains an
+    unsupported replacement-field shape. The adapter catches
+    this and surfaces a sanitized ``PromptTemplateLoadError``.
+    """
 
 
 def _import_pydantic_class(dotted_path: str) -> Any:
@@ -181,7 +234,25 @@ class JsonPromptRegistry:
             _import_pydantic_class(template.output_schema_class)
         # Validate that declared variables agree with the
         # variables actually referenced by the template body.
-        body_variables = _extract_template_variables(template.template)
+        # ``_extract_template_variables`` also enforces the
+        # strict-allowlist field shape (top-level identifiers
+        # only) — codex iter-1 important Phase 2 step 2.3
+        # residual-attack-surface fix.
+        try:
+            body_variables = _extract_template_variables(template.template)
+        except _MalformedTemplateField as exc:
+            raise PromptTemplateLoadError(
+                template_ref=ref,
+                reason=str(exc),
+            ) from None
+        except ValueError:
+            # ``string.Formatter.parse`` raises for malformed
+            # ``{`` / ``}`` escaping — surface as a sanitized
+            # load error rather than a raw exception.
+            raise PromptTemplateLoadError(
+                template_ref=ref,
+                reason="template body has malformed format syntax",
+            ) from None
         declared = set(template.variables)
         if body_variables != declared:
             missing = sorted(body_variables - declared)
@@ -193,7 +264,13 @@ class JsonPromptRegistry:
                     f"body-only={missing} declared-only={extra}"
                 ),
             )
+        # Double-checked locking: avoid serialising hot-path
+        # cache hits while preventing duplicate parses on
+        # concurrent first resolves.
         with self._cache_lock:
+            cached = self._cache.get(ref)
+            if cached is not None:
+                return cached
             self._cache[ref] = template
         return template
 
@@ -213,6 +290,21 @@ class JsonPromptRegistry:
                 missing=sorted(missing),
                 extra=sorted(extra),
             )
+        # Codex iter-1 important (Phase 2 step 2.3 deferred
+        # attack surface): defense-in-depth on top of the
+        # ``RedactedPromptContext`` structural walk + marker
+        # scan, restrict context values to JSON-like primitives.
+        # That blocks a custom class with ``__format__`` /
+        # ``__str__`` that conjures a credential at format
+        # time without holding one in its ``__dict__`` (which
+        # the structural walk would otherwise miss).
+        for key, value in context.items():
+            if not _is_primitive_context_value(value):
+                raise PromptTemplateVariableError(
+                    template_ref=ref,
+                    missing=[],
+                    extra=[f"non-primitive:{key}"],
+                )
         redacted_context = RedactedPromptContext(context)
         # ``RedactedPromptContext.render`` raises
         # ``PromptCredentialLeakError`` on credential leaks and

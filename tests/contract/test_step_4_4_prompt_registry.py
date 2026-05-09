@@ -278,8 +278,157 @@ def test_render_refuses_credential_in_context(tmp_path: Path) -> None:
     )
     registry = JsonPromptRegistry(root=tmp_path)
     cred = CredentialValue(value="sk-secret-canary", scope_ref="EBAY_PROD")
-    with pytest.raises(PromptCredentialLeakError):
+    # CredentialValue is non-primitive, so the registry's
+    # primitive-allowlist defense refuses it BEFORE the
+    # render-side credential-leak detector runs. Either
+    # refusal is acceptable — the credential never reaches
+    # the formatter.
+    with pytest.raises((PromptCredentialLeakError, PromptTemplateVariableError)):
         registry.render(ref, {"token": cred})
+
+
+def test_prompt_template_rejects_duplicate_variables() -> None:
+    """Codex iter-1 important: duplicate variable names in the
+    declared list silently collapse to a set in the adapter,
+    hiding contract drift."""
+
+    with pytest.raises(ValueError, match="unique"):
+        PromptTemplate(
+            ref="extractor/product.v1",
+            role="extractor",
+            name="product",
+            version="v1",
+            template="extract {url}",
+            variables=["url", "url"],
+        )
+
+
+def test_resolve_refuses_dotted_field_in_template_body(tmp_path: Path) -> None:
+    """Codex iter-1 important: ``{name.attr}`` traversal could
+    let a custom object's ``__getattribute__`` reach a
+    credential at render time. Refuse at resolve so the
+    malformed template never reaches the render path."""
+
+    role_dir = tmp_path / "extractor"
+    role_dir.mkdir()
+    payload = {
+        "ref": "extractor/dotted.v1",
+        "role": "extractor",
+        "name": "dotted",
+        "version": "v1",
+        "template": "Extract {url.host}",
+        "variables": ["url"],
+    }
+    (role_dir / "dotted.v1.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+    registry = JsonPromptRegistry(root=tmp_path)
+    with pytest.raises(PromptTemplateLoadError, match="plain identifiers"):
+        registry.resolve("extractor/dotted.v1")
+
+
+def test_resolve_refuses_subscript_field_in_template_body(tmp_path: Path) -> None:
+    role_dir = tmp_path / "extractor"
+    role_dir.mkdir()
+    payload = {
+        "ref": "extractor/subscript.v1",
+        "role": "extractor",
+        "name": "subscript",
+        "version": "v1",
+        "template": "Extract {items[0]}",
+        "variables": ["items"],
+    }
+    (role_dir / "subscript.v1.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+    registry = JsonPromptRegistry(root=tmp_path)
+    with pytest.raises(PromptTemplateLoadError, match="plain identifiers"):
+        registry.resolve("extractor/subscript.v1")
+
+
+def test_resolve_refuses_positional_index_field(tmp_path: Path) -> None:
+    role_dir = tmp_path / "extractor"
+    role_dir.mkdir()
+    payload = {
+        "ref": "extractor/positional.v1",
+        "role": "extractor",
+        "name": "positional",
+        "version": "v1",
+        "template": "Extract {0}",
+        "variables": [],
+    }
+    (role_dir / "positional.v1.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+    registry = JsonPromptRegistry(root=tmp_path)
+    with pytest.raises(PromptTemplateLoadError, match="plain identifiers"):
+        registry.resolve("extractor/positional.v1")
+
+
+def test_resolve_refuses_empty_replacement_field(tmp_path: Path) -> None:
+    role_dir = tmp_path / "extractor"
+    role_dir.mkdir()
+    payload = {
+        "ref": "extractor/empty.v1",
+        "role": "extractor",
+        "name": "empty",
+        "version": "v1",
+        "template": "Extract {}",
+        "variables": [],
+    }
+    (role_dir / "empty.v1.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+    registry = JsonPromptRegistry(root=tmp_path)
+    with pytest.raises(PromptTemplateLoadError, match="empty replacement"):
+        registry.resolve("extractor/empty.v1")
+
+
+def test_render_refuses_non_primitive_context_value(tmp_path: Path) -> None:
+    """Codex iter-1 important: defense-in-depth — even with
+    field grammar locked to top-level identifiers, a custom
+    class with a ``__format__`` that conjures a credential
+    at format time would slip past. Refuse non-primitive
+    context values."""
+
+    ref = _write_template(
+        tmp_path,
+        role="extractor",
+        name="product",
+        version="v1",
+        template="Extract product at {url}",
+        variables=["url"],
+    )
+    registry = JsonPromptRegistry(root=tmp_path)
+
+    class _SneakyValue:
+        def __format__(self, _: str) -> str:
+            return "secret-leak"
+
+        def __str__(self) -> str:
+            return "secret-leak"
+
+    with pytest.raises(PromptTemplateVariableError) as exc_info:
+        registry.render(ref, {"url": _SneakyValue()})
+    assert any("non-primitive" in entry for entry in exc_info.value.extra)
+
+
+def test_render_accepts_nested_primitive_containers(tmp_path: Path) -> None:
+    """Containers of primitives are allowed (a list/dict/tuple
+    of strings/numbers/etc.) so realistic prompts can pass
+    structured context."""
+
+    ref = _write_template(
+        tmp_path,
+        role="extractor",
+        name="product",
+        version="v1",
+        template="Extract from {anchors}",
+        variables=["anchors"],
+    )
+    registry = JsonPromptRegistry(root=tmp_path)
+    rendered = registry.render(ref, {"anchors": ["a", "b", "c"]})
+    assert "['a', 'b', 'c']" in rendered
 
 
 def test_path_traversal_via_ref_blocked(tmp_path: Path) -> None:

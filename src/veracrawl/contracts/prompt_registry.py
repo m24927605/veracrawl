@@ -77,13 +77,23 @@ class PromptTemplate(VeraModel):
         if not self.template or not self.template.strip():
             raise ValueError("prompt template body must be non-blank")
         # Variable shape — declared variables are pure
-        # identifiers, no escapes, dots, or brackets.
+        # identifiers, no escapes, dots, or brackets. Duplicate
+        # entries are refused so a malformed contract object
+        # cannot drift past validation by being silently
+        # collapsed to a set in the registry.
+        seen: set[str] = set()
         for variable in self.variables:
             if not _NAME_PART_RE.fullmatch(variable):
                 raise ValueError(
                     "prompt template variable names must match "
                     "^[A-Za-z0-9_-]+$"
                 )
+            if variable in seen:
+                raise ValueError(
+                    f"prompt template variables must be unique "
+                    f"(duplicate: {variable!r})"
+                )
+            seen.add(variable)
         if self.output_schema_class is not None:
             if not _OUTPUT_CLASS_RE.fullmatch(self.output_schema_class):
                 raise ValueError(
