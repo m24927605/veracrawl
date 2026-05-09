@@ -345,3 +345,25 @@ def test_provider_finish_reason_exposed_on_enums_module() -> None:
 
     assert hasattr(enums_module, "ProviderFinishReason")
     assert enums_module.ProviderFinishReason.STOP is ProviderFinishReason.STOP
+
+
+def test_phase_4_1_contracts_and_enum_exposed_at_package_root() -> None:
+    """Codex iter-1 important: foundation contracts must be
+    importable from ``veracrawl.contracts`` (the project's
+    public surface), not only from their submodule."""
+
+    import veracrawl.contracts as contracts_pkg
+
+    for name in (
+        "Anchor",
+        "ProviderRequest",
+        "ProviderResponse",
+        "TokenUsageEstimate",
+        "ProviderFinishReason",
+    ):
+        assert hasattr(contracts_pkg, name), (
+            f"{name} must be re-exported from veracrawl.contracts"
+        )
+        assert name in contracts_pkg.__all__, (
+            f"{name} must appear in veracrawl.contracts.__all__"
+        )

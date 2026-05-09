@@ -44,8 +44,10 @@ authors see the full surface):
    :class:`ProductionRuntimeNotImplemented` until Phase 6 step
    6.1 wires the production deployment.
 
-Port is ``@runtime_checkable`` and listed in the foundation
-registry under ``"ModelProviderPortV2"``.
+Port is ``@runtime_checkable`` per the project's port
+convention (data contracts go in ``FOUNDATION_CONTRACTS``;
+ports are typed Protocols with ``isinstance`` discoverability
+via ``@runtime_checkable``).
 """
 
 from __future__ import annotations

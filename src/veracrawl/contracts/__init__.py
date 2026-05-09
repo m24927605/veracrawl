@@ -108,6 +108,7 @@ from veracrawl.contracts.enums import (
     AccessControlProvider,
     CalibrationMethod,
     MessageRole,
+    ProviderFinishReason,
     RecoveryDecisionKind,
     RecoveryDecisionSource,
     RecoveryTerminationReason,
@@ -190,6 +191,12 @@ from veracrawl.contracts.infrastructure import (
     RuntimeInfrastructureFixtureManifest,
     RuntimeInfrastructureReport,
     RuntimeInfrastructureSpec,
+)
+from veracrawl.contracts.llm_input import (
+    Anchor,
+    ProviderRequest,
+    ProviderResponse,
+    TokenUsageEstimate,
 )
 from veracrawl.contracts.memory import (
     CrossScopeMemoryTunnel,
@@ -553,8 +560,12 @@ __all__ = [
     "LLMExtractionCandidate",
     "LLMFieldCitation",
     "LLMFieldConfidence",
+    "Anchor",
     "Message",
     "MessageRole",
+    "ProviderFinishReason",
+    "ProviderRequest",
+    "ProviderResponse",
     "RecoveryDecision",
     "RecoveryDecisionKind",
     "RecoveryDecisionSource",
@@ -565,6 +576,7 @@ __all__ = [
     "RouteClass",
     "TokenBudget",
     "TokenUsage",
+    "TokenUsageEstimate",
     "ToolCall",
     "ToolSpec",
     "FetchResult",
