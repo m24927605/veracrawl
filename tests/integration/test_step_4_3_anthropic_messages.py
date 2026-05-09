@@ -190,6 +190,49 @@ def test_complete_text_response_returns_provider_response() -> None:
     assert captured[0].headers["anthropic-version"] == "2023-06-01"
 
 
+def test_consecutive_same_role_messages_are_coalesced_for_alternating_turns() -> None:
+    """Codex iter-5 important: Anthropic Messages requires
+    alternating USER/ASSISTANT turns, while the provider-
+    blind ``ProviderRequest`` allows any sequence. Adjacent
+    same-role USER messages must be merged into one turn
+    (with ``\\n`` between contents) before reaching the wire."""
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=_ok_response_body())
+
+    adapter = _build_adapter(handler)
+    multi_user_request = ProviderRequest(
+        id="provider-request:phase-4-3:coalesce",
+        run_ref="run:phase-4-3:coalesce",
+        model_name="claude-sonnet-4-6",
+        messages=[
+            Message(role=MessageRole.USER, content="Context chunk A"),
+            Message(role=MessageRole.USER, content="Context chunk B"),
+            Message(role=MessageRole.ASSISTANT, content="Acknowledged"),
+            Message(role=MessageRole.USER, content="Now extract"),
+        ],
+        response_format=ResponseFormat(kind=ResponseFormatKind.TEXT),
+        max_output_tokens=128,
+    )
+    adapter.complete(multi_user_request)
+
+    body = json.loads(captured[0].content)
+    wire_messages = body["messages"]
+    # Three turns survive: merged USER, ASSISTANT, USER.
+    assert len(wire_messages) == 3
+    assert wire_messages[0]["role"] == "user"
+    assert wire_messages[0]["content"] == "Context chunk A\nContext chunk B"
+    assert wire_messages[1]["role"] == "assistant"
+    assert wire_messages[2]["role"] == "user"
+    assert wire_messages[2]["content"] == "Now extract"
+    # Roles strictly alternate.
+    roles = [m["role"] for m in wire_messages]
+    assert all(roles[i] != roles[i + 1] for i in range(len(roles) - 1))
+
+
 def test_multi_block_text_response_joins_with_newline_separator() -> None:
     """Codex iter-3 critical: joining Anthropic text blocks
     with an empty separator can corrupt content. Block

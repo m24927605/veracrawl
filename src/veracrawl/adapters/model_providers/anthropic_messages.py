@@ -68,14 +68,18 @@ Mapping ``ProviderRequest`` → Anthropic body:
 * ``MessageRole.TOOL`` is refused (deferred — same as the
   OpenAI v2 adapter; Anthropic tool-result blocks have a
   different wire shape too).
-* ``response_format.kind == JSON_SCHEMA`` is **not** emitted
-  on the wire (Anthropic Messages API does not support
-  per-call JSON-schema enforcement; structured output is a
-  prompt-engineering pattern). The adapter still parses the
-  text as JSON for callers that opt into that flow, with the
-  same minimal-shape check as OpenAI v2 — and the capability
-  flag returns ``False`` so callers requiring guaranteed
-  structured output do not route here.
+* Adjacent same-role USER/ASSISTANT messages are coalesced
+  into one turn by newline-joining their ``content`` —
+  Anthropic requires alternating turns while the provider-
+  blind ``ProviderRequest`` shape does not.
+* ``response_format.kind == JSON_SCHEMA`` is **refused at the
+  adapter boundary** with ``NotImplementedError`` (codex
+  iter-4). Anthropic does not enforce per-call JSON Schema,
+  and the v2 adapter does not perform client-side
+  validation; ``JSON_SCHEMA`` callers route through Phase 4
+  step 4.6 ``schema_runtime``. ``JSON_OBJECT`` is parsed and
+  returned (its contract is "any JSON object" — JSON-decode
+  + dict root fully satisfies it).
 
 Mapping Anthropic ``stop_reason`` → :class:`ProviderFinishReason`:
 
@@ -251,6 +255,44 @@ def _message_to_anthropic(message: Message) -> dict[str, Any]:
         MessageRole.ASSISTANT: "assistant",
     }
     return {"role": role_map[message.role], "content": message.content}
+
+
+def _coalesce_same_role_runs(messages: list[Message]) -> list[Message]:
+    """Normalize same-role adjacency for the Anthropic Messages API.
+
+    Codex iter-5 important: Anthropic requires alternating
+    USER / ASSISTANT turns, while the provider-blind
+    ``ProviderRequest`` shape allows any sequence of roles.
+    A valid cross-provider request with multiple leading USER
+    messages — common when a caller assembles several context
+    chunks before the assistant turn — would work on OpenAI
+    but fail at the Anthropic wire boundary.
+
+    Resolution: join consecutive same-role USER/ASSISTANT
+    messages by concatenating their ``content`` with a
+    newline separator. This preserves the meaning of each
+    chunk while satisfying the alternating-turn requirement.
+    The original ``ProviderRequest`` is unchanged; only the
+    wire-shape projection coalesces.
+    """
+
+    if not messages:
+        return messages
+    coalesced: list[Message] = []
+    for message in messages:
+        if (
+            coalesced
+            and coalesced[-1].role is message.role
+            and message.role in {MessageRole.USER, MessageRole.ASSISTANT}
+        ):
+            previous = coalesced[-1]
+            coalesced[-1] = Message(
+                role=previous.role,
+                content=f"{previous.content}\n{message.content}",
+            )
+        else:
+            coalesced.append(message)
+    return coalesced
 
 
 def _extract_output_text(response: dict[str, Any]) -> str:
@@ -447,9 +489,13 @@ class AnthropicMessagesAdapter:
 
     def _build_request_body(self, request: ProviderRequest) -> dict[str, Any]:
         system_prompt, rest = _split_leading_system_messages(request.messages)
+        # Codex iter-5 important: normalize same-role adjacency
+        # before emitting the wire body — Anthropic Messages
+        # requires alternating USER/ASSISTANT turns.
+        rest_coalesced = _coalesce_same_role_runs(rest)
         body: dict[str, Any] = {
             "model": request.model_name,
-            "messages": [_message_to_anthropic(m) for m in rest],
+            "messages": [_message_to_anthropic(m) for m in rest_coalesced],
             "max_tokens": request.max_output_tokens,
             "temperature": request.temperature,
         }

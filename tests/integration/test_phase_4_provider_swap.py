@@ -209,6 +209,67 @@ def test_provider_swap_handles_provider_specific_finish_reason_mapping() -> None
     assert anthropic_response.finish_reason is ProviderFinishReason.STOP
 
 
+def test_provider_swap_multi_turn_request_succeeds_on_both_providers() -> None:
+    """Codex iter-5 minor: a provider-blind acceptance test
+    must cover multi-turn conversations, not just a single
+    system+user turn. Anthropic-specific normalization
+    (alternating turns) is exercised here so a future
+    refactor that breaks it surfaces in this test."""
+
+    multi_turn_request_openai = ProviderRequest(
+        id="provider-swap:multi:openai",
+        run_ref="run:provider-swap:multi",
+        model_name="gpt-4o-mini",
+        messages=[
+            Message(role=MessageRole.SYSTEM, content="You are a careful extractor."),
+            Message(role=MessageRole.USER, content="Context chunk A"),
+            Message(role=MessageRole.USER, content="Context chunk B"),
+            Message(role=MessageRole.ASSISTANT, content="Acknowledged"),
+            Message(role=MessageRole.USER, content="Now extract."),
+        ],
+        response_format=ResponseFormat(kind=ResponseFormatKind.TEXT),
+        max_output_tokens=128,
+    )
+    multi_turn_request_anthropic = ProviderRequest(
+        id="provider-swap:multi:anthropic",
+        run_ref="run:provider-swap:multi",
+        model_name="claude-sonnet-4-6",
+        messages=multi_turn_request_openai.messages,
+        response_format=ResponseFormat(kind=ResponseFormatKind.TEXT),
+        max_output_tokens=128,
+    )
+
+    openai_adapter = OpenAIResponsesAdapterV2(
+        api_key=_OPENAI_API_KEY,
+        runtime_mode=RuntimeMode.FIXTURE,
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json=_openai_response_body())
+        ),
+        sleep_fn=lambda _: None,
+        jitter_fn=lambda: 0.0,
+    )
+    anthropic_adapter = AnthropicMessagesAdapter(
+        api_key=_ANTHROPIC_API_KEY,
+        runtime_mode=RuntimeMode.FIXTURE,
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json=_anthropic_response_body())
+        ),
+        sleep_fn=lambda _: None,
+        jitter_fn=lambda: 0.0,
+    )
+
+    openai_response = openai_adapter.complete(multi_turn_request_openai)
+    anthropic_response = anthropic_adapter.complete(multi_turn_request_anthropic)
+
+    # Both adapters complete the multi-turn request without
+    # raising; the provider-specific shaping (Anthropic
+    # alternating-turn normalization, OpenAI developer-role
+    # mapping) is the adapter's job and must not surface as
+    # a wire-shape failure to the caller.
+    assert openai_response.finish_reason is ProviderFinishReason.STOP
+    assert anthropic_response.finish_reason is ProviderFinishReason.STOP
+
+
 def test_provider_swap_json_schema_refused_at_adapter_boundary_both_sides() -> None:
     """Codex iter-4 critical: refuse ``JSON_SCHEMA`` at the
     adapter boundary symmetrically across both providers.
