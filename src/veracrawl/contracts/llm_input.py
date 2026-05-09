@@ -36,7 +36,13 @@ from typing import Any
 
 from pydantic import Field, model_validator
 
-from veracrawl.contracts.agent import Message, ResponseFormat, TokenUsage, ToolSpec
+from veracrawl.contracts.agent import (
+    Message,
+    ResponseFormat,
+    TokenUsage,
+    ToolCall,
+    ToolSpec,
+)
 from veracrawl.contracts.common import Ref, VeraModel
 from veracrawl.contracts.enums import ProviderFinishReason
 
@@ -154,6 +160,7 @@ class ProviderResponse(VeraModel):
     finish_reason: ProviderFinishReason
     parsed_output: dict[str, Any] | None = None
     raw_response_ref: Ref | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_response(self) -> ProviderResponse:
@@ -197,6 +204,20 @@ class ProviderResponse(VeraModel):
         # rejecting these structurally prevents an adapter from
         # claiming a successful structured extraction on a
         # blocked / errored response.
+        if self.tool_calls:
+            # tool_calls + non-TOOL_CALL finish_reason is a
+            # contract violation: the adapter would have
+            # silently lost the model's tool selection if the
+            # finish reason said something else.
+            if self.finish_reason is not ProviderFinishReason.TOOL_CALL:
+                raise ValueError(
+                    f"tool_calls populated but finish_reason is "
+                    f"{self.finish_reason.value!r}; expected TOOL_CALL"
+                )
+            # tool_call ids must be unique within a response.
+            ids = [tc.id for tc in self.tool_calls]
+            if len(ids) != len(set(ids)):
+                raise ValueError("tool_calls ids must be unique within a response")
         if self.parsed_output is not None:
             # ``LENGTH`` (truncated generation) is also refused
             # for ``parsed_output`` (codex iter-5 important):

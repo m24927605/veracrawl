@@ -359,6 +359,89 @@ def test_provider_response_rejects_parsed_output_for_blocked_finish_reasons(
         )
 
 
+def test_provider_response_tool_calls_round_trip() -> None:
+    """Tool-call recovery (Phase 4 / 5 follow-up): adapters
+    can return one or more ``ToolCall`` records when the
+    model selected tools."""
+
+    from veracrawl.contracts.agent import ToolCall
+
+    response = ProviderResponse(
+        id="provider-response:1",
+        request_ref="provider-request:phase-4-1:1",
+        text="",
+        usage=_make_usage(),
+        finish_reason=ProviderFinishReason.TOOL_CALL,
+        tool_calls=[
+            ToolCall(id="call_1", name="lookup_product", arguments={"sku": "ABC"}),
+            ToolCall(id="call_2", name="get_inventory", arguments={"sku": "ABC"}),
+        ],
+    )
+    assert len(response.tool_calls) == 2
+    assert response.tool_calls[0].name == "lookup_product"
+
+
+def test_provider_response_rejects_tool_calls_with_non_tool_call_finish_reason() -> (
+    None
+):
+    """If ``tool_calls`` is populated, ``finish_reason`` MUST
+    be TOOL_CALL — otherwise the adapter would have silently
+    lost the model's tool selection."""
+
+    from veracrawl.contracts.agent import ToolCall
+
+    with pytest.raises(ValueError, match="finish_reason"):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="some text",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.STOP,
+            tool_calls=[
+                ToolCall(id="call_1", name="lookup", arguments={}),
+            ],
+        )
+
+
+def test_provider_response_rejects_duplicate_tool_call_ids() -> None:
+    """Duplicate tool_call ids would silently shadow earlier
+    tool calls when the orchestrator routes results back."""
+
+    from veracrawl.contracts.agent import ToolCall
+
+    with pytest.raises(ValueError, match="unique"):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.TOOL_CALL,
+            tool_calls=[
+                ToolCall(id="call_1", name="lookup", arguments={}),
+                ToolCall(id="call_1", name="lookup_again", arguments={}),
+            ],
+        )
+
+
+def test_provider_response_tool_call_finish_reason_with_empty_tool_calls_allowed() -> (
+    None
+):
+    """``finish_reason=TOOL_CALL`` with empty ``tool_calls`` is
+    permitted (provider may indicate tool intent without
+    materialising the call records — adapter then routes to
+    a model-specific recovery path)."""
+
+    response = ProviderResponse(
+        id="provider-response:1",
+        request_ref="provider-request:phase-4-1:1",
+        text="",
+        usage=_make_usage(),
+        finish_reason=ProviderFinishReason.TOOL_CALL,
+        tool_calls=[],
+    )
+    assert response.tool_calls == []
+
+
 @pytest.mark.parametrize(
     "finish_reason",
     [
