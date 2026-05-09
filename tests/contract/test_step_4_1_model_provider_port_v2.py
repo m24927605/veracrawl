@@ -223,7 +223,7 @@ def test_provider_response_rejects_blank_request_ref() -> None:
         )
 
 
-def test_provider_response_rejects_blank_text_when_finish_reason_is_stop() -> None:
+def test_provider_response_rejects_empty_text_when_finish_reason_is_stop() -> None:
     with pytest.raises(ValueError, match="text must be non-empty"):
         ProviderResponse(
             id="provider-response:1",
@@ -234,15 +234,52 @@ def test_provider_response_rejects_blank_text_when_finish_reason_is_stop() -> No
         )
 
 
-def test_provider_response_allows_blank_text_when_finish_reason_is_tool_call() -> None:
+def test_provider_response_rejects_whitespace_only_text_when_finish_reason_is_stop() -> (
+    None
+):
+    """Codex iter-2 important: whitespace-only text on STOP is the
+    same wiring bug as empty text — match the rest of the boundary
+    that uses ``.strip()`` checks."""
+
+    with pytest.raises(ValueError, match="text must be non-empty"):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="   \t\n",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.STOP,
+        )
+
+
+@pytest.mark.parametrize(
+    "finish_reason",
+    [
+        ProviderFinishReason.TOOL_CALL,
+        ProviderFinishReason.CONTENT_FILTER,
+        ProviderFinishReason.LENGTH,
+        ProviderFinishReason.ERROR,
+    ],
+)
+def test_provider_response_allows_empty_text_for_non_stop_finish_reasons(
+    finish_reason: ProviderFinishReason,
+) -> None:
+    """Codex iter-2 important: real providers can return no
+    output for ``CONTENT_FILTER`` (blocked content), ``LENGTH``
+    (max tokens reached before any text), ``ERROR`` (pre-
+    generation failure surfaced at the response layer), and
+    ``TOOL_CALL`` (model returned only a tool call). Forcing
+    text on these reasons would push adapters to fabricate it
+    or fail to construct a typed response."""
+
     response = ProviderResponse(
         id="provider-response:1",
         request_ref="provider-request:phase-4-1:1",
         text="",
         usage=_make_usage(),
-        finish_reason=ProviderFinishReason.TOOL_CALL,
+        finish_reason=finish_reason,
     )
     assert response.text == ""
+    assert response.finish_reason is finish_reason
 
 
 def test_provider_response_requires_usage() -> None:

@@ -158,16 +158,28 @@ class ProviderResponse(VeraModel):
         _ensure_non_blank_identifier(
             "provider response request_ref", self.request_ref
         )
-        # ``text`` may be blank when ``finish_reason == TOOL_CALL`` (the
-        # model returned only a tool call); otherwise blank text
-        # is a wiring bug.
+        # Successful text-bearing completions (``STOP``) require
+        # non-empty, non-whitespace-only text — empty text on
+        # ``STOP`` is a wiring bug. Other finish reasons may
+        # legitimately have empty text:
+        # * ``TOOL_CALL`` — the model returned only a tool call.
+        # * ``CONTENT_FILTER`` — provider blocked generation.
+        # * ``LENGTH`` — max tokens reached before any text emitted
+        #   (rare but possible with very small caps).
+        # * ``ERROR`` — pre-generation error returned at the
+        #   response layer (adapters typically ``raise`` for these
+        #   per the port's raise-vs-return policy, but a defensive
+        #   adapter may return one).
+        # Whitespace-only text on ``STOP`` is also refused so the
+        # boundary stays consistent with anchor excerpt /
+        # identifier validators that ``.strip()``-check.
         if (
-            self.finish_reason is not ProviderFinishReason.TOOL_CALL
-            and not self.text
+            self.finish_reason is ProviderFinishReason.STOP
+            and not self.text.strip()
         ):
             raise ValueError(
-                f"provider response text must be non-empty unless "
-                f"finish_reason is TOOL_CALL (got {self.finish_reason.value})"
+                "provider response text must be non-empty (and not "
+                "whitespace-only) when finish_reason is STOP"
             )
         return self
 
