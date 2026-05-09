@@ -41,7 +41,7 @@ import pytest
 from veracrawl.adapters.model_providers.openai_responses_v2 import (
     OpenAIResponsesAdapterV2,
 )
-from veracrawl.contracts.agent import Message, ResponseFormat
+from veracrawl.contracts.agent import Message, ResponseFormat, ToolSpec
 from veracrawl.contracts.enums import (
     MessageRole,
     ModelCapability,
@@ -49,6 +49,7 @@ from veracrawl.contracts.enums import (
     ResponseFormatKind,
 )
 from veracrawl.contracts.errors import (
+    ProviderAdapterFailure,
     ProviderAuthFailed,
     ProviderServerError,
     StructuredOutputViolation,
@@ -325,6 +326,108 @@ def test_api_key_never_leaks_into_exception_messages() -> None:
         adapter.complete(_build_request())
     assert _API_KEY_CANARY not in str(exc_info.value)
     assert _API_KEY_CANARY not in repr(exc_info.value)
+
+
+# --- Tool wire shape (codex iter-1 important) ------------------------------
+
+
+def test_tools_use_responses_api_flat_shape_not_chat_completions_nested() -> None:
+    """OpenAI Responses API tools are flat:
+    ``{"type": "function", "name": ..., "description": ...,
+       "parameters": ..., "strict": ...}`` — NOT the Chat
+    Completions nested ``{"type": "function", "function": {...}}``
+    envelope. ``supports(TOOL_CALLS) == True`` would be a lie if
+    the wire shape is wrong."""
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=_ok_response_body())
+
+    adapter = _build_adapter(handler)
+    tool = ToolSpec(
+        name="lookup_product",
+        description="Lookup a product by SKU",
+        parameters_schema={
+            "type": "object",
+            "properties": {"sku": {"type": "string"}},
+            "required": ["sku"],
+        },
+        strict=True,
+    )
+    request = _build_request()
+    request_with_tool = ProviderRequest(
+        id=request.id,
+        run_ref=request.run_ref,
+        model_name=request.model_name,
+        messages=request.messages,
+        tools=[tool],
+        response_format=request.response_format,
+        max_output_tokens=request.max_output_tokens,
+    )
+    adapter.complete(request_with_tool)
+
+    body = json.loads(captured[0].content)
+    assert "tools" in body
+    assert len(body["tools"]) == 1
+    wire_tool = body["tools"][0]
+    # Flat shape required.
+    assert wire_tool["type"] == "function"
+    assert wire_tool["name"] == "lookup_product"
+    assert wire_tool["description"] == "Lookup a product by SKU"
+    assert wire_tool["parameters"]["type"] == "object"
+    assert wire_tool["strict"] is True
+    # Nested-style fields must NOT be present.
+    assert "function" not in wire_tool
+
+
+# --- Token usage strictness (codex iter-1 minor) ---------------------------
+
+
+def test_missing_usage_block_raises_adapter_failure() -> None:
+    """Codex iter-1 minor: an absent or non-dict ``usage`` block
+    is a contract violation, not a fill-with-zeros case. Token-
+    budget audits never see fabricated zero counts."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp:abcdef",
+                "status": "completed",
+                "output": [
+                    {"content": [{"type": "output_text", "text": "extracted"}]},
+                ],
+                # NB: no ``usage`` block.
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure):
+        adapter.complete(_build_request())
+
+
+def test_partial_usage_block_raises_adapter_failure() -> None:
+    """``usage`` block present but missing ``input_tokens`` or
+    ``output_tokens`` is also a contract violation."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp:abcdef",
+                "status": "completed",
+                "output": [
+                    {"content": [{"type": "output_text", "text": "extracted"}]},
+                ],
+                "usage": {"total_tokens": 10},
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure):
+        adapter.complete(_build_request())
 
 
 # --- v1 deprecation ---------------------------------------------------------

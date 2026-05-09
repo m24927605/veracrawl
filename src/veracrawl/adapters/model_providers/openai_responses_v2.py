@@ -28,12 +28,17 @@ Design boundaries (per Phase 4 design supplement step 4.2):
   the upstream ``x-request-id`` header).
 * **Structured output**: when
   ``request.response_format.kind == JSON_SCHEMA``, the adapter
-  parses the response text as JSON and (best-effort) validates
-  it against the schema; mismatches raise
-  :class:`StructuredOutputViolation`. Full strict-mode
-  validation is the OpenAI Responses API's responsibility
-  (``response_format.strict=True``); the adapter trusts the
-  API's strict-mode flag and only re-checks JSON parseability.
+  parses the response text as JSON and surfaces a
+  :class:`StructuredOutputViolation` for non-decodable JSON or
+  non-object roots. **Schema validation is the OpenAI Responses
+  API's responsibility** (``response_format.strict=True``);
+  the v2 adapter does NOT re-validate against the schema in
+  Phase 4 (a Pydantic-class-based round-trip validator is
+  scoped to Phase 4 step 4.6 ``schema_runtime`` where the
+  caller provides the Pydantic class to validate against).
+  Callers that opt out of provider-side strict mode
+  (``response_format.strict=False``) accept that the adapter
+  will not detect schema violations beyond JSON-decodability.
 * **Capability table**: ``supports`` returns ``True`` for
   capabilities the adapter has implemented and validated:
   ``STRUCTURED_OUTPUT_JSON_SCHEMA``, ``TOOL_CALLS``. Vision
@@ -178,29 +183,37 @@ def _extract_usage(response: dict[str, Any]) -> TokenUsage:
     Boundary invariant (Phase 4 step 4.1): ``ProviderResponse``
     requires non-``None`` ``usage``. If the API omits ``usage``,
     raise — silently filling with zeros would let token-budget
-    audits drift.
+    audits drift past the declared cap.
     """
 
-    usage = response.get("usage", {})
-    if not isinstance(usage, dict):
+    usage_raw = response.get("usage")
+    if not isinstance(usage_raw, dict):
+        # Codex iter-1 important: an absent or non-dict ``usage``
+        # block is a contract violation, not a "fill with zeros"
+        # case. Surface as ADAPTER_FAILURE so token-budget audits
+        # never see fabricated zero counts.
         raise ProviderAdapterFailure(
             status_code=200,
             error_code="ADAPTER_FAILURE",
             request_id=None,
         )
-    prompt = int(usage.get("input_tokens", 0))
-    completion = int(usage.get("output_tokens", 0))
-    total = int(usage.get("total_tokens", prompt + completion))
-    cached_input = int(
-        usage.get("input_tokens_details", {}).get("cached_tokens", 0)
-        if isinstance(usage.get("input_tokens_details"), dict)
-        else 0
-    )
-    reasoning = int(
-        usage.get("output_tokens_details", {}).get("reasoning_tokens", 0)
-        if isinstance(usage.get("output_tokens_details"), dict)
-        else 0
-    )
+    if "input_tokens" not in usage_raw or "output_tokens" not in usage_raw:
+        raise ProviderAdapterFailure(
+            status_code=200,
+            error_code="ADAPTER_FAILURE",
+            request_id=None,
+        )
+    prompt = int(usage_raw["input_tokens"])
+    completion = int(usage_raw["output_tokens"])
+    total = int(usage_raw.get("total_tokens", prompt + completion))
+    cached_input = 0
+    input_details = usage_raw.get("input_tokens_details")
+    if isinstance(input_details, dict):
+        cached_input = int(input_details.get("cached_tokens", 0))
+    reasoning = 0
+    output_details = usage_raw.get("output_tokens_details")
+    if isinstance(output_details, dict):
+        reasoning = int(output_details.get("reasoning_tokens", 0))
     return TokenUsage(
         prompt_tokens=prompt,
         completion_tokens=completion,
@@ -300,15 +313,18 @@ class OpenAIResponsesAdapterV2:
             "temperature": request.temperature,
         }
         if request.tools:
+            # OpenAI Responses API flat tool shape (NOT the Chat
+            # Completions ``{"type":"function","function":{...}}``
+            # nested envelope). Per the Responses API:
+            # ``{"type":"function","name":...,"description":...,
+            #   "parameters":...,"strict":...}``.
             body["tools"] = [
                 {
                     "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.parameters_schema,
-                        "strict": tool.strict,
-                    },
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters_schema,
+                    "strict": tool.strict,
                 }
                 for tool in request.tools
             ]
@@ -404,13 +420,17 @@ class OpenAIResponsesAdapterV2:
     ) -> dict[str, Any] | None:
         """Parse JSON when the request asked for JSON.
 
+        Scope (codex iter-1 important): the v2 adapter checks
+        only JSON decodability + object-root shape. Schema
+        validation against ``response_format.json_schema`` is
+        the OpenAI Responses API's responsibility under
+        ``strict=True``. Phase 4 step 4.6 ``schema_runtime``
+        owns the Pydantic-class-based round-trip validator
+        once the caller supplies the target class.
+
         ``ProviderResponse.parsed_output`` is rejected for
         ``CONTENT_FILTER`` / ``ERROR`` / ``LENGTH`` at the
-        contract layer; we don't even try to parse for those
-        cases (would just raise an unhelpful validation error).
-        For ``JSON_SCHEMA`` strict-mode requests the OpenAI
-        Responses API enforces the schema upstream — the
-        adapter only re-checks JSON parseability here.
+        contract layer; we don't try to parse for those cases.
         """
 
         if request.response_format.kind not in (
