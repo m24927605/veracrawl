@@ -259,6 +259,99 @@ def test_provider_response_rejects_whitespace_only_text_when_finish_reason_is_st
         )
 
 
+def test_provider_response_parsed_output_with_text_provenance_is_valid() -> None:
+    response = ProviderResponse(
+        id="provider-response:1",
+        request_ref="provider-request:phase-4-1:1",
+        text='{"sku": "ABC"}',
+        usage=_make_usage(),
+        finish_reason=ProviderFinishReason.STOP,
+        parsed_output={"sku": "ABC"},
+    )
+    assert response.parsed_output == {"sku": "ABC"}
+
+
+def test_provider_response_parsed_output_with_raw_ref_provenance_is_valid() -> None:
+    """Codex iter-4 important: parsed_output is allowed with no
+    text when ``raw_response_ref`` carries the audit-copy provenance.
+    Plausible on TOOL_CALL where the model returned only a tool
+    call but the structured output was reconstructed from the
+    raw provider transcript."""
+
+    response = ProviderResponse(
+        id="provider-response:1",
+        request_ref="provider-request:phase-4-1:1",
+        text="",
+        usage=_make_usage(),
+        finish_reason=ProviderFinishReason.TOOL_CALL,
+        parsed_output={"tool": "lookup"},
+        raw_response_ref="artifact:provider-raw:1",
+    )
+    assert response.parsed_output == {"tool": "lookup"}
+
+
+def test_provider_response_rejects_parsed_output_without_provenance() -> None:
+    """Codex iter-4 important: parsed_output without text AND
+    without raw_response_ref means the structured extraction
+    has no provider transcript — replay can never reproduce
+    it. Refuse at construction."""
+
+    with pytest.raises(
+        ValueError, match="parsed_output requires either non-blank text"
+    ):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.TOOL_CALL,
+            parsed_output={"sku": "ABC"},
+        )
+
+
+def test_provider_response_rejects_parsed_output_with_blank_raw_ref() -> None:
+    with pytest.raises(
+        ValueError, match="parsed_output requires either non-blank text"
+    ):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.TOOL_CALL,
+            parsed_output={"sku": "ABC"},
+            raw_response_ref="   ",
+        )
+
+
+@pytest.mark.parametrize(
+    "blocked_reason",
+    [ProviderFinishReason.CONTENT_FILTER, ProviderFinishReason.ERROR],
+)
+def test_provider_response_rejects_parsed_output_for_blocked_finish_reasons(
+    blocked_reason: ProviderFinishReason,
+) -> None:
+    """Codex iter-4 important: ``CONTENT_FILTER`` (provider
+    blocked generation) and ``ERROR`` (pre-generation failure)
+    are not states where structured output is meaningful;
+    refuse parsed_output structurally so an adapter cannot
+    falsely claim a successful structured extraction on a
+    blocked or errored response."""
+
+    with pytest.raises(
+        ValueError, match="parsed_output is not meaningful when finish_reason"
+    ):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="",
+            usage=_make_usage(),
+            finish_reason=blocked_reason,
+            parsed_output={"sku": "ABC"},
+            raw_response_ref="artifact:provider-raw:1",
+        )
+
+
 @pytest.mark.parametrize(
     "finish_reason",
     [

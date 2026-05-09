@@ -184,6 +184,38 @@ class ProviderResponse(VeraModel):
                 "provider response text must be non-empty (and not "
                 "whitespace-only) when finish_reason is STOP"
             )
+        # ``parsed_output`` must always be backed by provenance
+        # (codex iter-4 important): otherwise the audit boundary
+        # would accept "structured output succeeded" with no
+        # provider transcript and no durable raw-response ref,
+        # which Phase 6 replay can never reproduce. Provenance =
+        # non-blank ``text`` (the model wrote it down) OR a
+        # non-blank ``raw_response_ref`` (durable audit copy of
+        # the wire response). Also: ``parsed_output`` is not
+        # meaningful for ``CONTENT_FILTER`` (provider blocked
+        # generation) or ``ERROR`` (pre-generation failure) —
+        # rejecting these structurally prevents an adapter from
+        # claiming a successful structured extraction on a
+        # blocked / errored response.
+        if self.parsed_output is not None:
+            if self.finish_reason in {
+                ProviderFinishReason.CONTENT_FILTER,
+                ProviderFinishReason.ERROR,
+            }:
+                raise ValueError(
+                    f"parsed_output is not meaningful when finish_reason "
+                    f"is {self.finish_reason.value}"
+                )
+            has_text_provenance = bool(self.text.strip())
+            has_raw_provenance = (
+                self.raw_response_ref is not None
+                and bool(self.raw_response_ref.strip())
+            )
+            if not has_text_provenance and not has_raw_provenance:
+                raise ValueError(
+                    "parsed_output requires either non-blank text or a "
+                    "non-blank raw_response_ref as provenance"
+                )
         return self
 
 
