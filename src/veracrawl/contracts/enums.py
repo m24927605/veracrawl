@@ -1866,6 +1866,22 @@ class CalibrationMethod(StrEnum):
     ISOTONIC = "isotonic"
 
 
+class ProviderFinishReason(StrEnum):
+    """Why the model stopped generating output (Phase 4 v2 surface).
+
+    Provider-blind: the intersection of OpenAI Responses
+    ``status`` + ``stop_reason`` and Anthropic Messages
+    ``stop_reason``. Adapters map provider-specific values to
+    this enum at the port boundary.
+    """
+
+    STOP = "stop"
+    LENGTH = "length"
+    TOOL_CALL = "tool_call"
+    CONTENT_FILTER = "content_filter"
+    ERROR = "error"
+
+
 class RecoveryDecisionKind(StrEnum):
     """Outcome the recovery layer asks the orchestrator to take."""
 

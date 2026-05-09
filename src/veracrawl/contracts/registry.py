@@ -326,6 +326,33 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "agent",
         tests=["tests/contract/test_agent_contracts_v2.py"],
     ),
+    # Phase 4 step 4.1 — provider-blind LLM call surface contracts.
+    "Anchor": _contract(
+        "Anchor",
+        OwnerService.AGENTS,
+        "llm_input",
+        tests=["tests/contract/test_step_4_1_model_provider_port_v2.py"],
+    ),
+    "ProviderRequest": _contract(
+        "ProviderRequest",
+        OwnerService.AGENTS,
+        "llm_input",
+        privacy=True,
+        tests=["tests/contract/test_step_4_1_model_provider_port_v2.py"],
+    ),
+    "ProviderResponse": _contract(
+        "ProviderResponse",
+        OwnerService.AGENTS,
+        "llm_input",
+        privacy=True,
+        tests=["tests/contract/test_step_4_1_model_provider_port_v2.py"],
+    ),
+    "TokenUsageEstimate": _contract(
+        "TokenUsageEstimate",
+        OwnerService.AGENTS,
+        "llm_input",
+        tests=["tests/contract/test_step_4_1_model_provider_port_v2.py"],
+    ),
     "RecoveryDecision": _contract(
         "RecoveryDecision",
         OwnerService.REVIEW_REPLAY,

@@ -1,0 +1,347 @@
+"""Contract tests for Phase 4 step 4.1.
+
+Adds the provider-blind LLM call surface contracts:
+
+* :class:`Anchor` — pure-data anchor for LLM grounding (no
+  network coupling).
+* :class:`ProviderRequest` — provider-blind request envelope.
+* :class:`ProviderResponse` — validated response shape with
+  required :class:`TokenUsage`.
+* :class:`TokenUsageEstimate` — pre-flight estimate consumed by
+  the Phase 4 step 4.5 token-budget port.
+* :class:`ProviderFinishReason` — enum mapping provider-specific
+  stop reasons to the v2 surface.
+* :class:`ModelProviderPortV2` — runtime-checkable Protocol
+  implemented by Phase 4 step 4.2 / 4.3 adapters.
+
+The boundary invariants enforced here (per
+``contracts/llm_input.py`` validators):
+
+* identifier-shape validation (codex recurring concern #6) for
+  ``id`` / ``run_ref`` / ``model_name`` / ``request_ref``;
+* ``temperature`` ∈ [0.0, 2.0];
+* ``max_output_tokens`` strictly positive;
+* ``messages`` non-empty;
+* anchor IDs unique within a request (no silent shadowing at
+  citation time);
+* ``ProviderResponse.usage`` required (no ``None`` token counts);
+* ``ProviderResponse.text`` non-empty unless
+  ``finish_reason == TOOL_CALL``.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from veracrawl.contracts.agent import Message, ResponseFormat, TokenUsage
+from veracrawl.contracts.enums import (
+    MessageRole,
+    ProviderFinishReason,
+    ResponseFormatKind,
+)
+from veracrawl.contracts.llm_input import (
+    Anchor,
+    ProviderRequest,
+    ProviderResponse,
+    TokenUsageEstimate,
+)
+from veracrawl.contracts.registry import FOUNDATION_CONTRACTS
+from veracrawl.ports.model_provider_v2 import ModelProviderPortV2
+
+
+def _user_message(text: str = "extract product details") -> Message:
+    return Message(role=MessageRole.USER, content=text)
+
+
+def _text_response_format() -> ResponseFormat:
+    return ResponseFormat(kind=ResponseFormatKind.TEXT)
+
+
+def _make_request(**overrides: object) -> ProviderRequest:
+    base: dict[str, object] = {
+        "id": "provider-request:phase-4-1:1",
+        "run_ref": "run:phase-4-1:1",
+        "model_name": "gpt-4o-mini",
+        "messages": [_user_message()],
+        "response_format": _text_response_format(),
+        "max_output_tokens": 256,
+    }
+    base.update(overrides)
+    return ProviderRequest(**base)
+
+
+def _make_usage(prompt: int = 100, completion: int = 50) -> TokenUsage:
+    return TokenUsage(
+        prompt_tokens=prompt,
+        completion_tokens=completion,
+        total_tokens=prompt + completion,
+    )
+
+
+# --- Anchor -----------------------------------------------------------------
+
+
+def test_anchor_round_trips_with_all_fields() -> None:
+    anchor = Anchor(
+        id="anchor:1",
+        selector="div.product-title",
+        excerpt="Widget Pro",
+        screenshot_region_ref="region:phase-4-1:1",
+    )
+    assert anchor.id == "anchor:1"
+    assert anchor.excerpt == "Widget Pro"
+
+
+def test_anchor_rejects_blank_id() -> None:
+    with pytest.raises(ValueError, match="anchor.id"):
+        Anchor(id="   ", excerpt="content")
+
+
+def test_anchor_rejects_blank_excerpt() -> None:
+    with pytest.raises(ValueError, match="excerpt must be non-blank"):
+        Anchor(id="anchor:1", excerpt="   ")
+
+
+def test_anchor_rejects_blank_selector_when_present() -> None:
+    with pytest.raises(ValueError, match="selector must be non-blank when present"):
+        Anchor(id="anchor:1", selector="   ", excerpt="content")
+
+
+def test_anchor_allows_omitted_selector() -> None:
+    anchor = Anchor(id="anchor:1", excerpt="content")
+    assert anchor.selector is None
+
+
+# --- ProviderRequest --------------------------------------------------------
+
+
+def test_provider_request_round_trips() -> None:
+    request = _make_request()
+    assert request.temperature == 0.0
+    assert request.max_output_tokens == 256
+    assert len(request.messages) == 1
+
+
+def test_provider_request_rejects_blank_id() -> None:
+    with pytest.raises(ValueError, match="provider request id"):
+        _make_request(id="   ")
+
+
+def test_provider_request_rejects_blank_run_ref() -> None:
+    with pytest.raises(ValueError, match="provider request run_ref"):
+        _make_request(run_ref="")
+
+
+def test_provider_request_rejects_blank_model_name() -> None:
+    with pytest.raises(ValueError, match="provider request model_name"):
+        _make_request(model_name=" ")
+
+
+def test_provider_request_rejects_zero_max_output_tokens() -> None:
+    with pytest.raises(ValueError, match="max_output_tokens must be positive"):
+        _make_request(max_output_tokens=0)
+
+
+def test_provider_request_rejects_negative_max_output_tokens() -> None:
+    with pytest.raises(ValueError, match="max_output_tokens must be positive"):
+        _make_request(max_output_tokens=-1)
+
+
+def test_provider_request_rejects_temperature_below_range() -> None:
+    with pytest.raises(ValueError, match=r"temperature must be in \[0.0, 2.0\]"):
+        _make_request(temperature=-0.5)
+
+
+def test_provider_request_rejects_temperature_above_range() -> None:
+    with pytest.raises(ValueError, match=r"temperature must be in \[0.0, 2.0\]"):
+        _make_request(temperature=2.5)
+
+
+def test_provider_request_accepts_temperature_at_bounds() -> None:
+    assert _make_request(temperature=0.0).temperature == 0.0
+    assert _make_request(temperature=2.0).temperature == 2.0
+
+
+def test_provider_request_rejects_empty_messages() -> None:
+    with pytest.raises(ValueError, match="at least one message"):
+        _make_request(messages=[])
+
+
+def test_provider_request_rejects_duplicate_anchor_ids() -> None:
+    anchors = [
+        Anchor(id="anchor:1", excerpt="first"),
+        Anchor(id="anchor:1", excerpt="second"),
+    ]
+    with pytest.raises(ValueError, match="anchor IDs must be unique"):
+        _make_request(anchors=anchors)
+
+
+def test_provider_request_accepts_unique_anchor_ids() -> None:
+    anchors = [
+        Anchor(id="anchor:1", excerpt="first"),
+        Anchor(id="anchor:2", excerpt="second"),
+    ]
+    request = _make_request(anchors=anchors)
+    assert len(request.anchors) == 2
+
+
+# --- ProviderResponse -------------------------------------------------------
+
+
+def test_provider_response_round_trips() -> None:
+    response = ProviderResponse(
+        id="provider-response:1",
+        request_ref="provider-request:phase-4-1:1",
+        text="extracted",
+        usage=_make_usage(),
+        finish_reason=ProviderFinishReason.STOP,
+    )
+    assert response.text == "extracted"
+    assert response.usage.total_tokens == 150
+    assert response.parsed_output is None
+
+
+def test_provider_response_rejects_blank_id() -> None:
+    with pytest.raises(ValueError, match="provider response id"):
+        ProviderResponse(
+            id="   ",
+            request_ref="provider-request:phase-4-1:1",
+            text="extracted",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.STOP,
+        )
+
+
+def test_provider_response_rejects_blank_request_ref() -> None:
+    with pytest.raises(ValueError, match="provider response request_ref"):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="",
+            text="extracted",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.STOP,
+        )
+
+
+def test_provider_response_rejects_blank_text_when_finish_reason_is_stop() -> None:
+    with pytest.raises(ValueError, match="text must be non-empty"):
+        ProviderResponse(
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="",
+            usage=_make_usage(),
+            finish_reason=ProviderFinishReason.STOP,
+        )
+
+
+def test_provider_response_allows_blank_text_when_finish_reason_is_tool_call() -> None:
+    response = ProviderResponse(
+        id="provider-response:1",
+        request_ref="provider-request:phase-4-1:1",
+        text="",
+        usage=_make_usage(),
+        finish_reason=ProviderFinishReason.TOOL_CALL,
+    )
+    assert response.text == ""
+
+
+def test_provider_response_requires_usage() -> None:
+    # mypy/Pydantic both refuse to construct without usage.
+    with pytest.raises((ValueError, TypeError)):
+        ProviderResponse(  # type: ignore[call-arg]
+            id="provider-response:1",
+            request_ref="provider-request:phase-4-1:1",
+            text="extracted",
+            finish_reason=ProviderFinishReason.STOP,
+        )
+
+
+# --- TokenUsageEstimate -----------------------------------------------------
+
+
+def test_token_usage_estimate_round_trips() -> None:
+    estimate = TokenUsageEstimate(
+        request_ref="provider-request:phase-4-1:1",
+        model_name="gpt-4o-mini",
+        prompt_tokens_estimate=100,
+        completion_tokens_estimate=50,
+        cost_usd_estimate=0.0015,
+    )
+    assert estimate.cost_usd_estimate == 0.0015
+
+
+def test_token_usage_estimate_rejects_blank_request_ref() -> None:
+    with pytest.raises(ValueError, match="request_ref"):
+        TokenUsageEstimate(
+            request_ref="",
+            model_name="gpt-4o-mini",
+            prompt_tokens_estimate=100,
+            completion_tokens_estimate=50,
+            cost_usd_estimate=0.0015,
+        )
+
+
+def test_token_usage_estimate_rejects_negative_tokens() -> None:
+    with pytest.raises(ValueError, match="prompt_tokens_estimate"):
+        TokenUsageEstimate(
+            request_ref="provider-request:phase-4-1:1",
+            model_name="gpt-4o-mini",
+            prompt_tokens_estimate=-1,
+            completion_tokens_estimate=50,
+            cost_usd_estimate=0.0015,
+        )
+
+
+def test_token_usage_estimate_rejects_negative_cost() -> None:
+    with pytest.raises(ValueError, match="cost_usd_estimate"):
+        TokenUsageEstimate(
+            request_ref="provider-request:phase-4-1:1",
+            model_name="gpt-4o-mini",
+            prompt_tokens_estimate=100,
+            completion_tokens_estimate=50,
+            cost_usd_estimate=-0.01,
+        )
+
+
+# --- Port -------------------------------------------------------------------
+
+
+def test_model_provider_port_v2_is_runtime_checkable() -> None:
+    class _StubAdapter:
+        def complete(self, request: ProviderRequest) -> ProviderResponse:
+            return ProviderResponse(
+                id="provider-response:1",
+                request_ref=request.id,
+                text="stub",
+                usage=_make_usage(),
+                finish_reason=ProviderFinishReason.STOP,
+            )
+
+    assert isinstance(_StubAdapter(), ModelProviderPortV2)
+
+
+def test_model_provider_port_v2_rejects_missing_complete() -> None:
+    class _MissingComplete:
+        pass
+
+    assert not isinstance(_MissingComplete(), ModelProviderPortV2)
+
+
+# --- Foundation registry ----------------------------------------------------
+
+
+def test_phase_4_1_contracts_registered() -> None:
+    for name in ("Anchor", "ProviderRequest", "ProviderResponse", "TokenUsageEstimate"):
+        assert name in FOUNDATION_CONTRACTS, (
+            f"{name} must be registered in FOUNDATION_CONTRACTS"
+        )
+        registration = FOUNDATION_CONTRACTS[name]
+        assert registration.python_model == f"veracrawl.contracts.llm_input.{name}"
+
+
+def test_provider_finish_reason_exposed_on_enums_module() -> None:
+    # Sanity: enum is importable from the canonical enums module.
+    from veracrawl.contracts import enums as enums_module
+
+    assert hasattr(enums_module, "ProviderFinishReason")
+    assert enums_module.ProviderFinishReason.STOP is ProviderFinishReason.STOP
