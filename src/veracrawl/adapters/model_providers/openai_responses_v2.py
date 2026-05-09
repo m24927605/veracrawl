@@ -185,43 +185,98 @@ def _extract_output_text(response: dict[str, Any]) -> str:
     return "\n".join(texts)
 
 
+def _coerce_non_negative_int(value: Any) -> int | None:
+    """Codex iter-3 important: ``int(...)`` on attacker-controlled
+    upstream payload can raise ``TypeError`` / ``ValueError``
+    whose message echoes the value (RAW_RESPONSE_LEAK
+    boundary). Return ``None`` for any value that is not a
+    plain non-negative integer; callers convert ``None`` into
+    a sanitized ``ProviderAdapterFailure``. ``bool`` is
+    explicitly rejected because ``isinstance(True, int)`` is
+    ``True`` in Python and would silently coerce to ``1``."""
+
+    if isinstance(value, bool):
+        return None
+    if not isinstance(value, int):
+        return None
+    if value < 0:
+        return None
+    return value
+
+
+def _coerce_optional_subtotal(value: Any) -> int:
+    """Optional subtotals (``cached_tokens``, ``reasoning_tokens``)
+    that may be absent. Absent → 0; malformed → 0 (silently treat
+    as no info rather than failing the whole call)."""
+
+    coerced = _coerce_non_negative_int(value) if value is not None else 0
+    return coerced if coerced is not None else 0
+
+
 def _extract_usage(response: dict[str, Any]) -> TokenUsage:
     """Build ``TokenUsage`` from the Responses API ``usage`` block.
 
     Boundary invariant (Phase 4 step 4.1): ``ProviderResponse``
-    requires non-``None`` ``usage``. If the API omits ``usage``,
-    raise — silently filling with zeros would let token-budget
-    audits drift past the declared cap.
+    requires non-``None`` ``usage``. If the API omits ``usage``
+    OR returns malformed integer fields, raise a sanitized
+    ``ProviderAdapterFailure`` — silently filling with zeros
+    or coercing arbitrary upstream text via ``int(...)`` would
+    leak response content into the exception message
+    (RAW_RESPONSE_LEAK boundary, codex iter-3 important).
     """
 
     usage_raw = response.get("usage")
     if not isinstance(usage_raw, dict):
-        # Codex iter-1 important: an absent or non-dict ``usage``
-        # block is a contract violation, not a "fill with zeros"
-        # case. Surface as ADAPTER_FAILURE so token-budget audits
-        # never see fabricated zero counts.
         raise ProviderAdapterFailure(
             status_code=200,
             error_code="ADAPTER_FAILURE",
             request_id=None,
         )
-    if "input_tokens" not in usage_raw or "output_tokens" not in usage_raw:
+    prompt = _coerce_non_negative_int(usage_raw.get("input_tokens"))
+    completion = _coerce_non_negative_int(usage_raw.get("output_tokens"))
+    if prompt is None or completion is None:
         raise ProviderAdapterFailure(
             status_code=200,
             error_code="ADAPTER_FAILURE",
             request_id=None,
         )
-    prompt = int(usage_raw["input_tokens"])
-    completion = int(usage_raw["output_tokens"])
-    total = int(usage_raw.get("total_tokens", prompt + completion))
-    cached_input = 0
+    total_raw = usage_raw.get("total_tokens", prompt + completion)
+    total = _coerce_non_negative_int(total_raw)
+    if total is None:
+        raise ProviderAdapterFailure(
+            status_code=200,
+            error_code="ADAPTER_FAILURE",
+            request_id=None,
+        )
     input_details = usage_raw.get("input_tokens_details")
-    if isinstance(input_details, dict):
-        cached_input = int(input_details.get("cached_tokens", 0))
-    reasoning = 0
+    cached_input = (
+        _coerce_optional_subtotal(input_details.get("cached_tokens"))
+        if isinstance(input_details, dict)
+        else 0
+    )
     output_details = usage_raw.get("output_tokens_details")
-    if isinstance(output_details, dict):
-        reasoning = int(output_details.get("reasoning_tokens", 0))
+    reasoning = (
+        _coerce_optional_subtotal(output_details.get("reasoning_tokens"))
+        if isinstance(output_details, dict)
+        else 0
+    )
+    # The Phase 0 ``TokenUsage`` validator enforces
+    # ``total_tokens == prompt + completion`` — if the upstream
+    # ``total_tokens`` disagrees, surface as a sanitized
+    # adapter failure rather than letting the validator's
+    # error message leak the upstream values.
+    if total != prompt + completion:
+        raise ProviderAdapterFailure(
+            status_code=200,
+            error_code="ADAPTER_FAILURE",
+            request_id=None,
+        )
+    if cached_input > prompt or reasoning > completion:
+        raise ProviderAdapterFailure(
+            status_code=200,
+            error_code="ADAPTER_FAILURE",
+            request_id=None,
+        )
     return TokenUsage(
         prompt_tokens=prompt,
         completion_tokens=completion,
@@ -274,6 +329,18 @@ class OpenAIResponsesAdapterV2:
             raise ValueError("OpenAIResponsesAdapterV2 requires a non-blank api_key")
         if max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
+        # Codex iter-3 important: FIXTURE mode without an
+        # explicit transport defaults to a real httpx.Client,
+        # which can reach api.openai.com from tests or local
+        # runs. Refuse construction so a wiring bug surfaces
+        # immediately instead of as an accidental live call
+        # (which would also burn API credits).
+        if transport is None:
+            raise ValueError(
+                "OpenAIResponsesAdapterV2 in FIXTURE mode requires an explicit "
+                "httpx.BaseTransport (e.g. httpx.MockTransport). The PRODUCTION "
+                "wiring (real network egress) is gated until Phase 6 step 6.1."
+            )
         self._api_key = api_key
         self._endpoint = endpoint
         self._max_attempts = max_attempts
@@ -396,12 +463,27 @@ class OpenAIResponsesAdapterV2:
                 continue
 
             if http_response.is_success:
-                data = http_response.json()
+                # Codex iter-3 important: ``http_response.json()``
+                # raises ``json.JSONDecodeError`` whose message
+                # echoes part of the upstream body
+                # (RAW_RESPONSE_LEAK boundary). Catch and convert
+                # to a sanitized ``ProviderAdapterFailure``
+                # carrying only the status code + upstream
+                # request id — never the body.
+                request_id = _request_id_from(http_response.headers)
+                try:
+                    data = http_response.json()
+                except json.JSONDecodeError:
+                    raise classify_provider_error(
+                        status_code=http_response.status_code,
+                        error_code="ADAPTER_FAILURE",
+                        request_id=request_id,
+                    ) from None
                 if not isinstance(data, dict):
                     raise classify_provider_error(
                         status_code=http_response.status_code,
                         error_code="ADAPTER_FAILURE",
-                        request_id=_request_id_from(http_response.headers),
+                        request_id=request_id,
                     )
                 return data
 

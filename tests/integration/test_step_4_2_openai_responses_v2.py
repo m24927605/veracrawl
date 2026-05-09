@@ -133,7 +133,21 @@ def test_blank_api_key_rejected() -> None:
 
 def test_zero_max_attempts_rejected() -> None:
     with pytest.raises(ValueError, match="max_attempts must be"):
-        OpenAIResponsesAdapterV2(api_key=_API_KEY_CANARY, max_attempts=0)
+        OpenAIResponsesAdapterV2(
+            api_key=_API_KEY_CANARY,
+            max_attempts=0,
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json={})),
+        )
+
+
+def test_fixture_mode_requires_explicit_transport() -> None:
+    """Codex iter-3 important: ``RuntimeMode.FIXTURE`` without
+    an explicit transport defaulted to a real ``httpx.Client``,
+    which can call api.openai.com from tests or local runs.
+    Refuse construction so a wiring bug surfaces immediately."""
+
+    with pytest.raises(ValueError, match="explicit httpx.BaseTransport"):
+        OpenAIResponsesAdapterV2(api_key=_API_KEY_CANARY)
 
 
 # --- Capability table -------------------------------------------------------
@@ -335,7 +349,131 @@ def test_api_key_never_leaks_into_exception_messages() -> None:
     assert _API_KEY_CANARY not in repr(exc_info.value)
 
 
-# --- Tool wire shape (codex iter-1 important) ------------------------------
+# --- RAW_RESPONSE_LEAK on success-path parse (codex iter-3) ----------------
+
+
+def test_invalid_json_body_on_2xx_does_not_leak_into_exception() -> None:
+    """Codex iter-3 important: ``http_response.json()`` raises
+    ``json.JSONDecodeError`` whose message echoes part of the
+    upstream body. The adapter must catch + sanitize so error
+    messages carry only status code + upstream request id."""
+
+    body_canary = "PROBE-NOT-VALID-JSON-{{garbled-LEAK-PROBE}}"
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body_canary.encode())
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure) as exc_info:
+        adapter.complete(_build_request())
+    assert body_canary not in str(exc_info.value)
+    assert body_canary not in repr(exc_info.value)
+
+
+def test_malformed_usage_int_does_not_leak_into_exception() -> None:
+    """``int("evil string")`` raises ``ValueError`` whose message
+    quotes the bad literal. Convert to a sanitized
+    ``ProviderAdapterFailure`` instead."""
+
+    bad_token_value = "EVIL-PROBE-LEAK-12345"
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp:abcdef",
+                "status": "completed",
+                "output": [
+                    {"content": [{"type": "output_text", "text": "extracted"}]},
+                ],
+                "usage": {
+                    "input_tokens": bad_token_value,
+                    "output_tokens": 50,
+                    "total_tokens": 150,
+                },
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure) as exc_info:
+        adapter.complete(_build_request())
+    assert bad_token_value not in str(exc_info.value)
+    assert bad_token_value not in repr(exc_info.value)
+
+
+def test_inconsistent_total_tokens_raises_adapter_failure() -> None:
+    """``total_tokens != input_tokens + output_tokens`` would
+    trigger the Phase 0 ``TokenUsage`` validator whose error
+    message includes the values. Catch upstream and convert."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp:abcdef",
+                "status": "completed",
+                "output": [
+                    {"content": [{"type": "output_text", "text": "extracted"}]},
+                ],
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "total_tokens": 999,
+                },
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure):
+        adapter.complete(_build_request())
+
+
+def test_negative_token_count_raises_adapter_failure() -> None:
+    """A negative ``input_tokens`` from a buggy / hostile
+    upstream must not slip into ``TokenUsage`` (validator would
+    leak the value into its error message)."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp:abcdef",
+                "status": "completed",
+                "output": [
+                    {"content": [{"type": "output_text", "text": "extracted"}]},
+                ],
+                "usage": {"input_tokens": -1, "output_tokens": 50, "total_tokens": 49},
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure):
+        adapter.complete(_build_request())
+
+
+def test_boolean_token_value_rejected_not_silently_coerced_to_one() -> None:
+    """``isinstance(True, int)`` is ``True`` in Python and would
+    silently coerce to ``1`` if not explicitly rejected."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp:abcdef",
+                "status": "completed",
+                "output": [
+                    {"content": [{"type": "output_text", "text": "extracted"}]},
+                ],
+                "usage": {"input_tokens": True, "output_tokens": 50, "total_tokens": 51},
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure):
+        adapter.complete(_build_request())
+
+
+# --- Tool refusal (codex iter-2 important) ---------------------------------
 
 
 def test_complete_refuses_request_with_tools() -> None:
