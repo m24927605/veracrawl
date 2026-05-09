@@ -435,14 +435,26 @@ class OpenAIResponsesAdapterV2:
             response_id = upstream_id.strip()
         else:
             response_id = f"openai-response:{request.id}"
-        return ProviderResponse(
-            id=response_id,
-            request_ref=request.id,
-            text=text,
-            usage=usage,
-            finish_reason=finish_reason,
-            parsed_output=parsed_output,
-        )
+        # Step 4.3 codex iter-1 minor: convert any Pydantic
+        # ``ValueError`` from ``ProviderResponse`` validation to
+        # the typed sanitized ``ProviderAdapterFailure`` so
+        # callers can dispatch on the provider hierarchy and
+        # validator messages never leak upstream values.
+        try:
+            return ProviderResponse(
+                id=response_id,
+                request_ref=request.id,
+                text=text,
+                usage=usage,
+                finish_reason=finish_reason,
+                parsed_output=parsed_output,
+            )
+        except ValueError:
+            raise ProviderAdapterFailure(
+                status_code=200,
+                error_code="ADAPTER_FAILURE",
+                request_id=None,
+            ) from None
 
     def _build_request_body(self, request: ProviderRequest) -> dict[str, Any]:
         # Tool-call paths are refused at ``complete()`` (codex

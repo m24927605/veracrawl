@@ -211,6 +211,59 @@ def test_system_message_hoisted_to_top_level_system_field() -> None:
     assert roles_in_messages == ["user"]
 
 
+def test_mid_conversation_system_message_is_refused() -> None:
+    """Codex iter-1 important: hoisting ALL SYSTEM messages
+    (regardless of position) would silently reorder the
+    conversation. Only **leading** SYSTEM messages are
+    hoisted; mid-conversation SYSTEM messages are refused
+    with ``ProviderAdapterFailure`` so the provider-blind
+    contract stays consistent across providers."""
+
+    bad_request = ProviderRequest(
+        id="provider-request:phase-4-3:bad",
+        run_ref="run:phase-4-3:bad",
+        model_name="claude-sonnet-4-6",
+        messages=[
+            Message(role=MessageRole.USER, content="Hello"),
+            # SYSTEM appearing AFTER user — invalid for Anthropic
+            Message(role=MessageRole.SYSTEM, content="Be concise"),
+            Message(role=MessageRole.USER, content="Now extract"),
+        ],
+        response_format=ResponseFormat(kind=ResponseFormatKind.TEXT),
+        max_output_tokens=128,
+    )
+    adapter = _build_adapter(lambda _: httpx.Response(200, json=_ok_response_body()))
+    with pytest.raises(ProviderAdapterFailure):
+        adapter.complete(bad_request)
+
+
+def test_malformed_response_does_not_leak_via_pydantic_validator() -> None:
+    """Codex iter-1 minor: ``ProviderResponse`` Pydantic
+    validation can raise ``ValueError`` whose message echoes
+    field values (e.g., ``stop_reason=end_turn`` with empty
+    text triggers the STOP-requires-text validator). Adapter
+    must convert to ``ProviderAdapterFailure`` so callers
+    can dispatch on the typed provider hierarchy and the
+    validator's message never surfaces raw."""
+
+    body_canary = "VALIDATOR-LEAK-PROBE-canary-XYZZY"
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        body = _ok_response_body(stop_reason="end_turn")
+        # Force an empty-text + STOP combo, which fails the
+        # ``ProviderResponse.text`` validator. Add a canary
+        # so we can assert it doesn't escape.
+        body["content"] = []
+        body["model"] = body_canary  # arbitrary echoable field
+        return httpx.Response(200, json=body)
+
+    adapter = _build_adapter(handler)
+    with pytest.raises(ProviderAdapterFailure) as exc_info:
+        adapter.complete(_build_request())
+    assert body_canary not in str(exc_info.value)
+    assert body_canary not in repr(exc_info.value)
+
+
 def test_complete_structured_output_populates_parsed_output() -> None:
     schema = {
         "type": "object",

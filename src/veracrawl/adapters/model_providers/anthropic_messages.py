@@ -206,18 +206,38 @@ def _coerce_optional_subtotal(value: Any) -> int:
     return coerced if coerced is not None else 0
 
 
-def _split_system_messages(messages: list[Message]) -> tuple[str | None, list[Message]]:
+def _split_leading_system_messages(
+    messages: list[Message],
+) -> tuple[str | None, list[Message]]:
     """Anthropic dedicates a ``system`` body field; the
     ``messages`` array carries USER / ASSISTANT only.
-    Concatenate any leading SYSTEM messages and return the
-    rest unchanged."""
+
+    Codex iter-1 important: only **leading** SYSTEM messages
+    are hoisted. A SYSTEM message that appears mid-conversation
+    (after USER or ASSISTANT) carries explicit ordering
+    semantics in the original ``ProviderRequest`` (e.g., a
+    rule injection between turns); silently hoisting it to the
+    top-level ``system`` field would reorder the conversation
+    and diverge from the OpenAI v2 adapter's interpretation,
+    breaking provider-blind expectations. Mid-conversation
+    SYSTEM messages are refused with a sanitized
+    ``ProviderAdapterFailure`` instead.
+    """
 
     system_chunks: list[str] = []
     rest: list[Message] = []
+    seen_non_system = False
     for message in messages:
         if message.role is MessageRole.SYSTEM:
+            if seen_non_system:
+                raise ProviderAdapterFailure(
+                    status_code=0,
+                    error_code="ADAPTER_FAILURE",
+                    request_id=None,
+                )
             system_chunks.append(message.content)
         else:
+            seen_non_system = True
             rest.append(message)
     system_prompt = "\n\n".join(system_chunks) if system_chunks else None
     return system_prompt, rest
@@ -378,17 +398,31 @@ class AnthropicMessagesAdapter:
             response_id = upstream_id.strip()
         else:
             response_id = f"anthropic-msg:{request.id}"
-        return ProviderResponse(
-            id=response_id,
-            request_ref=request.id,
-            text=text,
-            usage=usage,
-            finish_reason=finish_reason,
-            parsed_output=parsed_output,
-        )
+        # Codex iter-1 minor: malformed successful responses
+        # (e.g., ``stop_reason=end_turn`` with empty text) would
+        # surface as generic Pydantic ``ValueError`` from the
+        # ``ProviderResponse`` validator. Adapter-owned shape
+        # failures must be the typed sanitized provider hierarchy
+        # so callers can dispatch on it, and so validator errors
+        # — which can echo upstream values — do not surface raw.
+        try:
+            return ProviderResponse(
+                id=response_id,
+                request_ref=request.id,
+                text=text,
+                usage=usage,
+                finish_reason=finish_reason,
+                parsed_output=parsed_output,
+            )
+        except ValueError:
+            raise ProviderAdapterFailure(
+                status_code=200,
+                error_code="ADAPTER_FAILURE",
+                request_id=None,
+            ) from None
 
     def _build_request_body(self, request: ProviderRequest) -> dict[str, Any]:
-        system_prompt, rest = _split_system_messages(request.messages)
+        system_prompt, rest = _split_leading_system_messages(request.messages)
         body: dict[str, Any] = {
             "model": request.model_name,
             "messages": [_message_to_anthropic(m) for m in rest],
