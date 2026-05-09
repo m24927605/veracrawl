@@ -480,6 +480,64 @@ def test_naive_clock_raises_runtime_error() -> None:
         lifecycle.__enter__()
 
 
+def test_re_entry_after_exit_raises() -> None:
+    """Codex iter-5 minor: re-entering a previously exited
+    lifecycle would emit a stale start event with the prior
+    counter. State guard prevents this."""
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+    lifecycle = AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:test:1",
+        clock=lambda: _FROZEN_NOW,
+    )
+    with lifecycle:
+        pass
+    with pytest.raises(RuntimeError, match="not designed for reuse"):
+        lifecycle.__enter__()
+
+
+def test_exit_runs_cleanup_even_when_clock_raises_at_end() -> None:
+    """Codex iter-5 important: cleanup is the primary __exit__
+    responsibility — must run regardless of whether the audit
+    clock / logger fails. Otherwise a clock failure leaves
+    credential cache invalidation unattempted."""
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+
+    cleanup_invoked = False
+
+    def cleanup_callback(scopes: Iterable[CredentialScope]) -> None:
+        nonlocal cleanup_invoked
+        cleanup_invoked = True
+        del scopes
+
+    # Clock returns tz-aware on enter, then tz-naive on exit.
+    enter_count = [0]
+
+    def variable_clock() -> datetime:
+        enter_count[0] += 1
+        if enter_count[0] == 1:
+            return _FROZEN_NOW  # tz-aware on enter
+        return datetime(2026, 5, 9, 12, 0, 0)  # noqa: DTZ001 — naive on exit
+
+    with AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:test:1",
+        on_session_end=cleanup_callback,
+        clock=variable_clock,
+    ):
+        pass
+    # Cleanup ran even though end-event clock failed.
+    assert cleanup_invoked is True
+
+
 def test_credential_scope_refs_default_empty_on_request() -> None:
     """Backward compat: AgentRunRequest without explicit
     credential_scope_refs defaults to empty (existing call sites

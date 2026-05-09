@@ -204,6 +204,15 @@ class AgentCredentialLifecycle:
         return ts
 
     def __enter__(self) -> AgentCredentialLifecycle:
+        # Re-entry guard: the class is not designed for reuse.
+        # Re-entering would emit a second start event with the
+        # accumulated counter from the prior run.
+        if self._state != "constructed":
+            raise RuntimeError(
+                f"AgentCredentialLifecycle.__enter__() called in "
+                f"state {self._state!r}; the lifecycle is not "
+                "designed for reuse"
+            )
         # Resolve into locals first; assign onto the lifecycle
         # only after every ref has resolved. A partial-failure
         # scenario therefore leaves the lifecycle in its initial
@@ -252,46 +261,55 @@ class AgentCredentialLifecycle:
         exc_tb: TracebackType | None,
     ) -> None:
         del exc_val, exc_tb
-        timestamp = self._now()
-        # Run cleanup BEFORE emitting the end event so the audit
-        # row's ``cleanup_succeeded`` field reflects the cleanup
-        # outcome (rather than always claiming success and forcing
-        # the operator to check a separate fallback log to detect
-        # cleanup failure). When an original exception is in
-        # flight, log + swallow the callback failure so the
-        # original error reaches the caller; otherwise raise
-        # ``LifecycleEndCallbackError`` after the end event.
+        # Cleanup MUST run regardless of whether timestamp /
+        # logging works — credential cache invalidation is the
+        # primary lifecycle-exit responsibility, and audit is
+        # secondary. Run cleanup first; only then prepare and
+        # emit the end event.
         callback_failed = False
         callback_exc_class: str | None = None
         try:
             self._on_session_end(self._scopes)
         except Exception as exc:
             callback_failed = True
-            # Capture the class name only — exception args may
-            # carry implementation-specific identifiers from the
-            # Phase 6 cache adapter. Class name + sanitized
-            # message gives operators enough to triage without
-            # leaking secret-shaped strings.
+            # Class name only — args may carry implementation-
+            # specific identifiers from the Phase 6 cache adapter.
             callback_exc_class = type(exc).__name__
         cleanup_succeeded = not callback_failed
         self._state = "exited"
-        _logger.info(
-            "agent_credential_session_ended",
-            session_id=self._session_id,
-            run_ref=self._run_ref,
-            agent_run_request_id=self._request.id,
-            scope_count=len(self._scopes),
-            credential_use_count=self._credential_use_count,
-            ended_with_exception=exc_type is not None,
-            cleanup_succeeded=cleanup_succeeded,
-            timestamp_iso=timestamp.isoformat(),
-        )
+        # End event emission. If the clock or logger fails here,
+        # swallow + emit a fallback log entry rather than letting
+        # the audit failure propagate (cleanup already ran;
+        # masking the original exception with an audit-failure
+        # exception would lose the primary error). The cleanup
+        # status is preserved on the local ``cleanup_succeeded``
+        # flag for the cleanup-failure raise below.
+        try:
+            timestamp = self._now()
+            _logger.info(
+                "agent_credential_session_ended",
+                session_id=self._session_id,
+                run_ref=self._run_ref,
+                agent_run_request_id=self._request.id,
+                scope_count=len(self._scopes),
+                credential_use_count=self._credential_use_count,
+                ended_with_exception=exc_type is not None,
+                cleanup_succeeded=cleanup_succeeded,
+                timestamp_iso=timestamp.isoformat(),
+            )
+        except Exception:
+            _logger.error(  # noqa: TRY400
+                "agent_credential_session_end_event_emit_failed",
+                session_id=self._session_id,
+                run_ref=self._run_ref,
+                ended_with_exception=exc_type is not None,
+                cleanup_succeeded=cleanup_succeeded,
+            )
         if callback_failed:
             _logger.error(  # noqa: TRY400
                 "agent_credential_session_end_callback_failed",
                 session_id=self._session_id,
                 run_ref=self._run_ref,
-                timestamp_iso=timestamp.isoformat(),
                 masked_by_original_exception=exc_type is not None,
                 callback_exception_class=callback_exc_class,
             )
