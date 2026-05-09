@@ -98,8 +98,14 @@ def test_lifecycle_emits_start_and_end_events() -> None:
     ends = [e for e in captured if e.get("event") == "agent_credential_session_ended"]
     assert len(starts) == 1
     assert len(ends) == 1
+    import hashlib
+
+    expected_hash = (
+        f"sha256:{hashlib.sha256(b'cred-scope:ebay-prod').hexdigest()[:16]}"
+    )
     assert starts[0]["scope_count"] == 1
-    assert starts[0]["scope_ids"] == ("cred-scope:ebay-prod",)
+    # Codex iter-3 important: scope IDs are hashed before logging.
+    assert starts[0]["scope_id_hashes"] == (expected_hash,)
     assert ends[0]["scope_count"] == 1
     assert ends[0]["ended_with_exception"] is False
 
@@ -328,6 +334,77 @@ def test_registry_satisfies_protocol() -> None:
 
     registry: CredentialScopeRegistryPort = _StubRegistry()
     assert isinstance(registry, CredentialScopeRegistryPort)
+
+
+def test_record_use_pre_enter_raises_runtime_error() -> None:
+    """Codex iter-3 minor: state guard prevents a stale adapter
+    reference from corrupting the audit count via pre-entered or
+    post-exited record_use calls."""
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+    lifecycle = AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:test:1",
+        clock=lambda: _FROZEN_NOW,
+    )
+    with pytest.raises(RuntimeError, match="state 'constructed'"):
+        lifecycle.record_use()
+
+
+def test_record_use_post_exit_raises_runtime_error() -> None:
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+    with AgentCredentialLifecycle(
+        request=request,
+        registry=registry,
+        run_ref="run:test:1",
+        clock=lambda: _FROZEN_NOW,
+    ) as session:
+        pass
+    with pytest.raises(RuntimeError, match="state 'exited'"):
+        session.record_use()
+
+
+def test_callback_failure_log_includes_exception_class() -> None:
+    """Codex iter-3 important: failed callback log includes the
+    exception class so operators can diagnose; class name only
+    (not args) avoids leaking implementation-specific
+    identifiers."""
+
+    from veracrawl.agents.credential_lifecycle import LifecycleEndCallbackError
+
+    scope = _make_scope()
+    registry = _StubRegistry(scopes={"cred-scope:ebay-prod": scope})
+    request = _make_request(scope_refs=["cred-scope:ebay-prod"])
+
+    class _CustomCacheError(Exception):
+        pass
+
+    def failing_callback(scopes: Iterable[CredentialScope]) -> None:
+        del scopes
+        raise _CustomCacheError("simulated")
+
+    with structlog.testing.capture_logs() as captured:
+        with pytest.raises(LifecycleEndCallbackError):
+            with AgentCredentialLifecycle(
+                request=request,
+                registry=registry,
+                run_ref="run:test:1",
+                on_session_end=failing_callback,
+                clock=lambda: _FROZEN_NOW,
+            ):
+                pass
+    failures = [
+        e
+        for e in captured
+        if e.get("event") == "agent_credential_session_end_callback_failed"
+    ]
+    assert len(failures) == 1
+    assert failures[0]["callback_exception_class"] == "_CustomCacheError"
 
 
 def test_record_use_increments_count_on_end_event() -> None:

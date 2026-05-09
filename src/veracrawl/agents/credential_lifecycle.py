@@ -19,7 +19,7 @@ authorized to use:
 
 Used as a context manager:
 
-    with AgentCredentialLifecycle.start(
+    with AgentCredentialLifecycle(
         request=agent_run_request,
         registry=scope_registry,
         run_ref=run_ref,
@@ -49,6 +49,7 @@ adapter) construct the lifecycle explicitly per the
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
@@ -71,6 +72,18 @@ def _utc_now() -> datetime:
 
 def _noop_on_session_end(scopes: Iterable[CredentialScope]) -> None:
     del scopes
+
+
+def _hashed_scope_id(scope_id: str) -> str:
+    """Stable opaque identifier for audit-row scope_ids.
+
+    The CredentialScope.id is free-form and could carry caller-
+    controlled content. Hashing it before logging gives operators
+    correlation without surfacing the raw id (defense in depth
+    symmetric with step 2.4a's hashed audit refs).
+    """
+
+    return f"sha256:{hashlib.sha256(scope_id.encode('utf-8')).hexdigest()[:16]}"
 
 
 class LifecycleEndCallbackError(RuntimeError):
@@ -123,6 +136,12 @@ class AgentCredentialLifecycle:
         # pipeline can correlate with the count of
         # CredentialUseRecord rows for the same run_ref.
         self._credential_use_count = 0
+        # State guard: ``record_use`` is only valid while the
+        # lifecycle is "entered" (between ``__enter__`` and
+        # ``__exit__``). Pre-enter and post-exit calls raise so an
+        # adapter holding a stale reference can't corrupt the
+        # count.
+        self._state: str = "constructed"
 
     @property
     def session_id(self) -> str:
@@ -137,12 +156,19 @@ class AgentCredentialLifecycle:
         return self._credential_use_count
 
     def record_use(self) -> None:
-        """Increment the per-run credential-use counter. The
-        ``AuthorizedSessionAdapter`` (Phase 2 step 2.4b) calls
-        this on each successful credential-bearing request so the
-        end event can report the total.
+        """Increment the per-run credential-use counter.
+
+        Only valid while the lifecycle is entered; pre-enter or
+        post-exit calls raise :class:`RuntimeError` so an adapter
+        holding a stale reference cannot corrupt the audit count.
         """
 
+        if self._state != "entered":
+            raise RuntimeError(
+                f"AgentCredentialLifecycle.record_use() called in "
+                f"state {self._state!r}; only valid between "
+                "``__enter__`` and ``__exit__``"
+            )
         self._credential_use_count += 1
 
     def scope_for(self, scope_ref: Ref) -> CredentialScope:
@@ -184,6 +210,7 @@ class AgentCredentialLifecycle:
             scope_by_ref[scope_ref] = scope
         self._scopes = tuple(resolved)
         self._scope_by_ref = scope_by_ref
+        self._state = "entered"
         timestamp = self._now()
         _logger.info(
             "agent_credential_session_started",
@@ -191,7 +218,10 @@ class AgentCredentialLifecycle:
             run_ref=self._run_ref,
             agent_run_request_id=self._request.id,
             scope_count=len(self._scopes),
-            scope_ids=tuple(scope.id for scope in self._scopes),
+            # Codex iter-3 important: ``scope.id`` is free-form
+            # caller-supplied content; emit hashes (defense in
+            # depth symmetric with step 2.4a's hashed audit refs).
+            scope_id_hashes=tuple(_hashed_scope_id(scope.id) for scope in self._scopes),
             timestamp_iso=timestamp.isoformat(),
         )
         return self
@@ -213,11 +243,19 @@ class AgentCredentialLifecycle:
         # original error reaches the caller; otherwise raise
         # ``LifecycleEndCallbackError`` after the end event.
         callback_failed = False
+        callback_exc_class: str | None = None
         try:
             self._on_session_end(self._scopes)
-        except Exception:
+        except Exception as exc:
             callback_failed = True
+            # Capture the class name only — exception args may
+            # carry implementation-specific identifiers from the
+            # Phase 6 cache adapter. Class name + sanitized
+            # message gives operators enough to triage without
+            # leaking secret-shaped strings.
+            callback_exc_class = type(exc).__name__
         cleanup_succeeded = not callback_failed
+        self._state = "exited"
         _logger.info(
             "agent_credential_session_ended",
             session_id=self._session_id,
@@ -236,6 +274,7 @@ class AgentCredentialLifecycle:
                 run_ref=self._run_ref,
                 timestamp_iso=timestamp.isoformat(),
                 masked_by_original_exception=exc_type is not None,
+                callback_exception_class=callback_exc_class,
             )
             if exc_type is None:
                 raise LifecycleEndCallbackError(
