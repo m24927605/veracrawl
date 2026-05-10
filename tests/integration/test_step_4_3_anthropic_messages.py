@@ -33,7 +33,6 @@ from veracrawl.contracts.errors import (
 )
 from veracrawl.contracts.llm_input import ProviderRequest
 from veracrawl.runtime_support.runtime_mode import (
-    ProductionRuntimeNotImplemented,
     RuntimeMode,
 )
 
@@ -98,12 +97,25 @@ def _build_adapter(
 # --- Construction gates -----------------------------------------------------
 
 
-def test_production_mode_raises_production_runtime_not_implemented() -> None:
-    with pytest.raises(ProductionRuntimeNotImplemented):
-        AnthropicMessagesAdapter(
-            api_key=_API_KEY_CANARY,
-            runtime_mode=RuntimeMode.PRODUCTION,
-        )
+def test_production_mode_accepts_real_transport() -> None:
+    """Phase 6 step 6.1 unblock (mirrored from
+    ``OpenAIResponsesAdapterV2``): PRODUCTION mode now wires
+    a real network transport."""
+
+    adapter = AnthropicMessagesAdapter(
+        api_key=_API_KEY_CANARY,
+        runtime_mode=RuntimeMode.PRODUCTION,
+        transport=httpx.HTTPTransport(),
+    )
+    assert adapter is not None
+
+
+def test_production_mode_defaults_transport_to_real_http() -> None:
+    adapter = AnthropicMessagesAdapter(
+        api_key=_API_KEY_CANARY,
+        runtime_mode=RuntimeMode.PRODUCTION,
+    )
+    assert adapter is not None
 
 
 def test_blank_api_key_rejected() -> None:
@@ -138,13 +150,11 @@ def test_constructor_consults_current_mode_when_runtime_mode_omitted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("VERACRAWL_RUNTIME_MODE", "production")
-    with pytest.raises(ProductionRuntimeNotImplemented):
-        AnthropicMessagesAdapter(
-            api_key=_API_KEY_CANARY,
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(200, json=_ok_response_body())
-            ),
-        )
+    adapter = AnthropicMessagesAdapter(
+        api_key=_API_KEY_CANARY,
+        transport=httpx.HTTPTransport(),
+    )
+    assert adapter is not None
 
 
 # --- Capability table -------------------------------------------------------

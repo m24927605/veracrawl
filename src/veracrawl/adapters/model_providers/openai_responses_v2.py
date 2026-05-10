@@ -12,11 +12,18 @@ Design boundaries (per Phase 4 design supplement step 4.2):
 * **Provider-blind shape**: the adapter consumes
   :class:`ProviderRequest` / produces :class:`ProviderResponse`.
   Provider HTTP shape is contained inside this module.
-* **Fixture mode default** (``RuntimeMode.FIXTURE``): callers
-  pass an ``httpx.BaseTransport`` (typically
-  ``httpx.MockTransport``); production mode raises
-  :class:`ProductionRuntimeNotImplemented` until Phase 6 step
-  6.1 wires the production deployment.
+* **Fixture mode** (``RuntimeMode.FIXTURE``): callers MUST
+  pass an ``httpx.MockTransport`` (real network transports
+  refused — keeps tests deterministic and blocks accidental
+  real-network egress in test runs).
+* **Production mode** (``RuntimeMode.PRODUCTION``, Phase 6
+  step 6.1): callers may pass any ``httpx.BaseTransport``
+  (typically the cooperative HTTP composition); ``None``
+  defaults to a fresh ``httpx.HTTPTransport``. The pilot
+  smoke test (``scripts/pilot_smoke_test.py``) validates the
+  contract surface against real OpenAI responses; in
+  PRODUCTION mode the same call goes through the adapter
+  framework instead of bypassing it.
 * **Retry policy**: 429 / 5xx retried up to ``max_attempts``
   with exponential backoff + jitter; ``Retry-After`` honored
   (delta-seconds + HTTP-date), capped at 60s so a hostile
@@ -97,7 +104,6 @@ from veracrawl.contracts.errors import (
 )
 from veracrawl.contracts.llm_input import ProviderRequest, ProviderResponse
 from veracrawl.runtime_support.runtime_mode import (
-    ProductionRuntimeNotImplemented,
     RuntimeMode,
     current_mode,
 )
@@ -347,36 +353,47 @@ class OpenAIResponsesAdapterV2:
         # boundary the rest of the project relies on for
         # production-gate enforcement.
         effective_mode = runtime_mode if runtime_mode is not None else current_mode()
-        if effective_mode is RuntimeMode.PRODUCTION:
-            raise ProductionRuntimeNotImplemented(
-                backend="openai_responses_v2",
-                gate="phase_4_step_4_2_production_call",
-            )
         if not api_key or not api_key.strip():
             raise ValueError("OpenAIResponsesAdapterV2 requires a non-blank api_key")
         if max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
-        # Codex iter-3 + iter-5 important: FIXTURE mode must
-        # NEVER reach a real network. iter-3 added the explicit-
-        # transport requirement; iter-5 noted that ``BaseTransport``
-        # also covers ``httpx.HTTPTransport`` (real egress).
-        # Restrict fixture mode to ``httpx.MockTransport``
-        # specifically — production egress is gated by the
-        # PRODUCTION mode check above (which is currently
-        # always-raise per Phase 4 step 4.2 scope).
-        if transport is None:
-            raise ValueError(
-                "OpenAIResponsesAdapterV2 in FIXTURE mode requires an explicit "
-                "httpx.MockTransport. The PRODUCTION wiring (real network "
-                "egress) is gated until Phase 6 step 6.1."
-            )
-        if not isinstance(transport, httpx.MockTransport):
-            raise ValueError(
-                "OpenAIResponsesAdapterV2 in FIXTURE mode only accepts "
-                "httpx.MockTransport (real network transports such as "
-                "httpx.HTTPTransport are refused — they would bypass the "
-                "production-egress gate)."
-            )
+        # Phase 6 step 6.1 unblock: PRODUCTION mode now wires
+        # a real ``httpx.HTTPTransport`` (or any caller-supplied
+        # ``BaseTransport``). FIXTURE mode is still
+        # MockTransport-only to keep tests deterministic and
+        # block accidental real-network egress in test runs.
+        # The pilot smoke test (scripts/pilot_smoke_test.py)
+        # validates the contract surface against real OpenAI
+        # responses; this constructor change lets that pilot
+        # run through the adapter framework instead of bypassing it.
+        if effective_mode is RuntimeMode.FIXTURE:
+            if transport is None:
+                raise ValueError(
+                    "OpenAIResponsesAdapterV2 in FIXTURE mode requires an explicit "
+                    "httpx.MockTransport (real network egress is refused; use "
+                    "RuntimeMode.PRODUCTION to opt into the real-network path)."
+                )
+            if not isinstance(transport, httpx.MockTransport):
+                raise ValueError(
+                    "OpenAIResponsesAdapterV2 in FIXTURE mode only accepts "
+                    "httpx.MockTransport (real network transports such as "
+                    "httpx.HTTPTransport are refused — they would bypass the "
+                    "deterministic-test gate). Switch to RuntimeMode.PRODUCTION "
+                    "for real-network calls."
+                )
+        else:
+            # PRODUCTION mode: a real network transport is
+            # required (or the caller can pass any
+            # ``BaseTransport``, e.g., a cooperative HTTP
+            # composition). ``transport=None`` would default
+            # to ``httpx.HTTPTransport`` via httpx, which is
+            # acceptable but better to be explicit so
+            # operators know what they're wiring.
+            if transport is None:
+                # Default to a fresh real HTTPTransport so the
+                # caller doesn't have to construct one for
+                # every adapter instance.
+                transport = httpx.HTTPTransport()
         self._api_key = api_key
         self._endpoint = endpoint
         self._max_attempts = max_attempts

@@ -117,7 +117,6 @@ from veracrawl.contracts.errors import (
 )
 from veracrawl.contracts.llm_input import ProviderRequest, ProviderResponse
 from veracrawl.runtime_support.runtime_mode import (
-    ProductionRuntimeNotImplemented,
     RuntimeMode,
     current_mode,
 )
@@ -382,27 +381,31 @@ class AnthropicMessagesAdapter:
         jitter_fn: Callable[[], float] | None = None,
     ) -> None:
         effective_mode = runtime_mode if runtime_mode is not None else current_mode()
-        if effective_mode is RuntimeMode.PRODUCTION:
-            raise ProductionRuntimeNotImplemented(
-                backend="anthropic_messages",
-                gate="phase_4_step_4_3_production_call",
-            )
         if not api_key or not api_key.strip():
             raise ValueError("AnthropicMessagesAdapter requires a non-blank api_key")
         if max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
-        if transport is None:
-            raise ValueError(
-                "AnthropicMessagesAdapter in FIXTURE mode requires an explicit "
-                "httpx.MockTransport. The PRODUCTION wiring (real network "
-                "egress) is gated until Phase 6 step 6.1."
-            )
-        if not isinstance(transport, httpx.MockTransport):
-            raise ValueError(
-                "AnthropicMessagesAdapter in FIXTURE mode only accepts "
-                "httpx.MockTransport (real network transports are refused — "
-                "they would bypass the production-egress gate)."
-            )
+        # Phase 6 step 6.1 unblock (mirrored from
+        # ``OpenAIResponsesAdapterV2``): PRODUCTION mode now
+        # wires a real network transport; FIXTURE mode is
+        # still MockTransport-only to keep tests deterministic.
+        if effective_mode is RuntimeMode.FIXTURE:
+            if transport is None:
+                raise ValueError(
+                    "AnthropicMessagesAdapter in FIXTURE mode requires an explicit "
+                    "httpx.MockTransport (real network egress is refused; use "
+                    "RuntimeMode.PRODUCTION to opt into the real-network path)."
+                )
+            if not isinstance(transport, httpx.MockTransport):
+                raise ValueError(
+                    "AnthropicMessagesAdapter in FIXTURE mode only accepts "
+                    "httpx.MockTransport (real network transports are refused — "
+                    "they would bypass the deterministic-test gate). Switch to "
+                    "RuntimeMode.PRODUCTION for real-network calls."
+                )
+        else:
+            if transport is None:
+                transport = httpx.HTTPTransport()
         self._api_key = api_key
         self._endpoint = endpoint
         self._max_attempts = max_attempts

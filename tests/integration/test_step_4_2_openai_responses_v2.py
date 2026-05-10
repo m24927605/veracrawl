@@ -56,7 +56,6 @@ from veracrawl.contracts.errors import (
 )
 from veracrawl.contracts.llm_input import ProviderRequest
 from veracrawl.runtime_support.runtime_mode import (
-    ProductionRuntimeNotImplemented,
     RuntimeMode,
 )
 
@@ -118,12 +117,31 @@ def _build_adapter(
 # --- Construction gates -----------------------------------------------------
 
 
-def test_production_mode_raises_production_runtime_not_implemented() -> None:
-    with pytest.raises(ProductionRuntimeNotImplemented):
-        OpenAIResponsesAdapterV2(
-            api_key=_API_KEY_CANARY,
-            runtime_mode=RuntimeMode.PRODUCTION,
-        )
+def test_production_mode_accepts_real_transport() -> None:
+    """Phase 6 step 6.1 unblock: PRODUCTION mode now wires
+    a real network transport (HTTPTransport accepted; None
+    defaults to a fresh HTTPTransport). FIXTURE mode is
+    still MockTransport-only."""
+
+    # Real transport accepted in PRODUCTION.
+    adapter = OpenAIResponsesAdapterV2(
+        api_key=_API_KEY_CANARY,
+        runtime_mode=RuntimeMode.PRODUCTION,
+        transport=httpx.HTTPTransport(),
+    )
+    assert adapter is not None
+
+
+def test_production_mode_defaults_transport_to_real_http() -> None:
+    """``transport=None`` in PRODUCTION mode defaults to a
+    fresh ``httpx.HTTPTransport`` so callers don't have to
+    construct one for every adapter instance."""
+
+    adapter = OpenAIResponsesAdapterV2(
+        api_key=_API_KEY_CANARY,
+        runtime_mode=RuntimeMode.PRODUCTION,
+    )
+    assert adapter is not None
 
 
 def test_blank_api_key_rejected() -> None:
@@ -171,17 +189,17 @@ def test_constructor_consults_current_mode_when_runtime_mode_omitted(
     """Codex iter-5 important: omitting ``runtime_mode`` must
     fall through to ``current_mode()`` so
     ``VERACRAWL_RUNTIME_MODE=production`` (env var) is honored.
-    Without this, every caller would have to remember to pass
-    ``runtime_mode`` for the production-gate to work."""
+    With Phase 6 step 6.1 unblock, env-set PRODUCTION accepts
+    real transports (instead of raising); FIXTURE-set still
+    refuses real transports."""
 
+    # Env says PRODUCTION → real-network transport accepted.
     monkeypatch.setenv("VERACRAWL_RUNTIME_MODE", "production")
-    with pytest.raises(ProductionRuntimeNotImplemented):
-        OpenAIResponsesAdapterV2(
-            api_key=_API_KEY_CANARY,
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(200, json=_ok_response_body())
-            ),
-        )
+    adapter = OpenAIResponsesAdapterV2(
+        api_key=_API_KEY_CANARY,
+        transport=httpx.HTTPTransport(),
+    )
+    assert adapter is not None
 
 
 # --- Capability table -------------------------------------------------------
