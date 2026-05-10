@@ -1,0 +1,41 @@
+{
+  "charged_cost_usd": 0.00023759999999999997,
+  "citation_anchor_refs": {
+    "price": [
+      "anchor:pilot:price"
+    ],
+    "sku": [
+      "anchor:pilot:sku"
+    ],
+    "title": [
+      "anchor:pilot:title"
+    ]
+  },
+  "confidence_count": 3,
+  "field_citation_refs": {
+    "price": "llm-field-citation:8d9c273d76164e9888d35cd53df298d4",
+    "sku": "llm-field-citation:3ced5ec1e9534d34afd1421fcc1cb70b",
+    "title": "llm-field-citation:7efac332270b426d91272a0ffd0f123f"
+  },
+  "field_values": {
+    "price": 19.99,
+    "sku": "PILOT-001",
+    "title": "Pilot Widget Pro"
+  },
+  "model_name": "gpt-5.4-mini",
+  "pilot": "schema-runtime-openai-smoke",
+  "pilot_date": "2026-05-10",
+  "price_table": {
+    "prices_per_1k": {
+      "input_per_1k": 0.0009,
+      "output_per_1k": 0.0054
+    },
+    "version": "pilot-openai-gpt-5.4-mini-2026-05-10-conservative"
+  },
+  "scope": "smoke-only: provider path is real OpenAI PRODUCTION; budget persistence is fixture-backed and does not satisfy Phase 6 production outbox acceptance",
+  "usage": {
+    "completion_tokens": 28,
+    "prompt_tokens": 96,
+    "total_tokens": 124
+  }
+}
