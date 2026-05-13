@@ -16,12 +16,15 @@ _STDLIB = set(sys.stdlib_module_names)
 
 
 def _imports(source: str) -> list[str]:
+    # ``from a.b import c`` yields ``a.b.c`` so the allowlist sees the full name (iter-3 fix).
     out: list[str] = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
             out.extend(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom):
-            out.append("." * node.level + (node.module or ""))
+            prefix = "." * node.level + (node.module or "")
+            for a in node.names:
+                out.append(f"{prefix}.{a.name}" if prefix else a.name)
     return out
 
 
@@ -31,7 +34,9 @@ def _check_allowlist(path: Path, extra: tuple[str, ...]) -> None:
             pytest.fail(f"{path.name} forbids relative imports: {module!r}")
         if module.split(".", 1)[0] in _STDLIB:
             continue
-        if module.startswith("veracrawl.contracts.") or module in extra:
+        if module.startswith("veracrawl.contracts."):
+            continue
+        if any(module == e or module.startswith(e + ".") for e in extra):
             continue
         pytest.fail(f"{path.name} imports forbidden module: {module!r}")
 
