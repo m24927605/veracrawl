@@ -10,7 +10,7 @@ follow-up.
 
 | Slice | Title | Status | Plan commit | Implementation commits | Codex plan iter | Codex task iter | Reservations |
 |-------|-------|--------|-------------|------------------------|-----------------|-----------------|--------------|
-| s1 | `CrawlPlannerPort` + plan-decision contract + deterministic fixture adapter | IMPL_IN_PROGRESS | aca4f82 | step 1: c49f68a, 22e1966, d7b836d, 0f8472e (contracts + 29 tests, APPROVED iter 4) | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1→2→3 REJECTED → iter 4 APPROVED — see below | 1 — see "s1 plan iter-5 reservations" below |
+| s1 | `CrawlPlannerPort` + plan-decision contract + deterministic fixture adapter | DONE | aca4f82 | step 1: c49f68a, 22e1966, d7b836d, 0f8472e, 04f75cf (APPROVED iter 4). step 2: 65698e2 (APPROVED iter 1). step 3: 0ed2781, 731369b, 4a5c5ed, 4cf33f8 (APPROVED iter 4). step 4: c3c1de3 (APPROVED iter 1). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1→3 REJECTED → iter 4 APPROVED. step 2: iter 1 APPROVED. step 3: iter 1→3 REJECTED → iter 4 APPROVED. step 4: iter 1 APPROVED. | 1 — see "s1 plan iter-5 reservations" below |
 
 ## s1 codex plan-review log
 
@@ -33,6 +33,27 @@ hook-installed version once landed.
 | 3    | 2026-05-13        | REJECTED | iter-2 findings all closed (per codex). 1 major + 1 minor: (major) `PlanDecision.request_ref` is specified to equal `PlanRequest.id` but no red test mechanically asserts it — an adapter could emit a wrong `request_ref` while still putting `request.id` in `replay_refs` and pass. (minor) Status table referred to "test 29" for the `canonical_json` fix but revised red list names it test 28; trail should match. | s1 plan revised to v4: new red unit test 27a `test_request_ref_equals_request_id` asserts `decision.request_ref == request.id` for the deterministic adapter; pytest count bumped from 30 to 31; STATUS rows aligned to actual red list numbering. Iter 4 follows. |
 | 4    | 2026-05-13        | REJECTED | iter-1/2/3 findings all closed (per codex). 1 major: several declared contract validator invariants (non-blank scalar refs on `PlanRequest`, non-blank `rationale_ref` on `PlannedSeed`/`AdapterPrior`/`FrontierPriorityHint`, non-blank `request_ref`/`planner_adapter_ref` on `PlanDecision`) are NOT mechanically asserted by any red test — an implementation could leave the validators out and still pass the 31-test pytest gate. | s1 plan revised to v5: 10 discrete red tests added (2a, 3a, 6a, 10b–10f, 14a, 14b) covering every previously-untested non-blank-ref invariant; pytest count bumped from 31 → 41. Iter 5 follows. |
 | 5    | 2026-05-13        | REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) | iter-1/2/3/4 findings all closed (per codex). 1 major + 1 minor: (major) adapter import-boundary test 21 uses a blocklist regex over named SDKs — an implementation could import internal runtime modules (`veracrawl.external_crawl.runner`, `veracrawl.agents.orchestration`) or other adapters and still pass. (minor) topic README line 38 still described the obsolete `CrawlObjective → PlanDecision` shape rather than the revised `PlanRequest(seed_urls=...) → PlanDecision` shape. | Post-iter-5 follow-up landed in the same plan revision (not re-reviewed per goal-doc workflow): test 21 rewritten as a strict AST **allowlist** (`stdlib` + `veracrawl.contracts.*` + `veracrawl.ports.crawl_planner` only); acceptance criterion 4 **rewritten** to reference the allowlist test (rather than dropped — earlier note corrected); README line 38 + smallest-viable-first-slice paragraph updated. A second post-iter-5 follow-up (after the hook-shim smoke test surfaced new findings) corrected `adapter_priors` Scope + test 25 from tuple-shorthand `[(HTTP, 1.0)]` to the typed `[AdapterPrior(adapter_type=HTTP, weight=1.0, rationale_ref=...)]` the contract actually requires. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS` per goal doc's "iter-5 rejects but issues are addressable" provision. See "s1 plan iter-5 reservations" below. |
+
+## s1 step-4 (adapter) task-review log
+
+| Iter | Date (UTC) | Commit  | Verdict  | Findings | Resolution |
+|------|------------|---------|----------|----------|------------|
+| 1    | 2026-05-14 | c3c1de3 | APPROVED | None.    | Step 4 closed. s1 implementation DONE. All six s1 acceptance criteria verified: AC1 42/42 pytest, AC2 registry assertion, AC3 no runner wiring, AC4 adapter allowlist active, AC5 port has no adapter dep, AC6 total LOC 243 ≤ 300. |
+
+## s1 step-3 (port) task-review log
+
+| Iter | Date (UTC) | Commit  | Verdict  | Findings (severity — summary) | Resolution |
+|------|------------|---------|----------|-------------------------------|------------|
+| 1    | 2026-05-14 | 0ed2781 | REJECTED | (major) `_imports` skipped relative `ImportFrom` (`node.level != 0`) — adapter could `from ..external_crawl.runner import X` and bypass tests 20+21. (major) test file was 134 LOC vs ≤60 budget. | Follow-up commit 731369b flattens relative imports into leading-dot strings (then rejects them outright) and compacts the file to 53 LOC. |
+| 2    | 2026-05-14 | 731369b | REJECTED | (major) test 22 still missed relative imports — `from ..ports.crawl_planner import X` became `..ports.crawl_planner` and the test only matched `veracrawl.ports.crawl_planner` / `veracrawl.contracts.crawl_planner` absolute prefixes. (minor) commit message didn't name the specific AC. | Follow-up commit 4a5c5ed switches test 22 to substring match on `"crawl_planner"`. |
+| 3    | 2026-05-14 | 4a5c5ed | REJECTED | (major) `_imports` was returning only `ImportFrom.module`, ignoring imported names — `from veracrawl.ports import crawl_planner` emitted only `veracrawl.ports` and slipped past every test. | Follow-up commit 4cf33f8 rewrites `_imports` to emit `<module>.<imported-name>` for each alias; allowlist accepts exact or prefix-dot form. File stays at 58 LOC. |
+| 4    | 2026-05-14 | 4cf33f8 | APPROVED | None.                         | Step 3 closed. Proceed to step 4 (adapter). |
+
+## s1 step-2 (registry) task-review log
+
+| Iter | Date (UTC) | Commit  | Verdict  | Findings | Resolution |
+|------|------------|---------|----------|----------|------------|
+| 1    | 2026-05-14 | 65698e2 | APPROVED | None.    | Step 2 closed. Proceed to step 3 (port). |
 
 ## s1 step-1 (contracts) task-review log
 
