@@ -251,6 +251,21 @@ def test_plan_request_rejects_empty_policy_decision_refs() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Test 10a-schema — PlanRequest validator: policy_decision_refs is required
+# at the Pydantic field level (no default). Task-review iter 2 follow-up:
+# without this test, a future regression to ``Field(default_factory=list)``
+# would silently pass test 10a above.
+# ---------------------------------------------------------------------------
+
+
+def test_plan_request_rejects_missing_policy_decision_refs() -> None:
+    payload = _valid_plan_request_payload()
+    del payload["policy_decision_refs"]
+    with pytest.raises(ValidationError, match="policy_decision_refs"):
+        PlanRequest(**payload)
+
+
+# ---------------------------------------------------------------------------
 # Tests 10b–10f — PlanRequest validator: every scalar ref non-blank. (Iter-4 finding 1.)
 # Discrete tests rather than parametrized so the count is unambiguous against
 # the s1 plan's Acceptance Criterion 1.
