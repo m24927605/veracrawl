@@ -10,7 +10,7 @@ follow-up.
 
 | Slice | Title | Status | Plan commit | Implementation commits | Codex plan iter | Codex task iter | Reservations |
 |-------|-------|--------|-------------|------------------------|-----------------|-----------------|--------------|
-| s1 | `CrawlPlannerPort` + plan-decision contract + deterministic fixture adapter | IMPL_IN_PROGRESS | aca4f82 | step 1: c49f68a, 22e1966, d7b836d (contracts + 29 tests) | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1 REJECTED → iter 2 REJECTED → iter 3 REJECTED (plan-alignment fix in flight) — see below | 1 — see "s1 plan iter-5 reservations" below |
+| s1 | `CrawlPlannerPort` + plan-decision contract + deterministic fixture adapter | IMPL_IN_PROGRESS | aca4f82 | step 1: c49f68a, 22e1966, d7b836d, 0f8472e (contracts + 29 tests, APPROVED iter 4) | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1→2→3 REJECTED → iter 4 APPROVED — see below | 1 — see "s1 plan iter-5 reservations" below |
 
 ## s1 codex plan-review log
 
@@ -41,7 +41,7 @@ hook-installed version once landed.
 | 1    | 2026-05-14 | c49f68a | REJECTED | (major) `contracts/crawl_planner.py` 251 LOC vs ≤130 per-file budget. (major) `PlanRequest.policy_decision_refs` declared `Field(default_factory=list)` despite being a required invariant. | Follow-up commit 22e1966 compacted to 129 LOC via `_require` helper + tighter messages; removed the default factory from `policy_decision_refs`. |
 | 2    | 2026-05-14 | 22e1966 | REJECTED | (major) Removing the default factory was not mechanically covered by a red test (test 10a passes with the defaulted-empty implementation). (minor) 13 lines exceed ruff's 100-char cap. | Follow-up commit d7b836d added `test_plan_request_rejects_missing_policy_decision_refs`; shortened validator error messages so every line ≤100 chars; ruff `All checks passed!`. |
 | 3    | 2026-05-14 | d7b836d | REJECTED | (major) The new test isn't in the s1 plan's Test Strategy red list; AC1 still requires 41 collected (now 42). (minor) Commit message doesn't reference the s1 slice ID + AC. | s1 plan revised: test 10a-schema added to red list; AC1 bumped 41 → 42; green-path total updated. Next commit message will explicitly reference s1 + AC1. Follow-up commit lands the plan update. |
-| 4    | TBD        | TBD     | TBD      | TBD                           | TBD        |
+| 4    | 2026-05-14 | 0f8472e | APPROVED | (minor) Inline s1 status iter-5 row still said "AC4 dropped" while STATUS correctly said "AC4 rewritten". | Step 1 (contracts) closed. The minor is addressed in this same doc-cleanup commit (the iter-5 row note now says "rewritten"). |
 
 ## s1 plan iter-5 reservations
 
