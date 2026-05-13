@@ -429,6 +429,15 @@ counterpart and verified to fail with the expected error.
     `ValidationError(match="objective_ref")`.
 10a. `test_plan_request_rejects_empty_policy_decision_refs` →
     `ValidationError(match="policy_decision_refs")`. *(Iter-2 finding 1.)*
+10a-schema. `test_plan_request_rejects_missing_policy_decision_refs`
+    — *(task-review iter 2 follow-up; iter-3 plan-alignment fix)*.
+    Construct `PlanRequest` with the `policy_decision_refs` key
+    omitted entirely → `ValidationError(match="policy_decision_refs")`
+    raised by the Pydantic field-level required-field schema. This
+    pins the field-level requirement against a regression to
+    `Field(default_factory=list)`, which test 10a alone would not
+    catch (10a passes with the defaulted-empty implementation;
+    10a-schema does not).
 10b. `test_plan_request_rejects_blank_id` — *(Iter-4 finding 1)*.
     `id=""` → `ValidationError(match="id")`.
 10c. `test_plan_request_rejects_blank_run_ref` — *(Iter-4 finding 1)*.
@@ -549,7 +558,7 @@ it with a real request and assert real outputs. *(Adversarial rule:
 ### Green path
 
 Each red test gets a minimal implementation. One purpose per
-commit. After all 41 tests pass, refactor only to dedupe regex
+commit. After all 42 tests pass, refactor only to dedupe regex
 constants and simplify validator messages.
 
 ## Acceptance Criteria
@@ -558,10 +567,12 @@ Mechanically verifiable from a fresh checkout.
 
 1. **Pytest gate** —
    `pytest tests/contract/test_crawl_planner_contracts.py tests/contract/test_crawl_planner_contract_registry.py tests/contract/test_crawl_planner_import_boundaries.py tests/unit/adapters/planning/test_deterministic_crawl_planner.py -v`
-   exits 0 with **41** collected, **41** passed, **0** failed,
+   exits 0 with **42** collected, **42** passed, **0** failed,
    **0** errored. *(Iter-3 finding 1 added unit test 27a; iter-4
    finding 1 added 10 contract tests covering every declared
-   non-blank-ref validator: 2a, 3a, 6a, 10b-10f, 14a, 14b.)*
+   non-blank-ref validator: 2a, 3a, 6a, 10b-10f, 14a, 14b;
+   s1-step-1 task-review iter 2 follow-up added contract test
+   10a-schema for the schema-level required-field invariant.)*
 2. **Contract registry** —
    `python -c "from veracrawl.contracts.registry import FOUNDATION_CONTRACTS, validate_registry, OwnerService; names = ('PlanRequest','PlannedSeed','AdapterPrior','FrontierPriorityHint','PlanDecision'); assert all(n in FOUNDATION_CONTRACTS for n in names); assert all(FOUNDATION_CONTRACTS[n].replay_required for n in names); assert all(FOUNDATION_CONTRACTS[n].owner_service == OwnerService.AGENTS for n in names); assert validate_registry().ok"`
    exits 0.
