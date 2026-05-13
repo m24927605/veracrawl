@@ -156,6 +156,39 @@ def _contract(
 
 
 FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
+    # s1 of general-purpose-crawler-agentification: CrawlPlannerPort
+    # contracts. See docs/plans/general-purpose-crawler-agentification/
+    # s1-crawl-planner-port-contract.md.
+    "PlanRequest": _contract(
+        "PlanRequest",
+        OwnerService.AGENTS,
+        "crawl_planner",
+        tests=["tests/contract/test_crawl_planner_contract_registry.py"],
+    ),
+    "PlannedSeed": _contract(
+        "PlannedSeed",
+        OwnerService.AGENTS,
+        "crawl_planner",
+        tests=["tests/contract/test_crawl_planner_contract_registry.py"],
+    ),
+    "AdapterPrior": _contract(
+        "AdapterPrior",
+        OwnerService.AGENTS,
+        "crawl_planner",
+        tests=["tests/contract/test_crawl_planner_contract_registry.py"],
+    ),
+    "FrontierPriorityHint": _contract(
+        "FrontierPriorityHint",
+        OwnerService.AGENTS,
+        "crawl_planner",
+        tests=["tests/contract/test_crawl_planner_contract_registry.py"],
+    ),
+    "PlanDecision": _contract(
+        "PlanDecision",
+        OwnerService.AGENTS,
+        "crawl_planner",
+        tests=["tests/contract/test_crawl_planner_contract_registry.py"],
+    ),
     "CommandEnvelope": _contract(
         "CommandEnvelope", OwnerService.CONTRACTS, "command", mutation_allowed=True
     ),
