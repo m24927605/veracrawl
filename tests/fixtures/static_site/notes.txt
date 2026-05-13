@@ -1,0 +1,5 @@
+VeraCrawl static-site fixture — plain text document.
+
+This file exists so Phase 3.3 integration tests can verify that
+non-HTML responses are routed to the ``artifacts/documents/``
+category rather than ``raw-html/``.

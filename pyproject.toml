@@ -20,6 +20,9 @@ dependencies = [
   # alternations (``(a|aa)+``) can still backtrack catastrophically
   # without a timeout.
   "regex>=2024.5,<2027",
+  # External CrawlJobSpec is authored in YAML by operators; PyYAML
+  # parses the spec safely via ``yaml.safe_load``.
+  "pyyaml>=6.0,<7",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +30,8 @@ dev = [
   "pytest>=8.2,<9",
   "ruff>=0.5,<1",
   "mypy>=1.10,<2",
+  "types-PyYAML>=6.0,<7",
+  "pypdf>=4.0,<6",
 ]
 postgres = [
   "psycopg[binary]>=3.2,<4",
@@ -39,6 +44,9 @@ object-s3 = [
 ]
 browser-playwright = [
   "playwright>=1.45,<2",
+]
+pdf = [
+  "pypdf>=4.0,<6",
 ]
 
 [project.scripts]
@@ -53,6 +61,7 @@ veracrawl-source-runtime = "veracrawl.cli.source_runtime:main"
 veracrawl-network = "veracrawl.cli.network:main"
 veracrawl-live-http = "veracrawl.cli.live_http:main"
 veracrawl-structured-source = "veracrawl.cli.structured_source:main"
+veracrawl-crawl = "veracrawl.cli.crawl:main"
 veracrawl-browser-snapshot = "veracrawl.cli.browser_snapshot:main"
 veracrawl-credentialed-session = "veracrawl.cli.credentialed_session:main"
 veracrawl-live-normalization = "veracrawl.cli.live_normalization:main"
@@ -152,4 +161,22 @@ disallow_untyped_defs = false
 # rot when the upstream API moves.
 [[tool.mypy.overrides]]
 module = ["regex"]
+ignore_missing_imports = true
+
+# ``playwright`` lives behind the ``browser-playwright`` optional
+# extra; the default dev install does not pull it in, so the import
+# in ``adapters/browser/playwright.py`` is unresolvable to mypy.
+# The adapter only runs when the extra is installed at runtime,
+# so silencing the missing-stubs error here keeps strict mypy
+# green for the standard dev install path.
+[[tool.mypy.overrides]]
+module = ["playwright.*"]
+ignore_missing_imports = true
+
+# ``pypdf`` is an optional dependency wired only by the document
+# normaliser's PDF text extraction path. Same rationale as
+# playwright: silence the missing-stubs error so strict mypy
+# stays green for installs without the ``pdf`` extra.
+[[tool.mypy.overrides]]
+module = ["pypdf", "pypdf.*"]
 ignore_missing_imports = true

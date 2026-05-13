@@ -1,0 +1,50 @@
+# Static-site demo CrawlJobSpec.
+#
+# Pairs with the local fixture at ``tests/fixtures/static_site/``.
+# Run with::
+#
+#     # In one shell, serve the fixture:
+#     python -m http.server 18080 \
+#       --directory tests/fixtures/static_site --bind 127.0.0.1
+#
+#     # In another shell, run the demo crawl:
+#     uv run --python python3.12 --extra dev veracrawl-crawl run \
+#       examples/crawl/static-site-job.yaml \
+#       --out .veracrawl-runs/static-site-demo
+#
+# ``private_network_policy: allow_loopback_only`` is the
+# test/demo-only opt-in. Production jobs must keep ``deny``.
+id: job:static-site-demo
+project_id: project:demo
+objective: |
+  Phase 2 demo crawl exercising the external crawl runtime against
+  a local static-site fixture without reaching the public internet.
+seed_urls:
+  - "http://127.0.0.1:18080/"
+allowed_domains:
+  - "127.0.0.1"
+denied_domains: []
+max_depth: 2
+max_pages: 10
+max_runtime_seconds: 30
+per_origin_concurrency: 1
+rate_limit:
+  requests_per_minute: 60
+  crawl_delay_seconds: 0.0
+source_adapters:
+  - http
+robots_policy: warn
+private_network_policy: allow_loopback_only
+artifact_policy:
+  store_raw_html: true
+  store_headers: true
+  store_screenshots: false
+  store_documents: false
+extraction:
+  mode: none
+  schema_ref: null
+  exploratory_schema_allowed: false
+output:
+  format: jsonl
+  include_raw_refs: true
+  include_evidence: false
