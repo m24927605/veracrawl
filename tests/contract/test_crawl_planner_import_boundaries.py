@@ -46,8 +46,8 @@ def test_adapters_planning_deterministic_crawl_planner_imports_allowlist() -> No
 
 
 def test_external_crawl_runner_does_not_import_crawl_planner_port() -> None:
+    # Match by substring so absolute (``veracrawl.ports.crawl_planner``) and
+    # relative (``..ports.crawl_planner``) imports both fail. Iter-2 follow-up.
     for module in _imports(_RUNNER.read_text()):
-        if module.startswith("veracrawl.ports.crawl_planner"):
-            pytest.fail(f"runner must not import port in s1: {module!r}")
-        if module.startswith("veracrawl.contracts.crawl_planner"):
-            pytest.fail(f"runner must not import planner contracts in s1: {module!r}")
+        if "crawl_planner" in module:
+            pytest.fail(f"runner must not import any crawl_planner module in s1: {module!r}")
