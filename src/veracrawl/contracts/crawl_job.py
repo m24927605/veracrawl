@@ -69,6 +69,11 @@ class ExtractionSpec(VeraModel):
     mode: ExtractionMode
     schema_ref: str | None = None
     exploratory_schema_allowed: bool = False
+    # OCR language hint forwarded to ``PytesseractPdfOcrExtractor`` when
+    # the hybrid PDF text extractor falls back to OCR. Accepts any
+    # tesseract language code or ``+``-joined combination (e.g.
+    # ``"eng"``, ``"chi_tra"``, ``"eng+jpn"``). Default ``"eng"``.
+    ocr_language: str = "eng"
 
     @model_validator(mode="after")
     def validate_extraction(self) -> ExtractionSpec:
@@ -78,6 +83,8 @@ class ExtractionSpec(VeraModel):
                     "extraction: llm_assisted without schema_ref requires "
                     "exploratory_schema_allowed=true"
                 )
+        if not self.ocr_language or not self.ocr_language.strip():
+            raise ValueError("extraction.ocr_language must be non-blank")
         return self
 
 

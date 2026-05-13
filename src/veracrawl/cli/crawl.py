@@ -79,6 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Model name forwarded to the provider when --llm-provider is set",
     )
     run.add_argument(
+        "--ocr-language",
+        default=None,
+        help=(
+            "OCR language hint (tesseract code, e.g. 'eng', 'chi_tra', "
+            "'eng+jpn'). Overrides spec.extraction.ocr_language when set."
+        ),
+    )
+    run.add_argument(
         "--llm-system-prompt",
         default=(
             "You extract structured fields from a single document. "
@@ -167,6 +175,7 @@ def _run(
     dry_run: bool,
     user_agent: str,
     max_response_bytes: int,
+    ocr_language: str | None,
     llm_provider_spec: str | None,
     llm_model: str,
     llm_system_prompt: str,
@@ -240,13 +249,18 @@ def _run(
             spec.private_network_policy == PrivateNetworkPolicy.ALLOW_LOOPBACK_ONLY
         ),
     )
+    resolved_ocr_language = (
+        ocr_language if ocr_language is not None else spec.extraction.ocr_language
+    )
     pdf_extractor: Any | None = None
     if pdf_module is not None:
         primary = pdf_module.PypdfTextExtractor()
         if ocr_module is not None and hybrid_module is not None:
             pdf_extractor = hybrid_module.HybridPdfTextExtractor(
                 primary=primary,
-                ocr=ocr_module.PytesseractPdfOcrExtractor(),
+                ocr=ocr_module.PytesseractPdfOcrExtractor(
+                    language=resolved_ocr_language
+                ),
             )
         else:
             pdf_extractor = primary
@@ -310,6 +324,7 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
                 user_agent=args.user_agent,
                 max_response_bytes=args.max_response_bytes,
+                ocr_language=args.ocr_language,
                 llm_provider_spec=args.llm_provider,
                 llm_model=args.llm_model,
                 llm_system_prompt=args.llm_system_prompt,

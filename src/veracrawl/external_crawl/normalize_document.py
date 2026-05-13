@@ -28,6 +28,11 @@ class NormalizedDocumentAnchor:
     char_offset_end: int
     text_hash: str
     raw_artifact_ref: str
+    # Redirect chain that led to the artifact referenced by
+    # ``raw_artifact_ref``. Empty when the seed URL responded
+    # directly. The list is the ordered sequence of ``from_url``
+    # values for every 3xx hop *plus* the final destination URL.
+    redirect_lineage: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +86,7 @@ def normalize_document(
     content_type: str,
     raw_artifact_ref: str,
     pdf_extractor: PdfTextExtractorPort | None = None,
+    redirect_lineage: tuple[str, ...] = (),
 ) -> NormalizedDocument:
     lowered = (content_type or "").lower()
 
@@ -93,7 +99,9 @@ def normalize_document(
                 canonical_url, content_type, raw_artifact_ref, "html parse failed"
             )
         text = collector.text()
-        return _ok(canonical_url, content_type, raw_artifact_ref, text)
+        return _ok(
+            canonical_url, content_type, raw_artifact_ref, text, redirect_lineage
+        )
 
     if "plain" in lowered or lowered.startswith("text/") and "html" not in lowered:
         try:
@@ -105,7 +113,9 @@ def normalize_document(
                 raw_artifact_ref,
                 "text body is not valid utf-8",
             )
-        return _ok(canonical_url, content_type, raw_artifact_ref, text)
+        return _ok(
+            canonical_url, content_type, raw_artifact_ref, text, redirect_lineage
+        )
 
     if "pdf" in lowered:
         if pdf_extractor is None:
@@ -121,6 +131,7 @@ def normalize_document(
             raw_artifact_ref=raw_artifact_ref,
             body=body,
             extractor=pdf_extractor,
+            redirect_lineage=redirect_lineage,
         )
 
     return _needs_review(
@@ -138,6 +149,7 @@ def _normalize_pdf(
     raw_artifact_ref: str,
     body: bytes,
     extractor: PdfTextExtractorPort,
+    redirect_lineage: tuple[str, ...] = (),
 ) -> NormalizedDocument:
     try:
         doc = extractor.extract(body)
@@ -173,6 +185,7 @@ def _normalize_pdf(
                 char_offset_end=end,
                 text_hash=_hash(page_text),
                 raw_artifact_ref=raw_artifact_ref,
+                redirect_lineage=redirect_lineage,
             )
         )
         cursor = end + 2  # the "\n\n" separator
@@ -187,7 +200,11 @@ def _normalize_pdf(
 
 
 def _ok(
-    canonical_url: str, content_type: str, raw_artifact_ref: str, text: str
+    canonical_url: str,
+    content_type: str,
+    raw_artifact_ref: str,
+    text: str,
+    redirect_lineage: tuple[str, ...] = (),
 ) -> NormalizedDocument:
     anchor = NormalizedDocumentAnchor(
         page_number=None,
@@ -195,6 +212,7 @@ def _ok(
         char_offset_end=len(text),
         text_hash=_hash(text),
         raw_artifact_ref=raw_artifact_ref,
+        redirect_lineage=redirect_lineage,
     )
     return NormalizedDocument(
         canonical_url=canonical_url,

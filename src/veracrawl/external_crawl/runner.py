@@ -84,22 +84,49 @@ def _now() -> datetime:
 
 
 def _parse_retry_after(value: str | None) -> float | None:
-    """Parse a ``Retry-After`` header value into seconds.
+    """Parse an RFC 7231 ``Retry-After`` header into seconds.
 
-    Returns ``None`` for empty/missing headers and for HTTP-date
-    forms (Phase 7.2 honours only the integer-seconds shape; the
-    date shape would require a full HTTP-date parser which the
-    limiter doesn't need today).
+    Both forms are accepted:
+
+    * ``<delta-seconds>`` — a non-negative integer (or float, which
+      RFC strictly disallows but some servers emit).
+    * ``<HTTP-date>`` — an RFC 7231 §7.1.1.1 date string, e.g.
+      ``"Wed, 21 Oct 2099 07:28:00 GMT"``. The parser returns the
+      seconds remaining until that date.
+
+    Returns ``None`` for missing / whitespace-only / negative-seconds
+    / past-date / malformed values so the caller's limiter falls
+    back to its built-in cooldown.
     """
     if value is None:
         return None
     stripped = value.strip()
     if not stripped:
         return None
+
     try:
-        return float(stripped)
+        seconds = float(stripped)
     except ValueError:
+        pass
+    else:
+        # RFC: delta-seconds must be non-negative. Treat negatives as
+        # malformed rather than "wait infinity backwards in time".
+        return seconds if seconds >= 0 else None
+
+    # Fall through to HTTP-date parsing.
+    from email.utils import parsedate_to_datetime
+
+    try:
+        parsed = parsedate_to_datetime(stripped)
+    except (TypeError, ValueError):
         return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        # RFC requires GMT; defensively assume UTC for naive parses.
+        parsed = parsed.replace(tzinfo=UTC)
+    delta = (parsed - datetime.now(tz=UTC)).total_seconds()
+    return delta if delta > 0 else None
 
 
 def _event_to_dict(event: FrontierEvent) -> dict[str, Any]:
@@ -253,6 +280,8 @@ class ExternalCrawlRunner:
                     content_type=fetch_outcome.content_type,
                     raw_artifact_ref=artifact_ref,
                     pdf_extractor=self._pdf_extractor,
+                    redirect_lineage=tuple(fetch_outcome.redirect_chain)
+                    + (fetch_outcome.final_url,),
                 )
                 normalized_fp.write(
                     json.dumps(self._normalized_record(normalized)) + "\n"
@@ -618,6 +647,7 @@ class ExternalCrawlRunner:
                     "char_offset_end": anchor.char_offset_end,
                     "text_hash": anchor.text_hash,
                     "raw_artifact_ref": anchor.raw_artifact_ref,
+                    "redirect_lineage": list(anchor.redirect_lineage),
                 }
                 for anchor in candidate.evidence_anchors
             ],
@@ -669,6 +699,7 @@ class ExternalCrawlRunner:
                     "char_offset_end": anchor.char_offset_end,
                     "text_hash": anchor.text_hash,
                     "raw_artifact_ref": anchor.raw_artifact_ref,
+                    "redirect_lineage": list(anchor.redirect_lineage),
                 }
                 for anchor in normalized.anchors
             ],

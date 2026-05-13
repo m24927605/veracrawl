@@ -35,6 +35,9 @@ Verified at 2026-05-13.
 | 7.1 Per-redirect lineage events | ✅ | `FetchOutcome.redirect_history` typed list of `RedirectHop`; runner writes `events/redirects.jsonl` (one record per hop with `from_url`/`to_url`/`status_code`/`observed_at`); the file is always present (empty when no hops). |
 | 7.2 AIMD rate limiter wiring | ✅ | `InMemoryAimdLimiter` now drives the runner's per-fetch pacing via `acquire(...) → report_success / report_throttled`; `RouteClass` heuristic per URL (`file` / `api` / `search` / `listing` / `detail`); `Retry-After` honoured on 429/503; integration tests confirm both pacing and throttle cooldown. |
 | 7.3 OCR fallback for image-only PDFs | ✅ | `PytesseractPdfOcrExtractor` (pdf2image + pytesseract) + `HybridPdfTextExtractor` composing pypdf primary + OCR fallback; runner uses the hybrid when the `pdf-ocr` extra is installed. End-to-end test renders text → image-only PDF → OCR roundtrip recovers the string. |
+| 8.1 HTTP-date `Retry-After` parsing | ✅ | `_parse_retry_after` accepts both integer-seconds and RFC 7231 HTTP-date forms via `email.utils.parsedate_to_datetime`; rejects negative seconds and past dates; 10 parametrised unit tests. |
+| 8.2 OCR language plumbing | ✅ | `ExtractionSpec.ocr_language` (default `"eng"`) carries the tesseract language code; CLI `--ocr-language` overrides; default applied for back-compat with specs that omit the field. |
+| 8.3 Redirect lineage on anchors | ✅ | `NormalizedDocumentAnchor.redirect_lineage: tuple[str, ...]` records every URL on the chain from seed → final destination; runner threads `FetchOutcome.redirect_chain + (final_url,)` into the normaliser; lineage propagates into `extraction_candidates.jsonl` + `evidence_packets.jsonl` so replay does not require joining `events/redirects.jsonl`. |
 
 ## Acceptance criteria
 
@@ -104,19 +107,21 @@ Follow-ups to wire a real LLM:
 
 ## Known gaps / follow-ups
 
-All Phase 1–7 acceptance items are in. Remaining nice-to-haves
-(none blocking):
+Phase 1–8 acceptance items are all in. No outstanding gaps tied to
+the original goal doc. Forward-looking improvements that would extend
+behaviour beyond the current spec (not blocking):
 
-* **HTTP-date `Retry-After`** — the limiter currently honours only
-  the integer-seconds form. Date-form parsing would require a
-  proper HTTP-date parser.
-* **OCR language detection** — `PytesseractPdfOcrExtractor` defaults
-  to ``eng``; multi-language jobs would benefit from a language
-  hint per job spec.
-* **Per-redirect anchor lineage** — the redirect log captures hops
-  but the eventual content's evidence anchors only point at the
-  final URL; for sites that 302 to mirror domains, mirroring the
-  hop history into the anchor would improve replayability.
+* **Automatic OCR language detection** — currently the operator
+  declares ``extraction.ocr_language`` per job; a per-page language
+  detector (e.g. fastText / `langdetect`) could pick the right
+  tesseract pack page-by-page.
+* **Sitemap-of-sitemaps recursion beyond one level** — the current
+  recursion cap is deliberate (operators with truly nested sitemaps
+  re-seed manually); deepening would need a budget guard.
+* **Per-hop status codes in anchor lineage** — `redirect_lineage`
+  carries URLs only. The status codes are still in
+  `events/redirects.jsonl`; binding them onto the anchor itself
+  would let replay reconstruct the chain without two-file joins.
 
 ## File-level summary
 
