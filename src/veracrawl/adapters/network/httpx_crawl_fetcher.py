@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from veracrawl.ports.crawl_http_fetcher import FetchError, FetchOutcome
+from veracrawl.ports.crawl_http_fetcher import FetchError, FetchOutcome, RedirectHop
 
 _SUPPORTED_SCHEMES = frozenset({"http", "https"})
 
@@ -111,6 +111,23 @@ class HttpxCrawlFetcher:
             )
 
         redirect_chain = [str(resp.url) for resp in response.history]
+        redirect_history: list[RedirectHop] = []
+        # Each entry in response.history is the 3xx response that
+        # *caused* a redirect. The next-step URL is the requested
+        # URL of the next history entry, falling back to the final
+        # response URL for the last hop.
+        for idx, hop_resp in enumerate(response.history):
+            if idx + 1 < len(response.history):
+                to_url = str(response.history[idx + 1].url)
+            else:
+                to_url = str(response.url)
+            redirect_history.append(
+                RedirectHop(
+                    from_url=str(hop_resp.url),
+                    to_url=to_url,
+                    status_code=hop_resp.status_code,
+                )
+            )
         elapsed_ms = (time.monotonic() - started) * 1000.0
         return FetchOutcome(
             requested_url=url,
@@ -120,6 +137,7 @@ class HttpxCrawlFetcher:
             body=body,
             content_type=response.headers.get("content-type", ""),
             redirect_chain=redirect_chain,
+            redirect_history=redirect_history,
             elapsed_ms=elapsed_ms,
         )
 

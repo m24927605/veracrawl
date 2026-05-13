@@ -32,6 +32,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from veracrawl.contracts.crawl_job import (
     CrawlJobSpec,
@@ -39,6 +40,7 @@ from veracrawl.contracts.crawl_job import (
     PrivateNetworkPolicy,
     RobotsPolicy,
 )
+from veracrawl.contracts.enums import AdapterType, RouteClass
 from veracrawl.external_crawl.frontier import (
     ExternalCrawlFrontier,
     FrontierEvent,
@@ -68,11 +70,36 @@ from veracrawl.ports.extractor import (
     ExtractorPort,
 )
 from veracrawl.ports.pdf_text_extractor import PdfTextExtractorPort
+from veracrawl.ports.rate_limiter import (
+    NoopRateLimiter,
+    RateLimiterPort,
+    RateLimitFloor,
+    RateLimitPermit,
+)
 from veracrawl.ports.robots import NoopRobotsPort, RobotsPort
 
 
 def _now() -> datetime:
     return datetime.now(tz=UTC)
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Parse a ``Retry-After`` header value into seconds.
+
+    Returns ``None`` for empty/missing headers and for HTTP-date
+    forms (Phase 7.2 honours only the integer-seconds shape; the
+    date shape would require a full HTTP-date parser which the
+    limiter doesn't need today).
+    """
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    try:
+        return float(stripped)
+    except ValueError:
+        return None
 
 
 def _event_to_dict(event: FrontierEvent) -> dict[str, Any]:
@@ -99,6 +126,7 @@ class ExternalCrawlRunner:
         extractors: list[ExtractorPort] | None = None,
         pdf_extractor: PdfTextExtractorPort | None = None,
         robots_port: RobotsPort | None = None,
+        rate_limiter: RateLimiterPort | None = None,
         user_agent: str = "veracrawl/0.1",
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -113,6 +141,7 @@ class ExternalCrawlRunner:
         )
         self._pdf_extractor = pdf_extractor
         self._robots_port: RobotsPort = robots_port or NoopRobotsPort()
+        self._rate_limiter: RateLimiterPort = rate_limiter or NoopRateLimiter()
         self._user_agent = user_agent
         self._clock = clock
 
@@ -125,14 +154,6 @@ class ExternalCrawlRunner:
             allow_loopback=allow_loopback,
         )
 
-        rate = spec.rate_limit
-        # Convert requests-per-minute into a minimum inter-request
-        # delay; the explicit ``crawl_delay_seconds`` overrides if set.
-        rpm_delay = 60.0 / rate.requests_per_minute if rate.requests_per_minute else 0.0
-        self._min_delay_seconds = (
-            rate.crawl_delay_seconds if rate.crawl_delay_seconds is not None else rpm_delay
-        )
-        self._last_fetch_at: float | None = None
         self._cited_artifact_refs: set[str] = set()
         self._candidates_written = 0
         self._evidence_packets_written = 0
@@ -158,6 +179,7 @@ class ExternalCrawlRunner:
         )
         evidence_path = self._run_root / "outputs" / "evidence_packets.jsonl"
         events_path = self._run_root / "events" / "frontier.jsonl"
+        redirects_path = self._run_root / "events" / "redirects.jsonl"
 
         for path in (
             documents_path,
@@ -166,8 +188,13 @@ class ExternalCrawlRunner:
             candidates_path,
             evidence_path,
             events_path,
+            redirects_path,
         ):
             path.unlink(missing_ok=True)
+        # Touch redirects.jsonl so it always exists for downstream
+        # tooling, even when no hops were observed.
+        redirects_path.parent.mkdir(parents=True, exist_ok=True)
+        redirects_path.touch()
 
         for seed in self._spec.seed_urls:
             self._frontier.enqueue(seed, depth=0, parent_canonical_url=None)
@@ -200,12 +227,16 @@ class ExternalCrawlRunner:
                     )
                     continue
 
-                self._apply_rate_limit()
-                fetch_outcome = self._fetch(item.canonical_url, failures)
+                fetch_outcome = self._fetch_with_rate_limit(
+                    item.canonical_url, failures
+                )
                 if fetch_outcome is None:
                     continue
 
                 self._frontier.mark_fetched(item.canonical_url)
+                self._write_redirect_hops(
+                    item.canonical_url, fetch_outcome, redirects_path
+                )
                 artifact_ref = self._persist_artifact(
                     item.canonical_url, fetch_outcome
                 )
@@ -289,6 +320,27 @@ class ExternalCrawlRunner:
         )
         return report
 
+    @staticmethod
+    def _write_redirect_hops(
+        canonical_url: str, outcome: FetchOutcome, redirects_path: Any
+    ) -> None:
+        if not outcome.redirect_history:
+            return
+        with redirects_path.open("a", encoding="utf-8") as fp:
+            for hop in outcome.redirect_history:
+                fp.write(
+                    json.dumps(
+                        {
+                            "canonical_url": canonical_url,
+                            "from_url": hop.from_url,
+                            "to_url": hop.to_url,
+                            "status_code": hop.status_code,
+                            "observed_at": _now().isoformat(),
+                        }
+                    )
+                    + "\n"
+                )
+
     def _robots_allowed(self, url: str) -> bool:
         """Apply ``spec.robots_policy`` to a candidate URL.
 
@@ -303,18 +355,74 @@ class ExternalCrawlRunner:
         advice = self._robots_port.evaluate(url, user_agent=self._user_agent)
         return advice.is_allowed
 
-    def _apply_rate_limit(self) -> None:
-        if self._min_delay_seconds <= 0.0:
-            return
-        if self._last_fetch_at is None:
-            return
-        elapsed = self._clock() - self._last_fetch_at
-        remaining = self._min_delay_seconds - elapsed
-        if remaining > 0:
-            time.sleep(remaining)
+    def _floor_from_spec(self) -> RateLimitFloor:
+        rate = self._spec.rate_limit
+        request_rate = (
+            (rate.requests_per_minute, 60)
+            if rate.requests_per_minute > 0
+            else None
+        )
+        return RateLimitFloor(
+            crawl_delay_seconds=rate.crawl_delay_seconds,
+            request_rate=request_rate,
+        )
+
+    @staticmethod
+    def _origin_of(url: str) -> str:
+        parsed = urlsplit(url)
+        if not parsed.scheme or not parsed.hostname:
+            return url
+        host = parsed.hostname.lower()
+        if parsed.port and not (
+            (parsed.scheme == "http" and parsed.port == 80)
+            or (parsed.scheme == "https" and parsed.port == 443)
+        ):
+            host = f"{host}:{parsed.port}"
+        return f"{parsed.scheme}://{host}"
+
+    @staticmethod
+    def _route_class_for(url: str) -> RouteClass:
+        parsed = urlsplit(url)
+        path = (parsed.path or "/").lower()
+        query = (parsed.query or "").lower()
+        # File downloads first — extension wins.
+        if "." in path:
+            ext = path.rsplit(".", 1)[-1]
+            if ext in {
+                "pdf", "doc", "docx", "xls", "xlsx",
+                "zip", "tar", "gz", "tgz", "rar", "7z",
+                "png", "jpg", "jpeg", "gif", "webp", "svg",
+                "mp4", "mp3", "wav", "flac", "mov", "avi",
+                "csv", "tsv",
+            }:
+                return RouteClass.FILE
+        if "/api/" in path or path.startswith("/api"):
+            return RouteClass.API
+        if "/search" in path or "q=" in query or "search=" in query:
+            return RouteClass.SEARCH
+        if path.endswith("/") or "/list" in path or "/index" in path:
+            return RouteClass.LISTING
+        return RouteClass.DETAIL
+
+    def _fetch_with_rate_limit(
+        self, url: str, failures: list[dict[str, Any]]
+    ) -> FetchOutcome | None:
+        origin = self._origin_of(url)
+        route_class = self._route_class_for(url)
+        floor = self._floor_from_spec()
+        with self._rate_limiter.acquire(
+            origin=origin,
+            route_class=route_class,
+            adapter_type=AdapterType.HTTP,
+            floor=floor,
+        ) as permit:
+            return self._fetch(url, failures, permit)
 
     def _fetch(
-        self, url: str, failures: list[dict[str, Any]]
+        self,
+        url: str,
+        failures: list[dict[str, Any]],
+        permit: RateLimitPermit | None = None,
     ) -> FetchOutcome | None:
         try:
             outcome = self._fetcher.fetch(url, timeout_seconds=10.0)
@@ -327,9 +435,28 @@ class ExternalCrawlRunner:
                     "at": _now().isoformat(),
                 }
             )
-            self._last_fetch_at = self._clock()
+            # Transport errors don't carry a server-side throttle
+            # signal; do not feed the AIMD limiter a synthetic
+            # throttle here.
             return None
-        self._last_fetch_at = self._clock()
+        if outcome.status_code in {429, 503}:
+            failures.append(
+                {
+                    "canonical_url": url,
+                    "stage": "fetch",
+                    "error": f"HTTP {outcome.status_code}",
+                    "at": _now().isoformat(),
+                }
+            )
+            if permit is not None:
+                retry_after = _parse_retry_after(
+                    outcome.headers.get("Retry-After")
+                    or outcome.headers.get("retry-after")
+                )
+                self._rate_limiter.report_throttled(
+                    permit=permit, retry_after_seconds=retry_after
+                )
+            return None
         if outcome.status_code >= 400:
             failures.append(
                 {
@@ -340,6 +467,8 @@ class ExternalCrawlRunner:
                 }
             )
             return None
+        if permit is not None:
+            self._rate_limiter.report_success(permit=permit)
         return outcome
 
     def _persist_artifact(

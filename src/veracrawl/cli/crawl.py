@@ -197,15 +197,30 @@ def _run(
     fetcher_module = importlib.import_module(
         "veracrawl.adapters.network.httpx_crawl_fetcher"
     )
-    # PDF extraction is opt-in via the ``pdf`` extra. Soft-import so
-    # an install without ``--extra pdf`` still runs the rest of the
-    # pipeline; PDFs in that case fall back to ``needs_review``.
+    # PDF text extraction is opt-in via the ``pdf`` extra. Soft-import
+    # so an install without it still runs the rest of the pipeline;
+    # PDFs in that case fall back to ``needs_review``. The ``pdf-ocr``
+    # extra adds an OCR fallback for image-only PDFs; when both are
+    # available we wire a HybridPdfTextExtractor automatically.
     try:
         pdf_module: Any | None = importlib.import_module(
             "veracrawl.adapters.document.pypdf_text_extractor"
         )
     except ImportError:
         pdf_module = None
+    try:
+        ocr_module: Any | None = importlib.import_module(
+            "veracrawl.adapters.document.pytesseract_pdf_ocr_extractor"
+        )
+        hybrid_module: Any | None = importlib.import_module(
+            "veracrawl.adapters.document.hybrid_pdf_text_extractor"
+        )
+    except ImportError:
+        ocr_module = None
+        hybrid_module = None
+    rate_limiter_module = importlib.import_module(
+        "veracrawl.adapters.network.aimd_rate_limiter"
+    )
     store = store_module.LocalFsCrawlArtifactStore(root=out_root, run_id=run_id)
     spec_payload = spec.model_dump(mode="json")
     _write_json_file(store.run_root / "reports" / "job_spec.json", spec_payload)
@@ -225,9 +240,17 @@ def _run(
             spec.private_network_policy == PrivateNetworkPolicy.ALLOW_LOOPBACK_ONLY
         ),
     )
-    pdf_extractor = (
-        pdf_module.PypdfTextExtractor() if pdf_module is not None else None
-    )
+    pdf_extractor: Any | None = None
+    if pdf_module is not None:
+        primary = pdf_module.PypdfTextExtractor()
+        if ocr_module is not None and hybrid_module is not None:
+            pdf_extractor = hybrid_module.HybridPdfTextExtractor(
+                primary=primary,
+                ocr=ocr_module.PytesseractPdfOcrExtractor(),
+            )
+        else:
+            pdf_extractor = primary
+    rate_limiter = rate_limiter_module.InMemoryAimdLimiter()
 
     extractors_kwarg: dict[str, Any] = {}
     if spec.extraction.mode == ExtractionMode.LLM_ASSISTED:
@@ -267,6 +290,7 @@ def _run(
         run_root=store.run_root,
         fetcher=fetcher,
         pdf_extractor=pdf_extractor,
+        rate_limiter=rate_limiter,
         **extractors_kwarg,
     )
     runner.run()

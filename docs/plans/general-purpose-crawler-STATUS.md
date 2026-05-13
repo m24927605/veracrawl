@@ -31,7 +31,10 @@ Verified at 2026-05-13.
 | 6.2 Full integration suite regression | ⏳ | Running |
 | 6.3 PDF text extraction | ✅ | `PdfTextExtractorPort` + `PypdfTextExtractor` adapter; `normalize_document` now produces one anchor per PDF page when an extractor is injected; CLI soft-imports the adapter so installs without `--extra pdf` still work |
 | 6.4 Real LLM call wiring | ✅ | `ProviderBackedLlmCallable` wraps `ModelProviderPortV2` with a JSON-schema `ProviderRequest`; CLI flags `--llm-provider module:factory` / `--llm-model` / `--llm-system-prompt`; spec gate refuses `llm_assisted` mode without a provider (exit 5); runner flushes traces to `events/model_calls.jsonl` |
-| 6.5 Robots gate + cookies | ✅ | Runner now consults a `RobotsPort` before fetching and respects `spec.robots_policy` (`OBEY` / `DENY_WITHOUT_ROBOTS` block, `WARN` proceeds); `HttpxCrawlFetcher` refactored to use a persistent `httpx.Client` so cookies and connections persist across fetches; **AIMD rate limiter wiring deferred** — see follow-ups |
+| 6.5 Robots gate + cookies | ✅ | Runner now consults a `RobotsPort` before fetching and respects `spec.robots_policy` (`OBEY` / `DENY_WITHOUT_ROBOTS` block, `WARN` proceeds); `HttpxCrawlFetcher` refactored to use a persistent `httpx.Client` so cookies and connections persist across fetches |
+| 7.1 Per-redirect lineage events | ✅ | `FetchOutcome.redirect_history` typed list of `RedirectHop`; runner writes `events/redirects.jsonl` (one record per hop with `from_url`/`to_url`/`status_code`/`observed_at`); the file is always present (empty when no hops). |
+| 7.2 AIMD rate limiter wiring | ✅ | `InMemoryAimdLimiter` now drives the runner's per-fetch pacing via `acquire(...) → report_success / report_throttled`; `RouteClass` heuristic per URL (`file` / `api` / `search` / `listing` / `detail`); `Retry-After` honoured on 429/503; integration tests confirm both pacing and throttle cooldown. |
+| 7.3 OCR fallback for image-only PDFs | ✅ | `PytesseractPdfOcrExtractor` (pdf2image + pytesseract) + `HybridPdfTextExtractor` composing pypdf primary + OCR fallback; runner uses the hybrid when the `pdf-ocr` extra is installed. End-to-end test renders text → image-only PDF → OCR roundtrip recovers the string. |
 
 ## Acceptance criteria
 
@@ -101,20 +104,19 @@ Follow-ups to wire a real LLM:
 
 ## Known gaps / follow-ups
 
-* **AIMD rate limiter wiring**: the existing
-  `adapters/network/aimd_rate_limiter.py` is *not* wired into the
-  external crawl runner. The runner's `_apply_rate_limit` enforces
-  the fixed `requests_per_minute` floor declared by the job spec,
-  which is a correct (if conservative) baseline. Wiring AIMD
-  requires plumbing `RouteClass`, `AdapterType`, and the
-  success/throttle feedback loop through the fetcher; tracked for
-  a follow-up Phase.
-* **Per-redirect lineage events**: `redirect_chain` is captured per
-  fetch outcome, but each redirect doesn't get its own event
-  record. Phase 6 follow-up.
-* **OCR for image-only PDFs**: `PypdfTextExtractor` returns empty
-  page text for scanned PDFs (no text layer); a future OCR
-  adapter would fill that in.
+All Phase 1–7 acceptance items are in. Remaining nice-to-haves
+(none blocking):
+
+* **HTTP-date `Retry-After`** — the limiter currently honours only
+  the integer-seconds form. Date-form parsing would require a
+  proper HTTP-date parser.
+* **OCR language detection** — `PytesseractPdfOcrExtractor` defaults
+  to ``eng``; multi-language jobs would benefit from a language
+  hint per job spec.
+* **Per-redirect anchor lineage** — the redirect log captures hops
+  but the eventual content's evidence anchors only point at the
+  final URL; for sites that 302 to mirror domains, mirroring the
+  hop history into the anchor would improve replayability.
 
 ## File-level summary
 

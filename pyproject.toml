@@ -32,6 +32,8 @@ dev = [
   "mypy>=1.10,<2",
   "types-PyYAML>=6.0,<7",
   "pypdf>=4.0,<6",
+  "pytesseract>=0.3.10,<1",
+  "pdf2image>=1.17,<2",
 ]
 postgres = [
   "psycopg[binary]>=3.2,<4",
@@ -47,6 +49,11 @@ browser-playwright = [
 ]
 pdf = [
   "pypdf>=4.0,<6",
+]
+pdf-ocr = [
+  "pypdf>=4.0,<6",
+  "pytesseract>=0.3.10,<1",
+  "pdf2image>=1.17,<2",
 ]
 
 [project.scripts]
@@ -179,4 +186,10 @@ ignore_missing_imports = true
 # stays green for installs without the ``pdf`` extra.
 [[tool.mypy.overrides]]
 module = ["pypdf", "pypdf.*"]
+ignore_missing_imports = true
+
+# ``pytesseract`` and ``pdf2image`` are optional OCR-path deps
+# pulled in by the ``pdf-ocr`` extra; same stubs rationale.
+[[tool.mypy.overrides]]
+module = ["pytesseract", "pytesseract.*", "pdf2image", "pdf2image.*"]
 ignore_missing_imports = true

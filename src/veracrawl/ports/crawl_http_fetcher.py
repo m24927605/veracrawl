@@ -16,6 +16,15 @@ class FetchError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class RedirectHop:
+    """One ``3xx → Location`` step in a redirect chain."""
+
+    from_url: str
+    to_url: str
+    status_code: int
+
+
+@dataclass(frozen=True, slots=True)
 class FetchOutcome:
     requested_url: str
     final_url: str
@@ -24,6 +33,7 @@ class FetchOutcome:
     body: bytes
     content_type: str
     redirect_chain: list[str] = field(default_factory=list)
+    redirect_history: list[RedirectHop] = field(default_factory=list)
     elapsed_ms: float = 0.0
 
 
@@ -31,4 +41,4 @@ class CrawlHttpFetcherPort(Protocol):
     def fetch(self, url: str, *, timeout_seconds: float) -> FetchOutcome: ...
 
 
-__all__ = ["CrawlHttpFetcherPort", "FetchError", "FetchOutcome"]
+__all__ = ["CrawlHttpFetcherPort", "FetchError", "FetchOutcome", "RedirectHop"]
