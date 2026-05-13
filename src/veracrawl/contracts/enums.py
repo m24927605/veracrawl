@@ -1950,3 +1950,28 @@ class AccessControlProvider(StrEnum):
     LOGIN_WALL = "login_wall"
     GENERIC_CAPTCHA = "generic_captcha"
     UNKNOWN = "unknown"
+
+
+class FrontierMatchKind(StrEnum):
+    """Pattern kind for ``FrontierPriorityHint.match_value``.
+
+    Introduced in s1 of the general-purpose-crawler-agentification
+    topic (``docs/plans/general-purpose-crawler-agentification/
+    s1-crawl-planner-port-contract.md``). Each kind specifies how
+    ``match_value`` is interpreted when a future runner slice applies
+    the hint to a frontier item.
+
+    * ``URL_PREFIX`` — ``match_value`` is a literal ``http://`` or
+      ``https://`` URL prefix; matches frontier items whose canonical
+      URL starts with this prefix.
+    * ``HOST_GLOB`` — ``match_value`` is a host-shaped glob
+      (``[a-zA-Z0-9._*-]+``); matches frontier items whose hostname
+      glob-matches.
+    * ``CONTENT_TYPE_PREFIX`` — ``match_value`` is a
+      ``type/subtype``-shaped MIME prefix; matches frontier items
+      whose pre-fetch content-type hint starts with this prefix.
+    """
+
+    URL_PREFIX = "url_prefix"
+    HOST_GLOB = "host_glob"
+    CONTENT_TYPE_PREFIX = "content_type_prefix"
