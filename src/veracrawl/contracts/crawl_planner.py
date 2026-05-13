@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 
-from veracrawl.contracts.common import Ref, TimestampedModel
+from veracrawl.contracts.common import Ref, VeraModel
 from veracrawl.contracts.enums import AdapterType, FrontierMatchKind
 
 _SUM_TOL = 1.0 + 1e-9
@@ -30,7 +30,7 @@ def _require(cond: bool, msg: str) -> None:
         raise ValueError(msg)
 
 
-class PlannedSeed(TimestampedModel):
+class PlannedSeed(VeraModel):
     canonical_url: str
     priority_score: float
     adapter_hint: AdapterType
@@ -43,7 +43,7 @@ class PlannedSeed(TimestampedModel):
         return self
 
 
-class AdapterPrior(TimestampedModel):
+class AdapterPrior(VeraModel):
     adapter_type: AdapterType
     weight: float
     rationale_ref: Ref
@@ -54,7 +54,7 @@ class AdapterPrior(TimestampedModel):
         return self
 
 
-class FrontierPriorityHint(TimestampedModel):
+class FrontierPriorityHint(VeraModel):
     match_kind: FrontierMatchKind
     match_value: str
     priority_delta: float
@@ -73,7 +73,7 @@ class FrontierPriorityHint(TimestampedModel):
         return self
 
 
-class PlanRequest(TimestampedModel):
+class PlanRequest(VeraModel):
     id: str
     run_ref: Ref
     objective_ref: Ref
@@ -98,7 +98,7 @@ class PlanRequest(TimestampedModel):
         return self
 
 
-class PlanDecision(TimestampedModel):
+class PlanDecision(VeraModel):
     id: str
     request_ref: Ref
     planner_adapter_ref: Ref
