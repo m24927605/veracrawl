@@ -13,6 +13,7 @@ follow-up.
 | s1 | `CrawlPlannerPort` + plan-decision contract + deterministic fixture adapter | DONE | aca4f82 | step 1: c49f68a, 22e1966, d7b836d, 0f8472e, 04f75cf (APPROVED iter 4). step 2: 65698e2 (APPROVED iter 1). step 3: 0ed2781, 731369b, 4a5c5ed, 4cf33f8 (APPROVED iter 4). step 4: c3c1de3 (APPROVED iter 1). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1→3 REJECTED → iter 4 APPROVED. step 2: iter 1 APPROVED. step 3: iter 1→3 REJECTED → iter 4 APPROVED. step 4: iter 1 APPROVED. | 1 — see "s1 plan iter-5 reservations" below |
 | s2 | Real LLM-driven `CrawlPlanner` adapter (replay-strict) | DONE | d271e04 | step 1: 9ab4de3, 8cca1b5, 2dd0740, a3ef153, bd87e28, f7120b7 (APPROVED iter 5). step 2: 2a961de, 06f2a00, 0454850 (APPROVED iter 2). step 3: e52a060, ecb275c, 2152d94, c042008 (APPROVED iter 3). step 4: e2ac34b, fc57f48, 7fb2678, 0584549, 5ef1c92 (planner adapter + 18 unit tests + step-5 merge with 2 import-boundary tests; APPROVED iter 5). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1→4 REJECTED → iter 5 APPROVED. step 2: iter 1 REJECTED → iter 2 APPROVED. step 3: iter 1 REJECTED → iter 2 APPROVED → iter 3 APPROVED. step 4: iter 1→4 REJECTED → iter 5 APPROVED. | 1 — see "s2 plan iter-5 reservations" below |
 | s3 | `ExternalCrawlRunner` wires `CrawlPlannerPort` (planned-seed scheduling) | DONE | a7c6798 | 732ffaf (runner + 15 unit tests + integration test + 22a replacement), e40b967 (iter-1 follow-up: tightened 22a + bumped test-file budget), 3907fb1 (iter-2 follow-up: bare `veracrawl.adapters` import rejected; APPROVED iter 3). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | iter 1 REJECTED → iter 2 REJECTED → iter 3 APPROVED. | 1 — see "s3 plan iter-5 reservations" below |
+| s4 | `GraphObservationPort` + URL/canonical/redirect/structure event contracts | PLAN_DONE_WITH_RESERVATIONS | (uncommitted; lands with s4 plan-landing commit) | — | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | n/a (no impl yet) | 1 — see "s4 plan iter-5 reservations" below |
 
 ## s1 codex plan-review log
 
@@ -120,6 +121,30 @@ hook-installed version once landed.
 | 3    | 2026-05-14 | REJECTED | 1 blocker + 1 major: Design §Replay invariant still listed 2 keys; AC6 only checked `runner.py`. | Plan revised to v4: Design rewritten to enumerate all 5 keys; AC6 scope expanded to `src/veracrawl/**`. |
 | 4    | 2026-05-14 | REJECTED | 1 blocker: `extraction_strategy_refs` is LLM-derived but report persisted 5 not 6 keys. | Plan revised to v5: 6th key `plan_decision_extraction_strategy_refs` added; new red test 10a; replay test 13 + absence test 12 extended to all 6. AC1 13 → 14. |
 | 5    | 2026-05-14 | REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) | 1 major + 2 minors: stable-tie order not pinned by a red test; Design prose stale ("all 5"); topic README missing `extraction_strategy_refs`. | Post-iter-5 follow-up landed in this same plan revision: new red test 6a for priority-tie emission-order stability; Design prose corrected to "all 6"; topic README s3 row rewritten with 6 persisted keys + s10 reference. AC1 14 → 15. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
+
+## s4 codex plan-review log
+
+| Iter | Date (UTC) | Verdict | Findings (severity — summary) | Resolution |
+|------|------------|---------|-------------------------------|------------|
+| 1 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: snapshot() Protocol contradicted test 25 invocation; UTC-only invariants un-tested; non-blank id/run_ref under-tested. | Plan revised v2: `snapshot(*, id, snapshot_at)`; 14 new tests for UTC-only datetimes and non-blank id/run_ref. AC1 26 → 40. |
+| 2 | 2026-05-14 | REJECTED | 1 blocker + 2 majors + 1 minor: snapshot run_ref had no deterministic input; aware-non-UTC not rejected; AC7/AC8 not mechanical; `TimestampedModel` import inconsistency. | Plan v3: `InMemoryGraphObserver(run_ref=...)` ctor; 5 non-UTC tests + 1 mismatched-run_ref test; AC7/AC8 shell-grep; `VeraModel` only. AC1 40 → 45. |
+| 3 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: test 26 ctor regression; missing URL invariants for from/target/page URLs; snapshot ref-list entries unvalidated. | Plan v4: 3 missing-URL tests; test 15t for blank entries; test 26 fixed. AC1 46 → 50. |
+| 4 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: snapshot ref-only (s5 couldn't read graph); missing-field tests absent; AC4 substring grep too weak. | Plan v5: snapshot embeds typed events (not refs); 5 missing-field tests for `observed_at`/`snapshot_at`; AC4 uses AST allowlist test. AC1 50 → 55. |
+| 5 | 2026-05-14 | REJECTED → DONE_WITH_RESERVATIONS via post-iter-5 follow-up | 1 blocker + 2 majors: snapshot redesign inconsistent (2 places still said "ref lists"); missing-field tests for `id`/`run_ref`/`source_ref` absent; AC7/AC8 reservations branch not deterministic. | Post-iter-5 follow-up: remaining "ref list" wording replaced with embedded events; 11 missing-field tests 15z-15jj added; AC7/AC8 reservations branch tightened to STATUS-row grep. AC1 55 → 66. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
+
+## s4 plan iter-5 reservations
+
+**Reservation 1 — iter-5 post-iter-5 follow-up not re-reviewed.**
+Iter 5 returned `REJECTED` with one blocker (inconsistent snapshot
+redesign) + two majors (missing-field tests for non-timestamp
+replay anchors; AC7/AC8 reservations branch not deterministic).
+All three were addressed in the same plan revision: every
+remaining "ref list" wording replaced with the embedded-event
+shape, 11 new missing-field tests 15z-15jj added for
+`id`/`run_ref`/`source_ref` absence, AC7/AC8 reservations branch
+rewritten as deterministic STATUS-row grep. Per goal doc, the
+follow-up is NOT re-reviewed by codex; the s4 implementation will
+exercise the per-commit task-review gate on every commit.
 
 ## s3 task-review log
 
