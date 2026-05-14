@@ -136,7 +136,7 @@ Codex plan-review gate via the documented hook
 
 ```
 src/veracrawl/external_crawl/runner.py                              # modified — Δ ≤  50 LOC
-tests/unit/external_crawl/test_runner_plans_with_crawl_planner.py   # new      — ≤ 220 LOC
+tests/unit/external_crawl/test_runner_plans_with_crawl_planner.py   # new      — ≤ 450 LOC  (step impl bumped 220→450 to fit 15 unit tests + 3 fake-port classes + the test-13 replay-consumer demonstration that constructs a full ``LlmCrawlPlanner`` + ``ReplayingModelProviderV2`` end-to-end against the runner; the 220 LOC estimate at plan-draft time underestimated the boilerplate for `CrawlJobSpec` factory + LocalFs store + failing-fetcher fake)
 tests/integration/test_runner_plans_against_httpbin.py              # new      — ≤  80 LOC
 ```
 
