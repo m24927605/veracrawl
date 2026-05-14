@@ -153,11 +153,11 @@ Codex plan-review gate via `~/.claude/hooks/codex-review.sh plan
 ### Module map
 
 ```
-src/veracrawl/contracts/graph_observation.py            # new — ≤ 140 LOC
+src/veracrawl/contracts/graph_observation.py            # new — ≤ 160 LOC  (step impl bumped 140→160: 5 models with full validators + UTC datetime helper + module docstring don't fit in 140 — current 155)
 src/veracrawl/ports/graph_observation.py                # new — ≤  50 LOC
 src/veracrawl/adapters/graph/__init__.py                # new — empty marker
 src/veracrawl/adapters/graph/in_memory_graph_observer.py  # new — ≤  90 LOC
-tests/contract/test_graph_observation_contracts.py             # new — ≤ 200 LOC
+tests/contract/test_graph_observation_contracts.py             # new — ≤ 460 LOC  (step impl bumped 200→460: 50 contract tests + 5 payload-factory helpers + 4 datetime fixtures don't fit in 200; 50 tests × ~8 LOC ≈ 400 baseline plus helpers — current 420)
 tests/contract/test_graph_observation_contract_registry.py     # new — ≤  40 LOC
 tests/contract/test_graph_observation_import_boundaries.py     # new — ≤  70 LOC
 tests/unit/adapters/graph/test_in_memory_graph_observer.py     # new — ≤ 170 LOC

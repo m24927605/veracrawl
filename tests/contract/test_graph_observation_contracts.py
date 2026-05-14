@@ -285,13 +285,21 @@ def test_graph_observation_snapshot_rejects_non_utc_snapshot_at() -> None:
         GraphObservationSnapshot(**(_snapshot_payload() | {"snapshot_at": _NON_UTC}))
 
 
-# Test 15t — event run_ref must match snapshot run_ref
+# Test 15t — event run_ref must match snapshot run_ref (all 4 lists)
 def test_graph_observation_snapshot_rejects_event_with_mismatched_run_ref() -> None:
-    mismatched_url = UrlObservedEvent(**(_url_payload() | {"run_ref": "run:other"}))
-    with pytest.raises(ValidationError, match="run_ref"):
-        GraphObservationSnapshot(**(_snapshot_payload() | {
-            "url_observed_events": [mismatched_url],
-        }))
+    url_other = UrlObservedEvent(**(_url_payload() | {"run_ref": "run:other"}))
+    redirect_other = RedirectObservedEvent(**(_redirect_payload() | {"run_ref": "run:other"}))
+    canonical_other = CanonicalObservedEvent(**(_canonical_payload() | {"run_ref": "run:other"}))
+    page_other = PageStructureObservedEvent(**(_page_payload() | {"run_ref": "run:other"}))
+    cases = [
+        ("url_observed_events", [url_other]),
+        ("redirect_observed_events", [redirect_other]),
+        ("canonical_observed_events", [canonical_other]),
+        ("page_structure_observed_events", [page_other]),
+    ]
+    for list_name, events in cases:
+        with pytest.raises(ValidationError, match=f"{list_name}.*run_ref"):
+            GraphObservationSnapshot(**(_snapshot_payload() | {list_name: events}))
 
 
 # Tests 15u-15y — missing observed_at / snapshot_at
