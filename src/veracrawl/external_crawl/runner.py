@@ -43,6 +43,11 @@ from veracrawl.contracts.crawl_job import (
 )
 from veracrawl.contracts.crawl_planner import PlanDecision, PlanRequest
 from veracrawl.contracts.enums import AdapterType, RouteClass
+from veracrawl.contracts.graph_observation import (
+    PageStructureObservedEvent,
+    RedirectObservedEvent,
+    UrlObservedEvent,
+)
 from veracrawl.contracts.planner_observation_feedback import (
     PlannerObservationFeedback,
     derive_planner_observation_feedback,  # noqa: F401 — used in step-4 replan path
@@ -238,6 +243,74 @@ class ExternalCrawlRunner:
         self._cited_artifact_refs: set[str] = set()
         self._candidates_written = 0
         self._evidence_packets_written = 0
+        self._obs_seq = 0
+        self._original_plan_request: PlanRequest | None = None
+
+    def _s6_active(self) -> bool:
+        return (
+            self._graph_observer is not None
+            and self._utc_clock is not None
+            and self._original_plan_request is not None
+        )
+
+    def _next_seq(self) -> int:
+        seq = self._obs_seq
+        self._obs_seq += 1
+        return seq
+
+    def _record_url_observed(
+        self, *, canonical_url: str, depth: int,
+        parent_canonical_url: str | None, source_ref: str,
+    ) -> None:
+        if not self._s6_active():
+            return
+        assert self._graph_observer is not None
+        assert self._utc_clock is not None
+        assert self._original_plan_request is not None
+        self._graph_observer.record_url_observed(UrlObservedEvent(
+            id=f"url-obs:{self._spec.id}:{self._next_seq()}",
+            run_ref=self._original_plan_request.run_ref,
+            canonical_url=canonical_url,
+            depth=depth,
+            parent_canonical_url=parent_canonical_url,
+            source_ref=source_ref,
+            observed_at=self._utc_clock(),
+        ))
+
+    def _record_redirect_observed(self, outcome: FetchOutcome) -> None:
+        if not self._s6_active() or not outcome.redirect_history:
+            return
+        assert self._graph_observer is not None
+        assert self._utc_clock is not None
+        assert self._original_plan_request is not None
+        for hop in outcome.redirect_history:
+            self._graph_observer.record_redirect_observed(RedirectObservedEvent(
+                id=f"redirect-obs:{self._spec.id}:{self._next_seq()}",
+                run_ref=self._original_plan_request.run_ref,
+                from_canonical_url=hop.from_url,
+                to_canonical_url=hop.to_url,
+                status_code=hop.status_code,
+                observed_at=self._utc_clock(),
+            ))
+
+    def _record_page_structure_observed(
+        self, *, page_canonical_url: str, discovered_link_count: int,
+    ) -> None:
+        if not self._s6_active():
+            return
+        assert self._graph_observer is not None
+        assert self._utc_clock is not None
+        assert self._original_plan_request is not None
+        self._graph_observer.record_page_structure_observed(
+            PageStructureObservedEvent(
+                id=f"page-obs:{self._spec.id}:{self._next_seq()}",
+                run_ref=self._original_plan_request.run_ref,
+                page_canonical_url=page_canonical_url,
+                discovered_link_count=discovered_link_count,
+                discovered_canonical_urls=[],
+                observed_at=self._utc_clock(),
+            ),
+        )
 
     @staticmethod
     def _default_extractors(spec: CrawlJobSpec) -> list[ExtractorPort]:
@@ -279,14 +352,22 @@ class ExternalCrawlRunner:
 
         if self._planner is not None and self._plan_request_builder is not None:
             plan_request = self._plan_request_builder(self._spec, self._run_root)
+            self._original_plan_request = plan_request
             self._plan_decision = self._planner.plan(plan_request)
             sorted_seeds = sorted(
                 enumerate(self._plan_decision.planned_seeds),
                 key=lambda iv: (-iv[1].priority_score, iv[0]),
             )
             for _, seed in sorted_seeds:
-                self._frontier.enqueue(seed.canonical_url, depth=0,
-                                       parent_canonical_url=None)
+                outcome_enqueue = self._frontier.enqueue(
+                    seed.canonical_url, depth=0, parent_canonical_url=None,
+                )
+                if outcome_enqueue.admitted and outcome_enqueue.canonical_url:
+                    self._record_url_observed(
+                        canonical_url=outcome_enqueue.canonical_url,
+                        depth=0, parent_canonical_url=None,
+                        source_ref="frontier-admit:seed",
+                    )
         else:
             for seed in self._spec.seed_urls:
                 self._frontier.enqueue(seed, depth=0, parent_canonical_url=None)
@@ -326,6 +407,7 @@ class ExternalCrawlRunner:
                     continue
 
                 self._frontier.mark_fetched(item.canonical_url)
+                self._record_redirect_observed(fetch_outcome)
                 self._write_redirect_hops(
                     item.canonical_url, fetch_outcome, redirects_path
                 )
@@ -676,6 +758,10 @@ class ExternalCrawlRunner:
 
         assert isinstance(item, FrontierItem)
         discovered = self._discover_links(outcome)
+        self._record_page_structure_observed(
+            page_canonical_url=item.canonical_url,
+            discovered_link_count=len(discovered),
+        )
         for raw in discovered:
             try:
                 canonical = canonicalize_url(raw)
@@ -684,6 +770,13 @@ class ExternalCrawlRunner:
             outcome_enqueue = self._frontier.enqueue(
                 raw, depth=item.depth + 1, parent_canonical_url=item.canonical_url
             )
+            if outcome_enqueue.admitted and outcome_enqueue.canonical_url:
+                self._record_url_observed(
+                    canonical_url=outcome_enqueue.canonical_url,
+                    depth=item.depth + 1,
+                    parent_canonical_url=item.canonical_url,
+                    source_ref="frontier-admit:discovery",
+                )
             links_fp.write(
                 json.dumps(
                     {

@@ -8,6 +8,7 @@ trigger tests land in step 3 / step 4.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -28,11 +29,16 @@ from veracrawl.contracts.crawl_job import (
     RateLimitSpec,
     RobotsPolicy,
 )
-from veracrawl.contracts.crawl_planner import PlanRequest
+from veracrawl.contracts.crawl_planner import (
+    AdapterPrior,
+    PlanDecision,
+    PlannedSeed,
+    PlanRequest,
+)
 from veracrawl.contracts.enums import AdapterType
 from veracrawl.contracts.planner_observation_feedback import PlannerObservationFeedback
 from veracrawl.external_crawl.runner import ExternalCrawlRunner
-from veracrawl.ports.crawl_http_fetcher import FetchError
+from veracrawl.ports.crawl_http_fetcher import FetchError, FetchOutcome, RedirectHop
 
 
 def _spec() -> CrawlJobSpec:
@@ -64,13 +70,32 @@ class _FailingFetcher:
         raise FetchError(f"fake refuses {url}")
 
 
-class _FakeObserver:
-    def record_url_observed(self, event: Any) -> None: ...
-    def record_redirect_observed(self, event: Any) -> None: ...
-    def record_canonical_observed(self, event: Any) -> None: ...
-    def record_page_structure_observed(self, event: Any) -> None: ...
-    def snapshot(self, *, id: str, snapshot_at: datetime) -> Any:  # noqa: A002
+@dataclass
+class _CapturingObserver:
+    url_events: list[Any] = field(default_factory=list)
+    redirect_events: list[Any] = field(default_factory=list)
+    canonical_events: list[Any] = field(default_factory=list)
+    page_events: list[Any] = field(default_factory=list)
+
+    def record_url_observed(self, event: Any) -> None:
+        self.url_events.append(event)
+
+    def record_redirect_observed(self, event: Any) -> None:
+        self.redirect_events.append(event)
+
+    def record_canonical_observed(self, event: Any) -> None:
+        self.canonical_events.append(event)
+
+    def record_page_structure_observed(self, event: Any) -> None:
+        self.page_events.append(event)
+
+    def snapshot(self, *, id: str, snapshot_at: datetime) -> Any:  # noqa: A002, ARG002
         raise NotImplementedError
+
+
+# Back-compat alias: prior tests imported _FakeObserver. The capturing
+# observer is a drop-in superset (also satisfies the no-op contract).
+_FakeObserver = _CapturingObserver
 
 
 class _FakePlanner:
@@ -305,3 +330,212 @@ def test_s6_mode_accepts_full_arg_set(tmp_path: Path) -> None:
         feedback_aware_planner_factory=_factory,
     )
     assert runner is not None
+
+
+# ── Event-recording tests (5, 6, 7, 8) ──────────────────────────────────────
+# These tests run the runner end-to-end with a controlled fetcher so the
+# observer captures real events. The fake fetcher returns canned
+# FetchOutcome values; the runner's existing fetch loop + link extractor
+# drives the discovery / page-structure / redirect call sites.
+
+
+@dataclass
+class _CannedFetcher:
+    outcomes: dict[str, FetchOutcome]
+
+    def fetch(self, url: str, *, timeout_seconds: float) -> FetchOutcome:  # noqa: ARG002
+        if url in self.outcomes:
+            return self.outcomes[url]
+        raise FetchError(f"no canned outcome for {url}")
+
+
+def _outcome(
+    *, url: str, body: bytes = b"", content_type: str = "text/html",
+    redirect_history: list[RedirectHop] | None = None,
+) -> FetchOutcome:
+    return FetchOutcome(
+        requested_url=url, final_url=url, status_code=200, headers={},
+        body=body, content_type=content_type,
+        redirect_chain=[], redirect_history=redirect_history or [],
+    )
+
+
+def _minimal_planner_returning(seeds: list[tuple[str, float]]) -> Any:
+    class _Planner:
+        def plan(self, request: PlanRequest) -> PlanDecision:
+            return PlanDecision(
+                id="plan-decision:s6-evt:1", request_ref=request.id,
+                planner_adapter_ref="adapter:fake-s6:v1",
+                planned_seeds=[
+                    PlannedSeed(
+                        canonical_url=u, priority_score=p,
+                        adapter_hint=AdapterType.HTTP,
+                        rationale_ref=f"rationale:{u}",
+                    )
+                    for u, p in seeds
+                ],
+                adapter_priors=[AdapterPrior(
+                    adapter_type=AdapterType.HTTP, weight=1.0,
+                    rationale_ref="rationale:test:http",
+                )],
+                replay_refs=[request.id, "adapter:fake-s6:v1"],
+                policy_decision_refs=["policy-decision:1"],
+            )
+
+    return _Planner()
+
+
+def _spec_for_seeds(seed_urls: list[str], allowed_domains: list[str]) -> Any:
+    spec = _spec()
+    return spec.model_copy(update={
+        "seed_urls": seed_urls,
+        "allowed_domains": allowed_domains,
+        "max_depth": 2,
+    })
+
+
+def _build_s6(tmp_path: Path, *, seeds: list[str], fetcher: Any,
+              allowed: list[str]) -> tuple[ExternalCrawlRunner, _CapturingObserver]:
+    obs = _CapturingObserver()
+    spec = _spec_for_seeds(seeds, allowed)
+    store = LocalFsCrawlArtifactStore(root=tmp_path, run_id="run-s6")
+    plan_seeds = [(u, 1.0 / (1 + i)) for i, u in enumerate(seeds)]
+
+    def builder(_s: Any, _r: Any) -> PlanRequest:
+        return PlanRequest(
+            id="plan-req:s6:1", run_ref="run:s6:test:1",
+            objective_ref="objective:1",
+            seed_urls=seeds, budget_ref="budget:1",
+            policy_snapshot_ref="policy-snap:1",
+            policy_decision_refs=["policy-decision:1"],
+            replay_config_ref="replay-config:1",
+        )
+
+    runner = ExternalCrawlRunner(
+        spec=spec, store=store, run_root=store.run_root,
+        fetcher=fetcher,
+        planner=_minimal_planner_returning(plan_seeds),
+        plan_request_builder=builder,
+        utc_clock=_utc, utc_clock_ref="utc-clock:fixture:1",
+        graph_observer=obs,
+        feedback_aware_planner_factory=_factory,
+    )
+    return runner, obs
+
+
+# Test 5
+def test_observer_records_url_observed_per_admitted_seed(tmp_path: Path) -> None:
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(url="https://a.example/"),
+        "https://b.example/": _outcome(url="https://b.example/"),
+    })
+    runner, obs = _build_s6(
+        tmp_path, seeds=["https://a.example/", "https://b.example/"],
+        fetcher=fetcher, allowed=["a.example", "b.example"],
+    )
+    runner.run()
+    seed_events = [
+        e for e in obs.url_events if e.source_ref == "frontier-admit:seed"
+    ]
+    assert len(seed_events) == 2
+    assert {e.canonical_url for e in seed_events} == {
+        "https://a.example/", "https://b.example/",
+    }
+    for e in seed_events:
+        assert e.depth == 0
+        assert e.parent_canonical_url is None
+
+
+# Test 6
+def test_observer_records_url_observed_per_admitted_discovery(tmp_path: Path) -> None:
+    seed = "https://seed.example/"
+    body = (
+        b'<html><body>'
+        b'<a href="https://seed.example/child-a">a</a>'
+        b'<a href="https://seed.example/child-b/#frag">b</a>'
+        b'</body></html>'
+    )
+    fetcher = _CannedFetcher(outcomes={
+        seed: _outcome(url=seed, body=body),
+        "https://seed.example/child-a": _outcome(url="https://seed.example/child-a"),
+        "https://seed.example/child-b/": _outcome(url="https://seed.example/child-b/"),
+    })
+    runner, obs = _build_s6(
+        tmp_path, seeds=[seed], fetcher=fetcher, allowed=["seed.example"],
+    )
+    runner.run()
+    assert len(obs.url_events) == 3
+    assert obs.url_events[0].canonical_url == seed
+    assert obs.url_events[0].source_ref == "frontier-admit:seed"
+    assert obs.url_events[0].depth == 0
+    assert obs.url_events[0].parent_canonical_url is None
+    # Children — order preserved per anchor emission
+    assert obs.url_events[1].canonical_url == "https://seed.example/child-a"
+    assert obs.url_events[1].depth == 1
+    assert obs.url_events[1].parent_canonical_url == seed
+    assert obs.url_events[1].source_ref == "frontier-admit:discovery"
+    # Canonicalized (utm + frag stripped)
+    assert obs.url_events[2].canonical_url == "https://seed.example/child-b/"
+    assert obs.url_events[2].depth == 1
+    assert obs.url_events[2].parent_canonical_url == seed
+
+
+# Test 7
+def test_observer_records_redirect_observed_per_redirect_hop(tmp_path: Path) -> None:
+    seed = "https://a.example/"
+    hops = [
+        RedirectHop(from_url="https://a.example/", to_url="https://a.example/x", status_code=301),
+        RedirectHop(from_url="https://a.example/x", to_url="https://a.example/y", status_code=302),
+    ]
+    fetcher = _CannedFetcher(outcomes={
+        seed: _outcome(url=seed, redirect_history=hops),
+    })
+    runner, obs = _build_s6(
+        tmp_path, seeds=[seed], fetcher=fetcher, allowed=["a.example"],
+    )
+    runner.run()
+    assert len(obs.redirect_events) == 2
+    assert obs.redirect_events[0].from_canonical_url == "https://a.example/"
+    assert obs.redirect_events[0].to_canonical_url == "https://a.example/x"
+    assert obs.redirect_events[0].status_code == 301
+    assert obs.redirect_events[1].status_code == 302
+
+
+# Test 8
+def test_observer_records_page_structure_observed_per_fetched_page(tmp_path: Path) -> None:
+    seed1 = "https://a.example/"
+    seed2 = "https://b.example/"
+    body1 = (
+        b'<html><body>'
+        b'<a href="https://a.example/1">1</a>'
+        b'<a href="https://a.example/2">2</a>'
+        b'<a href="https://a.example/3">3</a>'
+        b'</body></html>'
+    )
+    body2 = (
+        b'<html><body>'
+        b'<a href="https://b.example/1">1</a>'
+        b'<a href="https://b.example/2">2</a>'
+        b'<a href="https://b.example/3">3</a>'
+        b'</body></html>'
+    )
+    fetcher = _CannedFetcher(outcomes={
+        seed1: _outcome(url=seed1, body=body1),
+        seed2: _outcome(url=seed2, body=body2),
+        "https://a.example/1": _outcome(url="https://a.example/1"),
+        "https://a.example/2": _outcome(url="https://a.example/2"),
+        "https://a.example/3": _outcome(url="https://a.example/3"),
+        "https://b.example/1": _outcome(url="https://b.example/1"),
+        "https://b.example/2": _outcome(url="https://b.example/2"),
+        "https://b.example/3": _outcome(url="https://b.example/3"),
+    })
+    runner, obs = _build_s6(
+        tmp_path, seeds=[seed1, seed2], fetcher=fetcher,
+        allowed=["a.example", "b.example"],
+    )
+    runner.run()
+    page_for_seed = {e.page_canonical_url: e for e in obs.page_events}
+    assert seed1 in page_for_seed
+    assert seed2 in page_for_seed
+    assert page_for_seed[seed1].discovered_link_count == 3
+    assert page_for_seed[seed2].discovered_link_count == 3
