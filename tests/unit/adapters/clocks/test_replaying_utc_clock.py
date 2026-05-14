@@ -64,6 +64,9 @@ def test_helper_rejects_missing_or_empty_clock_trace() -> None:
     report_missing = {"utc_clock_ref": "utc-clock:fixture:m"}
     with pytest.raises(ValueError, match="clock_trace"):
         replaying_utc_clock_from_run_report(report_missing, "utc-clock:fixture:m")
+    report_none = {"utc_clock_ref": "utc-clock:fixture:m", "clock_trace": None}
+    with pytest.raises(ValueError, match="clock_trace"):
+        replaying_utc_clock_from_run_report(report_none, "utc-clock:fixture:m")
     report_empty = {"utc_clock_ref": "utc-clock:fixture:m", "clock_trace": []}
     with pytest.raises(ValueError, match="clock_trace"):
         replaying_utc_clock_from_run_report(report_empty, "utc-clock:fixture:m")
