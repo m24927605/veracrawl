@@ -62,14 +62,22 @@ def test_supports_structured_output_iff_any_canned_has_parsed_output() -> None:
     assert ReplayingModelProviderV2({"req-y": _canned()}).supports(cap) is True
 
 
-def test_supports_tool_calls_iff_any_canned_has_tool_calls() -> None:
-    no_tools = ReplayingModelProviderV2({"req-x": _canned()})
-    assert no_tools.supports(ModelCapability.TOOL_CALLS) is False
-    with_tools = _canned().model_copy(
-        update={"tool_calls": [ToolCall(id="tc-1", name="fn", arguments={})]}
+def _canned_with_tool_calls() -> ProviderResponse:
+    # ``tool_calls`` populated requires ``finish_reason=TOOL_CALL``.
+    return ProviderResponse(
+        id="provider-response:tools", request_ref="req-y", text="",
+        usage=TokenUsage(prompt_tokens=3, completion_tokens=0, total_tokens=3),
+        finish_reason=ProviderFinishReason.TOOL_CALL,
+        tool_calls=[ToolCall(id="tc-1", name="fn", arguments={})],
+        raw_response_ref="raw-response:tools",
     )
-    p = ReplayingModelProviderV2({"req-y": with_tools})
-    assert p.supports(ModelCapability.TOOL_CALLS) is True
+
+
+def test_supports_tool_calls_iff_any_canned_has_tool_calls() -> None:
+    cap = ModelCapability.TOOL_CALLS
+    assert ReplayingModelProviderV2({"req-x": _canned()}).supports(cap) is False
+    p = ReplayingModelProviderV2({"req-y": _canned_with_tool_calls()})
+    assert p.supports(cap) is True
 
 
 def test_supports_vision_and_extended_thinking_default_false() -> None:
