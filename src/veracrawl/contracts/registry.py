@@ -189,6 +189,16 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "graph_observation",
         tests=["tests/contract/test_graph_observation_contract_registry.py"],
     ),
+    # s5 of general-purpose-crawler-agentification: PlannerObservationFeedback
+    # contract — typed read projection of a GraphObservationSnapshot consumed
+    # by the DeterministicCrawlPlannerV2 adapter. See docs/plans/
+    # general-purpose-crawler-agentification/s5-planner-observation-feedback.md.
+    "PlannerObservationFeedback": _contract(
+        "PlannerObservationFeedback",
+        OwnerService.AGENTS,
+        "planner_observation_feedback",
+        tests=["tests/contract/test_planner_observation_feedback_contract_registry.py"],
+    ),
     # s2 of general-purpose-crawler-agentification: LLM-output contracts
     # for the LlmCrawlPlanner adapter. See docs/plans/general-purpose-
     # crawler-agentification/s2-llm-crawl-planner-adapter.md.
