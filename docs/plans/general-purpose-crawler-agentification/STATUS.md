@@ -14,6 +14,7 @@ follow-up.
 | s2 | Real LLM-driven `CrawlPlanner` adapter (replay-strict) | DONE | d271e04 | step 1: 9ab4de3, 8cca1b5, 2dd0740, a3ef153, bd87e28, f7120b7 (APPROVED iter 5). step 2: 2a961de, 06f2a00, 0454850 (APPROVED iter 2). step 3: e52a060, ecb275c, 2152d94, c042008 (APPROVED iter 3). step 4: e2ac34b, fc57f48, 7fb2678, 0584549, 5ef1c92 (planner adapter + 18 unit tests + step-5 merge with 2 import-boundary tests; APPROVED iter 5). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1→4 REJECTED → iter 5 APPROVED. step 2: iter 1 REJECTED → iter 2 APPROVED. step 3: iter 1 REJECTED → iter 2 APPROVED → iter 3 APPROVED. step 4: iter 1→4 REJECTED → iter 5 APPROVED. | 1 — see "s2 plan iter-5 reservations" below |
 | s3 | `ExternalCrawlRunner` wires `CrawlPlannerPort` (planned-seed scheduling) | DONE | a7c6798 | 732ffaf (runner + 15 unit tests + integration test + 22a replacement), e40b967 (iter-1 follow-up: tightened 22a + bumped test-file budget), 3907fb1 (iter-2 follow-up: bare `veracrawl.adapters` import rejected; APPROVED iter 3). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | iter 1 REJECTED → iter 2 REJECTED → iter 3 APPROVED. | 1 — see "s3 plan iter-5 reservations" below |
 | s4 | `GraphObservationPort` + URL/canonical/redirect/structure event contracts | DONE | 44147a2 | 6b8124d (contracts + port + adapter + 66 tests), 8d59cc0 (iter-1 follow-up: extended test 15t to all 4 lists + bumped plan budgets), 2696b62 (iter-2 minor: budget-math sync; APPROVED iter 3). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | iter 1 REJECTED → iter 2 REJECTED (1 refuted, 1 fixed) → iter 3 APPROVED. | 1 — see "s4 plan iter-5 reservations" below |
+| s5 | `PlannerObservationFeedback` contract + deterministic fixture planner adapter v2 | PLAN_DONE_WITH_RESERVATIONS | — (plan-only; this commit) | — (implementation pending) | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; v6 follow-up landed without re-review) — see below | n/a (impl pending) | 3 — see "s5 plan iter-5 reservations" below |
 
 ## s1 codex plan-review log
 
@@ -139,6 +140,62 @@ hook-installed version once landed.
 | 3 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: test 26 ctor regression; missing URL invariants for from/target/page URLs; snapshot ref-list entries unvalidated. | Plan v4: 3 missing-URL tests; test 15t for blank entries; test 26 fixed. AC1 46 → 50. |
 | 4 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: snapshot ref-only (s5 couldn't read graph); missing-field tests absent; AC4 substring grep too weak. | Plan v5: snapshot embeds typed events (not refs); 5 missing-field tests for `observed_at`/`snapshot_at`; AC4 uses AST allowlist test. AC1 50 → 55. |
 | 5 | 2026-05-14 | REJECTED → DONE_WITH_RESERVATIONS via post-iter-5 follow-up | 1 blocker + 2 majors: snapshot redesign inconsistent (2 places still said "ref lists"); missing-field tests for `id`/`run_ref`/`source_ref` absent; AC7/AC8 reservations branch not deterministic. | Post-iter-5 follow-up: remaining "ref list" wording replaced with embedded events; 11 missing-field tests 15z-15jj added; AC7/AC8 reservations branch tightened to STATUS-row grep. AC1 55 → 66. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
+
+## s5 codex plan-review log
+
+| Iter | Date (UTC) | Verdict | Findings (severity — summary) | Resolution |
+|------|------------|---------|-------------------------------|------------|
+| 1 | 2026-05-14 | REJECTED | 1 blocker + 3 majors: feedback provenance not mechanically bound (no tests required `feedback.run_ref == request.run_ref`, `feedback.id in request.observed_state_refs`, `feedback.id in decision.replay_refs`, `decision.request_ref == request.id`); import-boundary test 21's `veracrawl.contracts.*` wildcard allowed direct `GraphObservationSnapshot` import; `page_neighbour_count_by_url` was derived-only — never affected `frontier_priority_hints`; AC7/AC8 used prose for the APPROVED branch + literal `<C>` placeholder. | Plan v2: 4 new provenance red tests; test 21 switched to per-module allowlist; hub-page hint rule added (`discovered_link_count ≥ 5` → `URL_PREFIX` +0.2); AC7/AC8 rewritten as shell-grep. AC1 30 → 36. |
+| 2 | 2026-05-14 | REJECTED | 1 blocker + 2 majors + 1 minor: hidden coupling not closed — adapter could still re-import `GraphObservationSnapshot` via the feedback contract module or reach into `feedback.snapshot.<events>`; tests 20/21 treated all non-veracrawl modules as stdlib (admitting `openai` / `httpx` / `langchain`); AC8 used `git log master..HEAD`, which is vacuous on master + excluded `registry.py`; topic README still described s5 as taking a `GraphSnapshotRef`. | Plan v3: test 21 extended with AST checks rejecting `ImportFrom` of snapshot/event names + `Attribute(attr="snapshot")` on the adapter; tests 20/21 switched to explicit stdlib allowlist (`__future__`, `typing`, `collections.abc`, `re`, `hashlib`, `urllib.parse`); AC8 rewritten to walk commits from the s5-plan commit forward with subject prefix `s5:`. README s5/s6 rows updated. AC1 36 → 37 (one new AST test). |
+| 3 | 2026-05-14 | REJECTED | 1 blocker + 1 major + 1 minor: hidden coupling STILL not closed — aliased `import veracrawl.contracts.planner_observation_feedback as pof` could reach `pof.GraphObservationSnapshot`; `getattr(feedback, "snapshot")` / `feedback.model_dump()["snapshot"]` bypassed the AST `Attribute` walk; AC8 silently `continue`d any non-`s5:` commit touching s5-exclusive paths; Open Questions referenced stale test number. | Plan v4: **structural fix** — dropped the public `snapshot: GraphObservationSnapshot` field from `PlannerObservationFeedback`. Contract carries only `id`, `run_ref`, and the three derived collections. Derive helper validates `run_ref == snapshot.run_ref` at construction; contract module imports `GraphObservationSnapshot` only inside `TYPE_CHECKING`. Adapter test 21 extended to (a) ban `Import` of any `veracrawl.*` module, (b) ban `Attribute(attr="snapshot")`, `getattr(_, "snapshot")`, and any literal `"snapshot"` string. AC8 reworked to FAIL loudly on non-`s5:` commits touching s5-exclusive paths. Test-27 reference corrected. AC1 stays at 37. |
+| 4 | 2026-05-14 | REJECTED | 2 majors + 1 minor: AC8 registry-bypass (non-`s5:` commits adding the `PlannerObservationFeedback` registry entry would pass); adapter allowlist admitted `utc_now()` / `TimestampedModel` via whole-module `veracrawl.contracts.common`; "wraps a `GraphObservationSnapshot`" wording lingered in Why + README. | Plan v5: AC8 phase A2 added — commits that introduce/remove the literal `"PlannerObservationFeedback"` in `registry.py` (detected via `git log -S`) must have subject `s5:`. Adapter `contracts.common` import switched to per-name allowlist `{Ref, VeraModel, stable_hash}` only; per-name allowlists also added for `crawl_planner` + `enums`. Why + README reworded to "typed read projection". No test-count change. |
+| 5 | 2026-05-14 | REJECTED (5/5 used; v6 follow-up landed without re-review) | 2 majors + 1 minor: hub-page hint emission used dict insertion order, but `VeraModel.canonical_json()` sorts dict keys — replay-unstable after JSON round-trip; contract test 20 still allowed whole `veracrawl.contracts.common` module (admitting `utc_now` / `TimestampedModel` in the contract); test-21 prose said "Four sub-checks" then listed six. | Post-iter-5 v6 follow-up landed in same plan revision (NOT re-reviewed per goal doc): hub-hint emission switched from dict insertion order to **URL-ascending sort** — replay-stable across canonical_json round-trip. New red tests 10a `test_feedback_model_fields_exactly`, 27a `test_v2_hub_hint_order_is_url_sorted`, 28a `test_v2_decision_is_replay_stable_through_feedback_canonical_json_round_trip`. Contract test 20 split into per-name allowlist `{Ref, VeraModel, stable_hash}` + `TYPE_CHECKING`-gated `GraphObservationSnapshot`. Test-21 prose count corrected. AC1 37 → 40. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
+
+## s5 plan iter-5 reservations
+
+Mirrors the s1/s2/s3/s4 reservations pattern.
+
+**Reservation 1 — iter-5 v6 follow-up not re-reviewed.**
+Iteration 5 returned `REJECTED` with two majors (hub-hint dict
+insertion-order replay-instability; contract `contracts.common`
+whole-module import) and one minor (test-21 prose miscount).
+All three were addressed in the same plan revision as the v6
+follow-up: hub hints switched to URL-ascending sort, three new
+red tests (10a, 27a, 28a) added including a canonical-JSON
+round-trip replay-stability test, contract import-boundary test
+20 split to per-name allowlist + `TYPE_CHECKING` gate, and the
+"Four sub-checks" → "Six sub-checks" prose fix landed. Per the
+goal-doc workflow, the v6 follow-up is **NOT** re-reviewed by
+codex (iteration budget exhausted at 5). The s5 implementation
+will exercise the per-commit task-review gate on every commit,
+so the new tests + adapter URL-sort behavior are codex-reviewed
+when they land as code rather than as plan text.
+
+**Reservation 2 — hub-hint URL-sort decision is binding.**
+The v6 change pins hub-page hint emission as URL-ascending
+sort (`sorted(...)`) rather than dict insertion order. This is
+the replay-stability invariant: a feedback object that
+round-trips through `canonical_json()` produces byte-equal
+planner output. If a future slice needs insertion-order
+semantics (e.g., for "freshness" prioritization), it must
+introduce a dedicated typed field (e.g., `hub_pages: list[str]`
+preserving emission order) on the contract rather than
+regressing the URL-sort rule here. The discharge condition is
+that no follow-up slice silently reverts the
+`test_v2_hub_hint_order_is_url_sorted` invariant.
+
+**Reservation 3 — `TYPE_CHECKING` alias bypass.**
+The contract-module import-boundary test 20 detects the
+`TYPE_CHECKING`-gated import by matching the parent `If`
+node's `test` against `Name("TYPE_CHECKING")`. An alias
+`from typing import TYPE_CHECKING as TC` followed by
+`if TC:` would bypass this detection. Within s5 the
+contract module uses the canonical spelling; this
+reservation is flagged for s6+ to extend the AST check
+to track `typing.TYPE_CHECKING` import aliases if any
+future slice needs them. Discharge condition: either
+the alias pattern is provably not used anywhere in
+`src/veracrawl/contracts/**`, or the test is extended.
 
 ## s4 plan iter-5 reservations
 
