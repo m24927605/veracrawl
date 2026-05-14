@@ -178,12 +178,14 @@ Codex plan-review gate via `~/.claude/hooks/codex-review.sh plan <plan-file> --p
   `LlmProposedFrontierPriorityHint`. All
   `owner_service=OwnerService.AGENTS`, `replay_required=True`.
 
-- One new test method in
+- Two new test methods in
   `tests/contract/test_crawl_planner_import_boundaries.py`:
-  `test_adapters_planning_llm_crawl_planner_imports_allowlist`,
-  enforcing the broader allowlist for the LLM adapter (see Design
-  § "Cross-module flow"). The s1 deterministic-adapter test keeps
-  its tighter allowlist unchanged.
+  `test_adapters_planning_llm_crawl_planner_imports_allowlist`
+  (test 25) and
+  `test_adapters_model_providers_replaying_model_provider_imports_allowlist`
+  (test 25a). Both enforce the per-adapter allowlists declared
+  in Design § "Cross-module flow". The s1 deterministic-adapter
+  test keeps its tighter allowlist unchanged.
 
 - **`ReplayingModelProviderV2`** — *(Iter-5 post-iter-5 follow-up)*.
   New adapter
