@@ -82,7 +82,7 @@ def test_external_crawl_runner_imports_crawl_planner_only_via_contracts_and_port
     for module in _imports(_RUNNER.read_text()):
         if module.startswith("."):
             pytest.fail(f"runner forbids relative imports: {module!r}")
-        if module.startswith("veracrawl.adapters."):
+        if module == "veracrawl.adapters" or module.startswith("veracrawl.adapters."):
             pytest.fail(f"runner must not import any adapter module: {module!r}")
         if "crawl_planner" in module:
             if not any(module == p or module.startswith(p + ".") for p in allowed_prefixes):
