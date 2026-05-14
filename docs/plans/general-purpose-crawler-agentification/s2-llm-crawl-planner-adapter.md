@@ -572,13 +572,10 @@ None of these fakes mock the adapter under test.
     wiring the goal-doc rule requires.
 
 Acceptance Criterion 1 pytest count = **14** contract + 2
-registry + **15** planner-unit + **3** replaying-unit =
-**34 collected**. Contract count includes iter-4 test 11a
-(typed-error inheritance) plus step-1 task-review iter 1
-follow-up tests 11a-ctor (`ProviderTraceMissingError` domain
-constructor + str) and 11b (`ReplayLookupMissError` typing +
-constructor). The replaying-unit tests cover the
-`ReplayingModelProviderV2` adapter.
+registry + **15** planner-unit + **6** replaying-unit =
+**37 collected**. The replaying-unit count rose 3 → 6 after
+step-3 task-review iter 1 required `supports()` to be derived
+from the canned bundle (tests 28a, 28b, 28c added).
 
 ### `tests/unit/adapters/model_providers/test_replaying_model_provider.py` *(iter-5 follow-up)*
 
@@ -591,6 +588,20 @@ constructor). The replaying-unit tests cover the
     (new typed `FatalError` subclass).
 28. `test_replaying_model_provider_implements_model_provider_port` —
     `isinstance(ReplayingModelProviderV2(...), ModelProviderPortV2)`.
+28a. `test_supports_structured_output_iff_any_canned_has_parsed_output`
+    — *(step-3 task-review iter 1 finding)*. `supports()` must be
+    derived from the canned bundle. Empty bundle → `False`. Canned
+    response with `parsed_output=None` → `False`. Canned with a
+    non-`None` `parsed_output` → `True`.
+28b. `test_supports_tool_calls_iff_any_canned_has_tool_calls` —
+    *(step-3 task-review iter 1 finding)*. Canned with empty
+    `tool_calls` → `False`; canned with at least one `ToolCall`
+    → `True`.
+28c. `test_supports_vision_and_extended_thinking_default_false` —
+    *(step-3 task-review iter 1 finding)*. Capabilities with no
+    signal in the canned bundle default to `False` so an unrelated
+    consumer cannot accidentally route work through a replay
+    provider.
 
 ### Import boundary
 
@@ -611,7 +622,7 @@ imports allowed there).
 ### Green path
 
 Each red test gets a minimal implementation. One purpose per
-commit. After all 35 tests pass (counted as 14 + 2 + 15 + 3 + 1),
+commit. After all 38 tests pass (counted as 14 + 2 + 15 + 6 + 1),
 refactor to dedupe URL / match-value validators.
 
 ## Acceptance Criteria
@@ -620,7 +631,7 @@ Mechanically verifiable from a fresh checkout.
 
 1. **Pytest gate (s2-owned files)** —
    `pytest tests/contract/test_llm_crawl_planner_contracts.py tests/contract/test_llm_crawl_planner_contract_registry.py tests/unit/adapters/planning/test_llm_crawl_planner.py tests/unit/adapters/model_providers/test_replaying_model_provider.py -v`
-   exits 0 with **34** collected, **34** passed, **0** failed,
+   exits 0 with **37** collected, **37** passed, **0** failed,
    **0** errored.
 
 2. **Pytest gate (import-boundary file)** —

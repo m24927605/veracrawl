@@ -4,6 +4,8 @@ See ``docs/plans/general-purpose-crawler-agentification/
 s2-llm-crawl-planner-adapter.md``. Returns canned
 ``ProviderResponse`` instances looked up by ``ProviderRequest.id``;
 raises ``ReplayLookupMissError`` when the bundle is incomplete.
+``supports()`` is derived from the canned bundle so the adapter
+advertises only the capabilities it can actually serve.
 """
 
 from __future__ import annotations
@@ -28,13 +30,9 @@ class ReplayingModelProviderV2:
             raise ReplayLookupMissError(provider_request_id=request.id) from exc
 
     def supports(self, capability: ModelCapability) -> bool:
-        # Conservative: replay can serve any capability the canned response
-        # was originally captured under. Without inspecting every value the
-        # adapter advertises ``True`` for the structured-output and
-        # tool-call shapes the s2 planner uses; other capabilities default
-        # to ``False`` so an unrelated consumer cannot accidentally route
-        # work through a replay provider.
-        return capability in {
-            ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA,
-            ModelCapability.TOOL_CALLS,
-        }
+        values = self._canned.values()
+        if capability is ModelCapability.STRUCTURED_OUTPUT_JSON_SCHEMA:
+            return any(r.parsed_output is not None for r in values)
+        if capability is ModelCapability.TOOL_CALLS:
+            return any(bool(r.tool_calls) for r in values)
+        return False
