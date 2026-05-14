@@ -521,3 +521,31 @@ def classify_provider_status(status: int) -> str:
     if 500 <= status < 600:
         return "SERVER_ERROR"
     return "ADAPTER_FAILURE"
+
+
+# ---------------------------------------------------------------------------
+# s2 of general-purpose-crawler-agentification: typed errors for the
+# LLM-driven CrawlPlanner adapter and the in-product replay consumer.
+# ---------------------------------------------------------------------------
+
+
+class ProviderTraceMissingError(ModelProviderError, FatalError, VeraCrawlError):
+    """Raised when ``ProviderResponse.raw_response_ref`` is missing.
+
+    The s2 ``LlmCrawlPlanner`` requires every successful model call to
+    carry a non-blank ``raw_response_ref`` so the planner's
+    ``PlanDecision.replay_refs`` is a complete byte-equal replay
+    anchor. Provider adapters that have not yet been wired to the
+    artifact store (s2.1) trip this gate. ``FatalError`` because the
+    fix is upstream provider wiring, not retrying the same call.
+    """
+
+
+class ReplayLookupMissError(ModelProviderError, FatalError, VeraCrawlError):
+    """Raised by ``ReplayingModelProviderV2`` when no canned response
+    is registered for a given ``ProviderRequest.id``.
+
+    Indicates the replay bundle is incomplete or the request id was
+    mutated between record and replay — both are upstream wiring bugs
+    that retrying cannot fix.
+    """
