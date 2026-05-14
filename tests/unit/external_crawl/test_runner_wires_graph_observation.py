@@ -1106,3 +1106,23 @@ def test_replan_not_invoked_when_budget_exhausted_with_queued_items(
     )
     report = _read_report(tmp_path)
     assert report["replan_invoked"] is False
+    # The runner must have stopped specifically because the page
+    # budget was exhausted — NOT because the frontier drained.
+    assert report["stop_reason"] == "budget_exhausted", (
+        f"expected stop_reason='budget_exhausted'; got {report['stop_reason']!r}"
+    )
+    # The child URL was admitted into the frontier (observer recorded
+    # the discovery url-observed event) but NEVER fetched (the canned
+    # fetcher's call log doesn't contain it). This proves the queued-
+    # but-unfetched-child invariant.
+    discovery_admits = [
+        e.canonical_url for e in obs.url_events
+        if e.source_ref == "frontier-admit:discovery"
+    ]
+    assert "https://a.example/x" in discovery_admits, (
+        f"child must have been admitted to frontier; got {discovery_admits}"
+    )
+    assert "https://a.example/x" not in fetcher.calls, (
+        f"child must NOT have been fetched (budget exhausted); "
+        f"got {fetcher.calls}"
+    )
