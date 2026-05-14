@@ -242,7 +242,7 @@ src/veracrawl/adapters/planning/llm_crawl_planner.py           # new — ≤ 160
 src/veracrawl/adapters/model_providers/replaying_model_provider.py  # new — ≤  40 LOC  (iter-5 follow-up)
 tests/contract/test_llm_crawl_planner_contracts.py             # new — ≤ 200 LOC
 tests/contract/test_llm_crawl_planner_contract_registry.py     # new — ≤  40 LOC
-tests/unit/adapters/planning/test_llm_crawl_planner.py         # new — ≤ 320 LOC  (step-4: bumped 260→320 to accommodate the three fake-port classes — `_FakePromptRegistry`, `_FakeModelProviderV2`, `_FakeTokenBudget` — plus the 15 planner unit tests, including the test-25 byte-equal replay-consumer demonstration that wires the real `ReplayingModelProviderV2`)
+tests/unit/adapters/planning/test_llm_crawl_planner.py         # new — ≤ 380 LOC  (step-4: bumped 260→320 then 320→380 to accommodate three fake-port classes + 18 planner unit tests: the original 15 plus three projection-detail tests 15-detail / 16-hints / 16-extraction added in step-4 task-review iter 1)
 tests/unit/adapters/model_providers/test_replaying_model_provider.py  # new — ≤  90 LOC  (iter-5 follow-up; bumped 80→90 after step-3 task-review iter 2 added the valid `_canned_with_tool_calls` fixture helper for the iter-1 test 28b minor)
 ```
 
@@ -251,8 +251,10 @@ Module touched (not created):
 one new test method + helper allowlist tuple update; existing
 budget is 60 LOC, post-update target ≤ 90 LOC.
 
-Behavior-LOC ceiling: 100 + 150 + 40 = **290 LOC** before tests
-+ the additive registry-dict edits. Under the binding ≤ 300 LOC.
+Behavior-LOC ceiling: 100 + 160 + 40 = **300 LOC** before tests
++ the additive registry-dict edits. At the binding ≤ 300 LOC cap
+after the step-4 task-review iter 1 bumped the planner adapter
+budget 150 → 160 for the projection over seeds + priors + hints.
 
 ### Data flow
 
@@ -322,6 +324,13 @@ LlmCrawlPlanner.plan(request):
   - `veracrawl.ports.model_provider_v2`
   - `veracrawl.ports.prompt_registry`
   - `veracrawl.ports.token_budget`
+  - `pydantic` — the project's validation library; needed to
+    catch `ValidationError` from
+    `LlmPlanProposal.model_validate(response.parsed_output)`
+    and re-raise as a sanitized `StructuredOutputViolation`.
+    The whole `contracts/` tree already imports `pydantic`; the
+    s2 adapter follows the same dependency. *(step-4
+    task-review iter 1 finding.)*
   - stdlib only otherwise.
 
   Forbidden imports (enforced by the import-boundary test
@@ -556,6 +565,20 @@ None of these fakes mock the adapter under test.
     `StructuredOutputViolation`.
 24. `test_planner_implements_crawl_planner_port` —
     `isinstance(LlmCrawlPlanner(...), CrawlPlannerPort)`.
+24-15detail. `test_plan_planned_seed_fields_round_trip_from_proposal`
+    — *(step-4 task-review iter 1 finding)*. Asserts each
+    projected `PlannedSeed` carries the LLM's `priority_score`,
+    the proposal's `adapter_hint`, and the synthesized
+    `rationale_ref = f"rationale:{adapter_ref}:{prompt_template_ref}:seed-{i}"`.
+24-16hints. `test_plan_frontier_priority_hints_round_trip_from_proposal`
+    — *(step-4 task-review iter 1 finding)*. Asserts the
+    proposal's `frontier_priority_hints` are projected into the
+    typed `FrontierPriorityHint` shape with the synthesized
+    `rationale_ref = f"rationale:{adapter_ref}:{prompt_template_ref}:hint-{kind}"`.
+24-16extr. `test_plan_extraction_strategy_refs_forwarded_verbatim`
+    — *(step-4 task-review iter 1 finding)*. The proposal's
+    `extraction_strategy_refs` list is forwarded into
+    `PlanDecision.extraction_strategy_refs` byte-equal.
 25. `test_replay_refs_enable_byte_identical_plan_decision` —
     *(Iter-3 finding 1; iter-5 follow-up wires the real
     consumer.)* Run 1: adapter calls a `FakeModelProviderV2`
@@ -572,10 +595,11 @@ None of these fakes mock the adapter under test.
     wiring the goal-doc rule requires.
 
 Acceptance Criterion 1 pytest count = **14** contract + 2
-registry + **15** planner-unit + **6** replaying-unit =
-**37 collected**. The replaying-unit count rose 3 → 6 after
-step-3 task-review iter 1 required `supports()` to be derived
-from the canned bundle (tests 28a, 28b, 28c added).
+registry + **18** planner-unit + **6** replaying-unit =
+**40 collected**. The planner-unit count rose 15 → 18 after
+step-4 task-review iter 1 required projection-detail coverage
+(tests 24-15detail, 24-16hints, 24-16extr). The replaying-unit
+count is 6 from step-3 iter 1.
 
 ### `tests/unit/adapters/model_providers/test_replaying_model_provider.py` *(iter-5 follow-up)*
 
@@ -622,7 +646,7 @@ imports allowed there).
 ### Green path
 
 Each red test gets a minimal implementation. One purpose per
-commit. After all 38 tests pass (counted as 14 + 2 + 15 + 6 + 1),
+commit. After all 41 tests pass (counted as 14 + 2 + 18 + 6 + 1),
 refactor to dedupe URL / match-value validators.
 
 ## Acceptance Criteria
@@ -631,7 +655,7 @@ Mechanically verifiable from a fresh checkout.
 
 1. **Pytest gate (s2-owned files)** —
    `pytest tests/contract/test_llm_crawl_planner_contracts.py tests/contract/test_llm_crawl_planner_contract_registry.py tests/unit/adapters/planning/test_llm_crawl_planner.py tests/unit/adapters/model_providers/test_replaying_model_provider.py -v`
-   exits 0 with **37** collected, **37** passed, **0** failed,
+   exits 0 with **40** collected, **40** passed, **0** failed,
    **0** errored.
 
 2. **Pytest gate (import-boundary file)** —

@@ -261,13 +261,21 @@ def test_plan_calls_token_budget_estimate_then_charge_in_order() -> None:
     assert kinds == ["estimate_charge", "charge"]
 
 
-# Test 20a
+# Test 20a — covers BOTH parsed_output=None and parsed_output={"foo": "bar"}
+# paths per the plan's test 20a spec.
 def test_plan_charges_token_budget_before_structured_output_validation() -> None:
-    adapter, _, _, budget = _planner(response=_canned_response(parsed_output={"foo": "bar"}))
+    # Path 1: parsed_output = None
+    none_resp = _canned_response().model_copy(update={"parsed_output": None})
+    adapter, _, _, budget = _planner(response=none_resp)
     with pytest.raises(StructuredOutputViolation):
         adapter.plan(_request())
-    kinds = [call[0] for call in budget.recorded_calls]
-    assert "charge" in kinds
+    assert "charge" in [c[0] for c in budget.recorded_calls]
+    # Path 2: parsed_output = {"foo": "bar"} (validation failure)
+    bad_resp = _canned_response(parsed_output={"foo": "bar"})
+    adapter, _, _, budget = _planner(response=bad_resp)
+    with pytest.raises(StructuredOutputViolation):
+        adapter.plan(_request())
+    assert "charge" in [c[0] for c in budget.recorded_calls]
 
 
 # Test 21
@@ -297,6 +305,46 @@ def test_plan_raises_structured_output_violation_on_invalid_json() -> None:
 def test_planner_implements_crawl_planner_port() -> None:
     adapter, _, _, _ = _planner()
     assert isinstance(adapter, CrawlPlannerPort)
+
+
+# Test 15-detail — step-4 iter 1 finding: seed details projected.
+def test_plan_planned_seed_fields_round_trip_from_proposal() -> None:
+    adapter, _, _, _ = _planner()
+    decision = adapter.plan(_request())
+    seed = decision.planned_seeds[0]
+    assert seed.canonical_url == "https://a.example/1"
+    assert seed.priority_score == 0.9
+    assert seed.adapter_hint is AdapterType.HTTP
+    assert seed.rationale_ref == (
+        f"rationale:{_ADAPTER_REF}:{_PROMPT_REF}:seed-0"
+    )
+
+
+# Test 16-hints — step-4 iter 1 finding: frontier_priority_hints projected.
+def test_plan_frontier_priority_hints_round_trip_from_proposal() -> None:
+    proposal = _valid_proposal()
+    proposal["frontier_priority_hints"] = [
+        {"match_kind": "url_prefix", "match_value": "https://a.example/",
+         "priority_delta": 0.4},
+    ]
+    adapter, _, _, _ = _planner(response=_canned_response(parsed_output=proposal))
+    decision = adapter.plan(_request())
+    assert len(decision.frontier_priority_hints) == 1
+    hint = decision.frontier_priority_hints[0]
+    assert hint.match_value == "https://a.example/"
+    assert hint.priority_delta == 0.4
+    assert hint.rationale_ref == (
+        f"rationale:{_ADAPTER_REF}:{_PROMPT_REF}:hint-url_prefix"
+    )
+
+
+# Test 16-extraction — step-4 iter 1 finding: extraction_strategy_refs forwarded.
+def test_plan_extraction_strategy_refs_forwarded_verbatim() -> None:
+    proposal = _valid_proposal()
+    proposal["extraction_strategy_refs"] = ["strategy:a", "strategy:b"]
+    adapter, _, _, _ = _planner(response=_canned_response(parsed_output=proposal))
+    decision = adapter.plan(_request())
+    assert decision.extraction_strategy_refs == ["strategy:a", "strategy:b"]
 
 
 # Test 25
