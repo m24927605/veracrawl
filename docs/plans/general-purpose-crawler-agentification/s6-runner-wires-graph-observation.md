@@ -697,7 +697,7 @@ Red-first list.
 ### Green path
 
 Each red test gets a minimal implementation. One purpose
-per commit. After all 33 tests pass, refactor only obvious
+per commit. After all 34 tests pass, refactor only obvious
 duplication.
 
 ## Acceptance Criteria

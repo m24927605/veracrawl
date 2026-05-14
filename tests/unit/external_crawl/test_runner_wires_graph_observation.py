@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -555,7 +555,7 @@ def test_observer_records_page_structure_observed_per_fetched_page(tmp_path: Pat
     assert page_for_seed[seed2].discovered_link_count == 3
 
 
-# Test 8a (step-3 iter-2 task-review follow-up — clock_trace producer red test)
+# Test 8a (step-3 iter-2/3 task-review follow-up — clock_trace producer red test)
 def test_s6_mode_populates_clock_trace_in_run_report(tmp_path: Path) -> None:
     seed = "https://a.example/"
     body = b'<html><body><a href="https://a.example/x">x</a></body></html>'
@@ -563,27 +563,77 @@ def test_s6_mode_populates_clock_trace_in_run_report(tmp_path: Path) -> None:
         seed: _outcome(url=seed, body=body),
         "https://a.example/x": _outcome(url="https://a.example/x"),
     })
-    runner, obs = _build_s6(
-        tmp_path, seeds=[seed], fetcher=fetcher, allowed=["a.example"],
+
+    # Advancing UTC clock — every invocation returns a fresh datetime
+    # one second later than the previous. The test below asserts the
+    # runner's recorded clock_trace matches THIS exact sequence,
+    # so an implementation that records arbitrary timestamps would
+    # fail.
+    base = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+    ticks: list[datetime] = []
+
+    def advancing_clock() -> datetime:
+        t = base + timedelta(seconds=len(ticks))
+        ticks.append(t)
+        return t
+
+    obs = _CapturingObserver()
+    spec = _spec_for_seeds([seed], ["a.example"])
+    store = LocalFsCrawlArtifactStore(root=tmp_path, run_id="run-s6")
+
+    def builder(_s: Any, _r: Any) -> PlanRequest:
+        return PlanRequest(
+            id="plan-req:s6:1", run_ref="run:s6:test:1",
+            objective_ref="objective:1",
+            seed_urls=[seed], budget_ref="budget:1",
+            policy_snapshot_ref="policy-snap:1",
+            policy_decision_refs=["policy-decision:1"],
+            replay_config_ref="replay-config:1",
+        )
+
+    runner = ExternalCrawlRunner(
+        spec=spec, store=store, run_root=store.run_root,
+        fetcher=fetcher,
+        planner=_minimal_planner_returning([(seed, 1.0)]),
+        plan_request_builder=builder,
+        utc_clock=advancing_clock,
+        utc_clock_ref="utc-clock:fixture:adv",
+        graph_observer=obs,
+        feedback_aware_planner_factory=_factory,
     )
     runner.run()
     report = _read_report(tmp_path)
-    # clock_trace must be a non-empty list of ISO 8601 strings — one
-    # entry per _utc_clock() invocation. The runner ticks once per
-    # recorded event; in this fixture that's:
-    #   - 1 seed url-observed
-    #   - 1 page-structure (parent page)
-    #   - 1 discovery url-observed (child)
-    # → 3 timestamps minimum. (No redirects, no canonical events.)
+
+    # 1. clock_trace is a list of ISO 8601 UTC strings.
     assert isinstance(report["clock_trace"], list)
-    expected_min = (
-        len(obs.url_events) + len(obs.redirect_events) + len(obs.page_events)
-    )
-    assert len(report["clock_trace"]) == expected_min, (
-        f"clock_trace should have {expected_min} entries "
-        f"(one per recorded event); got {len(report['clock_trace'])}"
-    )
-    # Every entry is a parseable ISO 8601 UTC datetime.
     for s in report["clock_trace"]:
         parsed = datetime.fromisoformat(s)
         assert parsed.tzinfo is not None
+
+    # 2. clock_trace has exactly one entry per recorded event.
+    n_events = (
+        len(obs.url_events) + len(obs.redirect_events) + len(obs.page_events)
+    )
+    assert len(report["clock_trace"]) == n_events, (
+        f"clock_trace should have {n_events} entries (one per recorded "
+        f"event); got {len(report['clock_trace'])}"
+    )
+
+    # 3. clock_trace entries match the advancing-clock sequence VERBATIM —
+    # the runner did not record arbitrary timestamps.
+    expected_trace = [t.isoformat() for t in ticks]
+    assert report["clock_trace"] == expected_trace, (
+        "clock_trace must match the injected advancing-clock sequence"
+    )
+
+    # 4. The MULTISET of recorded observed_at values across all events
+    # equals the MULTISET of injected ticks — every tick is consumed
+    # by exactly one event, and no event has a timestamp the clock
+    # didn't yield. (We don't pin a specific interleaving here since
+    # url/page/redirect ordering depends on the fetch-loop schedule.)
+    recorded = (
+        [e.observed_at for e in obs.url_events]
+        + [e.observed_at for e in obs.redirect_events]
+        + [e.observed_at for e in obs.page_events]
+    )
+    assert sorted(recorded) == sorted(ticks)
