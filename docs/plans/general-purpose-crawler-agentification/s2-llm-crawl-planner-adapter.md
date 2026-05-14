@@ -238,11 +238,11 @@ Codex plan-review gate via `~/.claude/hooks/codex-review.sh plan <plan-file> --p
 
 ```
 src/veracrawl/contracts/llm_crawl_planner.py                   # new — ≤ 100 LOC
-src/veracrawl/adapters/planning/llm_crawl_planner.py           # new — ≤ 150 LOC
+src/veracrawl/adapters/planning/llm_crawl_planner.py           # new — ≤ 160 LOC  (step-4: bumped 150→160 for the explicit project_to_plan_decision over seeds + priors + hints, mirroring s1's `DeterministicCrawlPlanner` projection style)
 src/veracrawl/adapters/model_providers/replaying_model_provider.py  # new — ≤  40 LOC  (iter-5 follow-up)
 tests/contract/test_llm_crawl_planner_contracts.py             # new — ≤ 200 LOC
 tests/contract/test_llm_crawl_planner_contract_registry.py     # new — ≤  40 LOC
-tests/unit/adapters/planning/test_llm_crawl_planner.py         # new — ≤ 260 LOC
+tests/unit/adapters/planning/test_llm_crawl_planner.py         # new — ≤ 320 LOC  (step-4: bumped 260→320 to accommodate the three fake-port classes — `_FakePromptRegistry`, `_FakeModelProviderV2`, `_FakeTokenBudget` — plus the 15 planner unit tests, including the test-25 byte-equal replay-consumer demonstration that wires the real `ReplayingModelProviderV2`)
 tests/unit/adapters/model_providers/test_replaying_model_provider.py  # new — ≤  90 LOC  (iter-5 follow-up; bumped 80→90 after step-3 task-review iter 2 added the valid `_canned_with_tool_calls` fixture helper for the iter-1 test 28b minor)
 ```
 
