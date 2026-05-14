@@ -40,6 +40,7 @@ from veracrawl.contracts.crawl_job import (
     PrivateNetworkPolicy,
     RobotsPolicy,
 )
+from veracrawl.contracts.crawl_planner import PlanDecision, PlanRequest
 from veracrawl.contracts.enums import AdapterType, RouteClass
 from veracrawl.external_crawl.frontier import (
     ExternalCrawlFrontier,
@@ -64,6 +65,7 @@ from veracrawl.ports.crawl_http_fetcher import (
     FetchError,
     FetchOutcome,
 )
+from veracrawl.ports.crawl_planner import CrawlPlannerPort
 from veracrawl.ports.extractor import (
     ExtractionCandidate,
     ExtractionRequest,
@@ -156,7 +158,17 @@ class ExternalCrawlRunner:
         rate_limiter: RateLimiterPort | None = None,
         user_agent: str = "veracrawl/0.1",
         clock: Callable[[], float] = time.monotonic,
+        planner: CrawlPlannerPort | None = None,
+        plan_request_builder: Callable[[CrawlJobSpec, Path], PlanRequest] | None = None,
     ) -> None:
+        if (planner is None) != (plan_request_builder is None):
+            raise ValueError(
+                "planner and plan_request_builder must both be provided or both omitted "
+                "(no synthetic default builder)"
+            )
+        self._planner = planner
+        self._plan_request_builder = plan_request_builder
+        self._plan_decision: PlanDecision | None = None
         self._spec = spec
         self._store = store
         self._run_root = run_root
@@ -223,8 +235,19 @@ class ExternalCrawlRunner:
         redirects_path.parent.mkdir(parents=True, exist_ok=True)
         redirects_path.touch()
 
-        for seed in self._spec.seed_urls:
-            self._frontier.enqueue(seed, depth=0, parent_canonical_url=None)
+        if self._planner is not None and self._plan_request_builder is not None:
+            plan_request = self._plan_request_builder(self._spec, self._run_root)
+            self._plan_decision = self._planner.plan(plan_request)
+            sorted_seeds = sorted(
+                enumerate(self._plan_decision.planned_seeds),
+                key=lambda iv: (-iv[1].priority_score, iv[0]),
+            )
+            for _, seed in sorted_seeds:
+                self._frontier.enqueue(seed.canonical_url, depth=0,
+                                       parent_canonical_url=None)
+        else:
+            for seed in self._spec.seed_urls:
+                self._frontier.enqueue(seed, depth=0, parent_canonical_url=None)
 
         failures: list[dict[str, Any]] = []
         started_at = _now()
@@ -344,6 +367,26 @@ class ExternalCrawlRunner:
         report["replay_completeness_result"] = replay_report["status"]
         report["extraction_candidates"] = self._candidates_written
         report["evidence_packets"] = self._evidence_packets_written
+        if self._plan_decision is not None:
+            d = self._plan_decision
+            sorted_seeds = sorted(
+                enumerate(d.planned_seeds),
+                key=lambda iv: (-iv[1].priority_score, iv[0]),
+            )
+            report["plan_decision_ref"] = d.id
+            report["plan_decision_replay_refs"] = list(d.replay_refs)
+            report["plan_decision_frontier_priority_hints"] = [
+                h.model_dump(mode="json") for h in d.frontier_priority_hints
+            ]
+            report["plan_decision_adapter_priors"] = [
+                p.model_dump(mode="json") for p in d.adapter_priors
+            ]
+            report["plan_decision_planned_seed_order"] = [
+                s.canonical_url for _, s in sorted_seeds
+            ]
+            report["plan_decision_extraction_strategy_refs"] = list(
+                d.extraction_strategy_refs
+            )
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
         )

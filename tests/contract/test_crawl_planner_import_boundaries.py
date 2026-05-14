@@ -68,9 +68,13 @@ def test_adapters_model_providers_replaying_model_provider_imports_allowlist() -
     _check_allowlist(_REPLAYING, extra=("veracrawl.ports.model_provider_v2",))
 
 
-def test_external_crawl_runner_does_not_import_crawl_planner_port() -> None:
-    # Match by substring so absolute (``veracrawl.ports.crawl_planner``) and
-    # relative (``..ports.crawl_planner``) imports both fail. Iter-2 follow-up.
+def test_external_crawl_runner_imports_crawl_planner_only_via_contracts_and_ports() -> None:
+    # s3 lifts the s1/s2-era prohibition: the runner now imports
+    # ``veracrawl.contracts.crawl_planner`` (typing) and
+    # ``veracrawl.ports.crawl_planner`` (the port). It must NOT import
+    # any ``veracrawl.adapters.*`` (the planner choice is the caller's).
     for module in _imports(_RUNNER.read_text()):
-        if "crawl_planner" in module:
-            pytest.fail(f"runner must not import any crawl_planner module in s1: {module!r}")
+        if module.startswith("."):
+            pytest.fail(f"runner forbids relative imports: {module!r}")
+        if module.startswith("veracrawl.adapters."):
+            pytest.fail(f"runner must not import any adapter module: {module!r}")
