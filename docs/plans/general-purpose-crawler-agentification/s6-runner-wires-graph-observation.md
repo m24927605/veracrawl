@@ -770,11 +770,16 @@ Mechanically verifiable.
    )
    bad_subject=0
    missing=0
-   for sha in $(git log --pretty=format:'%H' "${plan_first}..HEAD" -- "${s6_exclusive_paths[@]}"); do
+   # Phase A1: every commit touching an s6-exclusive OR s6-handoff path
+   # must have subject `s6:`. The handoff array covers the s5 boundary
+   # test file that s6 explicitly relaxes (see plan §AC7 prose).
+   for sha in $(git log --pretty=format:'%H' "${plan_first}..HEAD" -- "${s6_exclusive_paths[@]}" "${s6_handoff_paths[@]}"); do
      subj=$(git log -1 --pretty=format:'%s' "$sha")
      case "$subj" in "s6:"*) ;; *) echo "off-policy: $sha '$subj'"; bad_subject=1 ;; esac
    done
-   all=$(git log --pretty=format:'%H %s' "${plan_first}..HEAD" -- "${s6_exclusive_paths[@]}" "${s6_shared_paths[@]}")
+   # Phase B: every `s6:`-subject commit touching any s6 path must have
+   # a matching `s6-impl-<sha7>` STATUS row.
+   all=$(git log --pretty=format:'%H %s' "${plan_first}..HEAD" -- "${s6_exclusive_paths[@]}" "${s6_shared_paths[@]}" "${s6_handoff_paths[@]}")
    while IFS= read -r line; do
      sha=${line%% *}; subj=${line#* }
      case "$subj" in "s6:"*) ;; *) continue ;; esac
