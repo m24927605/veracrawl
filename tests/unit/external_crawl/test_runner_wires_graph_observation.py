@@ -491,6 +491,7 @@ def test_observer_records_url_observed_per_admitted_discovery(tmp_path: Path) ->
     assert "#" not in obs.url_events[2].canonical_url
     assert obs.url_events[2].depth == 1
     assert obs.url_events[2].parent_canonical_url == seed
+    assert obs.url_events[2].source_ref == "frontier-admit:discovery"
 
 
 # Test 7
@@ -552,3 +553,37 @@ def test_observer_records_page_structure_observed_per_fetched_page(tmp_path: Pat
     assert seed2 in page_for_seed
     assert page_for_seed[seed1].discovered_link_count == 3
     assert page_for_seed[seed2].discovered_link_count == 3
+
+
+# Test 8a (step-3 iter-2 task-review follow-up — clock_trace producer red test)
+def test_s6_mode_populates_clock_trace_in_run_report(tmp_path: Path) -> None:
+    seed = "https://a.example/"
+    body = b'<html><body><a href="https://a.example/x">x</a></body></html>'
+    fetcher = _CannedFetcher(outcomes={
+        seed: _outcome(url=seed, body=body),
+        "https://a.example/x": _outcome(url="https://a.example/x"),
+    })
+    runner, obs = _build_s6(
+        tmp_path, seeds=[seed], fetcher=fetcher, allowed=["a.example"],
+    )
+    runner.run()
+    report = _read_report(tmp_path)
+    # clock_trace must be a non-empty list of ISO 8601 strings — one
+    # entry per _utc_clock() invocation. The runner ticks once per
+    # recorded event; in this fixture that's:
+    #   - 1 seed url-observed
+    #   - 1 page-structure (parent page)
+    #   - 1 discovery url-observed (child)
+    # → 3 timestamps minimum. (No redirects, no canonical events.)
+    assert isinstance(report["clock_trace"], list)
+    expected_min = (
+        len(obs.url_events) + len(obs.redirect_events) + len(obs.page_events)
+    )
+    assert len(report["clock_trace"]) == expected_min, (
+        f"clock_trace should have {expected_min} entries "
+        f"(one per recorded event); got {len(report['clock_trace'])}"
+    )
+    # Every entry is a parseable ISO 8601 UTC datetime.
+    for s in report["clock_trace"]:
+        parsed = datetime.fromisoformat(s)
+        assert parsed.tzinfo is not None
