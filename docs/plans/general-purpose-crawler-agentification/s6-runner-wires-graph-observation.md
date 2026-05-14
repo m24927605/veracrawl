@@ -488,12 +488,16 @@ Red-first list.
    one seed at `https://seed.example/` with two child
    anchors: `https://seed.example/child-a` (already
    canonical) and `https://seed.example/child-b/?utm=x#frag`
-   (REQUIRES canonicalization to
-   `https://seed.example/child-b/`). The runner enqueues
-   the raw hrefs; the frontier returns `EnqueueOutcome`
-   with `canonical_url` set to the canonicalized form.
-   The observer's `record_url_observed` call sequence
-   must be:
+   (REQUIRES canonicalization). The repo's
+   `canonicalize_url` drops fragments but **preserves**
+   query strings (utm-style params are sorted, not
+   stripped — see `src/veracrawl/external_crawl/url.py:43`),
+   so the expected canonical form is
+   `https://seed.example/child-b/?utm=x`. The runner
+   enqueues the raw hrefs; the frontier returns
+   `EnqueueOutcome` with `canonical_url` set to the
+   canonicalized form. The observer's
+   `record_url_observed` call sequence must be:
    - call[0]: `canonical_url == "https://seed.example/"`,
      `depth == 0`, `parent_canonical_url is None`,
      `source_ref == "frontier-admit:seed"`.
@@ -502,12 +506,18 @@ Red-first list.
      `parent_canonical_url == "https://seed.example/"`,
      `source_ref == "frontier-admit:discovery"`.
    - call[2]: `canonical_url ==
-     "https://seed.example/child-b/"` *(canonicalized —
-     NOT `…/child-b/?utm=x#frag`)*, `depth == 1`,
-     `parent_canonical_url == "https://seed.example/"`,
-     `source_ref == "frontier-admit:discovery"`.
+     "https://seed.example/child-b/?utm=x"` *(fragment
+     stripped — NOT `…/child-b/?utm=x#frag`)*,
+     `depth == 1`, `parent_canonical_url ==
+     "https://seed.example/"`,
+     `source_ref == "frontier-admit:discovery"`. Also
+     assert `"#" not in call[2].canonical_url` to pin
+     the fragment-removal invariant.
    Pins the rule: discovery records use
    `EnqueueOutcome.canonical_url`, not the raw href.
+   (Plan v6 originally claimed `child-b/` as the canonical;
+   that was incorrect given the repo's canonicalizer
+   semantics — the step-3 iter-1 task-review caught it.)
 7. `test_observer_records_redirect_observed_per_redirect_hop` —
    spec with one seed; mock fetcher returns
    `redirect_history` = [hop_a, hop_b] → observer's

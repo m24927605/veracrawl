@@ -245,6 +245,7 @@ class ExternalCrawlRunner:
         self._evidence_packets_written = 0
         self._obs_seq = 0
         self._original_plan_request: PlanRequest | None = None
+        self._clock_trace: list[str] = []
 
     def _s6_active(self) -> bool:
         return (
@@ -257,6 +258,12 @@ class ExternalCrawlRunner:
         seq = self._obs_seq
         self._obs_seq += 1
         return seq
+
+    def _tick_utc_clock(self) -> datetime:
+        assert self._utc_clock is not None
+        t = self._utc_clock()
+        self._clock_trace.append(t.isoformat())
+        return t
 
     def _record_url_observed(
         self, *, canonical_url: str, depth: int,
@@ -274,7 +281,7 @@ class ExternalCrawlRunner:
             depth=depth,
             parent_canonical_url=parent_canonical_url,
             source_ref=source_ref,
-            observed_at=self._utc_clock(),
+            observed_at=self._tick_utc_clock(),
         ))
 
     def _record_redirect_observed(self, outcome: FetchOutcome) -> None:
@@ -290,7 +297,7 @@ class ExternalCrawlRunner:
                 from_canonical_url=hop.from_url,
                 to_canonical_url=hop.to_url,
                 status_code=hop.status_code,
-                observed_at=self._utc_clock(),
+                observed_at=self._tick_utc_clock(),
             ))
 
     def _record_page_structure_observed(
@@ -308,7 +315,7 @@ class ExternalCrawlRunner:
                 page_canonical_url=page_canonical_url,
                 discovered_link_count=discovered_link_count,
                 discovered_canonical_urls=[],
-                observed_at=self._utc_clock(),
+                observed_at=self._tick_utc_clock(),
             ),
         )
 
@@ -523,7 +530,7 @@ class ExternalCrawlRunner:
         report["observation_snapshot_ref"] = None
         report["observation_feedback_ref"] = None
         report["utc_clock_ref"] = self._utc_clock_ref
-        report["clock_trace"] = None
+        report["clock_trace"] = list(self._clock_trace) if self._clock_trace else None
         report["replan_invoked"] = False
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"

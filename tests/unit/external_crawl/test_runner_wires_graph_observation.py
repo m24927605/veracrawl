@@ -452,13 +452,22 @@ def test_observer_records_url_observed_per_admitted_discovery(tmp_path: Path) ->
     body = (
         b'<html><body>'
         b'<a href="https://seed.example/child-a">a</a>'
-        b'<a href="https://seed.example/child-b/#frag">b</a>'
+        b'<a href="https://seed.example/child-b/?utm=x#frag">b</a>'
         b'</body></html>'
     )
+    # The repo's canonicalize_url drops fragments but PRESERVES query
+    # strings (utm tracking params are sorted, not stripped — see
+    # src/veracrawl/external_crawl/url.py:43). So the expected canonical
+    # for `child-b/?utm=x#frag` is `child-b/?utm=x` (fragment-only
+    # canonicalization). Plan v6 originally claimed `child-b/`; this
+    # test follow-up corrects the expectation to match what the
+    # canonicalizer actually does.
     fetcher = _CannedFetcher(outcomes={
         seed: _outcome(url=seed, body=body),
         "https://seed.example/child-a": _outcome(url="https://seed.example/child-a"),
-        "https://seed.example/child-b/": _outcome(url="https://seed.example/child-b/"),
+        "https://seed.example/child-b/?utm=x": _outcome(
+            url="https://seed.example/child-b/?utm=x",
+        ),
     })
     runner, obs = _build_s6(
         tmp_path, seeds=[seed], fetcher=fetcher, allowed=["seed.example"],
@@ -474,8 +483,12 @@ def test_observer_records_url_observed_per_admitted_discovery(tmp_path: Path) ->
     assert obs.url_events[1].depth == 1
     assert obs.url_events[1].parent_canonical_url == seed
     assert obs.url_events[1].source_ref == "frontier-admit:discovery"
-    # Canonicalized (utm + frag stripped)
-    assert obs.url_events[2].canonical_url == "https://seed.example/child-b/"
+    # Canonicalized — fragment stripped (utm preserved per the codebase's
+    # canonicalize_url rules). The event's canonical_url must come from
+    # EnqueueOutcome.canonical_url, NOT the raw href containing the
+    # fragment.
+    assert obs.url_events[2].canonical_url == "https://seed.example/child-b/?utm=x"
+    assert "#" not in obs.url_events[2].canonical_url
     assert obs.url_events[2].depth == 1
     assert obs.url_events[2].parent_canonical_url == seed
 
