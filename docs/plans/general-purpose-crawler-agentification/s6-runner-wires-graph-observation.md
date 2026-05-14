@@ -755,6 +755,16 @@ Mechanically verifiable.
      tests/integration/test_runner_with_graph_observation_stub.py
      tests/contract/test_runner_graph_observation_import_boundaries.py
    )
+   # s5/s6 boundary handoff: the s5 test
+   # tests/contract/test_planner_observation_feedback_import_boundaries.py
+   # contained a "no wiring yet" guard that s6 explicitly relaxes (the
+   # runner now imports planner_observation_feedback as part of the
+   # wiring). That handoff is rewritten under a `s6:` subject prefix
+   # during s6 step 2 — AC7 phase A1 below explicitly admits this
+   # cross-slice edit:
+   s6_handoff_paths=(
+     tests/contract/test_planner_observation_feedback_import_boundaries.py
+   )
    s6_shared_paths=(
      src/veracrawl/external_crawl/runner.py
    )

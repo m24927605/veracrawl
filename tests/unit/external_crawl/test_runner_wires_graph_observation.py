@@ -108,23 +108,29 @@ def _read_report(tmp_path: Path) -> dict[str, Any]:
     return json.loads((tmp_path / "run-s6" / "reports" / "run_report.json").read_text())
 
 
+_S6_KEYED_ALWAYS = (
+    "plan_decision_2_ref", "plan_decision_2_replay_refs",
+    "plan_decision_2_planned_seed_order", "plan_decision_2_adapter_priors",
+    "plan_decision_2_frontier_priority_hints",
+    "plan_decision_2_extraction_strategy_refs",
+    "observation_snapshot_ref", "observation_feedback_ref",
+    "utc_clock_ref", "clock_trace",
+)
+
+
 # Test 1
 def test_legacy_mode_unchanged_by_s6(tmp_path: Path) -> None:
     runner = _build(tmp_path)
     runner.run()
     report = _read_report(tmp_path)
-    # No s6 mode keys with non-None values
-    for key in (
-        "plan_decision_2_ref", "plan_decision_2_replay_refs",
-        "plan_decision_2_planned_seed_order", "plan_decision_2_adapter_priors",
-        "plan_decision_2_frontier_priority_hints",
-        "plan_decision_2_extraction_strategy_refs",
-        "observation_snapshot_ref", "observation_feedback_ref",
-        "utc_clock_ref", "clock_trace",
-    ):
-        assert report.get(key) is None, f"legacy mode must leave {key} unset"
-    assert report.get("replan_invoked", False) is False
-    # And no s3 mode keys either
+    # Per plan: s6 keys are "keyed always" — present in the JSON shape
+    # regardless of mode, with None values in legacy/s3 mode.
+    for key in _S6_KEYED_ALWAYS:
+        assert key in report, f"key '{key}' must be present in legacy mode"
+        assert report[key] is None, f"key '{key}' must be None in legacy mode"
+    assert "replan_invoked" in report
+    assert report["replan_invoked"] is False
+    # And no s3 mode keys either (legacy mode doesn't run the planner)
     assert "plan_decision_ref" not in report
 
 
@@ -162,16 +168,21 @@ def test_s3_pair_only_mode_unchanged_by_s6(tmp_path: Path) -> None:
     runner = _build(tmp_path, planner=_MinimalPlanner(), plan_request_builder=_builder)
     runner.run()
     report = _read_report(tmp_path)
-    # s3 keys present (plan ran)
-    assert report.get("plan_decision_ref") == "plan-decision:s3-only:1"
-    # s6 keys absent or None
+    # All 6 s3 keys present (plan ran)
     for key in (
-        "plan_decision_2_ref", "plan_decision_2_replay_refs",
-        "observation_snapshot_ref", "observation_feedback_ref",
-        "utc_clock_ref", "clock_trace",
+        "plan_decision_ref", "plan_decision_replay_refs",
+        "plan_decision_planned_seed_order", "plan_decision_adapter_priors",
+        "plan_decision_frontier_priority_hints",
+        "plan_decision_extraction_strategy_refs",
     ):
-        assert report.get(key) is None, f"s3 mode must leave {key} unset"
-    assert report.get("replan_invoked", False) is False
+        assert key in report, f"s3 mode must keep '{key}'"
+    assert report["plan_decision_ref"] == "plan-decision:s3-only:1"
+    # All s6 keyed-always keys present with None values (no observe / no replan)
+    for key in _S6_KEYED_ALWAYS:
+        assert key in report, f"s6 keyed-always '{key}' must be present"
+        assert report[key] is None, f"s3 mode must leave '{key}' as None"
+    assert "replan_invoked" in report
+    assert report["replan_invoked"] is False
 
 
 # Test 2: graph_observer set, factory + utc_clock + utc_clock_ref missing

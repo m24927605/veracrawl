@@ -43,7 +43,10 @@ from veracrawl.contracts.crawl_job import (
 )
 from veracrawl.contracts.crawl_planner import PlanDecision, PlanRequest
 from veracrawl.contracts.enums import AdapterType, RouteClass
-from veracrawl.contracts.planner_observation_feedback import PlannerObservationFeedback
+from veracrawl.contracts.planner_observation_feedback import (
+    PlannerObservationFeedback,
+    derive_planner_observation_feedback,  # noqa: F401 — used in step-4 replan path
+)
 from veracrawl.external_crawl.frontier import (
     ExternalCrawlFrontier,
     FrontierEvent,
@@ -426,6 +429,20 @@ class ExternalCrawlRunner:
             report["plan_decision_extraction_strategy_refs"] = list(
                 d.extraction_strategy_refs
             )
+        # s6 keyed-always fields. In legacy / s3 mode these stay None
+        # (and replan_invoked False) so the JSON shape is stable; step 4
+        # will populate them when the s6 replan path lands.
+        report["plan_decision_2_ref"] = None
+        report["plan_decision_2_replay_refs"] = None
+        report["plan_decision_2_planned_seed_order"] = None
+        report["plan_decision_2_adapter_priors"] = None
+        report["plan_decision_2_frontier_priority_hints"] = None
+        report["plan_decision_2_extraction_strategy_refs"] = None
+        report["observation_snapshot_ref"] = None
+        report["observation_feedback_ref"] = None
+        report["utc_clock_ref"] = self._utc_clock_ref
+        report["clock_trace"] = None
+        report["replan_invoked"] = False
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
         )

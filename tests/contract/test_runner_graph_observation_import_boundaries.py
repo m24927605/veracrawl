@@ -59,14 +59,14 @@ def test_runner_imports_graph_observation_port_and_feedback_contract() -> None:
     assert "veracrawl.ports.graph_observation.GraphObservationPort" in imports_seen, (
         "runner must import GraphObservationPort from veracrawl.ports.graph_observation"
     )
-    feedback_imports = {
-        i for i in imports_seen
-        if i.startswith("veracrawl.contracts.planner_observation_feedback.")
-    }
-    assert feedback_imports, (
-        "runner must import at least one symbol from "
-        "veracrawl.contracts.planner_observation_feedback"
-    )
+    assert (
+        "veracrawl.contracts.planner_observation_feedback.PlannerObservationFeedback"
+        in imports_seen
+    ), "runner must import PlannerObservationFeedback"
+    assert (
+        "veracrawl.contracts.planner_observation_feedback.derive_planner_observation_feedback"
+        in imports_seen
+    ), "runner must import derive_planner_observation_feedback"
 
 
 # Test 22 — the clock adapter must be stdlib-only.
