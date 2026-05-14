@@ -141,6 +141,12 @@ hook-installed version once landed.
 | 4 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: snapshot ref-only (s5 couldn't read graph); missing-field tests absent; AC4 substring grep too weak. | Plan v5: snapshot embeds typed events (not refs); 5 missing-field tests for `observed_at`/`snapshot_at`; AC4 uses AST allowlist test. AC1 50 → 55. |
 | 5 | 2026-05-14 | REJECTED → DONE_WITH_RESERVATIONS via post-iter-5 follow-up | 1 blocker + 2 majors: snapshot redesign inconsistent (2 places still said "ref lists"); missing-field tests for `id`/`run_ref`/`source_ref` absent; AC7/AC8 reservations branch not deterministic. | Post-iter-5 follow-up: remaining "ref list" wording replaced with embedded events; 11 missing-field tests 15z-15jj added; AC7/AC8 reservations branch tightened to STATUS-row grep. AC1 55 → 66. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
 
+## s5 step-1 (contracts) task-review log
+
+| Iter | Date (UTC) | Commit  | Verdict  | Findings (severity — summary) | Resolution |
+|------|------------|---------|----------|-------------------------------|------------|
+| 1    | 2026-05-14 | 710de7b | REJECTED | (major) contract module imports `pydantic.model_validator` at runtime; plan's `STDLIB_ALLOWLIST` (test 20) excluded pydantic. As written, AC1 / test 20 would fail once the import-boundary test lands. | Plan corrected in iter-2 follow-up commit: `STDLIB_ALLOWLIST` extended with `pydantic` (same precedent as s2 plan iter-1 task-review). Pydantic is a pure validation library with no non-determinism / no I/O — same import-boundary treatment as stdlib. |
+
 ## s5 codex plan-review log
 
 | Iter | Date (UTC) | Verdict | Findings (severity — summary) | Resolution |

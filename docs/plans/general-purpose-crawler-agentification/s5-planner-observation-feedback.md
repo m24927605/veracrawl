@@ -371,6 +371,12 @@ Shared constant in the test module:
 STDLIB_ALLOWLIST = {
     "__future__", "typing", "collections.abc", "re",
     "hashlib", "urllib.parse",
+    "pydantic",   # iter-1 task-review correction: contract validators
+                  # need `pydantic.model_validator`. Pydantic is a pure
+                  # validation library — no non-determinism, no I/O —
+                  # so it is treated identically to stdlib for import-
+                  # boundary purposes. Same precedent as s2 plan iter-1
+                  # task-review (allowlist extended for pydantic).
 }
 SNAPSHOT_AND_EVENT_TYPES = {
     "GraphObservationSnapshot",
