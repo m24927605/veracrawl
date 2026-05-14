@@ -413,8 +413,10 @@ def test_s6_mode_accepts_full_arg_set(tmp_path: Path) -> None:
 @dataclass
 class _CannedFetcher:
     outcomes: dict[str, FetchOutcome]
+    calls: list[str] = field(default_factory=list)
 
     def fetch(self, url: str, *, timeout_seconds: float) -> FetchOutcome:  # noqa: ARG002
+        self.calls.append(url)
         if url in self.outcomes:
             return self.outcomes[url]
         raise FetchError(f"no canned outcome for {url}")
@@ -816,8 +818,11 @@ def test_replan_decision_2_enqueues_new_seeds(tmp_path: Path) -> None:
         allowed=["a.example", "newseed.example"], factory=factory,
     )
     runner.run()
-    # The new seed must have been admitted into the frontier and fetched.
-    assert "https://newseed.example/" in fetcher.outcomes
+    # The new seed must have been admitted AND actually fetched after
+    # the replan — the fetcher records every call.
+    assert "https://newseed.example/" in fetcher.calls, (
+        f"new seed must be fetched after replan; calls={fetcher.calls}"
+    )
     # The replan-seed admission must have been recorded as a url_observed.
     runner_obs = runner._graph_observer
     assert isinstance(runner_obs, _CapturingObserver)

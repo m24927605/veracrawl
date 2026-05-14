@@ -535,6 +535,10 @@ Red-first list.
    side of the clock-trace replay loop — the consumer side is
    in step-1's `replaying_utc_clock_from_run_report` helper, and
    the end-to-end round trip lands as test 21 in step 4.
+8b. `test_s6_mode_accepts_full_arg_set` — happy-path ctor smoke
+    test: all 6 s6 ctor args set + s3 pair → runner constructs
+    without error. Pins the "all 6 set" cell of the §Scope
+    ctor-mode table.
 9. `test_replan_invoked_once_after_first_frontier_drain` —
    spec with two seeds + observer wired → factory called
    exactly once with a `PlannerObservationFeedback`
@@ -697,7 +701,7 @@ Red-first list.
 ### Green path
 
 Each red test gets a minimal implementation. One purpose
-per commit. After all 34 tests pass, refactor only obvious
+per commit. After all 35 tests pass, refactor only obvious
 duplication.
 
 ## Acceptance Criteria
@@ -706,7 +710,7 @@ Mechanically verifiable.
 
 1. **Pytest gate** —
    `pytest tests/unit/external_crawl/test_runner_wires_graph_observation.py tests/unit/adapters/clocks/test_replaying_utc_clock.py tests/integration/test_runner_with_graph_observation_stub.py tests/contract/test_runner_graph_observation_import_boundaries.py -v`
-   exits 0 with **34** collected, **34** passed.
+   exits 0 with **35** collected, **35** passed.
    (Original v1: 18. v2 added: 1a, 19.
    v3 added: 4a, 4b, 4c.
    v4 added: 4d, 16b; test 16 reworked to the narrower

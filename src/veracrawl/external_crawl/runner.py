@@ -457,10 +457,15 @@ class ExternalCrawlRunner:
                     break
                 item = self._frontier.pop()
                 if item is None:
+                    if self._frontier.budget_exhausted():
+                        # Don't replan on budget exhaustion — there may
+                        # be queued URLs the budget refused; the plan
+                        # rule only authorizes replan when the frontier
+                        # truly drained after at least one fetch.
+                        stop_reason = "budget_exhausted"
+                        break
                     if self._maybe_replan():
                         continue
-                    if self._frontier.budget_exhausted():
-                        stop_reason = "budget_exhausted"
                     break
 
                 if not self._robots_allowed(item.canonical_url):

@@ -219,6 +219,23 @@ def test_local_stub_redirect_produces_host_glob_hint(
     )
 
     assert report["replan_invoked"] is True
+
+    # Observer event-count assertions per plan §Integration test:
+    # - >= 1 redirect event (the /start -> /target hop)
+    # - >= 3 url events (seed admission + 2 child discoveries)
+    # - 1 page-structure event (the /target page parse)
+    snap = observer.snapshot(id="snap:integ:check", snapshot_at=base)
+    assert len(snap.redirect_observed_events) >= 1, (
+        f"expected >=1 redirect event; got {len(snap.redirect_observed_events)}"
+    )
+    assert len(snap.url_observed_events) >= 3, (
+        f"expected >=3 url events; got {len(snap.url_observed_events)}"
+    )
+    assert len(snap.page_structure_observed_events) >= 1, (
+        f"expected >=1 page-structure event; "
+        f"got {len(snap.page_structure_observed_events)}"
+    )
+
     # The deterministic v2 planner emits a HOST_GLOB hint per redirect
     # neighbour. The stub fetcher records a redirect from /start →
     # /target, so the feedback's redirect_neighbours contains the
