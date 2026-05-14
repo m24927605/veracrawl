@@ -156,6 +156,39 @@ def _contract(
 
 
 FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
+    # s4 of general-purpose-crawler-agentification: GraphObservationPort
+    # event contracts. See docs/plans/general-purpose-crawler-
+    # agentification/s4-graph-observation-port-contract.md.
+    "UrlObservedEvent": _contract(
+        "UrlObservedEvent",
+        OwnerService.GRAPH,
+        "graph_observation",
+        tests=["tests/contract/test_graph_observation_contract_registry.py"],
+    ),
+    "RedirectObservedEvent": _contract(
+        "RedirectObservedEvent",
+        OwnerService.GRAPH,
+        "graph_observation",
+        tests=["tests/contract/test_graph_observation_contract_registry.py"],
+    ),
+    "CanonicalObservedEvent": _contract(
+        "CanonicalObservedEvent",
+        OwnerService.GRAPH,
+        "graph_observation",
+        tests=["tests/contract/test_graph_observation_contract_registry.py"],
+    ),
+    "PageStructureObservedEvent": _contract(
+        "PageStructureObservedEvent",
+        OwnerService.GRAPH,
+        "graph_observation",
+        tests=["tests/contract/test_graph_observation_contract_registry.py"],
+    ),
+    "GraphObservationSnapshot": _contract(
+        "GraphObservationSnapshot",
+        OwnerService.GRAPH,
+        "graph_observation",
+        tests=["tests/contract/test_graph_observation_contract_registry.py"],
+    ),
     # s2 of general-purpose-crawler-agentification: LLM-output contracts
     # for the LlmCrawlPlanner adapter. See docs/plans/general-purpose-
     # crawler-agentification/s2-llm-crawl-planner-adapter.md.

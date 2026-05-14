@@ -1975,3 +1975,21 @@ class FrontierMatchKind(StrEnum):
     URL_PREFIX = "url_prefix"
     HOST_GLOB = "host_glob"
     CONTENT_TYPE_PREFIX = "content_type_prefix"
+
+
+class CanonicalSource(StrEnum):
+    """Origin of a canonical-URL mapping observation (s4 of
+    general-purpose-crawler-agentification).
+
+    * ``LINK_REL_CANONICAL`` — discovered via an HTML
+      ``<link rel="canonical" href="…">`` element.
+    * ``HTTP_LINK_HEADER`` — discovered via the HTTP
+      ``Link: …; rel="canonical"`` response header.
+    * ``SITEMAP`` — discovered via an ``<xhtml:link
+      rel="canonical" href="…">`` declaration inside a
+      sitemap URL entry.
+    """
+
+    LINK_REL_CANONICAL = "link_rel_canonical"
+    HTTP_LINK_HEADER = "http_link_header"
+    SITEMAP = "sitemap"
