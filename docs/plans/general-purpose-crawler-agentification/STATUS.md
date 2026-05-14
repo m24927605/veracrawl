@@ -15,6 +15,7 @@ follow-up.
 | s3 | `ExternalCrawlRunner` wires `CrawlPlannerPort` (planned-seed scheduling) | DONE | a7c6798 | 732ffaf (runner + 15 unit tests + integration test + 22a replacement), e40b967 (iter-1 follow-up: tightened 22a + bumped test-file budget), 3907fb1 (iter-2 follow-up: bare `veracrawl.adapters` import rejected; APPROVED iter 3). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | iter 1 REJECTED → iter 2 REJECTED → iter 3 APPROVED. | 1 — see "s3 plan iter-5 reservations" below |
 | s4 | `GraphObservationPort` + URL/canonical/redirect/structure event contracts | DONE | 44147a2 | 6b8124d (contracts + port + adapter + 66 tests), 8d59cc0 (iter-1 follow-up: extended test 15t to all 4 lists + bumped plan budgets), 2696b62 (iter-2 minor: budget-math sync; APPROVED iter 3). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | iter 1 REJECTED → iter 2 REJECTED (1 refuted, 1 fixed) → iter 3 APPROVED. | 1 — see "s4 plan iter-5 reservations" below |
 | s5 | `PlannerObservationFeedback` contract + deterministic fixture planner adapter v2 | DONE | 7d33df1 | step 1: 710de7b (contract + 18 tests; REJECTED iter 1 → APPROVED iter 2 via plan-fix commit f0a8cd9). step 2: ae794b0 (registry + 2 tests; APPROVED iter 1). step 3: fff1f79 (adapter + 4 boundary + 16 adapter tests; REJECTED iter 1) → 6c49634 (port-strip fix + new red test 25a; APPROVED iter 2 with 2 non-blocking minors folded into close commit). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; v6 follow-up landed without re-review) — see below | step 1: iter 1 REJECTED → iter 2 APPROVED (via plan fix). step 2: iter 1 APPROVED. step 3: iter 1 REJECTED → iter 2 APPROVED (with 2 non-blocking minors). | 3 — see "s5 plan iter-5 reservations" below |
+| s6 | `ExternalCrawlRunner` wires `GraphObservationPort` + replan via feedback-aware planner | PLAN_DONE_WITH_RESERVATIONS | — (plan-only; this commit) | — (implementation pending) | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; v6 follow-up landed without re-review) — see below | n/a (impl pending) | 4 — see "s6 plan iter-5 reservations" below |
 
 ## s1 codex plan-review log
 
@@ -140,6 +141,71 @@ hook-installed version once landed.
 | 3 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: test 26 ctor regression; missing URL invariants for from/target/page URLs; snapshot ref-list entries unvalidated. | Plan v4: 3 missing-URL tests; test 15t for blank entries; test 26 fixed. AC1 46 → 50. |
 | 4 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: snapshot ref-only (s5 couldn't read graph); missing-field tests absent; AC4 substring grep too weak. | Plan v5: snapshot embeds typed events (not refs); 5 missing-field tests for `observed_at`/`snapshot_at`; AC4 uses AST allowlist test. AC1 50 → 55. |
 | 5 | 2026-05-14 | REJECTED → DONE_WITH_RESERVATIONS via post-iter-5 follow-up | 1 blocker + 2 majors: snapshot redesign inconsistent (2 places still said "ref lists"); missing-field tests for `id`/`run_ref`/`source_ref` absent; AC7/AC8 reservations branch not deterministic. | Post-iter-5 follow-up: remaining "ref list" wording replaced with embedded events; 11 missing-field tests 15z-15jj added; AC7/AC8 reservations branch tightened to STATUS-row grep. AC1 55 → 66. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
+
+## s6 codex plan-review log
+
+| Iter | Date (UTC) | Verdict | Findings (severity — summary) | Resolution |
+|------|------------|---------|-------------------------------|------------|
+| 1 | 2026-05-14 | REJECTED | 1 blocker + 2 majors + 1 minor: clock-and-replay design used `_clock: Callable[[], float]` (monotonic) for graph-event UTC datetimes — type mismatch; ctor-mode validation self-contradictory; AC4 grep too narrow; README contradicted plan body. | Plan v2: separate `utc_clock: Callable[[], datetime]` ctor param; 3-mode rules made explicit (legacy / s3 / s6); test 18 rewritten as AST allowlist; README s6 row reworded. AC1 18 → 20. |
+| 2 | 2026-05-14 | REJECTED | 2 blockers + 2 majors + 1 minor: Replay invariant still referenced `self._clock()`; feedback `run_ref` mismatched s5 v2 adapter's invariant; `utc_clock` ctor validation under-tested; discovery URL canonical mismatch. | Plan v3: `run_ref = original_plan_request.run_ref` (NOT spec.id); replay invariant tightened; 3 new ctor validation tests (4a/4b/4c); recording-site descriptions made explicit per call site. AC1 20 → 23. |
+| 3 | 2026-05-14 | REJECTED | 2 blockers + 1 major: import-boundary still bypassable via `from veracrawl import adapters as a`; `utc_clock` adds non-determinism without replay-ref / consumer in same slice; replay-invariant prose contradicted test 16. | Plan v4: test 18 extended to 5 sub-checks (incl. alias-name rejection); new `utc_clock_ref: Ref` ctor param persisted to run_report; test 16 reworked to narrower scope; new tests 4d/16b. AC1 23 → 25. |
+| 4 | 2026-05-14 | REJECTED | 1 blocker + 3 majors: replay consumer still not wired in same/directly-dependent slice; Why prose contradicted Replay invariant; `utc_clock_ref` validation missed the reverse partial; discovery URL recording could use raw href. | Plan v5: new same-slice `ReplayingUtcClock` adapter (≤40 LOC); Why prose narrowed; test 4e for reverse partial; test 6 extended with canonicalization fixture; new tests 20/20a/21 for the adapter. AC1 25 → 29. |
+| 5 | 2026-05-14 | PLAN_DONE_WITH_RESERVATIONS | 1 blocker + 2 majors + 1 minor: `ReplayingUtcClock` consumed caller-provided `canned` datetimes with no same-slice producer; adapter import boundaries not AST-tested; AC7 omitted new replay-adapter paths; iter-4 count prose stale. | Post-iter-5 v6 follow-up landed in same plan revision (NOT re-reviewed): runner now records `clock_trace: list[str]` into run_report (producer side); `replaying_utc_clock_from_run_report` helper constructs replay clock from recorded trace (consumer side, wired in s6); new test 22 (AST allowlist for the adapter, stdlib-only); AC7's `s6_exclusive_paths` extended with the adapter source + test; stale count corrected. AC1 29 → 30. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS` with 4 reservations. |
+
+## s6 plan iter-5 reservations
+
+Mirrors the s1/s2/s3/s4/s5 reservations pattern.
+
+**Reservation 1 — iter-5 v6 follow-up not re-reviewed.**
+Iteration 5 returned `REJECTED` with one blocker (producer
+side of the clock-trace replay loop missing) and two majors
+(adapter AST allowlist missing; AC7 commit-path audit missed
+the new adapter paths) and one minor (stale test-count
+prose). All were addressed in the same plan revision as the
+v6 follow-up: runner persists `clock_trace: list[str]` into
+the run_report; `replaying_utc_clock_from_run_report` helper
+closes the consumer side; new test 22 covers the adapter
+import boundary; AC7's `s6_exclusive_paths` extended. Per
+the goal-doc workflow, the v6 follow-up is NOT re-reviewed
+by codex (iteration budget exhausted at 5). The s6
+implementation will exercise the per-commit task-review
+gate on every commit, so the new tests + clock-trace
+producer-consumer wiring are codex-reviewed when they land
+as code rather than as plan text.
+
+**Reservation 2 — `clock_trace` producer-consumer scope is
+binding.** v6 closes the AGENTS.md "wire the consumer in
+same slice" rule by pairing two new pieces: (a) producer —
+runner persists every `utc_clock()` invocation into
+`run_report["clock_trace"]`; (b) consumer —
+`replaying_utc_clock_from_run_report` constructs a
+`ReplayingUtcClock` from that recorded trace. If a future
+slice refactors away the `clock_trace` field or the helper,
+the s6 replay invariant breaks. Discharge condition: no
+future slice silently regresses test 21 (the end-to-end
+producer-consumer round-trip).
+
+**Reservation 3 — narrowed replay scope is binding for
+s6.** s6's replay invariant covers ONLY: byte-equal
+graph-event lists AND byte-equal `plan_decision_2_replay_refs`
+across runs with the same fixture-wired UTC clock. The
+full `run_report.canonical_json()` is NOT byte-equal —
+the runner's pre-existing wall-clock `_now()` fills
+inherited fields like `started_at`. A future slice
+(likely paired with s11/s12 replay work) extends the
+invariant to the full report. Discharge condition: a
+slice extending the invariant to full-report byte equality
+lands and references this reservation.
+
+**Reservation 4 — discovery URL recording rule is
+binding.** v5 fix: the discovery `UrlObservedEvent`
+records `EnqueueOutcome.canonical_url` (the post-
+canonicalization value), NOT the raw href. Test 6 pins
+this with a fixture URL that requires canonicalization.
+If `_discover_and_enqueue` is refactored later, the
+canonicalized URL must remain the event's
+`canonical_url` source. Discharge condition: test 6
+stays green through any future refactor.
 
 ## s5 step-3 (adapter + boundaries) task-review log
 
