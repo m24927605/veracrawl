@@ -577,6 +577,22 @@ Red-first list.
 20a. `test_replaying_utc_clock_rejects_blank_ref_and_empty_canned` —
     blank `utc_clock_ref` → `ValueError`; empty `canned`
     list → `ValueError`.
+20b. `test_helper_round_trips_clock_trace` *(s6 step-1
+    iter-1 task-review follow-up)* — helper-direct unit
+    test: a `run_report` with `utc_clock_ref` +
+    `clock_trace` ISO-string list round-trips through
+    `replaying_utc_clock_from_run_report` to a working
+    clock. Closes the iter-1 TDD gap: the helper's
+    round-trip via the runner (test 21) lands later in
+    step 4, but the helper itself ships in step 1 — this
+    direct test pins it.
+20c. `test_helper_rejects_mismatched_ref` — helper-direct:
+    raises `ValueError(match="utc_clock_ref must match")`
+    when the supplied `utc_clock_ref` doesn't match
+    `run_report["utc_clock_ref"]`.
+20d. `test_helper_rejects_missing_or_empty_clock_trace` —
+    helper-direct: both `clock_trace=None` and
+    `clock_trace=[]` cases raise `ValueError(match="clock_trace")`.
 21. `test_runner_clock_trace_round_trip_produces_byte_equal_graph_events` —
     end-to-end producer-consumer wiring:
     1. **Producer run**: construct
@@ -663,7 +679,7 @@ Red-first list.
 ### Green path
 
 Each red test gets a minimal implementation. One purpose
-per commit. After all 30 tests pass, refactor only obvious
+per commit. After all 33 tests pass, refactor only obvious
 duplication.
 
 ## Acceptance Criteria
@@ -672,7 +688,7 @@ Mechanically verifiable.
 
 1. **Pytest gate** —
    `pytest tests/unit/external_crawl/test_runner_wires_graph_observation.py tests/unit/adapters/clocks/test_replaying_utc_clock.py tests/integration/test_runner_with_graph_observation_stub.py tests/contract/test_runner_graph_observation_import_boundaries.py -v`
-   exits 0 with **30** collected, **30** passed.
+   exits 0 with **33** collected, **33** passed.
    (Original v1: 18. v2 added: 1a, 19.
    v3 added: 4a, 4b, 4c.
    v4 added: 4d, 16b; test 16 reworked to the narrower
@@ -681,7 +697,11 @@ Mechanically verifiable.
    v6 follow-up: test 21 rewritten as a real producer-
    consumer round-trip via the new helper
    `replaying_utc_clock_from_run_report`; added test 22
-   `test_replaying_utc_clock_import_boundaries`.)
+   `test_replaying_utc_clock_import_boundaries`.
+   s6 step-1 iter-1 task-review follow-up: added helper-
+   direct tests 20b/20c/20d covering
+   `replaying_utc_clock_from_run_report` since test 21
+   (its runner-level round-trip) lands in step 4.)
 2. **Existing suite regression-free** —
    `pytest tests/unit/external_crawl/ tests/integration/ -q`
    exits 0; no test that was passing before s6 begins
