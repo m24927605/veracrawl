@@ -17,6 +17,7 @@ from veracrawl.contracts.enums import AdapterType, FrontierMatchKind
 from veracrawl.contracts.errors import (
     FatalError,
     ProviderTraceMissingError,
+    ReplayLookupMissError,
     VeraCrawlError,
 )
 from veracrawl.contracts.llm_crawl_planner import (
@@ -150,3 +151,23 @@ def test_llm_plan_proposal_rejects_blank_rationale_summary() -> None:
 def test_provider_trace_missing_error_is_fatal_error_subclass() -> None:
     assert issubclass(ProviderTraceMissingError, FatalError)
     assert issubclass(ProviderTraceMissingError, VeraCrawlError)
+
+
+# Test 11a-ctor — s2 step-1 task-review iter 1: domain-specific
+# constructor + message. The error mirrors ``PromptTemplateNotFoundError``
+# (single kwarg, no ``ModelProviderError`` plumbing).
+def test_provider_trace_missing_error_constructs_with_domain_kwarg() -> None:
+    err = ProviderTraceMissingError(provider_request_id="provider-request:test:1")
+    assert err.provider_request_id == "provider-request:test:1"
+    assert "provider-request:test:1" in str(err)
+    assert "raw_response_ref" in str(err)
+
+
+# Test 11b — s2 step-1 task-review iter 1: ReplayLookupMissError typing
+# + constructor.
+def test_replay_lookup_miss_error_is_fatal_error_subclass_and_constructs() -> None:
+    assert issubclass(ReplayLookupMissError, FatalError)
+    assert issubclass(ReplayLookupMissError, VeraCrawlError)
+    err = ReplayLookupMissError(provider_request_id="provider-request:test:2")
+    assert err.provider_request_id == "provider-request:test:2"
+    assert "provider-request:test:2" in str(err)

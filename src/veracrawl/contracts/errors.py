@@ -529,7 +529,7 @@ def classify_provider_status(status: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-class ProviderTraceMissingError(ModelProviderError, FatalError, VeraCrawlError):
+class ProviderTraceMissingError(VeraCrawlError, FatalError):
     """Raised when ``ProviderResponse.raw_response_ref`` is missing.
 
     The s2 ``LlmCrawlPlanner`` requires every successful model call to
@@ -538,10 +538,19 @@ class ProviderTraceMissingError(ModelProviderError, FatalError, VeraCrawlError):
     anchor. Provider adapters that have not yet been wired to the
     artifact store (s2.1) trip this gate. ``FatalError`` because the
     fix is upstream provider wiring, not retrying the same call.
+
+    Constructor mirrors ``PromptTemplateNotFoundError``: a single
+    domain-specific kwarg, no ``ModelProviderError`` plumbing.
     """
 
+    def __init__(self, *, provider_request_id: str) -> None:
+        self.provider_request_id = provider_request_id
+        super().__init__(
+            f"provider response for {provider_request_id!r} is missing raw_response_ref"
+        )
 
-class ReplayLookupMissError(ModelProviderError, FatalError, VeraCrawlError):
+
+class ReplayLookupMissError(VeraCrawlError, FatalError):
     """Raised by ``ReplayingModelProviderV2`` when no canned response
     is registered for a given ``ProviderRequest.id``.
 
@@ -549,3 +558,9 @@ class ReplayLookupMissError(ModelProviderError, FatalError, VeraCrawlError):
     mutated between record and replay — both are upstream wiring bugs
     that retrying cannot fix.
     """
+
+    def __init__(self, *, provider_request_id: str) -> None:
+        self.provider_request_id = provider_request_id
+        super().__init__(
+            f"replay bundle has no canned response for {provider_request_id!r}"
+        )

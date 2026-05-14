@@ -551,12 +551,14 @@ None of these fakes mock the adapter under test.
     The in-product `ReplayingModelProviderV2` is the consumer
     wiring the goal-doc rule requires.
 
-Acceptance Criterion 1 pytest count = **12** contract + 2
+Acceptance Criterion 1 pytest count = **14** contract + 2
 registry + **15** planner-unit + **3** replaying-unit =
-**32 collected** (iter-5 follow-up). The 3 replaying-unit tests
-(26-28) cover the new `ReplayingModelProviderV2` adapter; tests
-1-25 are unchanged. Contract count of 12 includes iter-4 test
-11a (typed-error inheritance).
+**34 collected**. Contract count includes iter-4 test 11a
+(typed-error inheritance) plus step-1 task-review iter 1
+follow-up tests 11a-ctor (`ProviderTraceMissingError` domain
+constructor + str) and 11b (`ReplayLookupMissError` typing +
+constructor). The replaying-unit tests cover the
+`ReplayingModelProviderV2` adapter.
 
 ### `tests/unit/adapters/model_providers/test_replaying_model_provider.py` *(iter-5 follow-up)*
 
@@ -589,7 +591,7 @@ imports allowed there).
 ### Green path
 
 Each red test gets a minimal implementation. One purpose per
-commit. After all 33 tests pass (counted as 12 + 2 + 15 + 3 + 1),
+commit. After all 35 tests pass (counted as 14 + 2 + 15 + 3 + 1),
 refactor to dedupe URL / match-value validators.
 
 ## Acceptance Criteria
@@ -598,7 +600,7 @@ Mechanically verifiable from a fresh checkout.
 
 1. **Pytest gate (s2-owned files)** —
    `pytest tests/contract/test_llm_crawl_planner_contracts.py tests/contract/test_llm_crawl_planner_contract_registry.py tests/unit/adapters/planning/test_llm_crawl_planner.py tests/unit/adapters/model_providers/test_replaying_model_provider.py -v`
-   exits 0 with **32** collected, **32** passed, **0** failed,
+   exits 0 with **34** collected, **34** passed, **0** failed,
    **0** errored.
 
 2. **Pytest gate (import-boundary file)** —
