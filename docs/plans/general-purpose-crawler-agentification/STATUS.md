@@ -11,6 +11,7 @@ follow-up.
 | Slice | Title | Status | Plan commit | Implementation commits | Codex plan iter | Codex task iter | Reservations |
 |-------|-------|--------|-------------|------------------------|-----------------|-----------------|--------------|
 | s1 | `CrawlPlannerPort` + plan-decision contract + deterministic fixture adapter | DONE | aca4f82 | step 1: c49f68a, 22e1966, d7b836d, 0f8472e, 04f75cf (APPROVED iter 4). step 2: 65698e2 (APPROVED iter 1). step 3: 0ed2781, 731369b, 4a5c5ed, 4cf33f8 (APPROVED iter 4). step 4: c3c1de3 (APPROVED iter 1). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | step 1: iter 1→3 REJECTED → iter 4 APPROVED. step 2: iter 1 APPROVED. step 3: iter 1→3 REJECTED → iter 4 APPROVED. step 4: iter 1 APPROVED. | 1 — see "s1 plan iter-5 reservations" below |
+| s2 | Real LLM-driven `CrawlPlanner` adapter (replay-strict) | PLAN_DONE_WITH_RESERVATIONS | (uncommitted; lands alongside s2 implementation) | — | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | n/a (no impl yet) | 1 — see "s2 plan iter-5 reservations" below |
 
 ## s1 codex plan-review log
 
@@ -63,6 +64,43 @@ hook-installed version once landed.
 | 2    | 2026-05-14 | 22e1966 | REJECTED | (major) Removing the default factory was not mechanically covered by a red test (test 10a passes with the defaulted-empty implementation). (minor) 13 lines exceed ruff's 100-char cap. | Follow-up commit d7b836d added `test_plan_request_rejects_missing_policy_decision_refs`; shortened validator error messages so every line ≤100 chars; ruff `All checks passed!`. |
 | 3    | 2026-05-14 | d7b836d | REJECTED | (major) The new test isn't in the s1 plan's Test Strategy red list; AC1 still requires 41 collected (now 42). (minor) Commit message doesn't reference the s1 slice ID + AC. | s1 plan revised: test 10a-schema added to red list; AC1 bumped 41 → 42; green-path total updated. Next commit message will explicitly reference s1 + AC1. Follow-up commit lands the plan update. |
 | 4    | 2026-05-14 | 0f8472e | APPROVED | (minor) Inline s1 status iter-5 row still said "AC4 dropped" while STATUS correctly said "AC4 rewritten". | Step 1 (contracts) closed. The minor is addressed in this same doc-cleanup commit (the iter-5 row note now says "rewritten"). |
+
+## s2 codex plan-review log
+
+| Iter | Date (UTC) | Verdict  | Findings (severity — summary) | Resolution |
+|------|------------|----------|-------------------------------|------------|
+| 1    | 2026-05-14 | REJECTED | 2 blockers + 3 majors + 1 minor: non-existent `ProviderResponse.trace_ref`; non-existent `PromptRegistryPort` version-pinned ref; token-budget call shape mismatch; non-existent `ModelCapability.PRODUCTION`; `ProviderRequest` required fields underspecified; test count math. | Plan revised to v2: replay anchor switched to `ProviderResponse.id` + `raw_response_ref` (existing fields); prompt anchor is the constructor-pinned ref; PRODUCTION-mode gate dropped; token budget call shape matched to port signatures; `ProviderRequest` construction fully specified; AC1 pinned at 24. |
+| 2    | 2026-05-14 | REJECTED | 2 majors + 1 minor: red list missed tests for prompt-render call shape and full `ProviderRequest` construction; topic README still said "gated behind PRODUCTION mode"; stale Status row test-count text. | Plan revised to v3: new tests 14a + 15a added; README s2 row rewritten; stale row text corrected. AC1 bumped 24 → 26. |
+| 3    | 2026-05-14 | REJECTED | 1 blocker + 1 major: `ProviderResponse.id` alone isn't durable content anchor; replay consumer deferred to s11 (rule violation); `token_budget.charge()` not called for malformed-output paths. | Plan revised to v4: adapter requires non-blank `raw_response_ref` (raises `ProviderTraceMissingError`); flow reordered to charge BEFORE structured-output validation; new tests 18 (rewritten), 20a, 25 added. AC1 bumped 26 → 28. |
+| 4    | 2026-05-14 | REJECTED | 1 blocker + 3 majors + 1 minor: requiring `raw_response_ref` rejects existing OpenAI/Anthropic v2 adapters (they don't populate it); same-slice consumer claim was test-only; README inconsistency; `ProviderTraceMissingError` fatal typing unverified; Design diagram still showed old order. | Plan revised to v5: s2 demoted from "production adapter" to "real LLM adapter (replay-strict; awaits directly-dependent s2.1)"; topic README s2 row updated to mandate `raw_response_ref` and introduces s2.1 placeholder; new contract test 11a verifies `ProviderTraceMissingError` inherits `FatalError`; data-flow diagram rewritten. AC1 bumped 28 → 29. |
+| 5    | 2026-05-14 | REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) | 1 blocker + 1 major: replay-consumer wiring still test-only (`FakeReplayingModelProvider`); Open Question 1 still falsely claimed PRODUCTION providers populate `raw_response_ref`. | Post-iter-5 follow-up landed in the same plan revision: s2 scope expanded to ship a real `ReplayingModelProviderV2` adapter at `src/veracrawl/adapters/model_providers/replaying_model_provider.py` (~40 LOC) as the in-product replay consumer; 3 new red tests (26-28) cover it. Open Question 1 corrected: current OpenAI/Anthropic v2 adapters do NOT populate `raw_response_ref` — the directly-dependent slice s2.1 wires the artifact-store persistence. AC1 bumped 29 → 32. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`; see reservations subsection below. |
+
+## s2 plan iter-5 reservations
+
+**Reservation 1 — iter-5 post-iter-5 follow-up not re-reviewed.**
+Iter 5 returned `REJECTED` with one blocker (replay-consumer wiring
+test-only) and one major (stale Open Question 1 about
+`raw_response_ref` population). Both findings were addressed in a
+post-iter-5 follow-up in the same plan revision: a real
+`ReplayingModelProviderV2` adapter landed inside s2 scope (~40
+LOC, 3 tests), and Open Question 1 was corrected. Per the goal
+doc, the iter-5 follow-up is **not** re-reviewed by codex. The
+s2 implementation will exercise the per-commit task-review gate
+on every commit, so the in-product replay-consumer wiring is
+codex-reviewed when it lands as code rather than as plan text.
+
+**Reservation 2 — s2.1 (provider-artifact wiring) is required
+before live deployment.** s2 ships the LLM planner adapter with a
+strict `raw_response_ref` requirement, but the current OpenAI /
+Anthropic v2 provider adapters do not populate that field. s2.1
+(listed in the topic README) is the directly-dependent follow-up
+slice that wires `ArtifactStorePort` persistence into the v2
+provider adapters and populates `ProviderResponse.raw_response_ref`
+on every successful `complete(...)`. s2's `ProviderTraceMissingError`
+gate ensures no live planning call can succeed before s2.1
+lands — the s2 adapter fails fast if `raw_response_ref` is
+missing. This reservation is discharged when s2.1 is approved
+and merged.
 
 ## s1 plan iter-5 reservations
 
