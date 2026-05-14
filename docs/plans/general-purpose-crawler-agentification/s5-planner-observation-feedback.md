@@ -492,6 +492,13 @@ SNAPSHOT_AND_EVENT_TYPES = {
     `FrontierPriorityHint` entries with
     `match_kind=HOST_GLOB`, `match_value` equal to the host,
     `priority_delta=0.6`.
+25a. `test_v2_redirect_hint_host_strips_port_and_userinfo`
+    *(iter-1 task-review follow-up)* — feedback redirect URL
+    `https://example.com:8443/x` → emitted `HOST_GLOB` hint's
+    `match_value == "example.com"` (port stripped). Pins the
+    fix: adapter must use `urlparse(url).hostname`, NOT
+    `.netloc`, because `_HOST_GLOB` rejects `:` in
+    `FrontierPriorityHint.match_value`.
 26. `test_v2_emits_url_prefix_hints_for_canonical_targets` —
     analogous with `URL_PREFIX` and `priority_delta=0.4`.
 27. `test_v2_emits_url_prefix_hints_for_hub_pages` —
@@ -575,8 +582,10 @@ Mechanically verifiable.
 
 1. **Pytest gate** —
    `pytest tests/contract/test_planner_observation_feedback_contracts.py tests/contract/test_planner_observation_feedback_contract_registry.py tests/contract/test_planner_observation_feedback_import_boundaries.py tests/unit/adapters/planning/test_deterministic_crawl_planner_v2.py -v`
-   exits 0 with **40** collected, **40** passed.
-   (37 from v4 + 3 added in v6: 10a `test_feedback_model_fields_exactly`,
+   exits 0 with **41** collected, **41** passed.
+   (37 from v4 + 3 added in v6 + 1 from impl iter-1 task-review:
+   10a `test_feedback_model_fields_exactly`,
+   25a `test_v2_redirect_hint_host_strips_port_and_userinfo`,
    27a `test_v2_hub_hint_order_is_url_sorted`,
    28a `test_v2_decision_is_replay_stable_through_feedback_canonical_json_round_trip`.)
 2. **Contract registry** —

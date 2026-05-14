@@ -37,7 +37,7 @@ def _seed_priority(index: int) -> float:
 
 
 def _host(url: str) -> str:
-    return urlparse(url).netloc
+    return urlparse(url).hostname or ""
 
 
 def _short_hash(url: str) -> str:

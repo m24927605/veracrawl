@@ -141,6 +141,12 @@ hook-installed version once landed.
 | 4 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: snapshot ref-only (s5 couldn't read graph); missing-field tests absent; AC4 substring grep too weak. | Plan v5: snapshot embeds typed events (not refs); 5 missing-field tests for `observed_at`/`snapshot_at`; AC4 uses AST allowlist test. AC1 50 → 55. |
 | 5 | 2026-05-14 | REJECTED → DONE_WITH_RESERVATIONS via post-iter-5 follow-up | 1 blocker + 2 majors: snapshot redesign inconsistent (2 places still said "ref lists"); missing-field tests for `id`/`run_ref`/`source_ref` absent; AC7/AC8 reservations branch not deterministic. | Post-iter-5 follow-up: remaining "ref list" wording replaced with embedded events; 11 missing-field tests 15z-15jj added; AC7/AC8 reservations branch tightened to STATUS-row grep. AC1 55 → 66. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
 
+## s5 step-3 (adapter + boundaries) task-review log
+
+| Iter | Date (UTC) | Commit  | Verdict  | Findings (severity — summary) | Resolution |
+|------|------------|---------|----------|-------------------------------|------------|
+| 1    | 2026-05-14 | fff1f79 | REJECTED | (major) `_host(url)` used `urlparse(url).netloc`, but `FrontierPriorityHint(HOST_GLOB)` regex `^[a-zA-Z0-9._*-]+$` rejects ports — valid feedback URLs like `https://example.com:8443/x` would crash the planner instead of producing a host hint. | Follow-up commit (this commit): switched to `urlparse(url).hostname or ""`; new red test 25a `test_v2_redirect_hint_host_strips_port_and_userinfo` pins the fix. Plan red list updated (test 25a added); AC1 collected count 40 → 41. |
+
 ## s5 step-2 (registry) task-review log
 
 | Iter | Date (UTC) | Commit  | Verdict  | Findings | Resolution |

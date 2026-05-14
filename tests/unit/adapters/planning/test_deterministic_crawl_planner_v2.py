@@ -76,6 +76,20 @@ def test_v2_emits_host_glob_hints_for_redirect_neighbours() -> None:
     assert redirect_hints[1].priority_delta == 0.6
 
 
+# Test 25a (iter-1 task-review follow-up — port-stripping in HOST_GLOB extraction)
+def test_v2_redirect_hint_host_strips_port_and_userinfo() -> None:
+    fb = _fb(redirect_neighbours=["https://example.com:8443/x"])
+    decision = DeterministicCrawlPlannerV2(feedback=fb).plan(
+        _request(observed_state_refs=[_FB_ID]),
+    )
+    redirect_hints = [
+        h for h in decision.frontier_priority_hints
+        if h.match_kind is FrontierMatchKind.HOST_GLOB
+    ]
+    assert len(redirect_hints) == 1
+    assert redirect_hints[0].match_value == "example.com"
+
+
 # Test 26
 def test_v2_emits_url_prefix_hints_for_canonical_targets() -> None:
     fb = _fb(canonical_targets=["https://a.example/x", "https://b.example/y"])
