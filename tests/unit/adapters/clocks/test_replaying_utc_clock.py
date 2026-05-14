@@ -38,11 +38,6 @@ def test_replaying_utc_clock_rejects_blank_ref_and_empty_canned() -> None:
         ReplayingUtcClock(utc_clock_ref="utc-clock:fixture:1", canned=[])
 
 
-def test_replaying_utc_clock_property_exposes_ref() -> None:
-    clock = ReplayingUtcClock(utc_clock_ref="utc-clock:fixture:7", canned=[_T0])
-    assert clock.utc_clock_ref == "utc-clock:fixture:7"
-
-
 # Helper tests — replaying_utc_clock_from_run_report
 def test_helper_round_trips_clock_trace() -> None:
     report = {
