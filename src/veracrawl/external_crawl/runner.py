@@ -246,6 +246,11 @@ class ExternalCrawlRunner:
         self._obs_seq = 0
         self._original_plan_request: PlanRequest | None = None
         self._clock_trace: list[str] = []
+        self._fetch_count = 0
+        self._replan_done = False
+        self._plan_decision_2: PlanDecision | None = None
+        self._observation_snapshot_ref: str | None = None
+        self._observation_feedback_ref: str | None = None
 
     def _s6_active(self) -> bool:
         return (
@@ -299,6 +304,61 @@ class ExternalCrawlRunner:
                 status_code=hop.status_code,
                 observed_at=self._tick_utc_clock(),
             ))
+
+    def _maybe_replan(self) -> bool:
+        """Trigger the s6 single replan on first frontier-empty after >=1 fetch.
+
+        Returns True when this call actually performed the replan
+        (caller continues the loop); False otherwise (caller breaks).
+        """
+        if (
+            self._replan_done
+            or not self._s6_active()
+            or self._fetch_count < 1
+            or self._feedback_aware_planner_factory is None
+        ):
+            return False
+        assert self._graph_observer is not None
+        assert self._original_plan_request is not None
+        snap = self._graph_observer.snapshot(
+            id=f"snap:{self._spec.id}:1",
+            snapshot_at=self._tick_utc_clock(),
+        )
+        fb = derive_planner_observation_feedback(
+            id=f"fb:{self._spec.id}:1",
+            run_ref=self._original_plan_request.run_ref,
+            snapshot=snap,
+        )
+        req2 = self._original_plan_request.model_copy(update={
+            "id": f"plan-req:{self._spec.id}:2",
+            "observed_state_refs": [
+                *self._original_plan_request.observed_state_refs, fb.id,
+            ],
+        })
+        planner2 = self._feedback_aware_planner_factory(fb)
+        decision2 = planner2.plan(req2)
+        self._plan_decision_2 = decision2
+        self._observation_snapshot_ref = snap.id
+        self._observation_feedback_ref = fb.id
+        # Frontier dedup is authoritative — re-enqueuing an already-
+        # admitted URL returns admitted=False, so we skip the
+        # url_observed record in that case.
+        sorted_seeds = sorted(
+            enumerate(decision2.planned_seeds),
+            key=lambda iv: (-iv[1].priority_score, iv[0]),
+        )
+        for _, seed in sorted_seeds:
+            outcome_enqueue = self._frontier.enqueue(
+                seed.canonical_url, depth=0, parent_canonical_url=None,
+            )
+            if outcome_enqueue.admitted and outcome_enqueue.canonical_url:
+                self._record_url_observed(
+                    canonical_url=outcome_enqueue.canonical_url,
+                    depth=0, parent_canonical_url=None,
+                    source_ref="frontier-admit:replan-seed",
+                )
+        self._replan_done = True
+        return True
 
     def _record_page_structure_observed(
         self, *, page_canonical_url: str, discovered_link_count: int,
@@ -397,6 +457,8 @@ class ExternalCrawlRunner:
                     break
                 item = self._frontier.pop()
                 if item is None:
+                    if self._maybe_replan():
+                        continue
                     if self._frontier.budget_exhausted():
                         stop_reason = "budget_exhausted"
                     break
@@ -414,6 +476,7 @@ class ExternalCrawlRunner:
                     continue
 
                 self._frontier.mark_fetched(item.canonical_url)
+                self._fetch_count += 1
                 self._record_redirect_observed(fetch_outcome)
                 self._write_redirect_hops(
                     item.canonical_url, fetch_outcome, redirects_path
@@ -519,19 +582,40 @@ class ExternalCrawlRunner:
                 d.extraction_strategy_refs
             )
         # s6 keyed-always fields. In legacy / s3 mode these stay None
-        # (and replan_invoked False) so the JSON shape is stable; step 4
-        # will populate them when the s6 replan path lands.
-        report["plan_decision_2_ref"] = None
-        report["plan_decision_2_replay_refs"] = None
-        report["plan_decision_2_planned_seed_order"] = None
-        report["plan_decision_2_adapter_priors"] = None
-        report["plan_decision_2_frontier_priority_hints"] = None
-        report["plan_decision_2_extraction_strategy_refs"] = None
-        report["observation_snapshot_ref"] = None
-        report["observation_feedback_ref"] = None
+        # (and replan_invoked False) so the JSON shape is stable; in s6
+        # mode they are populated when the replan path fires.
+        d2 = self._plan_decision_2
+        if d2 is not None:
+            sorted_seeds_2 = sorted(
+                enumerate(d2.planned_seeds),
+                key=lambda iv: (-iv[1].priority_score, iv[0]),
+            )
+            report["plan_decision_2_ref"] = d2.id
+            report["plan_decision_2_replay_refs"] = list(d2.replay_refs)
+            report["plan_decision_2_planned_seed_order"] = [
+                s.canonical_url for _, s in sorted_seeds_2
+            ]
+            report["plan_decision_2_adapter_priors"] = [
+                p.model_dump(mode="json") for p in d2.adapter_priors
+            ]
+            report["plan_decision_2_frontier_priority_hints"] = [
+                h.model_dump(mode="json") for h in d2.frontier_priority_hints
+            ]
+            report["plan_decision_2_extraction_strategy_refs"] = list(
+                d2.extraction_strategy_refs,
+            )
+        else:
+            report["plan_decision_2_ref"] = None
+            report["plan_decision_2_replay_refs"] = None
+            report["plan_decision_2_planned_seed_order"] = None
+            report["plan_decision_2_adapter_priors"] = None
+            report["plan_decision_2_frontier_priority_hints"] = None
+            report["plan_decision_2_extraction_strategy_refs"] = None
+        report["observation_snapshot_ref"] = self._observation_snapshot_ref
+        report["observation_feedback_ref"] = self._observation_feedback_ref
         report["utc_clock_ref"] = self._utc_clock_ref
         report["clock_trace"] = list(self._clock_trace) if self._clock_trace else None
-        report["replan_invoked"] = False
+        report["replan_invoked"] = self._replan_done
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
         )

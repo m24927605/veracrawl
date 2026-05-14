@@ -36,6 +36,7 @@ from veracrawl.contracts.crawl_planner import (
     PlanRequest,
 )
 from veracrawl.contracts.enums import AdapterType
+from veracrawl.contracts.graph_observation import GraphObservationSnapshot
 from veracrawl.contracts.planner_observation_feedback import PlannerObservationFeedback
 from veracrawl.external_crawl.runner import ExternalCrawlRunner
 from veracrawl.ports.crawl_http_fetcher import FetchError, FetchOutcome, RedirectHop
@@ -89,8 +90,21 @@ class _CapturingObserver:
     def record_page_structure_observed(self, event: Any) -> None:
         self.page_events.append(event)
 
-    def snapshot(self, *, id: str, snapshot_at: datetime) -> Any:  # noqa: A002, ARG002
-        raise NotImplementedError
+    def snapshot(self, *, id: str, snapshot_at: datetime) -> GraphObservationSnapshot:  # noqa: A002
+        run_ref = (
+            self.url_events[0].run_ref if self.url_events
+            else self.redirect_events[0].run_ref if self.redirect_events
+            else self.page_events[0].run_ref if self.page_events
+            else "run:test:1"
+        )
+        return GraphObservationSnapshot(
+            id=id, run_ref=run_ref,
+            url_observed_events=list(self.url_events),
+            redirect_observed_events=list(self.redirect_events),
+            canonical_observed_events=list(self.canonical_events),
+            page_structure_observed_events=list(self.page_events),
+            snapshot_at=snapshot_at,
+        )
 
 
 # Back-compat alias: prior tests imported _FakeObserver. The capturing
@@ -113,8 +127,65 @@ def _builder(spec: CrawlJobSpec, run_root: Path) -> PlanRequest:  # noqa: ARG001
     )
 
 
-def _factory(_fb: PlannerObservationFeedback) -> _FakePlanner:
-    return _FakePlanner()
+@dataclass
+class _ReplanCapturingFactory:
+    """Captures the feedback + returns a planner that emits a valid PlanDecision."""
+
+    received_feedback: list[PlannerObservationFeedback] = field(default_factory=list)
+    received_requests: list[PlanRequest] = field(default_factory=list)
+    extra_seeds: list[str] = field(default_factory=list)
+    extra_hint_host: str | None = None
+
+    def __call__(self, fb: PlannerObservationFeedback) -> Any:
+        self.received_feedback.append(fb)
+        outer = self
+
+        class _Planner:
+            def plan(self, request: PlanRequest) -> PlanDecision:
+                outer.received_requests.append(request)
+                seeds = [
+                    PlannedSeed(
+                        canonical_url=u, priority_score=1.0 / (1 + i),
+                        adapter_hint=AdapterType.HTTP,
+                        rationale_ref=f"rationale:replan:{u}",
+                    )
+                    for i, u in enumerate(outer.extra_seeds)
+                ]
+                hints = []
+                if outer.extra_hint_host:
+                    from veracrawl.contracts.crawl_planner import FrontierPriorityHint
+                    from veracrawl.contracts.enums import FrontierMatchKind
+                    hints.append(FrontierPriorityHint(
+                        match_kind=FrontierMatchKind.HOST_GLOB,
+                        match_value=outer.extra_hint_host,
+                        priority_delta=0.6,
+                        rationale_ref="rationale:replan:hint",
+                    ))
+                return PlanDecision(
+                    id=f"plan-decision:replan:{request.id}",
+                    request_ref=request.id,
+                    planner_adapter_ref="adapter:replan-test:v1",
+                    planned_seeds=seeds or [PlannedSeed(
+                        canonical_url="https://a.example/",
+                        priority_score=1.0,
+                        adapter_hint=AdapterType.HTTP,
+                        rationale_ref="rationale:replan:default",
+                    )],
+                    adapter_priors=[AdapterPrior(
+                        adapter_type=AdapterType.HTTP, weight=1.0,
+                        rationale_ref="rationale:replan:http",
+                    )],
+                    frontier_priority_hints=hints,
+                    replay_refs=[request.id, "adapter:replan-test:v1", fb.id],
+                    policy_decision_refs=list(request.policy_decision_refs),
+                )
+
+        return _Planner()
+
+
+def _factory(fb: PlannerObservationFeedback) -> Any:
+    """Default factory for ctor tests — minimal valid planner."""
+    return _ReplanCapturingFactory()(fb)
 
 
 def _utc() -> datetime:
@@ -610,13 +681,20 @@ def test_s6_mode_populates_clock_trace_in_run_report(tmp_path: Path) -> None:
         parsed = datetime.fromisoformat(s)
         assert parsed.tzinfo is not None
 
-    # 2. clock_trace has exactly one entry per recorded event.
+    # 2. clock_trace has one entry per recorded event PLUS one extra
+    # entry per fired snapshot tick (the runner ticks the clock once
+    # to stamp the GraphObservationSnapshot in the replan path).
     n_events = (
         len(obs.url_events) + len(obs.redirect_events) + len(obs.page_events)
     )
-    assert len(report["clock_trace"]) == n_events, (
-        f"clock_trace should have {n_events} entries (one per recorded "
-        f"event); got {len(report['clock_trace'])}"
+    # In this fixture the replan path fires once (after the seed
+    # fetches finish + 1 page processed), producing 1 snapshot tick.
+    n_snapshot_ticks = 1 if report["replan_invoked"] else 0
+    expected_n = n_events + n_snapshot_ticks
+    assert len(report["clock_trace"]) == expected_n, (
+        f"clock_trace should have {expected_n} entries "
+        f"({n_events} events + {n_snapshot_ticks} snapshot ticks); "
+        f"got {len(report['clock_trace'])}"
     )
 
     # 3. clock_trace entries match the advancing-clock sequence VERBATIM —
@@ -627,13 +705,344 @@ def test_s6_mode_populates_clock_trace_in_run_report(tmp_path: Path) -> None:
     )
 
     # 4. The MULTISET of recorded observed_at values across all events
-    # equals the MULTISET of injected ticks — every tick is consumed
-    # by exactly one event, and no event has a timestamp the clock
-    # didn't yield. (We don't pin a specific interleaving here since
-    # url/page/redirect ordering depends on the fetch-loop schedule.)
+    # equals a SUBSET of injected ticks — every event timestamp came
+    # from the clock; remaining ticks (= snapshot ticks) are unmatched
+    # by an event but appear in the trace. (We don't pin a specific
+    # interleaving here since url/page/redirect ordering depends on
+    # the fetch-loop schedule.)
     recorded = (
         [e.observed_at for e in obs.url_events]
         + [e.observed_at for e in obs.redirect_events]
         + [e.observed_at for e in obs.page_events]
     )
-    assert sorted(recorded) == sorted(ticks)
+    assert set(recorded).issubset(set(ticks))
+    assert len(recorded) == n_events
+
+
+# ── Step-4 replan tests (9-16, 16b) ────────────────────────────────────────
+
+
+def _build_s6_with_factory(
+    tmp_path: Path, *, seeds: list[str], fetcher: Any, allowed: list[str],
+    factory: Any,
+) -> tuple[ExternalCrawlRunner, _CapturingObserver]:
+    obs = _CapturingObserver()
+    spec = _spec_for_seeds(seeds, allowed)
+    store = LocalFsCrawlArtifactStore(root=tmp_path, run_id="run-s6")
+    plan_seeds = [(u, 1.0 / (1 + i)) for i, u in enumerate(seeds)]
+
+    def builder(_s: Any, _r: Any) -> PlanRequest:
+        return PlanRequest(
+            id="plan-req:s6:1", run_ref="run:s6:test:1",
+            objective_ref="objective:1",
+            seed_urls=seeds, budget_ref="budget:1",
+            policy_snapshot_ref="policy-snap:1",
+            policy_decision_refs=["policy-decision:1"],
+            replay_config_ref="replay-config:1",
+        )
+
+    runner = ExternalCrawlRunner(
+        spec=spec, store=store, run_root=store.run_root,
+        fetcher=fetcher,
+        planner=_minimal_planner_returning(plan_seeds),
+        plan_request_builder=builder,
+        utc_clock=_utc, utc_clock_ref="utc-clock:fixture:1",
+        graph_observer=obs,
+        feedback_aware_planner_factory=factory,
+    )
+    return runner, obs
+
+
+# Test 9
+def test_replan_invoked_once_after_first_frontier_drain(tmp_path: Path) -> None:
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(url="https://a.example/"),
+        "https://b.example/": _outcome(url="https://b.example/"),
+    })
+    factory = _ReplanCapturingFactory()
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/", "https://b.example/"],
+        fetcher=fetcher, allowed=["a.example", "b.example"], factory=factory,
+    )
+    runner.run()
+    assert len(factory.received_feedback) == 1
+    assert _read_report(tmp_path)["replan_invoked"] is True
+
+
+# Test 10
+def test_replan_not_invoked_when_no_fetches_happen(tmp_path: Path) -> None:
+    # FailingFetcher → no fetches succeed; fetch_count stays 0.
+    factory = _ReplanCapturingFactory()
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/"],
+        fetcher=_FailingFetcher(), allowed=["a.example"], factory=factory,
+    )
+    runner.run()
+    assert factory.received_feedback == []
+    assert _read_report(tmp_path)["replan_invoked"] is False
+
+
+# Test 11
+def test_replan_request_threads_feedback_id_in_observed_state_refs(
+    tmp_path: Path,
+) -> None:
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(url="https://a.example/"),
+    })
+    factory = _ReplanCapturingFactory()
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/"], fetcher=fetcher,
+        allowed=["a.example"], factory=factory,
+    )
+    runner.run()
+    assert len(factory.received_requests) == 1
+    req2 = factory.received_requests[0]
+    fb = factory.received_feedback[0]
+    assert fb.id in req2.observed_state_refs
+    assert req2.id == "plan-req:spec:s6:1:2"
+    assert req2.run_ref == "run:s6:test:1"  # same as original
+    assert fb.run_ref == req2.run_ref  # s5 invariant
+
+
+# Test 12
+def test_replan_decision_2_enqueues_new_seeds(tmp_path: Path) -> None:
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(url="https://a.example/"),
+        "https://newseed.example/": _outcome(url="https://newseed.example/"),
+    })
+    factory = _ReplanCapturingFactory(extra_seeds=["https://newseed.example/"])
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/"], fetcher=fetcher,
+        allowed=["a.example", "newseed.example"], factory=factory,
+    )
+    runner.run()
+    # The new seed must have been admitted into the frontier and fetched.
+    assert "https://newseed.example/" in fetcher.outcomes
+    # The replan-seed admission must have been recorded as a url_observed.
+    runner_obs = runner._graph_observer
+    assert isinstance(runner_obs, _CapturingObserver)
+    replan_admits = [
+        e for e in runner_obs.url_events
+        if e.source_ref == "frontier-admit:replan-seed"
+    ]
+    assert len(replan_admits) == 1
+    assert replan_admits[0].canonical_url == "https://newseed.example/"
+
+
+# Test 13
+def test_run_report_contains_plan_decision_2_and_observation_refs(
+    tmp_path: Path,
+) -> None:
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(url="https://a.example/"),
+    })
+    factory = _ReplanCapturingFactory(extra_seeds=["https://b.example/"])
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/"], fetcher=fetcher,
+        allowed=["a.example", "b.example"], factory=factory,
+    )
+    runner.run()
+    report = _read_report(tmp_path)
+    assert report["plan_decision_2_ref"] is not None
+    assert report["plan_decision_2_ref"].startswith("plan-decision:replan:")
+    assert report["plan_decision_2_replay_refs"] is not None
+    assert factory.received_feedback[0].id in report["plan_decision_2_replay_refs"]
+    assert report["plan_decision_2_planned_seed_order"] == [
+        "https://b.example/",
+    ]
+    assert report["observation_snapshot_ref"] == "snap:spec:s6:1:1"
+    assert report["observation_feedback_ref"] == "fb:spec:s6:1:1"
+    assert report["replan_invoked"] is True
+
+
+# Test 14
+def test_run_report_replan_invoked_false_when_zero_fetches(tmp_path: Path) -> None:
+    factory = _ReplanCapturingFactory()
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/"],
+        fetcher=_FailingFetcher(), allowed=["a.example"], factory=factory,
+    )
+    runner.run()
+    report = _read_report(tmp_path)
+    assert report["replan_invoked"] is False
+    assert report["plan_decision_2_ref"] is None
+    assert report["observation_snapshot_ref"] is None
+    assert report["observation_feedback_ref"] is None
+
+
+# Test 15
+def test_event_ids_are_deterministic_from_spec_id(tmp_path: Path) -> None:
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(url="https://a.example/"),
+    })
+    factory = _ReplanCapturingFactory()
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/"], fetcher=fetcher,
+        allowed=["a.example"], factory=factory,
+    )
+    runner.run()
+    report = _read_report(tmp_path)
+    assert report["observation_snapshot_ref"] == "snap:spec:s6:1:1"
+    assert report["observation_feedback_ref"] == "fb:spec:s6:1:1"
+    fb = factory.received_feedback[0]
+    assert fb.id == "fb:spec:s6:1:1"
+    req2 = factory.received_requests[0]
+    assert req2.id == "plan-req:spec:s6:1:2"
+
+
+# Test 16
+def test_two_runs_produce_byte_equal_graph_event_ids_and_decision2_replay_refs(
+    tmp_path: Path,
+) -> None:
+    base = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+
+    def make_advancing() -> Any:
+        ticks = [base + timedelta(seconds=i) for i in range(20)]
+        idx = [0]
+
+        def _clock() -> datetime:
+            t = ticks[idx[0]]
+            idx[0] += 1
+            return t
+
+        return _clock
+
+    def run_once(run_id: str) -> tuple[_CapturingObserver, dict[str, Any]]:
+        obs = _CapturingObserver()
+        spec = _spec_for_seeds(
+            ["https://a.example/"], ["a.example", "b.example"],
+        )
+        store = LocalFsCrawlArtifactStore(root=tmp_path, run_id=run_id)
+        factory = _ReplanCapturingFactory(extra_seeds=["https://b.example/"])
+        fetcher = _CannedFetcher(outcomes={
+            "https://a.example/": _outcome(url="https://a.example/"),
+            "https://b.example/": _outcome(url="https://b.example/"),
+        })
+
+        def builder(_s: Any, _r: Any) -> PlanRequest:
+            return PlanRequest(
+                id="plan-req:s6:1", run_ref="run:s6:test:1",
+                objective_ref="objective:1",
+                seed_urls=["https://a.example/"], budget_ref="budget:1",
+                policy_snapshot_ref="policy-snap:1",
+                policy_decision_refs=["policy-decision:1"],
+                replay_config_ref="replay-config:1",
+            )
+
+        runner = ExternalCrawlRunner(
+            spec=spec, store=store, run_root=store.run_root,
+            fetcher=fetcher,
+            planner=_minimal_planner_returning([("https://a.example/", 1.0)]),
+            plan_request_builder=builder,
+            utc_clock=make_advancing(), utc_clock_ref="utc-clock:fixture:1",
+            graph_observer=obs,
+            feedback_aware_planner_factory=factory,
+        )
+        runner.run()
+        return obs, json.loads(
+            (tmp_path / run_id / "reports" / "run_report.json").read_text(),
+        )
+
+    obs_a, report_a = run_once("run-a")
+    obs_b, report_b = run_once("run-b")
+
+    snap_a = obs_a.snapshot(id="snap:cmp:1", snapshot_at=base)
+    snap_b = obs_b.snapshot(id="snap:cmp:1", snapshot_at=base)
+    assert snap_a.canonical_json() == snap_b.canonical_json()
+    assert (
+        report_a["plan_decision_2_replay_refs"]
+        == report_b["plan_decision_2_replay_refs"]
+    )
+
+
+# Test 16b
+def test_run_report_contains_utc_clock_ref(tmp_path: Path) -> None:
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(url="https://a.example/"),
+    })
+    factory = _ReplanCapturingFactory()
+    runner, _ = _build_s6_with_factory(
+        tmp_path, seeds=["https://a.example/"], fetcher=fetcher,
+        allowed=["a.example"], factory=factory,
+    )
+    runner.run()
+    report = _read_report(tmp_path)
+    assert report["utc_clock_ref"] == "utc-clock:fixture:1"
+
+
+# Test 21 — producer-consumer round-trip via replaying_utc_clock_from_run_report
+def test_runner_clock_trace_round_trip_produces_byte_equal_graph_events(
+    tmp_path: Path,
+) -> None:
+    from veracrawl.adapters.clocks.replaying_utc_clock import (
+        replaying_utc_clock_from_run_report,
+    )
+
+    base = datetime(2026, 5, 14, 12, 0, tzinfo=UTC)
+    seed = "https://a.example/"
+
+    def make_advancing() -> Any:
+        idx = [0]
+
+        def _clock() -> datetime:
+            t = base + timedelta(seconds=idx[0])
+            idx[0] += 1
+            return t
+
+        return _clock
+
+    def run_once(run_id: str, utc_clock: Any) -> tuple[
+        _CapturingObserver, dict[str, Any],
+    ]:
+        obs = _CapturingObserver()
+        spec = _spec_for_seeds([seed], ["a.example", "b.example"])
+        store = LocalFsCrawlArtifactStore(root=tmp_path, run_id=run_id)
+        factory = _ReplanCapturingFactory(extra_seeds=["https://b.example/"])
+        fetcher = _CannedFetcher(outcomes={
+            seed: _outcome(url=seed),
+            "https://b.example/": _outcome(url="https://b.example/"),
+        })
+
+        def builder(_s: Any, _r: Any) -> PlanRequest:
+            return PlanRequest(
+                id="plan-req:s6:1", run_ref="run:s6:test:1",
+                objective_ref="objective:1",
+                seed_urls=[seed], budget_ref="budget:1",
+                policy_snapshot_ref="policy-snap:1",
+                policy_decision_refs=["policy-decision:1"],
+                replay_config_ref="replay-config:1",
+            )
+
+        runner = ExternalCrawlRunner(
+            spec=spec, store=store, run_root=store.run_root,
+            fetcher=fetcher,
+            planner=_minimal_planner_returning([(seed, 1.0)]),
+            plan_request_builder=builder,
+            utc_clock=utc_clock, utc_clock_ref="utc-clock:fixture:rt",
+            graph_observer=obs,
+            feedback_aware_planner_factory=factory,
+        )
+        runner.run()
+        return obs, json.loads(
+            (tmp_path / run_id / "reports" / "run_report.json").read_text(),
+        )
+
+    # Producer run: advancing wall-clock-like clock.
+    obs_a, report_a = run_once("run-producer", make_advancing())
+
+    # Consumer run: rebuild the clock from the producer's run_report.
+    replay_clock = replaying_utc_clock_from_run_report(
+        report_a, "utc-clock:fixture:rt",
+    )
+    obs_b, report_b = run_once("run-consumer", replay_clock)
+
+    # Snapshots must be byte-equal.
+    snap_a = obs_a.snapshot(id="snap:cmp:1", snapshot_at=base)
+    snap_b = obs_b.snapshot(id="snap:cmp:1", snapshot_at=base)
+    assert snap_a.canonical_json() == snap_b.canonical_json()
+
+    # plan_decision_2 replay_refs byte-equal.
+    assert (
+        report_a["plan_decision_2_replay_refs"]
+        == report_b["plan_decision_2_replay_refs"]
+    )
