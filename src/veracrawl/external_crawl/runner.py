@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from veracrawl.contracts.common import Ref
 from veracrawl.contracts.crawl_job import (
     CrawlJobSpec,
     ExtractionMode,
@@ -42,6 +43,7 @@ from veracrawl.contracts.crawl_job import (
 )
 from veracrawl.contracts.crawl_planner import PlanDecision, PlanRequest
 from veracrawl.contracts.enums import AdapterType, RouteClass
+from veracrawl.contracts.planner_observation_feedback import PlannerObservationFeedback
 from veracrawl.external_crawl.frontier import (
     ExternalCrawlFrontier,
     FrontierEvent,
@@ -71,6 +73,7 @@ from veracrawl.ports.extractor import (
     ExtractionRequest,
     ExtractorPort,
 )
+from veracrawl.ports.graph_observation import GraphObservationPort
 from veracrawl.ports.pdf_text_extractor import PdfTextExtractorPort
 from veracrawl.ports.rate_limiter import (
     NoopRateLimiter,
@@ -160,14 +163,50 @@ class ExternalCrawlRunner:
         clock: Callable[[], float] = time.monotonic,
         planner: CrawlPlannerPort | None = None,
         plan_request_builder: Callable[[CrawlJobSpec, Path], PlanRequest] | None = None,
+        utc_clock: Callable[[], datetime] | None = None,
+        utc_clock_ref: Ref | None = None,
+        graph_observer: GraphObservationPort | None = None,
+        feedback_aware_planner_factory: Callable[
+            [PlannerObservationFeedback], CrawlPlannerPort,
+        ] | None = None,
     ) -> None:
-        if (planner is None) != (plan_request_builder is None):
+        s3_set = planner is not None and plan_request_builder is not None
+        s3_none = planner is None and plan_request_builder is None
+        s6_set = (
+            utc_clock is not None
+            and utc_clock_ref is not None
+            and graph_observer is not None
+            and feedback_aware_planner_factory is not None
+        )
+        s6_none = (
+            utc_clock is None
+            and utc_clock_ref is None
+            and graph_observer is None
+            and feedback_aware_planner_factory is None
+        )
+        if not ((s3_set or s3_none) and (s6_set or s6_none)):
             raise ValueError(
-                "planner and plan_request_builder must both be provided or both omitted "
-                "(no synthetic default builder)"
+                "ExternalCrawlRunner: partial s3/s6 ctor args. "
+                "Modes: legacy (all None) | s3 (planner + plan_request_builder) | "
+                "s6 (s3 pair + utc_clock + utc_clock_ref + graph_observer + "
+                "feedback_aware_planner_factory).",
+            )
+        if s6_set and not s3_set:
+            raise ValueError(
+                "ExternalCrawlRunner: s6 args (utc_clock + utc_clock_ref + "
+                "graph_observer + feedback_aware_planner_factory) require the s3 pair "
+                "(planner + plan_request_builder) to also be set.",
+            )
+        if utc_clock_ref is not None and not utc_clock_ref.strip():
+            raise ValueError(
+                "ExternalCrawlRunner: utc_clock_ref must be non-blank when set",
             )
         self._planner = planner
         self._plan_request_builder = plan_request_builder
+        self._utc_clock = utc_clock
+        self._utc_clock_ref = utc_clock_ref
+        self._graph_observer = graph_observer
+        self._feedback_aware_planner_factory = feedback_aware_planner_factory
         self._plan_decision: PlanDecision | None = None
         self._spec = spec
         self._store = store
