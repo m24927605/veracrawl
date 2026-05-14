@@ -1051,3 +1051,58 @@ def test_runner_clock_trace_round_trip_produces_byte_equal_graph_events(
         report_a["plan_decision_2_replay_refs"]
         == report_b["plan_decision_2_replay_refs"]
     )
+
+
+# Test 9b (step-4 iter-2 task-review follow-up — distinguish budget-paused
+# frontier from genuinely empty frontier)
+def test_replan_not_invoked_when_budget_exhausted_with_queued_items(
+    tmp_path: Path,
+) -> None:
+    """Budget exhaustion ends the run; replan is NOT triggered.
+
+    Even when fetch_count >= 1 (so the replan-eligibility precondition
+    is met), if `frontier.pop()` returns None because the page budget
+    is exhausted, the runner must stop with stop_reason="budget_exhausted"
+    rather than performing a replan that wouldn't be admitted anyway.
+    """
+    fetcher = _CannedFetcher(outcomes={
+        "https://a.example/": _outcome(
+            url="https://a.example/",
+            body=b'<html><body><a href="https://a.example/x">x</a></body></html>',
+        ),
+        "https://a.example/x": _outcome(url="https://a.example/x"),
+    })
+    obs = _CapturingObserver()
+    spec = _spec_for_seeds(["https://a.example/"], ["a.example"])
+    # max_pages=1 → after fetching the seed, the budget is exhausted
+    # even though /x is queued.
+    spec = spec.model_copy(update={"max_pages": 1, "max_depth": 2})
+    store = LocalFsCrawlArtifactStore(root=tmp_path, run_id="run-s6")
+    factory = _ReplanCapturingFactory()
+
+    def builder(_s: Any, _r: Any) -> PlanRequest:
+        return PlanRequest(
+            id="plan-req:s6:1", run_ref="run:s6:test:1",
+            objective_ref="objective:1",
+            seed_urls=["https://a.example/"], budget_ref="budget:1",
+            policy_snapshot_ref="policy-snap:1",
+            policy_decision_refs=["policy-decision:1"],
+            replay_config_ref="replay-config:1",
+        )
+
+    runner = ExternalCrawlRunner(
+        spec=spec, store=store, run_root=store.run_root,
+        fetcher=fetcher,
+        planner=_minimal_planner_returning([("https://a.example/", 1.0)]),
+        plan_request_builder=builder,
+        utc_clock=_utc, utc_clock_ref="utc-clock:test",
+        graph_observer=obs,
+        feedback_aware_planner_factory=factory,
+    )
+    runner.run()
+    # Replan must NOT have fired.
+    assert factory.received_feedback == [], (
+        "replan must not fire on budget exhaustion"
+    )
+    report = _read_report(tmp_path)
+    assert report["replan_invoked"] is False

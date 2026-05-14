@@ -543,6 +543,16 @@ Red-first list.
    spec with two seeds + observer wired → factory called
    exactly once with a `PlannerObservationFeedback`
    value; `replan_invoked == True`.
+9b. `test_replan_not_invoked_when_budget_exhausted_with_queued_items`
+   *(step-4 iter-2 task-review follow-up)* — distinguishes
+   the budget-paused frontier from a genuinely empty
+   frontier. `max_pages=1` + a seed that links to one
+   child → after fetching the seed the budget is
+   exhausted while the child is still queued. The runner
+   must stop with `stop_reason="budget_exhausted"` and
+   NOT trigger a replan (any new seeds couldn't be
+   admitted anyway). Asserts `factory.received_feedback
+   == []` and `run_report["replan_invoked"] is False`.
 10. `test_replan_not_invoked_when_no_fetches_happen` —
     all seeds robots-denied or otherwise unfetched → no
     `record_*` events with fetch context; factory NOT
@@ -701,7 +711,7 @@ Red-first list.
 ### Green path
 
 Each red test gets a minimal implementation. One purpose
-per commit. After all 35 tests pass, refactor only obvious
+per commit. After all 36 tests pass, refactor only obvious
 duplication.
 
 ## Acceptance Criteria
@@ -710,7 +720,7 @@ Mechanically verifiable.
 
 1. **Pytest gate** —
    `pytest tests/unit/external_crawl/test_runner_wires_graph_observation.py tests/unit/adapters/clocks/test_replaying_utc_clock.py tests/integration/test_runner_with_graph_observation_stub.py tests/contract/test_runner_graph_observation_import_boundaries.py -v`
-   exits 0 with **35** collected, **35** passed.
+   exits 0 with **36** collected, **36** passed.
    (Original v1: 18. v2 added: 1a, 19.
    v3 added: 4a, 4b, 4c.
    v4 added: 4d, 16b; test 16 reworked to the narrower
@@ -724,7 +734,14 @@ Mechanically verifiable.
    direct tests 20b/20c/20d.
    s6 step-3 iter-2 task-review follow-up: added test 8a
    `test_s6_mode_populates_clock_trace_in_run_report` to
-   pin the producer side of the clock-trace replay loop.)
+   pin the producer side of the clock-trace replay loop.
+   s6 step-4 iter-1 task-review follow-up: added test 8b
+   `test_s6_mode_accepts_full_arg_set` (s6 ctor happy-path
+   smoke).
+   s6 step-4 iter-2 task-review follow-up: added test 9b
+   `test_replan_not_invoked_when_budget_exhausted_with_queued_items`
+   distinguishing budget-paused frontier from genuinely
+   empty frontier.)
 2. **Existing suite regression-free** —
    `pytest tests/unit/external_crawl/ tests/integration/ -q`
    exits 0; no test that was passing before s6 begins
