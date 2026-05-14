@@ -7,6 +7,7 @@ trigger tests land in step 3 / step 4.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -103,21 +104,79 @@ def _build(tmp_path: Path, **kwargs: Any) -> ExternalCrawlRunner:
     )
 
 
+def _read_report(tmp_path: Path) -> dict[str, Any]:
+    return json.loads((tmp_path / "run-s6" / "reports" / "run_report.json").read_text())
+
+
 # Test 1
-def test_legacy_mode_accepts_no_s3_or_s6_args(tmp_path: Path) -> None:
+def test_legacy_mode_unchanged_by_s6(tmp_path: Path) -> None:
     runner = _build(tmp_path)
-    assert runner is not None
+    runner.run()
+    report = _read_report(tmp_path)
+    # No s6 mode keys with non-None values
+    for key in (
+        "plan_decision_2_ref", "plan_decision_2_replay_refs",
+        "plan_decision_2_planned_seed_order", "plan_decision_2_adapter_priors",
+        "plan_decision_2_frontier_priority_hints",
+        "plan_decision_2_extraction_strategy_refs",
+        "observation_snapshot_ref", "observation_feedback_ref",
+        "utc_clock_ref", "clock_trace",
+    ):
+        assert report.get(key) is None, f"legacy mode must leave {key} unset"
+    assert report.get("replan_invoked", False) is False
+    # And no s3 mode keys either
+    assert "plan_decision_ref" not in report
 
 
 # Test 1a
-def test_s3_pair_only_mode_accepts_s3_args_without_s6(tmp_path: Path) -> None:
-    runner = _build(tmp_path, planner=_FakePlanner(), plan_request_builder=_builder)
-    assert runner is not None
+def test_s3_pair_only_mode_unchanged_by_s6(tmp_path: Path) -> None:
+    fake_planner = _FakePlanner()
+    runner = _build(tmp_path, planner=fake_planner, plan_request_builder=_builder)
+    # FakePlanner.plan raises NotImplementedError; we use a real ValueError-raising
+    # planner setup so that the runner falls through the catch path. For this
+    # regression test, what matters is that no s6 keys are populated.
+    # Replace _FakePlanner with a planner that returns a minimal valid decision.
+    from veracrawl.contracts.crawl_planner import (
+        AdapterPrior,
+        PlanDecision,
+        PlannedSeed,
+    )
+
+    class _MinimalPlanner:
+        def plan(self, request: Any) -> PlanDecision:
+            return PlanDecision(
+                id="plan-decision:s3-only:1", request_ref=request.id,
+                planner_adapter_ref="adapter:test-minimal:v1",
+                planned_seeds=[PlannedSeed(
+                    canonical_url="https://a.example/", priority_score=1.0,
+                    adapter_hint=AdapterType.HTTP, rationale_ref="rationale:test",
+                )],
+                adapter_priors=[AdapterPrior(
+                    adapter_type=AdapterType.HTTP, weight=1.0,
+                    rationale_ref="rationale:test:http",
+                )],
+                replay_refs=[request.id, "adapter:test-minimal:v1"],
+                policy_decision_refs=["policy-decision:1"],
+            )
+
+    runner = _build(tmp_path, planner=_MinimalPlanner(), plan_request_builder=_builder)
+    runner.run()
+    report = _read_report(tmp_path)
+    # s3 keys present (plan ran)
+    assert report.get("plan_decision_ref") == "plan-decision:s3-only:1"
+    # s6 keys absent or None
+    for key in (
+        "plan_decision_2_ref", "plan_decision_2_replay_refs",
+        "observation_snapshot_ref", "observation_feedback_ref",
+        "utc_clock_ref", "clock_trace",
+    ):
+        assert report.get(key) is None, f"s3 mode must leave {key} unset"
+    assert report.get("replan_invoked", False) is False
 
 
 # Test 2: graph_observer set, factory + utc_clock + utc_clock_ref missing
 def test_partial_ctor_args_raise_value_error_observer_only(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="partial s3/s6 ctor args"):
+    with pytest.raises(ValueError, match=r"feedback_aware_planner_factory"):
         _build(
             tmp_path,
             planner=_FakePlanner(),
@@ -128,7 +187,7 @@ def test_partial_ctor_args_raise_value_error_observer_only(tmp_path: Path) -> No
 
 # Test 3: factory set, others missing
 def test_partial_ctor_args_raise_value_error_factory_only(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="partial s3/s6 ctor args"):
+    with pytest.raises(ValueError, match=r"graph_observer"):
         _build(
             tmp_path,
             planner=_FakePlanner(),
@@ -139,7 +198,7 @@ def test_partial_ctor_args_raise_value_error_factory_only(tmp_path: Path) -> Non
 
 # Test 4: observer + factory + utc_clock + utc_clock_ref set BUT s3 pair missing
 def test_partial_ctor_args_raise_value_error_observer_without_s3_pair(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="require the s3 pair"):
+    with pytest.raises(ValueError, match=r"require the s3 pair"):
         _build(
             tmp_path,
             utc_clock=_utc, utc_clock_ref="utc-clock:test",
@@ -150,7 +209,10 @@ def test_partial_ctor_args_raise_value_error_observer_without_s3_pair(tmp_path: 
 
 # Test 4a: utc_clock set, others missing (with s3 pair set)
 def test_partial_ctor_args_raise_value_error_utc_clock_only(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="partial s3/s6 ctor args"):
+    with pytest.raises(
+        ValueError,
+        match=r"utc_clock.*graph_observer.*feedback_aware_planner_factory",
+    ):
         _build(
             tmp_path,
             planner=_FakePlanner(), plan_request_builder=_builder,
@@ -162,7 +224,7 @@ def test_partial_ctor_args_raise_value_error_utc_clock_only(tmp_path: Path) -> N
 def test_partial_ctor_args_raise_value_error_observer_factory_without_utc_clock(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="partial s3/s6 ctor args"):
+    with pytest.raises(ValueError, match=r"utc_clock"):
         _build(
             tmp_path,
             planner=_FakePlanner(), plan_request_builder=_builder,
@@ -175,7 +237,7 @@ def test_partial_ctor_args_raise_value_error_observer_factory_without_utc_clock(
 def test_partial_ctor_args_raise_value_error_utc_clock_observer_without_factory(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="partial s3/s6 ctor args"):
+    with pytest.raises(ValueError, match=r"feedback_aware_planner_factory"):
         _build(
             tmp_path,
             planner=_FakePlanner(), plan_request_builder=_builder,
@@ -212,7 +274,7 @@ def test_partial_ctor_args_raise_value_error_utc_clock_ref_blank_or_missing(
 def test_partial_ctor_args_raise_value_error_utc_clock_ref_without_utc_clock(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="partial s3/s6 ctor args"):
+    with pytest.raises(ValueError, match=r"utc_clock"):
         _build(
             tmp_path,
             planner=_FakePlanner(), plan_request_builder=_builder,

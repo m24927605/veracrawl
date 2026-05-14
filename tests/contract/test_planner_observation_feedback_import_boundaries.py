@@ -163,12 +163,16 @@ def test_adapters_planning_v2_never_touches_snapshot_attribute() -> None:
                     )
 
 
-# Test 23
-def test_external_crawl_runner_does_not_import_planner_observation_feedback() -> None:
+# Test 23 — superseded by s6 runner import-boundary tests
+# (tests/contract/test_runner_graph_observation_import_boundaries.py).
+# The s5 guard `runner does not import planner_observation_feedback`
+# was a "no wiring yet" check; s6 explicitly wires the import.
+# DeterministicCrawlPlannerV2 must still NOT be imported by the runner
+# (the s6 wiring goes through the feedback_aware_planner_factory closure,
+# not direct adapter import). Pin only that invariant here.
+def test_external_crawl_runner_does_not_import_deterministic_crawl_planner_v2() -> None:
     source = _RUNNER.read_text()
-    assert "planner_observation_feedback" not in source, (
-        "runner must not import planner_observation_feedback in s5 — wiring is s6"
-    )
     assert "DeterministicCrawlPlannerV2" not in source, (
-        "runner must not import DeterministicCrawlPlannerV2 in s5 — wiring is s6"
+        "runner must not import DeterministicCrawlPlannerV2 — wire it via "
+        "feedback_aware_planner_factory closure instead"
     )
