@@ -440,6 +440,26 @@ and verified to fail.
     VeraCrawlError)`. Pins the typed-recovery boundary so a future
     refactor cannot quietly redefine the error as a plain
     `Exception` and weaken the recovery surface.
+11a-ctor. `test_provider_trace_missing_error_constructs_with_domain_kwarg`
+    — *(s2 step-1 task-review iter 1 finding)*. The error mirrors
+    `PromptTemplateNotFoundError`: a single `provider_request_id`
+    kwarg. Construct
+    `ProviderTraceMissingError(provider_request_id="provider-request:test:1")`
+    and assert: `err.provider_request_id == "provider-request:test:1"`;
+    `"provider-request:test:1"` appears in `str(err)`;
+    `"raw_response_ref"` appears in `str(err)`. The original 11a
+    only verified subclassing — without this, a future regression
+    could reintroduce the unfriendly `ModelProviderError.__init__(
+    status_code, error_code, request_id)` shape without test
+    coverage.
+11b. `test_replay_lookup_miss_error_is_fatal_error_subclass_and_constructs`
+    — *(s2 step-1 task-review iter 1 finding)*. `ReplayLookupMissError`
+    has the same typed shape as `ProviderTraceMissingError`:
+    `issubclass(..., FatalError)`, `issubclass(..., VeraCrawlError)`,
+    constructs via `ReplayLookupMissError(provider_request_id=...)`,
+    stores the kwarg, includes it in `str(err)`. Asserted in one
+    test because the error is twin-shaped with
+    `ProviderTraceMissingError`.
 
 ### `tests/contract/test_llm_crawl_planner_contract_registry.py`
 
