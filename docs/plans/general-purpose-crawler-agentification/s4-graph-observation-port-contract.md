@@ -163,8 +163,11 @@ tests/contract/test_graph_observation_import_boundaries.py     # new — ≤  70
 tests/unit/adapters/graph/test_in_memory_graph_observer.py     # new — ≤ 170 LOC
 ```
 
-Behavior-LOC ceiling: 140 + 50 + 90 = **280 LOC** before tests
-+ additive registry-dict edits. Under the binding ≤ 300 LOC cap.
+Behavior-LOC ceiling: 160 + 50 + 90 = **300 LOC** before tests
++ additive registry-dict edits. At the binding ≤ 300 LOC cap
+after the iter-1 task-review bump of the contracts module
+budget 140 → 160 (current implementation: 155 + 48 + 71 =
+274 LOC).
 
 ### Data flow
 
