@@ -243,7 +243,7 @@ src/veracrawl/adapters/model_providers/replaying_model_provider.py  # new — �
 tests/contract/test_llm_crawl_planner_contracts.py             # new — ≤ 200 LOC
 tests/contract/test_llm_crawl_planner_contract_registry.py     # new — ≤  40 LOC
 tests/unit/adapters/planning/test_llm_crawl_planner.py         # new — ≤ 260 LOC
-tests/unit/adapters/model_providers/test_replaying_model_provider.py  # new — ≤  90 LOC  (iter-5 follow-up; bumped 80→90 after step-3 task-review iter 1 added tests 28a-28c)
+tests/unit/adapters/model_providers/test_replaying_model_provider.py  # new — ≤  90 LOC  (iter-5 follow-up; bumped 80→90 after step-3 task-review iter 2 added the valid `_canned_with_tool_calls` fixture helper for the iter-1 test 28b minor)
 ```
 
 Module touched (not created):
