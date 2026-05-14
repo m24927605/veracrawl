@@ -573,8 +573,9 @@ SNAPSHOT_AND_EVENT_TYPES = {
 ### Green path
 
 Each red test gets a minimal implementation. One purpose per
-commit. After all 40 tests pass (37 from v4 + 3 added in v6
-follow-up), refactor only obvious duplication.
+commit. After all 41 tests pass (37 from v4 + 3 added in v6
+follow-up + 1 from impl iter-1 task-review: 25a), refactor only
+obvious duplication.
 
 ## Acceptance Criteria
 
