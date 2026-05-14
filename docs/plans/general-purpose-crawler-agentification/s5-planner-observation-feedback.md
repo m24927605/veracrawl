@@ -188,7 +188,7 @@ src/veracrawl/contracts/planner_observation_feedback.py             # new — �
 src/veracrawl/adapters/planning/deterministic_crawl_planner_v2.py   # new — ≤ 160 LOC
 tests/contract/test_planner_observation_feedback_contracts.py       # new — ≤ 280 LOC
 tests/contract/test_planner_observation_feedback_contract_registry.py  # new — ≤  30 LOC
-tests/contract/test_planner_observation_feedback_import_boundaries.py  # new — ≤ 110 LOC
+tests/contract/test_planner_observation_feedback_import_boundaries.py  # new — ≤ 200 LOC  (impl: 174 LOC — boundary tests need an AST walker with parent tracking + 4 per-module name allowlists; budget bumped at impl time)
 tests/unit/adapters/planning/test_deterministic_crawl_planner_v2.py # new — ≤ 340 LOC
 ```
 
