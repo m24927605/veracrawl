@@ -156,6 +156,33 @@ def _contract(
 
 
 FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
+    # s2 of general-purpose-crawler-agentification: LLM-output contracts
+    # for the LlmCrawlPlanner adapter. See docs/plans/general-purpose-
+    # crawler-agentification/s2-llm-crawl-planner-adapter.md.
+    "LlmPlanProposal": _contract(
+        "LlmPlanProposal",
+        OwnerService.AGENTS,
+        "llm_crawl_planner",
+        tests=["tests/contract/test_llm_crawl_planner_contract_registry.py"],
+    ),
+    "LlmProposedSeed": _contract(
+        "LlmProposedSeed",
+        OwnerService.AGENTS,
+        "llm_crawl_planner",
+        tests=["tests/contract/test_llm_crawl_planner_contract_registry.py"],
+    ),
+    "LlmProposedAdapterPrior": _contract(
+        "LlmProposedAdapterPrior",
+        OwnerService.AGENTS,
+        "llm_crawl_planner",
+        tests=["tests/contract/test_llm_crawl_planner_contract_registry.py"],
+    ),
+    "LlmProposedFrontierPriorityHint": _contract(
+        "LlmProposedFrontierPriorityHint",
+        OwnerService.AGENTS,
+        "llm_crawl_planner",
+        tests=["tests/contract/test_llm_crawl_planner_contract_registry.py"],
+    ),
     # s1 of general-purpose-crawler-agentification: CrawlPlannerPort
     # contracts. See docs/plans/general-purpose-crawler-agentification/
     # s1-crawl-planner-port-contract.md.
