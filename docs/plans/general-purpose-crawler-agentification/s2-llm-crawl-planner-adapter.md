@@ -634,10 +634,18 @@ one test:
 
 25. `test_adapters_planning_llm_crawl_planner_imports_allowlist` —
     walks the LLM adapter AST and accepts only stdlib +
+    `pydantic` *(step-4 task-review iter 1 follow-up; the
+    adapter catches `ValidationError` from
+    `LlmPlanProposal.model_validate`)* +
     `veracrawl.contracts.*` + `veracrawl.ports.crawl_planner` +
     `veracrawl.ports.model_provider_v2` +
     `veracrawl.ports.prompt_registry` +
     `veracrawl.ports.token_budget`. Relative imports rejected.
+25a. `test_adapters_model_providers_replaying_model_provider_imports_allowlist`
+    — walks the replaying-adapter AST and accepts only stdlib +
+    `veracrawl.contracts.*` + `veracrawl.ports.model_provider_v2`.
+    (No `pydantic` — replaying adapter forwards canned
+    `ProviderResponse` instances without re-validating.)
 
 The existing s1 deterministic-adapter allowlist test stays
 tighter (no model-provider / prompt-registry / token-budget
@@ -646,7 +654,7 @@ imports allowed there).
 ### Green path
 
 Each red test gets a minimal implementation. One purpose per
-commit. After all 41 tests pass (counted as 14 + 2 + 18 + 6 + 1),
+commit. After all 42 tests pass (counted as 14 + 2 + 18 + 6 + 2),
 refactor to dedupe URL / match-value validators.
 
 ## Acceptance Criteria
@@ -660,7 +668,9 @@ Mechanically verifiable from a fresh checkout.
 
 2. **Pytest gate (import-boundary file)** —
    `pytest tests/contract/test_crawl_planner_import_boundaries.py -v`
-   exits 0 with **4** collected (s1's 3 plus the new test 25).
+   exits 0 with **5** collected (s1's 3 plus the new tests 25
+   and 25a — the LLM adapter allowlist and the replaying
+   adapter allowlist).
 
 3. **Contract registry** — Python one-liner verifying all four
    new entries (`LlmPlanProposal`, `LlmProposedSeed`,

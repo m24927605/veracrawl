@@ -321,20 +321,33 @@ def test_plan_planned_seed_fields_round_trip_from_proposal() -> None:
 
 
 # Test 16-hints — step-4 iter 1 finding: frontier_priority_hints projected.
+# Uses BOTH url_prefix AND host_glob fixtures so a hardcoded projection
+# that ignores match_kind cannot pass (step-4 iter 2 follow-up).
 def test_plan_frontier_priority_hints_round_trip_from_proposal() -> None:
+    from veracrawl.contracts.enums import FrontierMatchKind
     proposal = _valid_proposal()
     proposal["frontier_priority_hints"] = [
         {"match_kind": "url_prefix", "match_value": "https://a.example/",
          "priority_delta": 0.4},
+        {"match_kind": "host_glob", "match_value": "*.example",
+         "priority_delta": -0.2},
     ]
     adapter, _, _, _ = _planner(response=_canned_response(parsed_output=proposal))
     decision = adapter.plan(_request())
-    assert len(decision.frontier_priority_hints) == 1
-    hint = decision.frontier_priority_hints[0]
-    assert hint.match_value == "https://a.example/"
-    assert hint.priority_delta == 0.4
-    assert hint.rationale_ref == (
+    assert len(decision.frontier_priority_hints) == 2
+    first = decision.frontier_priority_hints[0]
+    assert first.match_kind is FrontierMatchKind.URL_PREFIX
+    assert first.match_value == "https://a.example/"
+    assert first.priority_delta == 0.4
+    assert first.rationale_ref == (
         f"rationale:{_ADAPTER_REF}:{_PROMPT_REF}:hint-url_prefix"
+    )
+    second = decision.frontier_priority_hints[1]
+    assert second.match_kind is FrontierMatchKind.HOST_GLOB
+    assert second.match_value == "*.example"
+    assert second.priority_delta == -0.2
+    assert second.rationale_ref == (
+        f"rationale:{_ADAPTER_REF}:{_PROMPT_REF}:hint-host_glob"
     )
 
 
