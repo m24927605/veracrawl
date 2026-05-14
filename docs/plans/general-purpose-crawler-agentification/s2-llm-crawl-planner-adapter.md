@@ -248,8 +248,9 @@ tests/unit/adapters/model_providers/test_replaying_model_provider.py  # new — 
 
 Module touched (not created):
 `tests/contract/test_crawl_planner_import_boundaries.py` —
-one new test method + helper allowlist tuple update; existing
-budget is 60 LOC, post-update target ≤ 90 LOC.
+two new test methods (LLM adapter allowlist + replaying adapter
+allowlist) + the two new ``_LLM_ADAPTER`` / ``_REPLAYING`` path
+constants; existing budget is 60 LOC, post-update target ≤ 90 LOC.
 
 Behavior-LOC ceiling: 100 + 160 + 40 = **300 LOC** before tests
 + the additive registry-dict edits. At the binding ≤ 300 LOC cap
@@ -630,7 +631,7 @@ count is 6 from step-3 iter 1.
 ### Import boundary
 
 `tests/contract/test_crawl_planner_import_boundaries.py` gains
-one test:
+two tests (one for each new s2 adapter):
 
 25. `test_adapters_planning_llm_crawl_planner_imports_allowlist` —
     walks the LLM adapter AST and accepts only stdlib +
@@ -709,7 +710,7 @@ Mechanically verifiable from a fresh checkout.
 ## Rollback
 
 s2 only adds new files plus four `FOUNDATION_CONTRACTS` entries
-and one new test method in the import-boundary file. Rollback is
+and two new test methods in the import-boundary file. Rollback is
 `git revert <s2-commit-range>` — no migrations, no schema
 changes, no consumer breakage. s1 keeps working with the
 deterministic adapter as the only `CrawlPlannerPort` impl.

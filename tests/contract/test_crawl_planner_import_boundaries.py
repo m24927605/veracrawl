@@ -11,6 +11,8 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2] / "src" / "veracrawl"
 _PORT = _ROOT / "ports" / "crawl_planner.py"
 _ADAPTER = _ROOT / "adapters" / "planning" / "deterministic_crawl_planner.py"
+_LLM_ADAPTER = _ROOT / "adapters" / "planning" / "llm_crawl_planner.py"
+_REPLAYING = _ROOT / "adapters" / "model_providers" / "replaying_model_provider.py"
 _RUNNER = _ROOT / "external_crawl" / "runner.py"
 _STDLIB = set(sys.stdlib_module_names)
 
@@ -48,6 +50,22 @@ def test_ports_crawl_planner_imports_only_contracts_and_stdlib() -> None:
 @pytest.mark.skipif(not _ADAPTER.exists(), reason="DeterministicCrawlPlanner lands in s1 step 4")
 def test_adapters_planning_deterministic_crawl_planner_imports_allowlist() -> None:
     _check_allowlist(_ADAPTER, extra=("veracrawl.ports.crawl_planner",))
+
+
+@pytest.mark.skipif(not _LLM_ADAPTER.exists(), reason="LlmCrawlPlanner lands in s2 step 4")
+def test_adapters_planning_llm_crawl_planner_imports_allowlist() -> None:
+    _check_allowlist(_LLM_ADAPTER, extra=(
+        "pydantic",
+        "veracrawl.ports.crawl_planner",
+        "veracrawl.ports.model_provider_v2",
+        "veracrawl.ports.prompt_registry",
+        "veracrawl.ports.token_budget",
+    ))
+
+
+@pytest.mark.skipif(not _REPLAYING.exists(), reason="ReplayingModelProviderV2 lands in s2 step 3")
+def test_adapters_model_providers_replaying_model_provider_imports_allowlist() -> None:
+    _check_allowlist(_REPLAYING, extra=("veracrawl.ports.model_provider_v2",))
 
 
 def test_external_crawl_runner_does_not_import_crawl_planner_port() -> None:
