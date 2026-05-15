@@ -102,10 +102,14 @@ from typing import Any, Final
 
 import httpx
 
+from veracrawl.adapters.model_providers._artifact_persist import (
+    persist_provider_response,
+)
 from veracrawl.contracts.agent import Message, TokenUsage
 from veracrawl.contracts.enums import (
     MessageRole,
     ModelCapability,
+    ProviderArtifactPersistencePolicy,
     ProviderFinishReason,
     ResponseFormatKind,
 )
@@ -116,6 +120,7 @@ from veracrawl.contracts.errors import (
     classify_provider_status,
 )
 from veracrawl.contracts.llm_input import ProviderRequest, ProviderResponse
+from veracrawl.ports.stores import ArtifactStorePort
 from veracrawl.runtime_support.runtime_mode import (
     RuntimeMode,
     current_mode,
@@ -379,6 +384,11 @@ class AnthropicMessagesAdapter:
         transport: httpx.BaseTransport | None = None,
         sleep_fn: Callable[[float], None] = time.sleep,
         jitter_fn: Callable[[], float] | None = None,
+        artifact_store: ArtifactStorePort | None = None,
+        utc_clock: Callable[[], datetime] | None = None,
+        persistence_policy: ProviderArtifactPersistencePolicy = (
+            ProviderArtifactPersistencePolicy.PERSIST_ALL
+        ),
     ) -> None:
         effective_mode = runtime_mode if runtime_mode is not None else current_mode()
         if not api_key or not api_key.strip():
@@ -407,6 +417,11 @@ class AnthropicMessagesAdapter:
             if transport is None:
                 transport = httpx.HTTPTransport()
         self._api_key = api_key
+        self._artifact_store = artifact_store
+        self._utc_clock: Callable[[], datetime] = (
+            utc_clock if utc_clock is not None else lambda: datetime.now(UTC)
+        )
+        self._persistence_policy = persistence_policy
         self._endpoint = endpoint
         self._max_attempts = max_attempts
         self._sleep = sleep_fn
@@ -417,11 +432,17 @@ class AnthropicMessagesAdapter:
         if transport is not None:
             client_kwargs["transport"] = transport
         self._client = httpx.Client(**client_kwargs)
+        self._last_raw_bytes: bytes = b""
+        self._last_response_headers: dict[str, str] = {}
 
     def supports(self, capability: ModelCapability) -> bool:
         return capability in _SUPPORTED_CAPABILITIES
 
     def complete(self, request: ProviderRequest) -> ProviderResponse:
+        # s2.1: reset stash so a stale prior call can't pollute
+        # the current persist gate.
+        self._last_raw_bytes = b""
+        self._last_response_headers = {}
         # Tool-call refusal mirrors Phase 4 step 4.2 codex iter-2.
         if request.tools:
             raise NotImplementedError(
@@ -467,6 +488,11 @@ class AnthropicMessagesAdapter:
             response_id = upstream_id.strip()
         else:
             response_id = f"anthropic-msg:{request.id}"
+        # s2.1: persist raw response bytes per policy; populate
+        # ProviderResponse.raw_response_ref.
+        raw_response_ref = self._persist_if_allowed(
+            request=request, upstream_id=response_id,
+        )
         # Codex iter-1 minor: malformed successful responses
         # (e.g., ``stop_reason=end_turn`` with empty text) would
         # surface as generic Pydantic ``ValueError`` from the
@@ -482,6 +508,7 @@ class AnthropicMessagesAdapter:
                 usage=usage,
                 finish_reason=finish_reason,
                 parsed_output=parsed_output,
+                raw_response_ref=raw_response_ref,
             )
         except ValueError:
             raise ProviderAdapterFailure(
@@ -489,6 +516,32 @@ class AnthropicMessagesAdapter:
                 error_code="ADAPTER_FAILURE",
                 request_id=None,
             ) from None
+
+    def _persist_if_allowed(
+        self, *, request: ProviderRequest, upstream_id: str,
+    ) -> str | None:
+        if self._artifact_store is None:
+            # No store wired — caller didn't opt into persistence.
+            # The s2 LlmCrawlPlanner's existing
+            # ProviderTraceMissingError still fails-fast at the
+            # next layer when raw_response_ref is None.
+            return None
+        policy = self._persistence_policy
+        if policy is ProviderArtifactPersistencePolicy.PERSIST_NONE:
+            return None
+        if policy is ProviderArtifactPersistencePolicy.PERSIST_NON_SECRET:
+            # httpx normalizes header names to lowercase.
+            secret = self._last_response_headers.get("x-veracrawl-secret")
+            if secret and secret.lower() == "true":
+                return None
+        return persist_provider_response(
+            artifact_store=self._artifact_store,
+            raw_bytes=self._last_raw_bytes,
+            provider_name="anthropic-messages-v2",
+            request_id=request.id,
+            upstream_id=upstream_id,
+            captured_at=self._utc_clock(),
+        )
 
     def _build_request_body(self, request: ProviderRequest) -> dict[str, Any]:
         system_prompt, rest = _split_leading_system_messages(request.messages)
@@ -550,6 +603,7 @@ class AnthropicMessagesAdapter:
 
             if http_response.is_success:
                 request_id = _request_id_from(http_response.headers)
+                raw_bytes = http_response.content
                 try:
                     data = http_response.json()
                 except json.JSONDecodeError:
@@ -564,6 +618,9 @@ class AnthropicMessagesAdapter:
                         error_code="ADAPTER_FAILURE",
                         request_id=request_id,
                     )
+                # s2.1: stash for persist gate.
+                self._last_response_headers = dict(http_response.headers)
+                self._last_raw_bytes = raw_bytes
                 return data
 
             request_id = _request_id_from(http_response.headers)
