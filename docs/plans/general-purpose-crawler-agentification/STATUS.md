@@ -23,6 +23,7 @@ follow-up.
 | s8 | Drift + Repair ports (s8.a contracts+ports; s8.b adapters deferred) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 8 — see s8 plan iter-5 reservations below |
 | s9 | LLM adapters for s7+s8 (to split s9.a/s9.b/s9.c per port) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 8 — see s9 plan iter-5 reservations below |
 | s10 | SchemaExtractionRuntime (to be renamed SchemaExtractionLoop) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 7 — see s10 plan iter-5 reservations below |
+| s11 | ReplayConsumerPort + InMemoryReplayConsumer | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 7 — see s11 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -554,3 +555,10 @@ contract with new fields; (R3) AC6 inlined; (R4) topic README s10
 row clarifies runtime wiring is OUT; (R5) XPath extraction uses
 resolve_text resolver; (R6) hard prereq s7+s8+s9 impl'd;
 (R7) integration fixture corpus avoids real external sites.
+
+## s11 plan iter-5 reservations
+
+7 unresolved: (R1) ReplayLookupMissError name collision; (R2)
+Dependencies must list s6 + s2.1; (R3) ACs inlined; (R4) validator
+coverage extended; (R5) UTC-only validator for clock_trace strings;
+(R6) topic README s11 row added; (R7) accurate Rollback text.
