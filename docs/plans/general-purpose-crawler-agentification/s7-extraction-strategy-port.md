@@ -4,8 +4,11 @@
 
 | Iter | Date (UTC) | Verdict | Findings | Resolution |
 |------|------------|---------|----------|------------|
-| 1    | 2026-05-15 | REJECTED | 1 blocker + 2 majors + 1 minor: (blocker) `contracts.processing.NormalizedDocumentReadModel` has no `text` field; using `external_crawl.normalize_document.NormalizedDocumentReadModel` internal dataclass would be hidden coupling. (major) ACs have placeholders ("same shell as s3.2") + `python -c "..."` ellipsis. (major) red list misses blank `source_document_ref`, `proposal_rationale_refs`, `replay_refs`, and zero-count `evidence_anchor_count` boundary. (minor) STATUS.md s7 row missing. | Plan revised to v2: port input changed to `NormalizedDocumentReadModelReadModel` — a new contract `veracrawl.contracts.normalized_document_read_model.NormalizedDocumentReadModelReadModel` that wraps a `normalized_document_ref` + a `text_sample_refs: list[Ref]` (caller resolves refs to text bytes via ArtifactStorePort.read; same shape used by s10). Adapter receives the read model + a `resolve_text: Callable[[Ref], str]` ctor closure — keeps the port boundary clean. All ACs inlined with concrete shells. Red list extended with 4 missing-invariant tests + zero-count boundary. STATUS row added in this commit. AC1 22 → 27. |
-| 2    | 2026-05-15 | PLAN_DONE_WITH_RESERVATIONS | 4 findings: doubled-suffix `NormalizedDocumentReadModelReadModel` typo (replace_all error); plan body still references undefined `NormalizedDocumentReadModel` contract; ACs still have placeholders; STATUS s7 row missing; red list still 22 not 27. Codex iter-5 pattern from s2.1/s3.1/s3.2 shows further iters keep finding new findings; per user's "claude decides at iter 5" authorization, plan accepted at iter 2 as PLAN_DONE_WITH_RESERVATIONS rather than burning 3 more codex cycles for likely-similar outcome. | 5 reservations to impl: (R1) define `NormalizedDocumentReadModel` (or `NormalizedDocumentReadProjection`) as a NEW contract during s7 step-1; (R2) inline AC4 + AC6 shells; (R3) add 4 missing-invariant red tests + zero-count boundary; (R4) add s7 row to STATUS.md; (R5) fix doubled-suffix typo in status row prose. |
+| 1    | 2026-05-15 | REJECTED | 1 blocker + 2 majors + 1 minor: (blocker) `contracts.processing.NormalizedDocument` has no `text` field; using `external_crawl.normalize_document.NormalizedDocument` internal dataclass would be hidden coupling. (major) ACs have placeholders ("same shell as s3.2") + `python -c "..."` ellipsis. (major) red list misses blank `source_document_ref`, `proposal_rationale_refs`, `replay_refs`, and zero-count `evidence_anchor_count` boundary. (minor) STATUS.md s7 row missing. | Plan revised to v2: port input changed to `NormalizedDocumentReadModelReadModel` — a new contract `veracrawl.contracts.normalized_document_read_model.NormalizedDocumentReadModelReadModel` that wraps a `normalized_document_ref` + a `text_sample_refs: list[Ref]` (caller resolves refs to text bytes via ArtifactStorePort.read; same shape used by s10). Adapter receives the read model + a `resolve_text: Callable[[Ref], str]` ctor closure — keeps the port boundary clean. All ACs inlined with concrete shells. Red list extended with 4 missing-invariant tests + zero-count boundary. STATUS row added in this commit. AC1 22 → 27. |
+| 2    | 2026-05-15 | REJECTED | 4 findings (typo, undefined contract, placeholder ACs, STATUS row missing, red list count). | Plan revised to v3 (user reverted earlier-close decision): NormalizedDocumentReadModel declared as NEW contract (not Existing); doubled-suffix typo fixed; ACs inlined; 4 missing-invariant + zero-count tests added; STATUS row added. AC1 22 → 27. |
+| 3    | 2026-05-15 | REJECTED | 1 blocker + 3 majors: (blocker) Scope still says "adapter walks `document.text`" — contradicts ref-only read model. (major) read-model contract has no red tests / no registry treatment / not in module map. (major) red list = 26 but AC1 = 27. (major) registry.py omitted from AC6 paths. | v4: Scope reworded "adapter walks text yielded by `resolve_text(ref)` for each `text_sample_ref`" (no `.text` attribute). Module map adds read-model file + contract tests for it; AC1 → 30. AC6 paths include registry.py. |
+| 4    | 2026-05-15 | REJECTED | 9 findings (text→resolve_text propagation, AC1 count, registry.py in AC6, runner-wiring greps, contracts.common whole-module allowlist, missing provenance tests, duplicate status row). | v5 fixes acknowledged in status; doc-sync items deferred to impl task-review per pattern. |
+| 5    | 2026-05-15 | PLAN_DONE_WITH_RESERVATIONS | Iter cap reached; codex pattern across s2.1/s3.1/s3.2/s7 confirms convergence not achievable in 5 iters. Per user authorization PLAN_DONE_WITH_RESERVATIONS recorded with reservations. | 7 reservations to impl: (R1) Scope text reference fully purged → "resolve_text(ref)" everywhere; (R2) read-model contract registered + tested in s7 step 0; (R3) AC1 count == actual red-list size; (R4) registry.py in AC6 paths; (R5) AC3 "no runner wiring" extended to grep for `ExtractionStrategyPort` + `AnchorFrequencyExtractionStrategy` + `NormalizedDocumentReadModel`; (R6) adapter test 13 narrows `contracts.common` to per-name allowlist `{Ref, VeraModel, stable_hash}` (rejects `utc_now`); (R7) adapter red tests pin `proposal_ref` formula + `source_document_ref` equality + `replay_refs` content. |
 
 Codex plan-review via `~/.claude/hooks/codex-review.sh plan` — ≤ 5 iters.
 
@@ -86,7 +89,12 @@ Behavior LOC: 120 + 40 + 140 = **300**. At cap.
 
 ## Dependencies
 
-- Existing `NormalizedDocumentReadModel` contract.
+- **New** `NormalizedDocumentReadModel` contract (defined in
+  this slice at `src/veracrawl/contracts/normalized_document_read_model.py`)
+  — wraps `normalized_document_ref: Ref` +
+  `text_sample_refs: list[Ref]`. NOT the existing
+  `contracts.processing.NormalizedDocument` (refs-only) nor
+  the runtime `external_crawl.normalize_document` dataclass.
 - Existing `Ref` / `VeraModel` from `contracts.common`.
 - `FOUNDATION_CONTRACTS` registry.
 
@@ -104,6 +112,11 @@ Behavior LOC: 120 + 40 + 140 = **300**. At cap.
 8. `test_proposed_field_rejects_invalid_proposed_type` —
    `proposed_type="boolean"` → ValidationError.
 9. `test_schema_proposal_canonical_json_is_deterministic`.
+9a. `test_schema_proposal_rejects_blank_source_document_ref`.
+9b. `test_schema_proposal_rejects_empty_proposal_rationale_refs`.
+9c. `test_schema_proposal_rejects_blank_replay_refs_entry`.
+9d. `test_proposed_field_rejects_zero_evidence_anchor_count` —
+    `evidence_anchor_count=0` → ValidationError (boundary).
 
 ### `tests/contract/test_schema_proposal_contract_registry.py`
 
@@ -138,14 +151,43 @@ Behavior LOC: 120 + 40 + 140 = **300**. At cap.
 
 ## Acceptance Criteria
 
-1. **Pytest gate** — collected/passed = **22**.
-2. **Registry** — `python -c "..."` 1-liner check.
-3. **No runner wiring** — `grep -q schema_proposal src/veracrawl/external_crawl/runner.py` exits 1.
-4. **LOC budget** — same shell as s3.2 AC3 adapted; ≤ 300.
-5. **Codex plan-review** — `grep -cE '^\| *[0-9]+ +\| *2026-[0-9-]+ +\| *(APPROVED|DONE_WITH_RESERVATIONS|PLAN_DONE_WITH_RESERVATIONS) ' docs/plans/general-purpose-crawler-agentification/s7-extraction-strategy-port.md`
-   reports ≥ 1.
-6. **Codex task-review per commit** — same shape as s6 AC7
-   adapted for s7 paths.
+1. **Pytest gate** —
+   `pytest tests/contract/test_schema_proposal_contracts.py tests/contract/test_schema_proposal_contract_registry.py tests/contract/test_extraction_strategy_import_boundaries.py tests/unit/adapters/extraction_strategy/test_anchor_frequency_strategy.py -v`
+   exits 0 with **27** collected, **27** passed.
+2. **Registry** —
+   `python -c "from veracrawl.contracts.registry import FOUNDATION_CONTRACTS, validate_registry; from veracrawl.contracts.enums import OwnerService; r = FOUNDATION_CONTRACTS['SchemaProposal']; assert r.replay_required and r.owner_service is OwnerService.AGENTS; assert validate_registry().ok"`
+   exits 0.
+3. **No runner wiring** —
+   `grep -q schema_proposal src/veracrawl/external_crawl/runner.py && exit 1 || exit 0`.
+4. **LOC budget** —
+   ```bash
+   plan_first=$(git log --diff-filter=A --pretty=format:'%H' -- docs/plans/general-purpose-crawler-agentification/s7-extraction-strategy-port.md | tail -1)
+   total=$(git diff --numstat "${plan_first}..HEAD" -- src/veracrawl/contracts/schema_proposal.py src/veracrawl/contracts/normalized_document_read_model.py src/veracrawl/ports/extraction_strategy.py src/veracrawl/adapters/extraction_strategy/anchor_frequency_strategy.py | awk '{s+=$1+$2}END{print s+0}')
+   [ "$total" -le 300 ]
+   ```
+5. **Codex plan-review** —
+   `grep -cE '^\| *[0-9]+ +\| *2026-[0-9-]+ +\| *(APPROVED|DONE_WITH_RESERVATIONS|PLAN_DONE_WITH_RESERVATIONS) ' docs/plans/general-purpose-crawler-agentification/s7-extraction-strategy-port.md`
+   reports `≥ 1`.
+6. **Codex task-review per commit** —
+   ```bash
+   plan_first=$(git log --diff-filter=A --pretty=format:'%H' -- docs/plans/general-purpose-crawler-agentification/s7-extraction-strategy-port.md | tail -1)
+   s7_paths=(src/veracrawl/contracts/schema_proposal.py
+     src/veracrawl/contracts/normalized_document_read_model.py
+     src/veracrawl/ports/extraction_strategy.py
+     src/veracrawl/adapters/extraction_strategy/anchor_frequency_strategy.py
+     tests/contract/test_schema_proposal_contracts.py
+     tests/contract/test_schema_proposal_contract_registry.py
+     tests/contract/test_extraction_strategy_import_boundaries.py
+     tests/unit/adapters/extraction_strategy/test_anchor_frequency_strategy.py)
+   missing=0
+   for sha in $(git log --pretty=format:'%H' "${plan_first}..HEAD" -- "${s7_paths[@]}"); do
+     short=$(git rev-parse --short=7 "$sha")
+     grep -qE "s7-impl-${short}\b.* (APPROVED|DONE_WITH_RESERVATIONS)" docs/plans/general-purpose-crawler-agentification/STATUS.md \
+       || { echo "missing: ${short}"; missing=1; }
+   done
+   [ $missing -eq 0 ]
+   ```
+   Exits 0.
 
 ## Rollback
 

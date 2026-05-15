@@ -17,6 +17,9 @@ follow-up.
 | s5 | `PlannerObservationFeedback` contract + deterministic fixture planner adapter v2 | DONE | 7d33df1 | step 1: 710de7b (contract + 18 tests; REJECTED iter 1 → APPROVED iter 2 via plan-fix commit f0a8cd9). step 2: ae794b0 (registry + 2 tests; APPROVED iter 1). step 3: fff1f79 (adapter + 4 boundary + 16 adapter tests; REJECTED iter 1) → 6c49634 (port-strip fix + new red test 25a; APPROVED iter 2 with 2 non-blocking minors folded into close commit). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; v6 follow-up landed without re-review) — see below | step 1: iter 1 REJECTED → iter 2 APPROVED (via plan fix). step 2: iter 1 APPROVED. step 3: iter 1 REJECTED → iter 2 APPROVED (with 2 non-blocking minors). | 3 — see "s5 plan iter-5 reservations" below |
 | s6 | `ExternalCrawlRunner` wires `GraphObservationPort` + replan via feedback-aware planner | DONE | f986701 | step 1: 36dd567 → e3ea052 → 5d8c6ed → 5a0bdb2 → 944a15f (REJECTED iter 1-5) → f749385 (DONE_WITH_RESERVATIONS). step 2: 8474de0 → 54b807e → 517bf97 (REJECTED iter 1-3) → 668b30e (APPROVED iter 4). step 3: 1334d9c → f55593a → b061715 (REJECTED iter 1-3) → 5acfed5 (APPROVED iter 4). step 4: e70e099 → b187288 → 3c0c333 (REJECTED iter 1-3) → 11d634a (APPROVED iter 4). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; v6 follow-up landed without re-review) — see below | step 1: iter 1→5 REJECTED → DONE_WITH_RESERVATIONS. step 2: iter 1→3 REJECTED → iter 4 APPROVED. step 3: iter 1→3 REJECTED → iter 4 APPROVED. step 4: iter 1→3 REJECTED → iter 4 APPROVED. | 4 — see "s6 plan iter-5 reservations" below |
 | s2.1 | Provider artifact wiring for OpenAI/Anthropic v2 adapters | PLAN_DONE_WITH_RESERVATIONS | — (plan-only; this commit) | — (implementation pending) | iter 1-5 all REJECTED (5/5 cap reached; PLAN_DONE_WITH_RESERVATIONS per user authorization) | n/a (impl pending) | 4 — see "s2.1 plan iter-5 reservations" below |
+| s3.1 | Priority-queue frontier consumes hints | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED | n/a | 4 — see s3.1 reservations |
+| s3.2 | Multi-adapter dispatch consumes adapter_priors | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED | n/a | 3 — see s3.2 reservations |
+| s7 | ExtractionStrategyPort + anchor-frequency fixture adapter | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap; PLAN_DONE_WITH_RESERVATIONS) | n/a | 7 — see s7 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -499,11 +502,21 @@ per-commit codex task-review.
 (no source of adapter_priors otherwise); (R2) zero-effective-weight
 test missing; (R3) AC5 inline shell. Resolution lands in s3.2 impl.
 
-## s7 plan iter-2 reservations (early PLAN_DONE_WITH_RESERVATIONS)
+## s7 plan iter-2 reservations (SUPERSEDED — early-close reverted)
 
-5 unresolved: (R1) NormalizedDocumentReadModel contract needs to be
-NEW (not Existing) at impl; (R2) inline AC4 + AC6; (R3) add 4
-missing-invariant tests + zero-count boundary; (R4) add s7 row to
-STATUS slice progress table; (R5) doubled-suffix typo from iter-1
-replace_all needs cleanup. Per user "claude decides" authorization,
-accepted at iter 2 rather than running 3 more redundant iters.
+User overrode early-close decision; s7 returned to full 5-iter
+cycle. See s7 plan Status table for the active iter trail.
+Final reservations recorded after iter 5.
+
+## s7 plan iter-5 reservations
+
+7 unresolved findings carried to s7 impl: (R1) Scope text reference
+fully purged in favor of resolve_text(ref); (R2) NormalizedDocumentReadModel
+contract registered + has tests in s7 step 0; (R3) AC1 count synced
+to actual red-list size; (R4) registry.py added to AC6 paths;
+(R5) AC3 "no runner wiring" extended to grep ExtractionStrategyPort
++ AnchorFrequencyExtractionStrategy + NormalizedDocumentReadModel;
+(R6) adapter test 13 narrowed to per-name allowlist for
+contracts.common (rejects utc_now); (R7) adapter red tests pin
+proposal_ref formula + source_document_ref equality + replay_refs
+content. Resolution lands in s7 implementation commits.
