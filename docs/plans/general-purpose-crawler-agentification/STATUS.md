@@ -498,3 +498,12 @@ per-commit codex task-review.
 3 unresolved: (R1) runner ctor must require s3 pair when fetcher_map set
 (no source of adapter_priors otherwise); (R2) zero-effective-weight
 test missing; (R3) AC5 inline shell. Resolution lands in s3.2 impl.
+
+## s7 plan iter-2 reservations (early PLAN_DONE_WITH_RESERVATIONS)
+
+5 unresolved: (R1) NormalizedDocumentReadModel contract needs to be
+NEW (not Existing) at impl; (R2) inline AC4 + AC6; (R3) add 4
+missing-invariant tests + zero-count boundary; (R4) add s7 row to
+STATUS slice progress table; (R5) doubled-suffix typo from iter-1
+replace_all needs cleanup. Per user "claude decides" authorization,
+accepted at iter 2 rather than running 3 more redundant iters.
