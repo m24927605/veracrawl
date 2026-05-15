@@ -280,6 +280,33 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "schema_proposal",
         tests=["tests/contract/test_schema_proposal_contract_registry.py"],
     ),
+    # s8.a of general-purpose-crawler-agentification: drift / repair
+    # contracts. See docs/plans/general-purpose-crawler-
+    # agentification/s8-drift-repair-ports.md.
+    "ExtractionOutcome": _contract(
+        "ExtractionOutcome",
+        OwnerService.AGENTS,
+        "extraction_outcome",
+        tests=["tests/contract/test_drift_repair_registry.py"],
+    ),
+    "DriftReport": _contract(
+        "DriftReport",
+        OwnerService.AGENTS,
+        "drift_report",
+        tests=["tests/contract/test_drift_repair_registry.py"],
+    ),
+    "FieldRepair": _contract(
+        "FieldRepair",
+        OwnerService.AGENTS,
+        "repair_proposal",
+        tests=["tests/contract/test_drift_repair_registry.py"],
+    ),
+    "RepairProposal": _contract(
+        "RepairProposal",
+        OwnerService.AGENTS,
+        "repair_proposal",
+        tests=["tests/contract/test_drift_repair_registry.py"],
+    ),
     "CommandEnvelope": _contract(
         "CommandEnvelope", OwnerService.CONTRACTS, "command", mutation_allowed=True
     ),
