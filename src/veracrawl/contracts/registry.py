@@ -316,6 +316,21 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "replay_bundle",
         tests=["tests/contract/test_replay_bundle_contract_registry.py"],
     ),
+    # s16 of general-purpose-crawler-agentification: worker-lease port.
+    # See docs/plans/general-purpose-crawler-agentification/
+    # s16-worker-lease-port.md.
+    "WorkerLease": _contract(
+        "WorkerLease",
+        OwnerService.AGENTS,
+        "worker_lease",
+        tests=["tests/contract/test_worker_lease_registry.py"],
+    ),
+    "WorkOutcome": _contract(
+        "WorkOutcome",
+        OwnerService.AGENTS,
+        "worker_lease",
+        tests=["tests/contract/test_worker_lease_registry.py"],
+    ),
     "CommandEnvelope": _contract(
         "CommandEnvelope", OwnerService.CONTRACTS, "command", mutation_allowed=True
     ),
