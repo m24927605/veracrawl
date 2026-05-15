@@ -621,3 +621,9 @@ confirmed/added at impl-time.
 (R4) snapshot capture via s12 ReplayingHttpFetcher + s15
 hashed-fs default; (R5) red list expanded per-site;
 (R6) STATUS row added.
+
+## s2.1 step-1 (foundation) task-review log
+
+| Iter | Date (UTC) | Commit  | Verdict  | Findings | Resolution |
+|------|------------|---------|----------|----------|------------|
+| 1 | 2026-05-15 | ead7cbc | REJECTED | (blocker) commit doesn't implement adapter wiring required by plan AC1/AC2/AC3; (blocker) ReplayingModelProviderV2 still keys on request.id; (major) test set far short of red list; (major) PersistencePolicy enum has no executable behavior. | Follow-up commit (this commit): plan revised to explicitly declare s2.1 has 5 implementation steps (matching s5/s6 precedent). Step 1 is foundation only — adapter wiring is step 2, replay extension is step 4. Codex finding #1+#2+#3 are scoped to later steps. Finding #4 (enum has no executable consumer in this commit) acknowledged — enum is consumed in step 2 when the OpenAI adapter ctor takes it. |
