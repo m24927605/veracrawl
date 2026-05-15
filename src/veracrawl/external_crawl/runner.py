@@ -92,6 +92,7 @@ from veracrawl.ports.rate_limiter import (
     RateLimitFloor,
     RateLimitPermit,
 )
+from veracrawl.ports.replay_consumer import ReplayConsumerPort
 from veracrawl.ports.robots import NoopRobotsPort, RobotsPort
 
 
@@ -183,6 +184,7 @@ class ExternalCrawlRunner:
         frontier: FrontierLike | None = None,
         fetcher_map: dict[AdapterType, CrawlHttpFetcherPort] | None = None,
         replay_seed_ref: Ref | None = None,
+        replay_consumer: ReplayConsumerPort | None = None,
     ) -> None:
         s3_set = planner is not None and plan_request_builder is not None
         s3_none = planner is None and plan_request_builder is None
@@ -248,6 +250,15 @@ class ExternalCrawlRunner:
         self._fetcher_map = fetcher_map
         self._replay_seed_ref = replay_seed_ref
         self._adapter_dispatch_choices: dict[str, str] = {}
+        # s12: replay consumer overrides utc_clock when both provided.
+        self._replay_consumer = replay_consumer
+        self._replay_invocation_count = 0
+        if replay_consumer is not None:
+            recorded_clock = replay_consumer.next_utc
+            def _replay_clock() -> datetime:
+                self._replay_invocation_count += 1
+                return recorded_clock()
+            utc_clock = _replay_clock
         self._planner = planner
         self._plan_request_builder = plan_request_builder
         self._utc_clock = utc_clock
@@ -683,6 +694,15 @@ class ExternalCrawlRunner:
         report["adapter_dispatch_choices"] = (
             dict(self._adapter_dispatch_choices)
             if self._fetcher_map is not None else None
+        )
+        # s12 keyed-always fields.
+        report["replay_consumer_ref"] = (
+            "replay-consumer:active"
+            if self._replay_consumer is not None else None
+        )
+        report["replay_invocation_count"] = (
+            self._replay_invocation_count
+            if self._replay_consumer is not None else None
         )
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
