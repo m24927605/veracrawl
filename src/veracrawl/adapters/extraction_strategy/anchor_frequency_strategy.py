@@ -32,7 +32,7 @@ from veracrawl.contracts.normalized_document_read_model import (
 from veracrawl.contracts.schema_proposal import ProposedField, SchemaProposal
 
 _RE_DL = re.compile(
-    r"<dl[^>]*>\s*<dt[^>]*>(?P<key>.*?)</dt>\s*<dd[^>]*>(?P<value>.*?)</dd>",
+    r"<dt[^>]*>(?P<key>.*?)</dt>\s*<dd[^>]*>(?P<value>.*?)</dd>",
     re.IGNORECASE | re.DOTALL,
 )
 _RE_TR = re.compile(
