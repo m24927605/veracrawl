@@ -30,7 +30,7 @@ follow-up.
 | s15 | HashedFsArtifactStore content-addressed FS adapter | DONE | ba3b2b1 | new HashedFsArtifactStore at adapters/object_stores; sidecar metadata isolated from content hash (R2). 11/11 tests pass. Default-swap deferred (runtime hardcodes InMemoryArtifactStore). | iter 1-5 REJECTED (PLAN_DONE_WITH_RESERVATIONS) | shipped under TDD. | 6 — see s15 plan iter-5 reservations below |
 | s16 | WorkerLeasePort + InMemoryWorkerLeaseAdapter + AIMD | DONE | 14d6403 | 2 new contracts (WorkerLease + WorkOutcome) + port + in-memory adapter with FIFO queue + AIMD state machine. 23/23 tests pass. | iter 1-5 REJECTED (PLAN_DONE_WITH_RESERVATIONS) | shipped under TDD. | 6 — see s16 plan iter-5 reservations below |
 | s17 | WorkerPool driver (synchronous backend; multi-process deferred) | DONE | 3dc4a79 | WorkerPool drives N logical workers through WorkerLeasePort + outbox event store; real multiprocessing.Process spawning deferred to follow-up under the same API. 9/9 tests pass. | iter 1-5 REJECTED (PLAN_DONE_WITH_RESERVATIONS) | shipped under TDD. | 5 — see s17 plan iter-5 reservations below |
-| s18 | Real-site acceptance corpus (3 sites) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s18 plan iter-5 reservations below |
+| s18 | General-purpose acceptance corpus (3 synthetic verticals; live mode deferred) | DONE | a1a9bd1 | 4/4 replay-mode tests pass (news + ecommerce + docs + cross-vertical invariant). Live-mode tests skipped pending R1 legal/robots clearance — operational follow-up. s7 regex loosened to match standalone dt/dd pairs. | iter 1-5 REJECTED (PLAN_DONE_WITH_RESERVATIONS) | shipped under TDD. | 6 — see s18 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
