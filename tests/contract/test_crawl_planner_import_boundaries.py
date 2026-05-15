@@ -65,7 +65,12 @@ def test_adapters_planning_llm_crawl_planner_imports_allowlist() -> None:
 
 @pytest.mark.skipif(not _REPLAYING.exists(), reason="ReplayingModelProviderV2 lands in s2 step 3")
 def test_adapters_model_providers_replaying_model_provider_imports_allowlist() -> None:
-    _check_allowlist(_REPLAYING, extra=("veracrawl.ports.model_provider_v2",))
+    _check_allowlist(_REPLAYING, extra=(
+        "veracrawl.ports.model_provider_v2",
+        # s2.1 step 4: replay-via-raw-response-ref reads bytes via
+        # ``ArtifactStorePort.read``; legitimate port dependency.
+        "veracrawl.ports.stores",
+    ))
 
 
 def test_external_crawl_runner_imports_crawl_planner_only_via_contracts_and_ports() -> None:
