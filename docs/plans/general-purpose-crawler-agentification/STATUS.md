@@ -28,6 +28,9 @@ follow-up.
 | s13 | Live byte-identical replay test (capability 4 closing) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s13 plan iter-5 reservations below |
 | s14 | SQLite EventStorePort default | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 5 — see s14 plan iter-5 reservations below |
 | s15 | Hashed-fs ArtifactStorePort default | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s15 plan iter-5 reservations below |
+| s16 | WorkerLeasePort + InMemoryWorkerLeaseAdapter | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s16 plan iter-5 reservations below |
+| s17 | Multi-process worker pool (production adapter) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 5 — see s17 plan iter-5 reservations below |
+| s18 | Real-site acceptance corpus (3 sites) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s18 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -597,3 +600,24 @@ inlined; (R5) topic STATUS row added.
 sidecar timestamps via utc_clock OR excluded from hash; (R3)
 gate s15 impl on s2.1 ArtifactStorePort.read landing; (R4) red
 list expanded; (R5) ACs inlined; (R6) STATUS row added.
+
+## s16 plan iter-5 reservations
+
+6 unresolved: (R1) WorkOutcome + BudgetGate as new contracts;
+(R2) Rollback aligned with files; (R3) red list expanded;
+(R4) ACs inlined; (R5) STATUS row added; (R6) AIMD primitive
+confirmed/added at impl-time.
+
+## s17 plan iter-5 reservations
+
+5 unresolved: (R1) worker execution contract defined;
+(R2) multiprocessing/time replay-wired; (R3) STATUS row added;
+(R4) ACs inlined; (R5) hard prereq s16 impl'd.
+
+## s18 plan iter-5 reservations
+
+6 unresolved: (R1) concrete sites picked with legal review;
+(R2) deps narrowed to actual chains used; (R3) ACs inlined;
+(R4) snapshot capture via s12 ReplayingHttpFetcher + s15
+hashed-fs default; (R5) red list expanded per-site;
+(R6) STATUS row added.
