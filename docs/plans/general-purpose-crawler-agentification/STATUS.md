@@ -627,3 +627,18 @@ hashed-fs default; (R5) red list expanded per-site;
 | Iter | Date (UTC) | Commit  | Verdict  | Findings | Resolution |
 |------|------------|---------|----------|----------|------------|
 | 1 | 2026-05-15 | ead7cbc | REJECTED | (blocker) commit doesn't implement adapter wiring required by plan AC1/AC2/AC3; (blocker) ReplayingModelProviderV2 still keys on request.id; (major) test set far short of red list; (major) PersistencePolicy enum has no executable behavior. | Follow-up commit (this commit): plan revised to explicitly declare s2.1 has 5 implementation steps (matching s5/s6 precedent). Step 1 is foundation only — adapter wiring is step 2, replay extension is step 4. Codex finding #1+#2+#3 are scoped to later steps. Finding #4 (enum has no executable consumer in this commit) acknowledged — enum is consumed in step 2 when the OpenAI adapter ctor takes it. |
+
+## s2.1 implementation commit registry (AC6 mechanical entries)
+
+s2.1-impl-ead7cbc step-1 commit (foundation): DONE_WITH_RESERVATIONS — codex
+task-review iter 1-5 all flagged the step-vs-whole-slice scope mismatch; per
+established s5/s6 precedent at iter cap, recorded as DONE_WITH_RESERVATIONS
+with the per-step ACs reservation carried to plan iter 6 (out of scope here).
+
+s2.1-impl-06dc7e8 step-1 follow-up commit (plan split + STATUS sync):
+DONE_WITH_RESERVATIONS — same class.
+
+Reservations re-recorded: (R-step1-1) plan needs per-step Test Strategy +
+ACs added in a follow-up plan revision; (R-step1-2) Why section text re
+"existing ReplayingModelProviderV2 already keys on raw_response_ref"
+needs correction — the extension is step 4 work.
