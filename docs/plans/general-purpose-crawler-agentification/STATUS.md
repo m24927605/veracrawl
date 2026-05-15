@@ -22,6 +22,7 @@ follow-up.
 | s7 | ExtractionStrategyPort + anchor-frequency fixture adapter | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap; PLAN_DONE_WITH_RESERVATIONS) | n/a | 7 — see s7 plan iter-5 reservations below |
 | s8 | Drift + Repair ports (s8.a contracts+ports; s8.b adapters deferred) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 8 — see s8 plan iter-5 reservations below |
 | s9 | LLM adapters for s7+s8 (to split s9.a/s9.b/s9.c per port) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 8 — see s9 plan iter-5 reservations below |
+| s10 | SchemaExtractionRuntime (to be renamed SchemaExtractionLoop) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 7 — see s10 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -543,3 +544,13 @@ to estimate_charge+charge(usage); (R4) name every red test;
 names; (R7) ProviderRequest ctor must include model_name +
 max_output_tokens; (R8) hard prereq: s7 + s8.a + s8.b + s2.1
 all landed before s9 impl.
+
+## s10 plan iter-5 reservations
+
+7 unresolved: (R1) rename to SchemaExtractionLoop to avoid clash
+with existing processing/schema_extraction_runtime.py +
+extract/schema_runtime.py; (R2) extend SchemaExtractionRuntimeReport
+contract with new fields; (R3) AC6 inlined; (R4) topic README s10
+row clarifies runtime wiring is OUT; (R5) XPath extraction uses
+resolve_text resolver; (R6) hard prereq s7+s8+s9 impl'd;
+(R7) integration fixture corpus avoids real external sites.
