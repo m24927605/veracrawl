@@ -57,6 +57,7 @@ from veracrawl.external_crawl.frontier import (
     FrontierEvent,
     SkipReason,
 )
+from veracrawl.external_crawl.frontier_protocol import FrontierLike
 from veracrawl.external_crawl.html_metadata_extractor import HtmlMetadataExtractor
 from veracrawl.external_crawl.link_extractor import (
     HtmlAnchorExtractor,
@@ -177,6 +178,7 @@ class ExternalCrawlRunner:
         feedback_aware_planner_factory: Callable[
             [PlannerObservationFeedback], CrawlPlannerPort,
         ] | None = None,
+        frontier: FrontierLike | None = None,
     ) -> None:
         s3_set = planner is not None and plan_request_builder is not None
         s3_none = planner is None and plan_request_builder is None
@@ -232,12 +234,17 @@ class ExternalCrawlRunner:
         self._clock = clock
 
         allow_loopback = spec.private_network_policy == PrivateNetworkPolicy.ALLOW_LOOPBACK_ONLY
-        self._frontier = ExternalCrawlFrontier(
-            allowed_domains=frozenset(spec.allowed_domains),
-            denied_domains=frozenset(spec.denied_domains),
-            max_depth=spec.max_depth,
-            max_pages=spec.max_pages,
-            allow_loopback=allow_loopback,
+        # s3.1: optional caller-injected frontier (e.g.,
+        # PriorityCrawlFrontier). Default remains the legacy FIFO
+        # ExternalCrawlFrontier so existing callers are unaffected.
+        self._frontier: FrontierLike = frontier if frontier is not None else (
+            ExternalCrawlFrontier(
+                allowed_domains=frozenset(spec.allowed_domains),
+                denied_domains=frozenset(spec.denied_domains),
+                max_depth=spec.max_depth,
+                max_pages=spec.max_pages,
+                allow_loopback=allow_loopback,
+            )
         )
 
         self._cited_artifact_refs: set[str] = set()
@@ -340,6 +347,12 @@ class ExternalCrawlRunner:
         self._plan_decision_2 = decision2
         self._observation_snapshot_ref = snap.id
         self._observation_feedback_ref = fb.id
+        # s3.1: replan hints update the priority queue before
+        # enqueueing replan seeds. Guarded by hasattr; legacy FIFO
+        # frontier ignores this no-op.
+        add_hints = getattr(self._frontier, "add_hints", None)
+        if add_hints is not None:
+            add_hints(list(decision2.frontier_priority_hints))
         # Frontier dedup is authoritative — re-enqueuing an already-
         # admitted URL returns admitted=False, so we skip the
         # url_observed record in that case.
@@ -421,6 +434,12 @@ class ExternalCrawlRunner:
             plan_request = self._plan_request_builder(self._spec, self._run_root)
             self._original_plan_request = plan_request
             self._plan_decision = self._planner.plan(plan_request)
+            # s3.1: feed hints to the frontier before enqueueing seeds
+            # so the first pop already respects priority. Guarded by
+            # hasattr — legacy FIFO frontier has no add_hints.
+            add_hints = getattr(self._frontier, "add_hints", None)
+            if add_hints is not None:
+                add_hints(list(self._plan_decision.frontier_priority_hints))
             sorted_seeds = sorted(
                 enumerate(self._plan_decision.planned_seeds),
                 key=lambda iv: (-iv[1].priority_score, iv[0]),
