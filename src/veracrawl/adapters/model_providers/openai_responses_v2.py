@@ -89,10 +89,14 @@ from typing import Any, Final
 
 import httpx
 
+from veracrawl.adapters.model_providers._artifact_persist import (
+    persist_provider_response,
+)
 from veracrawl.contracts.agent import Message, TokenUsage
 from veracrawl.contracts.enums import (
     MessageRole,
     ModelCapability,
+    ProviderArtifactPersistencePolicy,
     ProviderFinishReason,
     ResponseFormatKind,
 )
@@ -103,6 +107,7 @@ from veracrawl.contracts.errors import (
     classify_provider_status,
 )
 from veracrawl.contracts.llm_input import ProviderRequest, ProviderResponse
+from veracrawl.ports.stores import ArtifactStorePort
 from veracrawl.runtime_support.runtime_mode import (
     RuntimeMode,
     current_mode,
@@ -343,6 +348,11 @@ class OpenAIResponsesAdapterV2:
         transport: httpx.BaseTransport | None = None,
         sleep_fn: Callable[[float], None] = time.sleep,
         jitter_fn: Callable[[], float] | None = None,
+        artifact_store: ArtifactStorePort | None = None,
+        utc_clock: Callable[[], datetime] | None = None,
+        persistence_policy: ProviderArtifactPersistencePolicy = (
+            ProviderArtifactPersistencePolicy.PERSIST_ALL
+        ),
     ) -> None:
         # Codex iter-5 important: when no ``runtime_mode`` is
         # passed explicitly, consult the project-wide
@@ -395,6 +405,11 @@ class OpenAIResponsesAdapterV2:
                 # every adapter instance.
                 transport = httpx.HTTPTransport()
         self._api_key = api_key
+        self._artifact_store = artifact_store
+        self._utc_clock: Callable[[], datetime] = (
+            utc_clock if utc_clock is not None else lambda: datetime.now(UTC)
+        )
+        self._persistence_policy = persistence_policy
         self._endpoint = endpoint
         self._max_attempts = max_attempts
         self._runtime_mode = runtime_mode
@@ -406,11 +421,17 @@ class OpenAIResponsesAdapterV2:
         if transport is not None:
             client_kwargs["transport"] = transport
         self._client = httpx.Client(**client_kwargs)
+        self._last_raw_bytes: bytes = b""
+        self._last_response_headers: dict[str, str] = {}
 
     def supports(self, capability: ModelCapability) -> bool:
         return capability in _SUPPORTED_CAPABILITIES
 
     def complete(self, request: ProviderRequest) -> ProviderResponse:
+        # s2.1: reset stash so a stale prior call can't pollute
+        # the current persist gate.
+        self._last_raw_bytes = b""
+        self._last_response_headers = {}
         # Codex iter-2 important: tool-call support is not yet
         # implemented in v2 (the ``ProviderResponse`` contract does
         # not yet carry a tool-call field, and the Responses API
@@ -473,6 +494,11 @@ class OpenAIResponsesAdapterV2:
             response_id = upstream_id.strip()
         else:
             response_id = f"openai-response:{request.id}"
+        # s2.1: persist raw response bytes per policy; populate
+        # ProviderResponse.raw_response_ref.
+        raw_response_ref = self._persist_if_allowed(
+            request=request, upstream_id=response_id,
+        )
         # Step 4.3 codex iter-1 minor: convert any Pydantic
         # ``ValueError`` from ``ProviderResponse`` validation to
         # the typed sanitized ``ProviderAdapterFailure`` so
@@ -486,6 +512,7 @@ class OpenAIResponsesAdapterV2:
                 usage=usage,
                 finish_reason=finish_reason,
                 parsed_output=parsed_output,
+                raw_response_ref=raw_response_ref,
             )
         except ValueError:
             raise ProviderAdapterFailure(
@@ -493,6 +520,32 @@ class OpenAIResponsesAdapterV2:
                 error_code="ADAPTER_FAILURE",
                 request_id=None,
             ) from None
+
+    def _persist_if_allowed(
+        self, *, request: ProviderRequest, upstream_id: str,
+    ) -> str | None:
+        if self._artifact_store is None:
+            # No store wired — caller didn't opt into persistence.
+            # The s2 LlmCrawlPlanner's existing
+            # ProviderTraceMissingError still fails-fast at the
+            # next layer when raw_response_ref is None.
+            return None
+        policy = self._persistence_policy
+        if policy is ProviderArtifactPersistencePolicy.PERSIST_NONE:
+            return None
+        if policy is ProviderArtifactPersistencePolicy.PERSIST_NON_SECRET:
+            # httpx normalizes header names to lowercase.
+            secret = self._last_response_headers.get("x-veracrawl-secret")
+            if secret and secret.lower() == "true":
+                return None
+        return persist_provider_response(
+            artifact_store=self._artifact_store,
+            raw_bytes=self._last_raw_bytes,
+            provider_name="openai-responses-v2",
+            request_id=request.id,
+            upstream_id=upstream_id,
+            captured_at=self._utc_clock(),
+        )
 
     def _build_request_body(self, request: ProviderRequest) -> dict[str, Any]:
         # Tool-call paths are refused at ``complete()`` (codex
@@ -571,6 +624,7 @@ class OpenAIResponsesAdapterV2:
                 # carrying only the status code + upstream
                 # request id — never the body.
                 request_id = _request_id_from(http_response.headers)
+                raw_bytes = http_response.content
                 try:
                     data = http_response.json()
                 except json.JSONDecodeError:
@@ -585,6 +639,11 @@ class OpenAIResponsesAdapterV2:
                         error_code="ADAPTER_FAILURE",
                         request_id=request_id,
                     )
+                # s2.1: stash secret-marker for the policy gate to
+                # consume on the success path. Cleared at the start
+                # of every complete() call.
+                self._last_response_headers = dict(http_response.headers)
+                self._last_raw_bytes = raw_bytes
                 return data
 
             # Fatal 4xx (non-429) — do not retry.
