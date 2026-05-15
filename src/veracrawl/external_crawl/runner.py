@@ -41,7 +41,7 @@ from veracrawl.contracts.crawl_job import (
     PrivateNetworkPolicy,
     RobotsPolicy,
 )
-from veracrawl.contracts.crawl_planner import PlanDecision, PlanRequest
+from veracrawl.contracts.crawl_planner import AdapterPrior, PlanDecision, PlanRequest
 from veracrawl.contracts.enums import AdapterType, RouteClass
 from veracrawl.contracts.graph_observation import (
     PageStructureObservedEvent,
@@ -52,9 +52,11 @@ from veracrawl.contracts.planner_observation_feedback import (
     PlannerObservationFeedback,
     derive_planner_observation_feedback,  # noqa: F401 — used in step-4 replan path
 )
+from veracrawl.external_crawl.dispatch import _choose_fetcher
 from veracrawl.external_crawl.frontier import (
     ExternalCrawlFrontier,
     FrontierEvent,
+    FrontierItem,
     SkipReason,
 )
 from veracrawl.external_crawl.frontier_protocol import FrontierLike
@@ -179,6 +181,8 @@ class ExternalCrawlRunner:
             [PlannerObservationFeedback], CrawlPlannerPort,
         ] | None = None,
         frontier: FrontierLike | None = None,
+        fetcher_map: dict[AdapterType, CrawlHttpFetcherPort] | None = None,
+        replay_seed_ref: Ref | None = None,
     ) -> None:
         s3_set = planner is not None and plan_request_builder is not None
         s3_none = planner is None and plan_request_builder is None
@@ -211,6 +215,39 @@ class ExternalCrawlRunner:
             raise ValueError(
                 "ExternalCrawlRunner: utc_clock_ref must be non-blank when set",
             )
+        # s3.2: fetcher_map + replay_seed_ref must be set together and
+        # require the s3 planner pair (no priors → nothing to dispatch).
+        s32_set = fetcher_map is not None and replay_seed_ref is not None
+        s32_none = fetcher_map is None and replay_seed_ref is None
+        if not (s32_set or s32_none):
+            if fetcher_map is not None and replay_seed_ref is None:
+                raise ValueError(
+                    "ExternalCrawlRunner: fetcher_map requires "
+                    "replay_seed_ref to be set (replay determinism).",
+                )
+            raise ValueError(
+                "ExternalCrawlRunner: replay_seed_ref requires "
+                "fetcher_map to be set (s3.2 dispatch mode).",
+            )
+        if s32_set and not s3_set:
+            raise ValueError(
+                "ExternalCrawlRunner: s3.2 (fetcher_map + "
+                "replay_seed_ref) requires the s3 planner pair "
+                "(planner + plan_request_builder) — adapter_priors "
+                "come from the plan decision.",
+            )
+        if replay_seed_ref is not None and not replay_seed_ref.strip():
+            raise ValueError(
+                "ExternalCrawlRunner: replay_seed_ref must be "
+                "non-blank when set",
+            )
+        if fetcher_map is not None and not fetcher_map:
+            raise ValueError(
+                "ExternalCrawlRunner: fetcher_map must be non-empty",
+            )
+        self._fetcher_map = fetcher_map
+        self._replay_seed_ref = replay_seed_ref
+        self._adapter_dispatch_choices: dict[str, str] = {}
         self._planner = planner
         self._plan_request_builder = plan_request_builder
         self._utc_clock = utc_clock
@@ -494,7 +531,7 @@ class ExternalCrawlRunner:
                     continue
 
                 fetch_outcome = self._fetch_with_rate_limit(
-                    item.canonical_url, failures
+                    item, failures
                 )
                 if fetch_outcome is None:
                     continue
@@ -640,6 +677,13 @@ class ExternalCrawlRunner:
         report["utc_clock_ref"] = self._utc_clock_ref
         report["clock_trace"] = list(self._clock_trace) if self._clock_trace else None
         report["replan_invoked"] = self._replan_done
+        # s3.2 keyed-always fields. ``None`` in legacy / s3 mode so the
+        # JSON shape stays stable; populated when ``fetcher_map`` is set.
+        report["replay_seed_ref"] = self._replay_seed_ref
+        report["adapter_dispatch_choices"] = (
+            dict(self._adapter_dispatch_choices)
+            if self._fetcher_map is not None else None
+        )
         report_path.write_text(
             json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
         )
@@ -730,27 +774,53 @@ class ExternalCrawlRunner:
         return RouteClass.DETAIL
 
     def _fetch_with_rate_limit(
-        self, url: str, failures: list[dict[str, Any]]
+        self, item: FrontierItem, failures: list[dict[str, Any]]
     ) -> FetchOutcome | None:
+        url = item.canonical_url
         origin = self._origin_of(url)
         route_class = self._route_class_for(url)
         floor = self._floor_from_spec()
+        adapter_type, fetcher = self._select_fetcher(item)
         with self._rate_limiter.acquire(
             origin=origin,
             route_class=route_class,
-            adapter_type=AdapterType.HTTP,
+            adapter_type=adapter_type,
             floor=floor,
         ) as permit:
-            return self._fetch(url, failures, permit)
+            return self._fetch(url, fetcher, failures, permit)
+
+    def _select_fetcher(
+        self, item: FrontierItem,
+    ) -> tuple[AdapterType, CrawlHttpFetcherPort]:
+        # s3.2: legacy path picks the single configured fetcher with
+        # ``AdapterType.HTTP`` (preserves existing behavior); dispatch
+        # path picks deterministically via ``_choose_fetcher``.
+        if self._fetcher_map is None or self._replay_seed_ref is None:
+            return AdapterType.HTTP, self._fetcher
+        priors: list[AdapterPrior] = []
+        if self._plan_decision_2 is not None:
+            priors = list(self._plan_decision_2.adapter_priors)
+        elif self._plan_decision is not None:
+            priors = list(self._plan_decision.adapter_priors)
+        adapter_type = _choose_fetcher(
+            item=item,
+            priors=priors,
+            fetcher_map=self._fetcher_map,
+            replay_seed_ref=self._replay_seed_ref,
+            source_adapters=list(self._spec.source_adapters),
+        )
+        self._adapter_dispatch_choices[item.canonical_url] = adapter_type.value
+        return adapter_type, self._fetcher_map[adapter_type]
 
     def _fetch(
         self,
         url: str,
+        fetcher: CrawlHttpFetcherPort,
         failures: list[dict[str, Any]],
         permit: RateLimitPermit | None = None,
     ) -> FetchOutcome | None:
         try:
-            outcome = self._fetcher.fetch(url, timeout_seconds=10.0)
+            outcome = fetcher.fetch(url, timeout_seconds=10.0)
         except FetchError as exc:
             failures.append(
                 {
