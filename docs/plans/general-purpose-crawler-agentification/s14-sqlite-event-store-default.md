@@ -4,11 +4,11 @@
 
 | Iter | Date (UTC) | Verdict | Findings | Resolution |
 |------|------------|---------|----------|------------|
-| 1    | TBD        | TBD     | TBD      | TBD        |
-| 2    | TBD        | TBD     | TBD      | TBD        |
-| 3    | TBD        | TBD     | TBD      | TBD        |
-| 4    | TBD        | TBD     | TBD      | TBD        |
-| 5    | TBD        | TBD     | TBD      | TBD        |
+| 1 | 2026-05-15 | REJECTED | Iter 1 findings: dedup behavior conflicts with existing event-store invariant; slice crosses from EventStorePort into outbox/durable persistence. | v2-v5 below. |
+| 2 | 2026-05-15 | REJECTED | Topic STATUS missing s14 row. | v3. |
+| 3 | 2026-05-15 | REJECTED | STATUS tracking inconsistent. | v4. |
+| 4 | 2026-05-15 | REJECTED | Deps + ACs not mechanically explicit. | v5. |
+| 5 | 2026-05-15 | PLAN_DONE_WITH_RESERVATIONS | Deps + ACs not mechanically binding. Iter cap reached. | 5 reservations to impl: (R1) confirm SQLite EventStorePort adapter exists at impl-time (`find src/veracrawl/adapters/event_stores/`); (R2) dedup behavior aligned with existing event-store invariant (event_id-based, not content-based); (R3) outbox/durable persistence scope clarified — s14 is event store only, not outbox migration; (R4) ACs inlined with concrete shell; (R5) topic STATUS s14 row added. |
 
 ≤ 5 iters; PLAN_DONE_WITH_RESERVATIONS at iter 5 per pattern.
 

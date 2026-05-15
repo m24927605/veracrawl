@@ -26,6 +26,7 @@ follow-up.
 | s11 | ReplayConsumerPort + InMemoryReplayConsumer | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 7 — see s11 plan iter-5 reservations below |
 | s12 | Runner replay wiring | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s12 plan iter-5 reservations below |
 | s13 | Live byte-identical replay test (capability 4 closing) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s13 plan iter-5 reservations below |
+| s14 | SQLite EventStorePort default | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 5 — see s14 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -580,3 +581,11 @@ post-s15; (R2) narrow replay invariant to graph events +
 decision_2 refs + clock_trace; (R3) run_report is dict, use
 json.dumps; (R4) ACs inlined; (R5) hard prereqs s2.1+s6+s11+s12;
 (R6) red list expanded with per-key comparison tests.
+
+## s14 plan iter-5 reservations
+
+5 unresolved: (R1) confirm SQLite EventStorePort adapter exists
+at impl-time; (R2) dedup behavior aligned with existing
+event-store invariant (event_id-based); (R3) outbox scope
+clarified — event store only, not outbox migration; (R4) ACs
+inlined; (R5) topic STATUS row added.
