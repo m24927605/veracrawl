@@ -21,6 +21,7 @@ follow-up.
 | s3.2 | Multi-adapter dispatch consumes adapter_priors | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED | n/a | 3 — see s3.2 reservations |
 | s7 | ExtractionStrategyPort + anchor-frequency fixture adapter | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap; PLAN_DONE_WITH_RESERVATIONS) | n/a | 7 — see s7 plan iter-5 reservations below |
 | s8 | Drift + Repair ports (s8.a contracts+ports; s8.b adapters deferred) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 8 — see s8 plan iter-5 reservations below |
+| s9 | LLM adapters for s7+s8 (to split s9.a/s9.b/s9.c per port) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 8 — see s9 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -532,3 +533,13 @@ with concrete shell/pytest; (R6) red list flat-named including
 ExtractionOutcome coverage; (R7) every new contract binds VeraModel
 + ConfigDict(extra="forbid") with red test; (R8) hard dependency
 on s7 implementation being landed first.
+
+## s9 plan iter-5 reservations
+
+8 unresolved findings: (R1) split into s9.a/s9.b/s9.c per port;
+(R2) drop runtime_mode ctor gate; (R3) fix TokenBudgetPort flow
+to estimate_charge+charge(usage); (R4) name every red test;
+(R5) inline AC3/AC6 concrete shell; (R6) AC3 grep all 3 adapter
+names; (R7) ProviderRequest ctor must include model_name +
+max_output_tokens; (R8) hard prereq: s7 + s8.a + s8.b + s2.1
+all landed before s9 impl.
