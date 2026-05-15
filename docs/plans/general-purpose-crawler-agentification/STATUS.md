@@ -482,3 +482,13 @@ iter 1–5, and surfaced two follow-up findings (tuple-shorthand in
 plan as additional post-iter-5 corrections. All future s2/s3
 plan-reviews and s1 per-commit task-reviews use the documented
 hook path.
+
+## s3.1 plan iter-5 reservations
+
+4 unresolved findings from iter 5: (R1) PriorityCrawlFrontier ctor needs
+`utc_clock`+`utc_clock_ref` like s6 to keep timestamps replay-stable;
+(R2) §Dependencies must list s6; (R3) test 22 needs sub-tests covering
+runner.py + frontier_protocol.py boundaries; (R4) §Why must explicitly
+state "opt-in delivery; default-runtime switch deferred to follow-up
+slice". Resolution lands in s3.1 implementation commits via
+per-commit codex task-review.
