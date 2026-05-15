@@ -16,6 +16,7 @@ follow-up.
 | s4 | `GraphObservationPort` + URL/canonical/redirect/structure event contracts | DONE | 44147a2 | 6b8124d (contracts + port + adapter + 66 tests), 8d59cc0 (iter-1 follow-up: extended test 15t to all 4 lists + bumped plan budgets), 2696b62 (iter-2 minor: budget-math sync; APPROVED iter 3). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; post-iter-5 follow-up landed without re-review) — see below | iter 1 REJECTED → iter 2 REJECTED (1 refuted, 1 fixed) → iter 3 APPROVED. | 1 — see "s4 plan iter-5 reservations" below |
 | s5 | `PlannerObservationFeedback` contract + deterministic fixture planner adapter v2 | DONE | 7d33df1 | step 1: 710de7b (contract + 18 tests; REJECTED iter 1 → APPROVED iter 2 via plan-fix commit f0a8cd9). step 2: ae794b0 (registry + 2 tests; APPROVED iter 1). step 3: fff1f79 (adapter + 4 boundary + 16 adapter tests; REJECTED iter 1) → 6c49634 (port-strip fix + new red test 25a; APPROVED iter 2 with 2 non-blocking minors folded into close commit). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; v6 follow-up landed without re-review) — see below | step 1: iter 1 REJECTED → iter 2 APPROVED (via plan fix). step 2: iter 1 APPROVED. step 3: iter 1 REJECTED → iter 2 APPROVED (with 2 non-blocking minors). | 3 — see "s5 plan iter-5 reservations" below |
 | s6 | `ExternalCrawlRunner` wires `GraphObservationPort` + replan via feedback-aware planner | DONE | f986701 | step 1: 36dd567 → e3ea052 → 5d8c6ed → 5a0bdb2 → 944a15f (REJECTED iter 1-5) → f749385 (DONE_WITH_RESERVATIONS). step 2: 8474de0 → 54b807e → 517bf97 (REJECTED iter 1-3) → 668b30e (APPROVED iter 4). step 3: 1334d9c → f55593a → b061715 (REJECTED iter 1-3) → 5acfed5 (APPROVED iter 4). step 4: e70e099 → b187288 → 3c0c333 (REJECTED iter 1-3) → 11d634a (APPROVED iter 4). | iter 1 REJECTED, iter 2 REJECTED, iter 3 REJECTED, iter 4 REJECTED, iter 5 REJECTED (5/5 used; v6 follow-up landed without re-review) — see below | step 1: iter 1→5 REJECTED → DONE_WITH_RESERVATIONS. step 2: iter 1→3 REJECTED → iter 4 APPROVED. step 3: iter 1→3 REJECTED → iter 4 APPROVED. step 4: iter 1→3 REJECTED → iter 4 APPROVED. | 4 — see "s6 plan iter-5 reservations" below |
+| s2.1 | Provider artifact wiring for OpenAI/Anthropic v2 adapters | PLAN_DONE_WITH_RESERVATIONS | — (plan-only; this commit) | — (implementation pending) | iter 1-5 all REJECTED (5/5 cap reached; PLAN_DONE_WITH_RESERVATIONS per user authorization) | n/a (impl pending) | 4 — see "s2.1 plan iter-5 reservations" below |
 
 ## s1 codex plan-review log
 
@@ -141,6 +142,40 @@ hook-installed version once landed.
 | 3 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: test 26 ctor regression; missing URL invariants for from/target/page URLs; snapshot ref-list entries unvalidated. | Plan v4: 3 missing-URL tests; test 15t for blank entries; test 26 fixed. AC1 46 → 50. |
 | 4 | 2026-05-14 | REJECTED | 1 blocker + 2 majors: snapshot ref-only (s5 couldn't read graph); missing-field tests absent; AC4 substring grep too weak. | Plan v5: snapshot embeds typed events (not refs); 5 missing-field tests for `observed_at`/`snapshot_at`; AC4 uses AST allowlist test. AC1 50 → 55. |
 | 5 | 2026-05-14 | REJECTED → DONE_WITH_RESERVATIONS via post-iter-5 follow-up | 1 blocker + 2 majors: snapshot redesign inconsistent (2 places still said "ref lists"); missing-field tests for `id`/`run_ref`/`source_ref` absent; AC7/AC8 reservations branch not deterministic. | Post-iter-5 follow-up: remaining "ref list" wording replaced with embedded events; 11 missing-field tests 15z-15jj added; AC7/AC8 reservations branch tightened to STATUS-row grep. AC1 55 → 66. Plan recorded as `PLAN_DONE_WITH_RESERVATIONS`. |
+
+## s2.1 plan iter-5 reservations
+
+**Reservation 1 — Replay consumer needs deterministic request→raw_response_ref resolver.**
+Iter 5's blocker: `ReplayingModelProviderV2` cannot deterministically
+pick a `raw_response_ref` from an incoming `ProviderRequest` because
+`ProviderRequest` doesn't carry that field. Impl must either (a)
+extend `ProviderRequest` with an optional `replay_response_ref:
+Ref | None`, OR (b) build a deterministic mapping (e.g.,
+`canonical_json(request).stable_hash → raw_response_ref`) in the
+replay adapter. Choice deferred to impl; both close the loop.
+
+**Reservation 2 — AC2 ctor-site coverage incomplete.**
+The pilot-ctor smoke in AC2 calls the adapter classes directly
+but doesn't import/execute `scripts/pilot_via_adapter.py` or
+`scripts/pilot_schema_runtime.py`. Impl must extend AC2 to
+`python -c "import scripts.pilot_via_adapter; ..."` so missing
+kwarg failures surface at the actual pilot call sites.
+
+**Reservation 3 — Persistence policy not tied to VeraCrawl policy permission.**
+The `ProviderArtifactPersistencePolicy` enum is a per-adapter
+ctor arg; codex flagged this as an under-binding for the docs
+requirements (`docs/07-data-contracts.md:606`,
+`docs/README.md:72`). Impl must bind the policy to the existing
+`RunPolicySnapshot` retention/privacy spec rather than relying on
+an upstream-header convention (`X-Veracrawl-Secret`).
+
+**Reservation 4 — `ArtifactStorePort.read` Protocol vs method
+tension.**
+Two places in the plan describe `read` differently — once as a
+required Protocol method, once as an `@runtime_checkable`
+optional. Impl must pick one (recommend: required method on the
+port; legacy adapters get a thin wrapper around their existing
+storage).
 
 ## s6 step-4 (replan trigger + integration) task-review log
 
