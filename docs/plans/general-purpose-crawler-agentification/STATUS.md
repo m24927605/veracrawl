@@ -492,3 +492,9 @@ runner.py + frontier_protocol.py boundaries; (R4) §Why must explicitly
 state "opt-in delivery; default-runtime switch deferred to follow-up
 slice". Resolution lands in s3.1 implementation commits via
 per-commit codex task-review.
+
+## s3.2 plan iter-5 reservations
+
+3 unresolved: (R1) runner ctor must require s3 pair when fetcher_map set
+(no source of adapter_priors otherwise); (R2) zero-effective-weight
+test missing; (R3) AC5 inline shell. Resolution lands in s3.2 impl.
