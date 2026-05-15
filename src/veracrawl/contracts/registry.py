@@ -259,6 +259,27 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "crawl_planner",
         tests=["tests/contract/test_crawl_planner_contract_registry.py"],
     ),
+    # s7 of general-purpose-crawler-agentification: extraction-strategy
+    # port input + output. See docs/plans/general-purpose-crawler-
+    # agentification/s7-extraction-strategy-port.md.
+    "NormalizedDocumentReadModel": _contract(
+        "NormalizedDocumentReadModel",
+        OwnerService.AGENTS,
+        "normalized_document_read_model",
+        tests=["tests/contract/test_schema_proposal_contract_registry.py"],
+    ),
+    "ProposedField": _contract(
+        "ProposedField",
+        OwnerService.AGENTS,
+        "schema_proposal",
+        tests=["tests/contract/test_schema_proposal_contract_registry.py"],
+    ),
+    "SchemaProposal": _contract(
+        "SchemaProposal",
+        OwnerService.AGENTS,
+        "schema_proposal",
+        tests=["tests/contract/test_schema_proposal_contract_registry.py"],
+    ),
     "CommandEnvelope": _contract(
         "CommandEnvelope", OwnerService.CONTRACTS, "command", mutation_allowed=True
     ),
