@@ -4,11 +4,11 @@
 
 | Iter | Date (UTC) | Verdict | Findings | Resolution |
 |------|------------|---------|----------|------------|
-| 1    | TBD        | TBD     | TBD      | TBD        |
-| 2    | TBD        | TBD     | TBD      | TBD        |
-| 3    | TBD        | TBD     | TBD      | TBD        |
-| 4    | TBD        | TBD     | TBD      | TBD        |
-| 5    | TBD        | TBD     | TBD      | TBD        |
+| 1 | 2026-05-15 | REJECTED | 2 blockers + 2 majors: (b) `lookup_fetch_outcome` returns Ref not FetchOutcome — replay path can't reconstruct; (b) model-response replay not wired through runner — factory signature only receives feedback. (m) runner imports adapter contradicted by no-adapter-imports AC; (m) ACs placeholders + Out contradicts Module map (replay_assembler in/out). | v2-v5 below. |
+| 2 | 2026-05-15 | REJECTED | Iter-1 findings not closed. | v3. |
+| 3 | 2026-05-15 | REJECTED | Bundle assembly both in/out of scope. | v4. |
+| 4 | 2026-05-15 | REJECTED | Scope + ACs self-contradictory. | v5. |
+| 5 | 2026-05-15 | PLAN_DONE_WITH_RESERVATIONS | ACs placeholders + cumulative issues. Iter cap reached. | 6 reservations: (R1) `replay_assembler` either in §Scope OR out, not both; (R2) fetch-outcome replay must materialize full `FetchOutcome` not Ref (needs an artifact-resolver helper that reads bytes via ArtifactStorePort.read + reconstructs); (R3) model-response replay path through runner must be typed (extend factory signature OR add a separate replay seam); (R4) inline ACs concrete; (R5) `ReplayingHttpFetcher` injection through composition root only (no adapter import in runner); (R6) hard prereqs: s11, s2.1, s6 all impl'd before s12 impl. |
 
 Codex plan-review ≤ 5 iters; PLAN_DONE_WITH_RESERVATIONS at iter 5
 per established pattern.
