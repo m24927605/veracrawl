@@ -307,6 +307,15 @@ FOUNDATION_CONTRACTS: dict[str, ContractRegistration] = {
         "repair_proposal",
         tests=["tests/contract/test_drift_repair_registry.py"],
     ),
+    # s11 of general-purpose-crawler-agentification: replay-consumer
+    # bundle. See docs/plans/general-purpose-crawler-agentification/
+    # s11-replay-consumer-port.md.
+    "ReplayBundle": _contract(
+        "ReplayBundle",
+        OwnerService.AGENTS,
+        "replay_bundle",
+        tests=["tests/contract/test_replay_bundle_contract_registry.py"],
+    ),
     "CommandEnvelope": _contract(
         "CommandEnvelope", OwnerService.CONTRACTS, "command", mutation_allowed=True
     ),

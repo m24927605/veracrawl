@@ -564,3 +564,37 @@ class ReplayLookupMissError(VeraCrawlError, FatalError):
         super().__init__(
             f"replay bundle has no canned response for {provider_request_id!r}"
         )
+
+
+class ReplayBundleLookupMissError(VeraCrawlError, FatalError):
+    """Raised by ``ReplayConsumerPort`` (s11) when a key lookup fails.
+
+    ``category`` distinguishes which sub-map (``model_response``,
+    ``seed``, ``fetch_outcome``) was queried so callers can dispatch
+    on the missing source. Per s11 plan iter-5 reservation R1,
+    distinct from the provider-specific ``ReplayLookupMissError``.
+    """
+
+    def __init__(self, *, category: str, key: str) -> None:
+        self.category = category
+        self.key = key
+        super().__init__(
+            f"replay bundle has no {category} entry for {key!r}",
+        )
+
+
+class ReplayExhaustedError(VeraCrawlError, FatalError):
+    """Raised by ``ReplayConsumerPort.next_utc`` when the recorded
+    ``clock_trace`` has been fully consumed.
+
+    Indicates the replay run made more clock reads than the recorded
+    run did — bundle is incomplete or the replay path diverged.
+    """
+
+    def __init__(self, *, category: str, recorded_length: int) -> None:
+        self.category = category
+        self.recorded_length = recorded_length
+        super().__init__(
+            f"replay bundle {category} trace of length "
+            f"{recorded_length} exhausted",
+        )
