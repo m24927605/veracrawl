@@ -1993,3 +1993,24 @@ class CanonicalSource(StrEnum):
     LINK_REL_CANONICAL = "link_rel_canonical"
     HTTP_LINK_HEADER = "http_link_header"
     SITEMAP = "sitemap"
+
+
+class ProviderArtifactPersistencePolicy(StrEnum):
+    """Policy for whether/how raw provider response bytes are persisted
+    via :class:`ArtifactStorePort` (s2.1 of general-purpose-crawler-
+    agentification).
+
+    * ``PERSIST_ALL`` — persist every successful response. Default for
+      production where audit is required.
+    * ``PERSIST_NONE`` — skip persistence; ``raw_response_ref`` set to
+      ``None``. The s2 planner's existing ``ProviderTraceMissingError``
+      fail-fast then refuses the call.
+    * ``PERSIST_NON_SECRET`` — short-circuits to ``PERSIST_NONE``
+      behavior when ``response.headers.get("X-Veracrawl-Secret") ==
+      "true"``. Preserves the replay-ref invariant (never persists
+      secrets; never claims replay on unpersisted bytes).
+    """
+
+    PERSIST_ALL = "persist_all"
+    PERSIST_NONE = "persist_none"
+    PERSIST_NON_SECRET = "persist_non_secret"
