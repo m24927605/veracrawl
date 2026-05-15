@@ -4,11 +4,11 @@
 
 | Iter | Date (UTC) | Verdict | Findings | Resolution |
 |------|------------|---------|----------|------------|
-| 1    | TBD        | TBD     | TBD      | TBD        |
-| 2    | TBD        | TBD     | TBD      | TBD        |
-| 3    | TBD        | TBD     | TBD      | TBD        |
-| 4    | TBD        | TBD     | TBD      | TBD        |
-| 5    | TBD        | TBD     | TBD      | TBD        |
+| 1 | 2026-05-15 | REJECTED | ACs not mechanical; red list under-constraining; sidecar timestamp determinism unresolved. | v2-v5 below. |
+| 2 | 2026-05-15 | REJECTED | s2.1 prereq unresolved but treated as available. | v3. |
+| 3 | 2026-05-15 | REJECTED | Sidecar timestamp nondeterminism lacks replay wiring. | v4. |
+| 4 | 2026-05-15 | REJECTED | Red list under-covers filesystem default behavior. | v5. |
+| 5 | 2026-05-15 | PLAN_DONE_WITH_RESERVATIONS | STATUS tracking inconsistent. Iter cap reached. | 6 reservations: (R1) confirm hashed-fs adapter exists at impl-time; (R2) sidecar timestamps via injected utc_clock OR excluded from content hash; (R3) gate s15 impl on s2.1 ArtifactStorePort.read landing; (R4) red list expanded for filesystem-default behavior (path config, concurrent write, permission errors); (R5) ACs inlined; (R6) STATUS s15 row added. |
 
 ≤ 5 iters; PLAN_DONE_WITH_RESERVATIONS at iter 5 per pattern.
 
