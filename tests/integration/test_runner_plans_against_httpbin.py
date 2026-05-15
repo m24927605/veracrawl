@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-from veracrawl.fetch.httpx_crawl_fetcher import HttpxCrawlFetcher
 
+from veracrawl.adapters.network.httpx_crawl_fetcher import HttpxCrawlFetcher
 from veracrawl.adapters.object_stores.local_fs_crawl_artifact_store import (
     LocalFsCrawlArtifactStore,
 )
