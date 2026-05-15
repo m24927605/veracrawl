@@ -20,6 +20,7 @@ follow-up.
 | s3.1 | Priority-queue frontier consumes hints | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED | n/a | 4 — see s3.1 reservations |
 | s3.2 | Multi-adapter dispatch consumes adapter_priors | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED | n/a | 3 — see s3.2 reservations |
 | s7 | ExtractionStrategyPort + anchor-frequency fixture adapter | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap; PLAN_DONE_WITH_RESERVATIONS) | n/a | 7 — see s7 plan iter-5 reservations below |
+| s8 | Drift + Repair ports (s8.a contracts+ports; s8.b adapters deferred) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 8 — see s8 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -520,3 +521,14 @@ to actual red-list size; (R4) registry.py added to AC6 paths;
 contracts.common (rejects utc_now); (R7) adapter red tests pin
 proposal_ref formula + source_document_ref equality + replay_refs
 content. Resolution lands in s7 implementation commits.
+
+## s8 plan iter-5 reservations
+
+8 unresolved findings: (R1) plan title + topic README + STATUS slice
+row all to match "s8.a contracts+ports only"; (R2) split impl into
+s8.a + s8.b; (R3) ExtractionOutcome settled as NEW in s8.a; (R4)
+drop RepairKind enum (use validated strings); (R5) all ACs inlined
+with concrete shell/pytest; (R6) red list flat-named including
+ExtractionOutcome coverage; (R7) every new contract binds VeraModel
++ ConfigDict(extra="forbid") with red test; (R8) hard dependency
+on s7 implementation being landed first.
