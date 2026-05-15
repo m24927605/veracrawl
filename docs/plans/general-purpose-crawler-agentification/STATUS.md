@@ -25,6 +25,7 @@ follow-up.
 | s10 | SchemaExtractionRuntime (to be renamed SchemaExtractionLoop) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 7 — see s10 plan iter-5 reservations below |
 | s11 | ReplayConsumerPort + InMemoryReplayConsumer | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 7 — see s11 plan iter-5 reservations below |
 | s12 | Runner replay wiring | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s12 plan iter-5 reservations below |
+| s13 | Live byte-identical replay test (capability 4 closing) | PLAN_DONE_WITH_RESERVATIONS | — | — | iter 1-5 REJECTED (5/5 cap) | n/a | 6 — see s13 plan iter-5 reservations below |
 
 ## s1 codex plan-review log
 
@@ -571,3 +572,11 @@ replay must materialize full FetchOutcome via artifact resolver;
 (R3) model-response replay path typed through runner; (R4) ACs
 inlined; (R5) ReplayingHttpFetcher injection at composition root;
 (R6) hard prereqs s11+s2.1+s6 impl'd.
+
+## s13 plan iter-5 reservations
+
+6 unresolved: (R1) drop artifact-dir byte-equality, defer to
+post-s15; (R2) narrow replay invariant to graph events +
+decision_2 refs + clock_trace; (R3) run_report is dict, use
+json.dumps; (R4) ACs inlined; (R5) hard prereqs s2.1+s6+s11+s12;
+(R6) red list expanded with per-key comparison tests.
