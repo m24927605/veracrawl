@@ -29,6 +29,7 @@ from veracrawl.contracts.objective import (
 )
 from veracrawl.contracts.policy import PolicyDecision
 from veracrawl.policy.gates import decision_for
+from veracrawl.ports.stores import EventStorePort
 from veracrawl.runtime_events.event_store import InMemoryEventStore, append_runtime_event
 from veracrawl.runtime_support.repositories import RuntimeRepositories
 
@@ -344,7 +345,26 @@ def run_runtime_fixture(
     fixture_id: str,
     scenario: str | None,
     profile: str,
+    event_store: EventStorePort | None = None,
 ) -> RuntimeRunReport:
+    """Run the runtime spine fixture.
+
+    s14 default-swap injection seam: callers can inject any
+    ``EventStorePort`` implementation (e.g.,
+    ``veracrawl.adapters.event_stores.sqlite_event_store.SqliteEventStore``
+    for durable runs). Default remains ``InMemoryEventStore`` so
+    existing fixture tests are unaffected. Production / CLI paths
+    should opt in to a durable backend explicitly.
+
+    Note: ``InMemoryArtifactStore`` is NOT swappable via this seam —
+    it uses a fixture-specific API
+    (``write(*, artifact_id, artifact_type, producer_service, ...)``
+    returning a ``RuntimeArtifactRef``) that diverges from
+    ``ArtifactStorePort.write(content: bytes, ...) -> Ref``. Wiring
+    the s15 ``HashedFsArtifactStore`` here requires reconciling
+    those two abstractions and is tracked as a follow-up slice.
+    """
+
     from veracrawl.evidence.runtime import build_evidence_packet
     from veracrawl.extract.runtime import extract_candidate
     from veracrawl.fetch.runtime import execute_source_adapter_fixture
@@ -356,7 +376,8 @@ def run_runtime_fixture(
     runtime_scenario = _scenario_from_fixture(fixture_id, scenario)
     repositories = RuntimeRepositories()
     artifact_store = InMemoryArtifactStore()
-    event_store = InMemoryEventStore()
+    if event_store is None:
+        event_store = InMemoryEventStore()
     objective, plan, snapshot, run = _bootstrap_run(fixture_id, repositories)
 
     report_kwargs: dict[str, Any] = {

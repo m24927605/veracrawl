@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from veracrawl.adapters.event_stores.sqlite_event_store import SqliteEventStore
 from veracrawl.control.runtime import RuntimeRunReport, run_runtime_fixture
 from veracrawl.runtime_support.logging import bootstrap_cli_logging
 
@@ -29,12 +30,22 @@ def run_fixture(fixture_dir: Path, *, profile: str, out: Path) -> RuntimeRunRepo
     if profile not in profile_refs:
         raise ValueError(f"fixture {fixture_id} does not support profile {profile}")
     scenario = manifest.get("scenario")
-    report = run_runtime_fixture(
-        fixture_id=fixture_id,
-        scenario=str(scenario) if scenario is not None else None,
-        profile=profile,
-    )
     out.mkdir(parents=True, exist_ok=True)
+    # s14 default-swap: production CLI path uses a SQLite-backed
+    # event store at ``<out>/events.db`` so the runtime event log
+    # survives across processes / replays. Tests still default to
+    # ``InMemoryEventStore`` when they call ``run_runtime_fixture``
+    # without injecting a backend.
+    event_store = SqliteEventStore(db_path=out / "events.db")
+    try:
+        report = run_runtime_fixture(
+            fixture_id=fixture_id,
+            scenario=str(scenario) if scenario is not None else None,
+            profile=profile,
+            event_store=event_store,
+        )
+    finally:
+        event_store.close()
     (out / "run_report.json").write_text(
         json.dumps(report.model_dump(mode="json"), sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
