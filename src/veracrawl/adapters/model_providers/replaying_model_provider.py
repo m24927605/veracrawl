@@ -16,13 +16,14 @@ all unresolvable cases.
 so the adapter advertises only the capabilities it can actually
 serve.
 
-s2.1 plan iter-5 reservation R1: when the request.id miss falls
-through to ``canned_by_raw_ref``, this consumer picks the
-first entry in insertion order — sufficient for the single-entry
-round-trip test 26a but not yet a deterministic resolver across
-multi-entry bundles. Multi-entry deterministic resolution is
-deferred to s12 (runner-replay wiring) which will thread an
-explicit request→ref mapping through ``RunReport``.
+s2.1 plan iter-5 reservation R1 (closed): when the request.id
+miss falls through to ``canned_by_raw_ref``, an explicit
+``replay_request_overrides: Mapping[str, str]`` ctor arg maps
+``ProviderRequest.id`` → ``raw_response_ref`` so multi-entry
+bundles are deterministic. Insertion-order fallback is preserved
+for single-entry bundles where overrides aren't supplied (kept
+backward-compatible with the s2.1 step-4 single-entry round-trip
+test).
 """
 
 from __future__ import annotations
@@ -47,19 +48,42 @@ class ReplayingModelProviderV2:
         *,
         canned_by_raw_ref: Mapping[str, ProviderResponse] | None = None,
         artifact_store: ArtifactStorePort | None = None,
+        replay_request_overrides: Mapping[str, str] | None = None,
     ) -> None:
         self._canned = dict(canned)
         self._canned_by_raw_ref: dict[str, ProviderResponse] = (
             dict(canned_by_raw_ref) if canned_by_raw_ref else {}
         )
         self._artifact_store = artifact_store
+        # s2.1 R1: deterministic request_id → raw_response_ref map for
+        # multi-entry canned_by_raw_ref bundles. Empty mapping by
+        # default; falls back to insertion-order pick.
+        self._replay_request_overrides: dict[str, str] = (
+            dict(replay_request_overrides) if replay_request_overrides else {}
+        )
 
     def complete(self, request: ProviderRequest) -> ProviderResponse:
         if request.id in self._canned:
             return self._canned[request.id]
         if self._canned_by_raw_ref and self._artifact_store is not None:
-            # s2.1: dict insertion order; R1 reservation acknowledges
-            # multi-entry non-determinism — deferred to s12.
+            override_ref = self._replay_request_overrides.get(request.id)
+            if override_ref is not None:
+                # s2.1 R1: deterministic resolution. The override maps
+                # this request to a specific raw_response_ref; the
+                # canned_by_raw_ref bundle MUST contain that entry.
+                response = self._canned_by_raw_ref.get(override_ref)
+                if response is None:
+                    raise ReplayLookupMissError(
+                        provider_request_id=request.id,
+                    )
+                try:
+                    self._artifact_store.read(override_ref)
+                except KeyError as exc:
+                    raise ReplayLookupMissError(
+                        provider_request_id=request.id,
+                    ) from exc
+                return response
+            # No override: insertion-order fallback (single-entry case).
             ref, response = next(iter(self._canned_by_raw_ref.items()))
             try:
                 self._artifact_store.read(ref)

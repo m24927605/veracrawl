@@ -116,3 +116,96 @@ def test_replaying_provider_v2_artifact_store_optional_when_no_raw_ref_keying() 
     replay = ReplayingModelProviderV2(canned={"req:legacy": response})
     out: Any = replay.complete(_request("req:legacy"))
     assert out is response
+
+
+# s2.1 R1 — deterministic request→raw_response_ref resolution
+def test_replay_request_overrides_routes_request_to_specific_ref() -> None:
+    """With a multi-entry ``canned_by_raw_ref`` bundle, the override
+    maps each request id to the exact raw_response_ref that should
+    answer it. Insertion-order fallback no longer applies.
+    """
+
+    store = InMemoryBytesArtifactStore()
+    ref_a = store.write(b"bytes-a")
+    ref_b = store.write(b"bytes-b")
+    response_a = ProviderResponse(
+        id="resp:a", request_ref="req:a", text="A",
+        usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        finish_reason=ProviderFinishReason.STOP,
+        raw_response_ref=ref_a,
+    )
+    response_b = ProviderResponse(
+        id="resp:b", request_ref="req:b", text="B",
+        usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        finish_reason=ProviderFinishReason.STOP,
+        raw_response_ref=ref_b,
+    )
+    replay = ReplayingModelProviderV2(
+        canned={},
+        canned_by_raw_ref={ref_a: response_a, ref_b: response_b},
+        artifact_store=store,
+        replay_request_overrides={
+            "req:from-bundle:1": ref_b,
+            "req:from-bundle:2": ref_a,
+        },
+    )
+    # Each request lands on the canned response named in the override
+    # — NOT in dict-insertion order.
+    out_1 = replay.complete(_request("req:from-bundle:1"))
+    out_2 = replay.complete(_request("req:from-bundle:2"))
+    assert out_1.text == "B"
+    assert out_2.text == "A"
+
+
+def test_replay_request_overrides_rejects_missing_ref_in_bundle() -> None:
+    """If the override points at a ref not present in
+    ``canned_by_raw_ref``, the lookup must fail (rather than fall
+    back to insertion order — that would mask a bundle-assembly bug).
+    """
+
+    store = InMemoryBytesArtifactStore()
+    ref_a = store.write(b"only-a")
+    response_a = ProviderResponse(
+        id="resp:a", request_ref="req:a", text="A",
+        usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        finish_reason=ProviderFinishReason.STOP,
+        raw_response_ref=ref_a,
+    )
+    replay = ReplayingModelProviderV2(
+        canned={},
+        canned_by_raw_ref={ref_a: response_a},
+        artifact_store=store,
+        replay_request_overrides={
+            "req:dangling": "artifact:sha256:not-in-bundle",
+        },
+    )
+    with pytest.raises(ReplayLookupMissError):
+        replay.complete(_request("req:dangling"))
+
+
+def test_replay_request_overrides_falls_back_to_insertion_order_for_unmapped_requests() -> None:
+    """When the override mapping doesn't include a request, the
+    existing insertion-order fallback still works (backward-compat
+    with the s2.1 step-4 single-entry round-trip test).
+    """
+
+    store = InMemoryBytesArtifactStore()
+    ref_a = store.write(b"single-entry")
+    response_a = ProviderResponse(
+        id="resp:a", request_ref="req:a", text="A",
+        usage=TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        finish_reason=ProviderFinishReason.STOP,
+        raw_response_ref=ref_a,
+    )
+    replay = ReplayingModelProviderV2(
+        canned={},
+        canned_by_raw_ref={ref_a: response_a},
+        artifact_store=store,
+        # Override mapping is non-empty but doesn't include the
+        # request being made.
+        replay_request_overrides={"req:elsewhere": ref_a},
+    )
+    # request id 'req:other' is unmapped → fall back to insertion
+    # order; single-entry bundle → response_a returned.
+    out = replay.complete(_request("req:other"))
+    assert out is response_a
