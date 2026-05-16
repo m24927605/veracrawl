@@ -325,6 +325,45 @@ class ExternalCrawlRunner:
         self._clock_trace.append(t.isoformat())
         return t
 
+    # Carry-forward gap #1 (s12 full clock override) — REFRAMED, NOT CLOSED.
+    #
+    # Original framing: "every wall-clock read in the runner should
+    # route through ``replay_consumer.next_utc`` when wired so the
+    # replay invariant binds outside s6 mode."
+    #
+    # On attempting the fix, the 8 ``_now()`` call sites I'd
+    # convert are all observability timestamps (``started_at``,
+    # ``fetched_at``, failure ``at``, ``checked_at``,
+    # ``completed_at``) — they land in ``run_report.json`` /
+    # ``documents.jsonl`` / ``robots-cache.json`` for human
+    # diagnostics. None of them are read by the runner's behavior
+    # loop. They're explicitly tagged as "wall-clock fields" by
+    # s13's ``_replay_compare.normalize_report`` and excluded from
+    # the byte-equality invariant.
+    #
+    # Routing them through ``self._utc_clock`` would:
+    # 1. Break s6's implicit invariant that ``clock_trace`` records
+    #    EVERY ``self._utc_clock`` call (witnessed by
+    #    ``test_s6_mode_populates_clock_trace_in_run_report``: an
+    #    auto-advancing fake clock would drain on the new reads,
+    #    and ``clock_trace``'s recorded subset would no longer
+    #    match the advancing-clock sequence verbatim).
+    # 2. Require expanding s11's ``ReplayBundle.clock_trace`` to
+    #    capture every UTC read, not just s6 events — a
+    #    bundle-shape change with cross-slice impact.
+    #
+    # Honest conclusion: the gap as originally framed conflates
+    # two different invariants (replay-stable BEHAVIOR vs replay-
+    # stable OBSERVABILITY). The replay-stable behavior part is
+    # already correctly bound via the s6 ``_tick_utc_clock``
+    # path. The replay-stable observability part needs its own
+    # design slice (bundle shape + tagging) and is NOT a simple
+    # ``_now()`` → ``self._utc_clock()`` substitution.
+    #
+    # Keeping the 8 wall-clock sites on ``_now()`` for now; opening
+    # a dedicated follow-up slice to design the observability-
+    # timestamp replay invariant once a real use case requires it.
+
     def _record_url_observed(
         self, *, canonical_url: str, depth: int,
         parent_canonical_url: str | None, source_ref: str,
