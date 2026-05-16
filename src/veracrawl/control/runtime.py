@@ -346,6 +346,7 @@ def run_runtime_fixture(
     scenario: str | None,
     profile: str,
     event_store: EventStorePort | None = None,
+    artifact_store: Any | None = None,
 ) -> RuntimeRunReport:
     """Run the runtime spine fixture.
 
@@ -353,16 +354,31 @@ def run_runtime_fixture(
     ``EventStorePort`` implementation (e.g.,
     ``veracrawl.adapters.event_stores.sqlite_event_store.SqliteEventStore``
     for durable runs). Default remains ``InMemoryEventStore`` so
-    existing fixture tests are unaffected. Production / CLI paths
-    should opt in to a durable backend explicitly.
+    existing fixture tests are unaffected.
 
-    Note: ``InMemoryArtifactStore`` is NOT swappable via this seam —
-    it uses a fixture-specific API
-    (``write(*, artifact_id, artifact_type, producer_service, ...)``
-    returning a ``RuntimeArtifactRef``) that diverges from
-    ``ArtifactStorePort.write(content: bytes, ...) -> Ref``. Wiring
-    the s15 ``HashedFsArtifactStore`` here requires reconciling
-    those two abstractions and is tracked as a follow-up slice.
+    s15 default-swap (carry-forward gap #3 closed) seam: callers can
+    inject either the legacy ``InMemoryArtifactStore`` (default) or a
+    ``PersistedRuntimeArtifactStore`` wrapping any
+    ``ArtifactStorePort`` (e.g.,
+    ``veracrawl.adapters.object_stores.hashed_fs_artifact_store.HashedFsArtifactStore``)
+    for durable content storage. Both expose the same rich runtime
+    API (``write(*, artifact_id, ...)`` → ``RuntimeArtifactRef``,
+    ``read``, ``get_ref``, ``list_refs``) so fetch / normalize /
+    extract / evidence callers see no difference.
+
+    Default-swap framing: keeping ``InMemoryArtifactStore`` /
+    ``InMemoryEventStore`` as the silent defaults preserves backward
+    compatibility with ~5+ test sites that don't pass tmp_path. The
+    architectural win is the seam itself: production / CLI /
+    composition-root callers can now inject durable backends without
+    a fork in the runtime body.
+
+    Production / CLI paths can't inject the durable adapters directly
+    from within ``src/veracrawl/cli/`` because of the core-import
+    boundary (``cli/`` is "core" and core can't import
+    ``veracrawl.adapters.*``). External composition roots
+    (deployment scripts, dedicated launchers, test fixtures, etc.)
+    are the intended injection point.
     """
 
     from veracrawl.evidence.runtime import build_evidence_packet
@@ -375,7 +391,8 @@ def run_runtime_fixture(
 
     runtime_scenario = _scenario_from_fixture(fixture_id, scenario)
     repositories = RuntimeRepositories()
-    artifact_store = InMemoryArtifactStore()
+    if artifact_store is None:
+        artifact_store = InMemoryArtifactStore()
     if event_store is None:
         event_store = InMemoryEventStore()
     objective, plan, snapshot, run = _bootstrap_run(fixture_id, repositories)
