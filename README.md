@@ -1,5 +1,32 @@
 # VeraCrawl
 
+> **🗄️ Archived (2026-05-17).** This repository is an R&D / learning artifact;
+> it is not a shipping product. There is no end-to-end "crawl a website → get
+> structured data" path: production fetch, markdown output, browser automation,
+> CLI, and Docker deployment are all out of scope. If you need a working AI
+> crawler today, use [crawl4ai](https://github.com/unclecode/crawl4ai) (Playwright
+> + LLM-ready markdown + 50k+ stars + active maintenance).
+>
+> What this repo does contain that may be useful as reference:
+>
+> - A contract-driven Python architecture (~75 typed contracts, ports + adapters,
+>   AST import-boundary tests).
+> - A replay-invariant skeleton (`ReplayConsumerPort`, `ReplayBundle`,
+>   raw-LLM-response persistence, deterministic request→response mapping).
+> - A goal-doc workflow with adversarial codex plan-review + retrospective
+>   per-commit task-review (see
+>   [`docs/plans/general-purpose-crawler-agentification/STATUS.md`](docs/plans/general-purpose-crawler-agentification/STATUS.md)).
+> - Deterministic fixture adapters for planner, drift detection, repair,
+>   schema extraction, worker pool (sync + multiprocess), event store
+>   (in-memory + SQLite), and artifact store (in-memory + hashed-fs).
+> - 3708 passing tests across the suite.
+>
+> The original aspirational README copy below is preserved for context — it
+> describes the design intent, not the shipped state. Read it as "what this
+> would have been at completion", not as a product claim.
+>
+> ---
+
 **A general-purpose AI agent web crawler for evidence-backed data extraction.**
 
 VeraCrawl is being built for the hard version of web crawling: unfamiliar
